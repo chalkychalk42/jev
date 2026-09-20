@@ -248,7 +248,8 @@ FIELDS: tuple[Field, ...] = (
     # and the whole class of confusion goes away. Eleven bits is about one pixel at 1600
     # wide. Origin top-left, flipped in the addon, because every reader here works that way.
     Field("ui.advance_x", 11, Kind.FRAC, "return ADVANCE_BUTTON('x')",
-          "fraction across the interface of Accept/Complete/Continue, whichever is showing"),
+          "fraction across the interface of Accept/Complete/Continue/popup-button, "
+          "whichever is showing; a quest frame wins over a popup"),
     Field("ui.advance_y", 11, Kind.FRAC, "return ADVANCE_BUTTON('y')"),
 
     # Which line of a list to click, and how to know it is the right one.

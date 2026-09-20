@@ -267,6 +267,11 @@ local ADVANCE_BUTTONS = {
     "QuestFrameCompleteQuestButton",
     "QuestFrameCompleteButton",
     "QuestFrameContinueButton",
+    -- Last, so a quest frame always wins. A StaticPopup's first button is the same
+    -- intent as Accept — *move this forward* — and Release Spirit and Resurrect are
+    -- both one. It is painted, not pressed: whether pressing is right is the caller's
+    -- decision, and the caller checks `vitals.dead` before it makes it.
+    "StaticPopup1Button1",
 }
 
 -- A list of things to click, and which one is which.

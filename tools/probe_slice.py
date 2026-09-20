@@ -41,12 +41,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 from jev.clients import win32  # noqa: E402
 from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
 from jev.clients.choose import ChooseListLine  # noqa: E402
+from jev.clients.fight import Fight, Fought  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
 from jev.guide import playhead  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
 from jev.guide.tracker import Tracker  # noqa: E402
+from jev.perceive.radio_frame import name_id  # noqa: E402
 from jev.run.client import NotRunning, attach, with_travel  # noqa: E402
 from jev.world.state_v1 import StepKind  # noqa: E402
 
@@ -56,6 +58,8 @@ def main() -> int:
     ap.add_argument("--steps", type=int, default=1,
                     help="how many graph nodes to attempt; one at a time by default")
     ap.add_argument("--timeout", type=float, default=180.0)
+    ap.add_argument("--kills", type=int, default=12,
+                    help="attempts at an objective before reporting where it got to")
     ap.add_argument("--mmaps", default="/home/ash/cmangos/run/bin/mmaps")
     ap.add_argument("--jevpath", default="/home/ash/ForeverV2/tools/jevpath/jevpath")
     args = ap.parse_args()
@@ -122,6 +126,55 @@ def main() -> int:
     # The only difference between accepting and turning in.
     GOALS = {StepKind.QUEST_ACCEPT: Goal.HELD, StepKind.QUEST_TURNIN: Goal.CLEARED}
 
+    fight = Fight(hid=client.hid, read=client.read, read_frame=client.frame,
+                  window_origin=client.origin,
+                  window_centre_x=client.size[0] // 2)
+
+    def progress(quest_id):
+        """Objective counts for one quest, from the **assembled** log.
+
+        The server's own tally, not an inference from kills we think we landed.
+        """
+        done = client.log.complete
+        if done is None:
+            client.quest_ids()
+            done = client.log.complete
+        for q in done or ():
+            if q.quest_id == quest_id and q.objectives:
+                o = q.objectives[0]
+                return (o.have, o.need)
+        return (None, None)
+
+    def do_objective(node) -> int:
+        """Stand in the camp and kill the thing the step names, until the count is in."""
+        wanted = name_id(node.notes) if node.notes else None
+        print(f"  objective: {node.objectives[0]}")
+        if not client.approach(node.world):
+            print("  could not get to the camp")
+            return 1
+
+        for attempt in range(args.kills):
+            have, need = progress(node.quest_id)
+            print(f"  progress: {have}/{need}")
+            if need is not None and have is not None and have >= need:
+                print("  objective complete")
+                return 0
+            outcome = fight.run(wanted)
+            print(f"    kill {attempt + 1}: {outcome.value} "
+                  f"(pressed {fight.pressed}, closed {fight.closed}, "
+                  f"last hp {fight.last_hp})"
+                  + (f" — {fight.detail}" if fight.detail else ""))
+            if outcome is Fought.DIED:
+                return 1
+            if outcome in (Fought.NO_TARGET, Fought.NOT_VISIBLE):
+                # Nothing in reach. Standing still and Tabbing harder will not change that.
+                print("  nothing attackable from here")
+                return 1
+
+        have, need = progress(node.quest_id)
+        print(f"  progress: {have}/{need} after {args.kills} attempts")
+        return 0 if (need is not None and have is not None and have >= need) else 1
+
     memory = playhead.load(graph.graph_id)
     print(f"  completed so far: {sorted(memory.completed) or 'nothing remembered'}")
 
@@ -136,18 +189,29 @@ def main() -> int:
         print(f"\n--- step {step + 1}: {node.id} ---")
         print(f"  {node.kind.value} quest {node.quest_id} at {node.notes} {node.pos}")
 
+        if node.world is None:
+            print(f"  no spawn for this node ({node.notes}); the graph cannot place it")
+            rc = 1
+            break
+
+        client.focused()
+
+        if node.kind is StepKind.QUEST_OBJECTIVE:
+            rc = do_objective(node)
+            if rc:
+                break
+            continue
+
         goal = GOALS.get(node.kind)
         if goal is None:
             print(f"  {node.kind.value} is not built yet; stopping rather than "
                   f"pretending the step is done")
             rc = 1
             break
-        if node.world is None or node.npc_id is None:
-            print(f"  no spawn for this node ({node.notes}); the graph cannot place it")
+        if node.npc_id is None:
+            print(f"  no NPC for this node ({node.notes})")
             rc = 1
             break
-
-        client.focused()
 
         result = inter.open_on(node.notes, node_world=node.world, node_map=node.pos)
         if inter.sighting is not None:
