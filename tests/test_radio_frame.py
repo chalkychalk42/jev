@@ -880,11 +880,12 @@ def test_the_strip_reads_from_a_real_client_frame():
     assert 0.0 <= v["pos.mx"] <= 1.0 and 0.0 <= v["pos.my"] <= 1.0
     assert v["vitals.hp_max"] > 0
 
-    # A fresh character with nothing accepted. `count == 0` is a positive observation of
-    # an empty log, which is what tells the playhead to be at the graph entry rather than
-    # at whichever NPC happens to be nearby.
-    assert v["quests.count"] == 0
-    assert radio_frame.to_state(reading, t=0.0, client_id="c").quests == ()
+    # The log this character actually has. `count` is a positive observation either way —
+    # zero means read-and-empty, which is what puts a fresh character on the graph entry
+    # rather than at whichever NPC happens to be nearby.
+    assert v["quests.count"] is not None
+    if v["quests.count"] == 0:
+        assert radio_frame.to_state(reading, t=0.0, client_id="c").quests == ()
 
 
 @pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")

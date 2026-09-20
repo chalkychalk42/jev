@@ -651,6 +651,19 @@ def _reaction(code: int | None) -> Reaction | None:
     return Reaction.FRIENDLY
 
 
+def advance_point(reading: RadioReading) -> tuple[int, int] | None:
+    """Screen point of the quest frame's Accept/Complete/Continue button, if one is up.
+
+    Deliberately not part of `state_v1`: that describes the character and the world, and
+    where a button happens to be drawn is neither. It belongs to the reading, which is
+    what a clicking skill has in hand anyway.
+    """
+    if not reading.ok or not reading.values:
+        return None
+    x, y = reading.values.get("ui.advance_x"), reading.values.get("ui.advance_y")
+    return None if x is None or y is None else (x, y)
+
+
 def to_state(reading: RadioReading, *, t: float, client_id: str) -> State:
     """A decoded strip as `state_v1`.
 

@@ -408,3 +408,48 @@ deterministic way to press it, and a sweep over the quest frame is the same flai
 later, so it is not here.
 
 NEXT: Accept, then kill, then turn in.
+
+---
+
+## V25 — Accept, and the button says where it is
+
+Quest 783 is in the log, accepted by the bot:
+
+    --- 5. accept quest 783 ---
+      advance button painted at (0.0450, 0.6940)
+      clicked (88, 681)  -> accepted
+      log now: (783,)
+
+The frame opens where the client decides, not where a constant says, so the addon paints
+where it put the button and the click reads it back. Two new fields on schema 3:
+
+    ui.advance_x   11 bits, fraction across UIParent
+    ui.advance_y   11 bits, fraction up   UIParent
+
+`ADVANCE_BUTTON(axis)` returns whichever of Accept / Complete / Continue is currently
+shown, so one pair of fields covers accepting a quest, completing one, and stepping
+through a multi-page gossip — the same button in three costumes, not three skills.
+
+**Fractions of UIParent, not pixels.** The first version painted `GetCenter()` scaled by
+the button's own effective scale and landed exactly 100 px high: a button's scale is not
+the UI's scale, and mixing them is an error that is invisible until it is a miss. A
+fraction has no units to get wrong, and the decoder multiplies it by the frame it actually
+captured, so it survives a resolution change for free.
+
+`jev/clients/advance.py` holds the caps the reviewer set:
+
+    zero clicks       unless the radio says the frame is open
+    one click         at the painted fraction times the captured window size
+    one confirmation  quest 783 present in the **assembled** log, not one frame
+
+The last line is the one that matters. The log paints one slot per cycle, so a single
+frame showing 783 proves only that a slot was painted — the assembled log is the claim,
+and `AdvanceQuestFrame` will not report success on anything less.
+
+The grid is now exactly full: 62 fields, 408 payload bits, 36 cells in 12x4, 8 spare bits.
+The next field costs a row.
+
+NOW: 488 tests. Willem gives 783 unattended, start to finish: login, plan, walk, click,
+accept.
+
+NEXT: McBride turn-in on the same two skills, then Echo Ridge.

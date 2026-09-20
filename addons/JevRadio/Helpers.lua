@@ -251,6 +251,46 @@ local function DURABILITY_MIN()
     return worst
 end
 
+-- --------------------------------------------------------------------- stock frames
+
+-- The button that moves a quest frame forward, in screen pixels.
+--
+-- Accept, Complete and Continue are the same intent at different moments in a quest, so
+-- they are painted through one pair of fields: whichever is showing. A caller that had to
+-- know which one it was would need a state machine to track quests it cannot see.
+--
+-- Read from the client's own layout, which is exact and survives any resolution or UI
+-- scale. The alternative was sweeping the panel for yellow buttons, and sweeping is what
+-- this addon exists to make unnecessary.
+local ADVANCE_BUTTONS = {
+    "QuestFrameAcceptButton",
+    "QuestFrameCompleteQuestButton",
+    "QuestFrameCompleteButton",
+    "QuestFrameContinueButton",
+}
+
+local function ADVANCE_BUTTON(axis)
+    for i = 1, #ADVANCE_BUTTONS do
+        local btn = getglobal(ADVANCE_BUTTONS[i])
+        if btn and btn.IsVisible and btn:IsVisible() then
+            local x, y = btn:GetCenter()
+            if x and y then
+                -- A ratio inside one coordinate system, so no screen height and no scale
+                -- arithmetic. Converting to pixels instead was wrong by a hundred on the
+                -- vertical: it mixed the button's effective scale with UIParent's, and
+                -- UIParent's pixel height is not the client height.
+                local ratio = btn:GetEffectiveScale() / UIParent:GetEffectiveScale()
+                if axis == "x" then
+                    return (x * ratio) / UIParent:GetWidth()
+                end
+                -- WoW's UI origin is bottom-left; every reader here works top-left.
+                return 1 - (y * ratio) / UIParent:GetHeight()
+            end
+        end
+    end
+    return nil
+end
+
 -- --------------------------------------------------------------------- quests
 
 -- The log is painted one entry per frame.
@@ -530,6 +570,7 @@ JevRadioHelpers = {
     ZONE_ID = ZONE_ID,
     BAG_FREE = BAG_FREE,
     DURABILITY_MIN = DURABILITY_MIN,
+    ADVANCE_BUTTON = ADVANCE_BUTTON,
     QUEST_HASH = QUEST_HASH,
     QUEST_COUNT = QUEST_COUNT,
     QUEST_SLOT = QUEST_SLOT,

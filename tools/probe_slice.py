@@ -26,6 +26,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 from jev.clients import win32  # noqa: E402
+from jev.clients.advance import AdvanceQuestFrame  # noqa: E402
 from jev.clients.capture import Backend, WindowCapture  # noqa: E402
 from jev.clients.hid import Hid, Humaniser  # noqa: E402
 from jev.clients.interact import Interact  # noqa: E402
@@ -174,11 +175,20 @@ def main() -> int:
 
 
     print(f"\n--- 5. accept quest {args.quest} ---")
-    print("  STOP. There is no deterministic way to press Accept yet.")
-    print("  A sweep over the quest frame is the same flail one step later, so it is not")
-    print("  here. The frame is open and the preconditions held; that is the milestone.")
+    advance = AdvanceQuestFrame(hid=hid, read=read, quest_ids=lambda: quest_ids(tries=1),
+                                window_origin=(ox, oy), window_size=(w, h))
+    v = read()
+    print(f"  advance button painted at "
+          f"{(v.get('ui.advance_x'), v.get('ui.advance_y')) if v else None}")
+    log.reset()
+    outcome = advance.run(args.quest)
+    print(f"  clicked {advance.clicked}  -> {outcome.value}"
+          + (f" — {advance.detail}" if advance.detail else ""))
+
+    ids = quest_ids()
+    print(f"  log now: {ids}")
     cap.close()
-    return 0
+    return 0 if outcome.ok else 1
 
 
 if __name__ == "__main__":

@@ -51,9 +51,11 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 2                                    # bump when the field table changes shape
+SCHEMA = 3                                    # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
-quest field that was unknown on every live client because nothing sets a watch."""
+quest field that was unknown on every live client because nothing sets a watch.
+3: the advance button's screen position, so a stock frame is clicked where it actually is
+rather than swept for."""
 
 # Quantisation step: nibble n renders as n * STEP, so 15 -> 255 exactly.
 STEP = 255 // (LEVELS - 1)                    # 17
@@ -219,6 +221,33 @@ FIELDS: tuple[Field, ...] = (
          "any StaticPopup is up; the world is obstructed and travel must not move"),
     Field("ui.error_id", 6, Kind.ENUM, "return LAST_ERROR()",
           "index into the shared UI-error enum, cleared after it is painted once"),
+
+    # Where to click to move a stock frame forward.
+    #
+    # The quest frame is the client's own UI at a position the client itself knows, so
+    # asking it is exact, works at any resolution and UI scale, and needs no per-install
+    # binding. The alternative was sweeping the panel for yellow buttons, which is the
+    # same flail that cost a session at the NPC.
+    #
+    # One pair of fields with one meaning — *the button that advances this frame* —
+    # because Accept, Complete and Continue are the same intent at different moments and
+    # a caller that had to know which is a caller that has to grow a state machine.
+    #
+    # **Fractions of the interface, not pixels.**
+    #
+    # Pixels were tried and were wrong by exactly a hundred on the vertical: converting a
+    # button's UI coordinates to screen pixels mixes the button's effective scale with
+    # UIParent's, and UIParent's pixel height turned out not to be the client height at
+    # all. The painted point landed at (62, 533) for a button at (66, 632) — the
+    # horizontal fine, the vertical a constant offset nobody could name.
+    #
+    # A ratio within one coordinate system needs no scale and no screen height. The
+    # decoder multiplies by the frame it captured, which is by definition the right size,
+    # and the whole class of confusion goes away. Eleven bits is about one pixel at 1600
+    # wide. Origin top-left, flipped in the addon, because every reader here works that way.
+    Field("ui.advance_x", 11, Kind.FRAC, "return ADVANCE_BUTTON('x')",
+          "fraction across the interface of Accept/Complete/Continue, whichever is showing"),
+    Field("ui.advance_y", 11, Kind.FRAC, "return ADVANCE_BUTTON('y')"),
 
     # -- quests ------------------------------------------------------------------
     Field("quests.log_hash", 16, Kind.UINT, "return QUEST_HASH()",
