@@ -18,6 +18,8 @@ import math
 import re
 from pathlib import Path
 
+import pathlib
+
 import numpy as np
 import pytest
 
@@ -836,3 +838,46 @@ def test_an_impossible_level_is_refused_rather_than_carried():
     reading = radio_frame.read(_paint(values))
     state = radio_frame.to_state(reading, t=1.0, client_id="c01")
     assert state.char.level is None
+
+
+# --------------------------------------------------------------------------- live frame
+
+LIVE = pathlib.Path(__file__).parent / "fixtures" / "live-northshire-1600x900.npy"
+
+
+@pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")
+def test_the_strip_reads_from_a_real_client_frame():
+    """A 1600x900 capture of the running client, character in Northshire.
+
+    Every other test in this file paints its own frame, which proves the format against
+    itself. This one is the only thing that proves the format against a screen — and it
+    caught what a fixture never could: on a real client the cyan mask held 3,798 pixels
+    of interface against the marker's 196, and ranking candidates by area put five slivers
+    of UI ahead of the real thing. The strip was on screen, painting correctly, and
+    reported as absent.
+    """
+    frame = np.load(LIVE)
+    assert frame.shape == (900, 1600, 3)
+
+    grid = radio_frame.locate(frame)
+    assert grid is not None, "the strip is in this frame; locate must find it"
+    assert grid.cols == GRID_COLS and grid.rows == GRID_ROWS
+    assert 10 <= grid.cell_w <= 20, f"cell width {grid.cell_w} is not a plausible size"
+
+    reading = radio_frame.read(frame)
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    v = reading.values
+    assert v["schema"] == 1
+    assert 1 <= v["char.level"] <= 70
+    assert 0.0 <= v["pos.mx"] <= 1.0 and 0.0 <= v["pos.my"] <= 1.0
+    assert v["vitals.hp_max"] > 0
+
+
+@pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")
+def test_a_real_screen_is_full_of_the_marker_colours():
+    """The premise behind the shape filter, asserted rather than remembered."""
+    frame = np.load(LIVE)
+    left, right = radio_frame._marker_masks(frame)
+    assert right.sum() > 1000, "this frame should have plenty of non-marker cyan in it"
+    candidates = radio_frame._marker_candidates(right)
+    assert len(candidates) < 30, "shape filtering should cut the field down hard"

@@ -10,3 +10,4 @@ runs/
 *.parquet
 *.jsonl
 addons/JevRadio/Fields.lua
+!tests/fixtures/

@@ -356,6 +356,33 @@ def _score_row0(img: np.ndarray, grid: Grid) -> tuple[float | None, float]:
     return worst, spread
 
 
+MAX_CANDIDATES = 24
+MIN_FILL = 0.7          # a marker cell is solid, not an outline
+ASPECT_TOLERANCE = 1.8  # generous: a scaled capture is not exactly square
+
+
+def _marker_candidates(mask: np.ndarray, limit: int = MAX_CANDIDATES) -> list[_Blob]:
+    """Blobs that could be a marker cell: square, solid, and big enough to sample.
+
+    Filtering on **shape before size** is what makes this work on a real screen rather
+    than on a fixture. The markers are square filled cells; the rest of the magenta and
+    cyan on a WoW screen is text, bar fill, spell-effect glow and icon edging, none of
+    which is square.
+
+    Measured against a live 1600x900 client: the cyan mask held 3,798 pixels, of which
+    the marker was 196. Ranking by area alone put five 57x7 slivers of interface ahead of
+    it and pushed the real marker out of a six-candidate cut — so the strip was on screen,
+    painting correctly, decoding perfectly when sampled by hand, and reported as absent.
+    """
+    out = [
+        b for b in _blobs(mask)
+        if b.w >= MIN_CELL_PX and b.h >= MIN_CELL_PX
+        and (1 / ASPECT_TOLERANCE) <= (b.w / max(1.0, b.h)) <= ASPECT_TOLERANCE
+        and b.area >= MIN_FILL * b.w * b.h
+    ]
+    return out[:limit]
+
+
 def locate(frame: np.ndarray) -> Grid | None:
     """Find the strip from its two markers. `None` is `SenseFault.NOT_FOUND`.
 
@@ -376,8 +403,8 @@ def locate(frame: np.ndarray) -> Grid | None:
     """
     img = _rgb(frame)
     left_mask, right_mask = _marker_masks(frame)
-    lefts = _blobs(left_mask)[:6]
-    rights = _blobs(right_mask)[:6]
+    lefts = _marker_candidates(left_mask)
+    rights = _marker_candidates(right_mask)
     if not lefts or not rights:
         return None
 
