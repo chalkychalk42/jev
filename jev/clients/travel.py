@@ -100,6 +100,10 @@ class Travel:
     # half is far outside normal and still quick to recover from.
     stuck_after_s: float = 1.5
     stuck_step_yards: float = 0.3
+    # How many headings to try the recovery from, and how far to turn between them. Eight
+    # would be a full circle; four covers a corner, and each one costs five attempts.
+    unstick_headings: int = 4
+    unstick_turn_s: float = 0.45
     heading_tolerance: float = math.radians(10.0)     # docking, near the target
     cruise_tolerance: float = math.radians(22.0)      # underway, with room to absorb it
     sample_s: float = 0.04
@@ -461,6 +465,14 @@ class Travel:
         while reporting a failed recovery.
 
         Each attempt is measured, and the first one that moves us wins.
+
+        **Every attempt above acts along the current facing**, which is why they are tried
+        again after turning. A character wedged in a corner can leave along exactly one
+        heading, and a recovery that only ever pushes one way reports "could not free the
+        character" while a quarter-turn would have done it. Measured on a ghost pinned
+        against a tree in Northshire that survived two full corpse runs, a relog, and
+        every attempt at its original heading: it came free on the **third** heading, on
+        jump-forward, after turning twice.
         """
         self.hid.release_all()
         self.last_unstick = ""
@@ -482,22 +494,26 @@ class Travel:
         # all five attempts instantly, and treating it as "give up" meant one torn frame
         # abandoned recovery after the first. Try them all, and only conclude nothing
         # worked when nothing has been tried successfully either.
-        unreadable = 0
-        for name, attempt in attempts:
-            before = self.position()
-            if before is None:
-                unreadable += 1
-                continue
-            attempt()
-            time.sleep(0.25)
-            after = self.position()
-            if after is None:
-                unreadable += 1
-                continue
-            if self.distance(before, after) > self.stuck_step_yards:
-                self.last_unstick = name
-                return True
-        if unreadable == len(attempts):
+        unreadable = tried = 0
+        for heading in range(self.unstick_headings):
+            if heading:
+                self.hid.hold("d", self.unstick_turn_s)
+            for name, attempt in attempts:
+                before = self.position()
+                if before is None:
+                    unreadable += 1
+                    continue
+                tried += 1
+                attempt()
+                time.sleep(0.25)
+                after = self.position()
+                if after is None:
+                    unreadable += 1
+                    continue
+                if self.distance(before, after) > self.stuck_step_yards:
+                    self.last_unstick = name if not heading else f"{name} (turned {heading}x)"
+                    return True
+        if tried == 0 and unreadable:
             self.last_unstick = "unreadable"
         return False
 

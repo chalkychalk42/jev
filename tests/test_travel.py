@@ -168,3 +168,17 @@ def test_remaining_yards_is_measured_against_the_destination_not_the_leg():
     assert t._short_by((0.5, 0.0), legs) == 50.0
     assert t._short_by(legs[-1], legs) == 0.0
     assert t._short_by(None, legs) is None
+
+
+def test_unstick_tries_more_than_one_heading():
+    """Every recovery attempt acts along the current facing, so a character wedged in a
+    corner can leave along exactly one heading. A ghost pinned against a tree in
+    Northshire survived two corpse runs, a relog and every attempt at its original
+    heading, then came free on the third heading on jump-forward."""
+    import inspect
+
+    body = inspect.getsource(Travel._unstick)
+    assert "for heading in range(self.unstick_headings)" in body
+    assert 'self.hid.hold("d", self.unstick_turn_s)' in body, "it never turns"
+    t = Travel(hid=None, bounds=None, read_pos=lambda: None)
+    assert t.unstick_headings >= 3, "one quarter-turn is not a sweep"
