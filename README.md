@@ -29,12 +29,22 @@ advancing*.
 
 ```bash
 uv venv --python 3.12 && uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 108 tests, no game required
+.venv/bin/python -m pytest          # no game required
 .venv/bin/python tools/gen_addon_fields.py
 ```
 
 The wire format, the state contract, the situation key, the verifier and the reward
-function are all testable with no client, no capture and no network.
+function are all testable with no client, no capture and no network. A count is left out
+of this file on purpose — it goes stale in a day and a stale number in a README is a
+small lie you tell yourself every time you read it. `STATUS.md` carries the current one.
+
+**Nothing drives the game yet.** The brain is built and simulated; capture and input are
+not written. See `STATUS.md` for exactly where the line is.
+
+### Platform split
+The brain is pure Python and runs anywhere. Capture and input are Windows-only — they
+need `user32`/`gdi32` and a real window — so a live client runs under Windows Python
+against the repo, while development, tests and the simulator run anywhere.
 
 ## Layout
 

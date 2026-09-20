@@ -86,3 +86,44 @@ BLOCKED: **the Claude subscription is out of usage credits** (429 on the primary
 `--model haiku` works). Not blocking the build — the loop ran 900 ticks to level 16 with
 zero teacher calls, which is the invariant doing its job — but no live teaching until it
 resets or the GLM rung is wired.
+
+## 2026-09-20 — the body, and the addon proven by running it
+DID: scope cut to the reviewer's line — Windows capture + HID + one live 1–12 slice,
+nothing else. README no longer claims a stale test count.
+
+- **`jev/clients/win32.py`, `hid.py`, `capture.py`, `live.py`** — `ctypes` only, no new
+  dependency. `SendInput` with **scan codes** (games read the DirectInput path; a virtual
+  key alone is a press the game may never see, and it fails silently), extended-key flag
+  on the arrows, Bezier mouse paths, per-event drawn delays and a per-client stagger.
+  Input **refuses when the window is not focused** — a bot pressing `1` into the wrong
+  window has not failed to attack, it has typed into somebody's chat.
+- Capture is GDI via `BitBlt`, with `PrintWindow` available; **a black frame raises**
+  rather than returning zeros, because silent black feeds a decoder that finds no strip
+  and a vision head that sees no windows, three layers from the cause.
+- `LiveSource` satisfies the same `Source` protocol as the simulator and never raises:
+  a lost window, a black frame, an unlocatable strip and a failed checksum each return a
+  state that says so. **Vision is not written, so windows are `None`, not `False`** — an
+  addon-off client is blind rather than confidently wrong.
+
+**The addon is no longer unproven.** Installed `lua5.1` and built a stubbed 2.4.3 client
+(`tests/lua/`), then ran the real `Helpers.lua` / `Fields.lua` / `JevRadio.lua` under it,
+drove the addon's own `OnUpdate`, and fed the painted cells back through the Python
+decoder. Values set on the stub come back out unchanged. Three real defects found by
+executing it that no amount of reading would have caught: a missing `SetToplevel`, frames
+not registered as globals by name (so `paint()` never ran at all and every payload cell
+was black), and `nil`-versus-`false` in the stub quietly testing the opposite of what it
+claimed. `luac -p` says all three files are valid; my hand-rolled block-balance checker
+had said one was not, and it was wrong.
+
+Copied to `C:\Games\WoW243\Interface\AddOns\JevRadio`.
+
+NOW: 400 tests. The brain is simulated, the addon is proven in a harness, capture and HID
+are written and unexercised — nothing has yet driven the running client.
+
+NEXT: the client must be restarted for a new addon to load. Then, in order: confirm the
+strip is on screen and decodes from a real capture; bind and focus; one key press; walk to
+a node; then the 1–12 slice — accept, kill, turn in.
+
+NOT NEXT, deliberately: more teacher/GLM/distill/promote, a second class, the Horde spine,
+extra vision heads, ten-client orchestration. None of it until one character has accepted
+a quest, killed, and turned it in.
