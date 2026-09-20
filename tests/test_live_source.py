@@ -59,3 +59,15 @@ def test_a_blind_state_reports_windows_as_unobserved_not_absent():
     assert s.ui.loot is None
     assert s.ui.modal is None
     assert s.sense.addon_ok is False
+
+
+def test_the_live_source_assembles_the_log_across_frames():
+    """`to_state` refuses to build a log from one frame; `LiveSource` has the history
+    that makes one possible, and is where the assembler belongs."""
+    import inspect
+
+    from jev.clients.live import LiveSource as LS
+
+    src = inspect.getsource(LS)
+    assert "_log.observe" in src, "the assembler is not wired into the read path"
+    assert "quest_log_progress" in src, "a postmortem must be able to say if it was read"

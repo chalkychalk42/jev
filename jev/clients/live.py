@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from jev.clients.capture import Backend, CaptureError, WindowCapture, find_game
 from jev.clients.source import blind
 from jev.perceive import radio_frame
+from jev.perceive.questlog import QuestLog
 from jev.world.state_v1 import SenseFault, State
 from jev.world.state_v1 import Source as StateSource
 
@@ -35,6 +36,7 @@ class LiveStats:
 
     frames: int = 0
     decoded: int = 0
+    log_cycles: int = 0
     black: int = 0
     not_found: int = 0
     checksum: int = 0
@@ -56,6 +58,9 @@ class LiveSource:
     stats: LiveStats = field(default_factory=LiveStats)
     _cap: WindowCapture | None = field(default=None, init=False)
     _prev_seq: int | None = field(default=None, init=False)
+    # The strip paints one log entry per frame, so the log exists across frames rather
+    # than in any one of them. This is the only thing that turns those into a log.
+    _log: QuestLog = field(default_factory=QuestLog, init=False)
 
     def __post_init__(self) -> None:
         self._cap = WindowCapture(self.hwnd, backend=self.backend)
@@ -99,9 +104,19 @@ class LiveSource:
 
         self.stats.decoded += 1
         state = radio_frame.to_state(reading, t=t, client_id=self.client_id)
+        # `to_state` refuses to build a log from one frame and says `None` for anything
+        # non-empty. Here there is history, so the assembled log — complete or not yet —
+        # replaces it.
         return state.model_copy(update={
+            "quests": self._log.observe(reading.values),
             "sense": state.sense.model_copy(update={"source": StateSource.RADIO}),
         })
+
+    @property
+    def quest_log_progress(self) -> tuple[int, int | None]:
+        """Slots seen against slots expected, so a postmortem can say whether the log was
+        ever actually read rather than leaving it to be inferred."""
+        return self._log.progress
 
     def close(self) -> None:
         if self._cap is not None:

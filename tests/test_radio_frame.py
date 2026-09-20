@@ -770,8 +770,13 @@ def test_a_decoded_strip_becomes_a_state():
     assert state.bags.free == 11
     assert state.bags.money_copper == 183400
     assert state.ui.error == "out_of_range"
-    assert state.quests[0].quest_id == 62, "the slot this frame described"
-    assert state.objective_counts() == [(3, 8)]
+    # One frame is never a log. Three quests in the log and one slot painted is *unread*,
+    # not a one-quest log — the difference is a tracker that skips two live steps every
+    # other second.
+    assert state.quests is None, "a partial cycle must not present as a short log"
+    # And the counts follow the log: unread means no counts, not zero counts. The slot's
+    # objectives reach the tracker through `QuestLog`, which is tested in its own file.
+    assert state.objective_counts() is None
     assert state.sense.addon_ok is True
     assert state.sense.fault is SenseFault.NONE
     assert state.sense.seq == 42
