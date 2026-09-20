@@ -23,8 +23,9 @@ from jev.clients import win32
 from jev.clients.capture import Backend, WindowCapture
 from jev.clients.hid import Hid, Humaniser
 from jev.clients.travel import Travel
-from jev.guide.coords import bounds_by_radio_id
+from jev.guide.coords import bounds_by_radio_id, map_to_world, world_to_map
 from jev.guide.graph import Graph
+from jev.guide.path import MmapQuery
 from jev.perceive import radio_frame
 
 # Resolved against the repo, not the cwd: these tools are run from wherever the Windows
@@ -34,12 +35,24 @@ ZONES = str(ROOT / "data" / "zones-tbc-243.json")
 GRAPH = str(ROOT / "content" / "tbc" / "ally_human_1_12.json")
 
 
+def world_to_map_safe(pt, bounds):
+    return world_to_map(pt[0], pt[1], bounds)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--to", nargs=2, type=float, metavar=("MX", "MY"))
     ap.add_argument("--to-npc", type=int, help="walk to the first node with this npc_id")
     ap.add_argument("--timeout", type=float, default=90.0)
     ap.add_argument("--arrival", type=float, default=5.0)
+    ap.add_argument("--straight", action="store_true",
+                    help="skip the planner and walk at the point (the old behaviour)")
+    ap.add_argument("--wsl-distro", default="Ubuntu-24.04",
+                    help="run the navmesh sidecar over here")
+    ap.add_argument("--mmaps", default="/home/ash/cmangos/run/bin/mmaps")
+    ap.add_argument("--jevpath", default="/home/ash/ForeverV2/tools/jevpath/jevpath",
+                    help="path to the sidecar AS SEEN BY THE MACHINE THAT RUNS IT; on "
+                         "Windows the repo is a UNC share and wsl.exe needs the Linux path")
     args = ap.parse_args()
 
     if not win32.available():
@@ -109,11 +122,42 @@ def main() -> int:
     print(f"  {travel.distance(here, target):.1f} yards, bearing "
           f"{math.degrees(travel.bearing(here, target) or 0):.1f} deg")
 
+    query = None
+    path = None
+    if not args.straight:
+        # The sidecar, its tiles and the compiler all live on the Linux side, so it is
+        # reached through wsl.exe rather than cross-compiled. Planning happens once per
+        # leg, so the boundary costs nothing that matters.
+        launcher = () if win32.IS_WINDOWS is False else ("wsl.exe", "-d", args.wsl_distro, "-e")
+        query = MmapQuery(args.jevpath, args.mmaps, launcher=launcher)
+        here_world = map_to_world(here[0], here[1], bounds)
+        target_world = map_to_world(target[0], target[1], bounds)
+        z = 0.0
+        if args.to_npc is not None and node.world:
+            z = node.world[2]
+        print("planning...")
+        path = query.path(bounds.map_id, (here_world[0], here_world[1], z),
+                          (target_world[0], target_world[1], z))
+        print(f"  {path.status.value} via {path.source}: {len(path.points)} waypoints, "
+              f"{path.length_yards():.1f} yards"
+              + (f" — {path.detail}" if path.detail else ""))
+        for pt in path.points:
+            frac = world_to_map_safe(pt, bounds)
+            print(f"    ({pt[0]:9.1f},{pt[1]:9.1f},{pt[2]:7.1f})"
+                  + (f"  map ({frac[0]:.4f},{frac[1]:.4f})" if frac else ""))
+
     try:
-        result = travel.to(target, timeout_s=args.timeout)
+        if path is not None and path.usable:
+            result = travel.follow(path, timeout_s=args.timeout)
+        else:
+            if path is not None:
+                print("  no usable route; walking straight at it instead")
+            result = travel.to(target, timeout_s=args.timeout)
     finally:
         hid.release_all()
         cap.close()
+        if query is not None:
+            query.close()
 
     print()
     print(f"outcome        {result.outcome.value}")

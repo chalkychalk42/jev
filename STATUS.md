@@ -203,3 +203,33 @@ NOW: 412 tests. Travel works; one node needs a route.
 NEXT: this is the point the plan predicted — recorded routes. The graph supplies
 destinations; the paths between them have to be walked once. Everything else on the NOT
 NEXT list stays there.
+
+## 2026-09-20 — arrived at Marshal McBride
+DID: the planner `Travel` was missing. Not vision, not more detour heuristics.
+
+**`tools/jevpath`** — a standalone Detour sidecar over the server's own mmaps (V19). The
+tiles are how CMaNGOS walks its own NPCs around Northshire Abbey, already extracted,
+already compiled as `libDetour.a`. 513 tiles for map 0, 2.2 s and 577 MB to load,
+microseconds to query, so `MmapQuery` keeps one process per map.
+
+**`jev/guide/path.py`** — `PathQuery(map_id, start, end) -> Path`, with `MmapQuery` first
+and `RecordedQuery` second as a seam with nothing behind it yet. `Travel.follow(path)` is
+sequencing only; the follower is unchanged and still knows nothing about geometry.
+
+**Live: arrived.** Courtyard to McBride, the leg that defeated straight-line travel nine
+times, now routes around the Abbey: 37.2 s, 4.8 yards remaining — inside interaction
+range — 50 turns, 3 stuck events all freed by jump-forward, 3 detours.
+
+Three things worth keeping:
+- **`-DDT_POLYREF64` is mandatory.** CMaNGOS builds Detour with 64-bit polyrefs, so every
+  symbol fails to link with a signature that differs only in `unsigned int` versus
+  `unsigned long`.
+- **The Detour axes are not the game's**: `detour = {world.y, world.z, world.x}`, read out
+  of `PathFinder.cpp` rather than remembered.
+- **Tight arrival on intermediate waypoints** (V20). The loose radius that seems obviously
+  right skipped most of the route and cut the corner back into the wall.
+
+NOW: 423 tests. Travel plans and follows. Vision, combat and the teacher are still
+untouched, deliberately.
+
+NEXT: the rest of the slice — loot/gossip templates, one combat profile, accept/kill/turn-in.

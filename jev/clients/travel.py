@@ -32,7 +32,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from jev.clients.hid import Hid
-from jev.guide.coords import ZoneBounds, distance_yards, heading_yards
+from jev.guide.coords import (
+    ZoneBounds,
+    distance_yards,
+    heading_yards,
+    world_to_map,
+)
 
 TAU = 2 * math.pi
 
@@ -103,6 +108,9 @@ class Travel:
     # loop turns straight back into the same wall.
     detour_s: float = 2.0
     max_detours: int = 8
+    # Tight, and deliberately tighter than the spacing Detour produces around buildings.
+    # See `follow`.
+    waypoint_arrival_yards: float = 3.0
 
     turn_rate: float = TURN_RATE_SEED
     turns: int = field(default=0, init=False)
@@ -263,6 +271,71 @@ class Travel:
         finally:
             self.hid.release_all()
 
+    def follow(self, path, *, timeout_s: float = 300.0,
+               abort: Callable[[], bool] | None = None) -> TravelResult:
+        """Walk a planned route, one waypoint at a time.
+
+        Sequencing only. The follower is unchanged and learns nothing new about geometry:
+        each leg is the same straight walk it has always done, and the planner is what
+        made the legs straight. A route around Northshire Abbey is three points, and the
+        middle one is the corner — so the follower never has to know the Abbey is there.
+
+        Intermediate waypoints get a **tight** arrival radius, not a loose one. That is
+        the opposite of the obvious choice and it was learned the hard way: Detour emits
+        waypoints at polygon portals, which around a building come as close as 1.9 yards
+        apart, so an 8-yard "close enough" radius marked most of the route as already
+        reached. The follower skipped to a distant waypoint, cut the corner, and walked
+        into the Abbey it had just been routed around — eight legs of nine completed and
+        the last one failing at the wall the planner existed to avoid.
+
+        Waypoints *are* the route. Passing near one is not the same as following it.
+        """
+        if not path.usable:
+            return self._result(Outcome.STUCK, self.position(), self.position(),
+                                self.position() or (0.0, 0.0), 0.0,
+                                f"no usable path: {path.status.value} {path.detail}".strip())
+
+        t0 = time.perf_counter()
+        legs = [world_to_map(pt[0], pt[1], self.bounds) for pt in path.points]
+        legs = [leg for leg in legs if leg is not None]
+        legs = _thin(legs, self.bounds, self.waypoint_arrival_yards)
+        exact = self.arrival_yards
+        last: TravelResult | None = None
+
+        for i, leg in enumerate(legs[1:], start=1):     # legs[0] is where we already are
+            final = i == len(legs) - 1
+            self.arrival_yards = exact if final else self.waypoint_arrival_yards
+            self.closest_yards = None       # per leg, or the number means nothing
+            remaining = timeout_s - (time.perf_counter() - t0)
+            if remaining <= 0:
+                self.arrival_yards = exact
+                return self._result(Outcome.TIMEOUT, legs[0], self.position(), leg,
+                                    time.perf_counter() - t0,
+                                    f"ran out of time on leg {i} of {len(legs) - 1}")
+            last = self.to(leg, timeout_s=remaining, abort=abort)
+            if last.outcome is not Outcome.ARRIVED:
+                self.arrival_yards = exact
+                return TravelResult(
+                    outcome=last.outcome, start=legs[0], end=last.end,
+                    remaining_yards=last.remaining_yards,
+                    elapsed_s=time.perf_counter() - t0, turns=self.turns,
+                    stuck_events=self.stuck_events, detours=self.detours,
+                    turn_rate_deg_s=last.turn_rate_deg_s,
+                    detail=f"leg {i} of {len(legs) - 1}: {last.detail}",
+                )
+
+        self.arrival_yards = exact
+        if last is None:
+            return self._result(Outcome.ARRIVED, legs[0], self.position(), legs[-1],
+                                time.perf_counter() - t0, "already at the destination")
+        return TravelResult(
+            outcome=Outcome.ARRIVED, start=legs[0], end=last.end,
+            remaining_yards=last.remaining_yards,
+            elapsed_s=time.perf_counter() - t0, turns=self.turns,
+            stuck_events=self.stuck_events, detours=self.detours,
+            turn_rate_deg_s=last.turn_rate_deg_s, detail="",
+        )
+
     def _detour(self, here, target) -> None:
         """Turn off the direct line and walk along the obstacle for a while.
 
@@ -321,18 +394,28 @@ class Travel:
                                        self.hid.hold("d", 0.4, tick_s=self.sample_s))),
         )
 
+        # A read failure skips *this* attempt, not the whole recovery. Both extremes
+        # have now cost a live run: treating None as "skip" meant one torn frame skipped
+        # all five attempts instantly, and treating it as "give up" meant one torn frame
+        # abandoned recovery after the first. Try them all, and only conclude nothing
+        # worked when nothing has been tried successfully either.
+        unreadable = 0
         for name, attempt in attempts:
             before = self.position()
             if before is None:
-                return False            # genuinely cannot see; recovery is not the fix
+                unreadable += 1
+                continue
             attempt()
             time.sleep(0.25)
             after = self.position()
             if after is None:
-                return False
+                unreadable += 1
+                continue
             if self.distance(before, after) > self.stuck_step_yards:
                 self.last_unstick = name
                 return True
+        if unreadable == len(attempts):
+            self.last_unstick = "unreadable"
         return False
 
     def _result(self, outcome: Outcome, start, end, target, elapsed: float,
@@ -344,6 +427,25 @@ class Travel:
             detours=self.detours,
             turn_rate_deg_s=math.degrees(self.turn_rate), detail=detail,
         )
+
+
+def _thin(legs: list[tuple[float, float]], bounds: ZoneBounds,
+          min_gap_yards: float) -> list[tuple[float, float]]:
+    """Drop waypoints closer together than the arrival radius can resolve.
+
+    Two points a yard apart cannot both be arrived at when arrival is three yards, so
+    keeping both means the second is satisfied the moment the first is and the follower
+    spends its time declaring victory instead of walking. The last point always survives:
+    it is the destination, and thinning it away would be arriving somewhere else.
+    """
+    if len(legs) <= 2:
+        return legs
+    kept = [legs[0]]
+    for leg in legs[1:-1]:
+        if distance_yards(kept[-1], leg, bounds) >= min_gap_yards:
+            kept.append(leg)
+    kept.append(legs[-1])
+    return kept
 
 
 def _wrap(a: float) -> float:

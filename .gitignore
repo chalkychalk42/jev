@@ -11,3 +11,4 @@ runs/
 *.jsonl
 addons/JevRadio/Fields.lua
 !tests/fixtures/
+tools/jevpath/jevpath
