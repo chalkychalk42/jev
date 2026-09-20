@@ -32,6 +32,16 @@ from jev.perceive.questlog import QuestLog
 FOCUS_TRIES = 20
 FOCUS_WAIT_S = 2.0
 
+# How long the strip may repeat a sequence number before it counts as frozen.
+#
+# Generous, because repeats are normal: the addon paints on a timer and this captures
+# faster than it paints, so the same frame is read several times over. Frozen is a
+# different thing entirely — the addon has stopped, usually on a Lua error — and it is
+# worth naming because **a frozen strip is indistinguishable from a pinned character**.
+# Both look like a position that never changes. An hour went into terrain that was never
+# the problem before anyone looked at `seq`.
+STALE_AFTER_S = 4.0
+
 
 class NotRunning(RuntimeError):
     """No client window, or it would not come to the foreground."""
@@ -47,6 +57,8 @@ class Client:
     origin: tuple[int, int]
     size: tuple[int, int]
     log: QuestLog = field(default_factory=QuestLog)
+    _seq: int | None = field(default=None, init=False)
+    _seq_at: float = field(default=0.0, init=False)
     travel: Travel | None = field(default=None, init=False)
     query: PathQuery | None = field(default=None, init=False)
     bounds: ZoneBounds | None = field(default=None, init=False)
@@ -55,14 +67,32 @@ class Client:
     # -- readers -------------------------------------------------------------
 
     def reading(self, tries: int = 6) -> radio_frame.RadioReading | None:
-        """A whole decoded reading, or `None`. Feeds the quest log on the way past."""
+        """A whole decoded reading, or `None`. Feeds the quest log on the way past.
+
+        `None` also means **frozen**, not only unreadable, and that is deliberate: every
+        caller already treats `None` as "cannot see", which is the honest answer for a
+        strip whose numbers stopped changing. Returning the last painted values would let
+        a follower conclude the character is stuck when the addon is what stopped.
+        """
         for _ in range(tries):
             r = radio_frame.read(self.cap.grab().rgb)
             if r.ok:
+                self._note_seq(r.values.get("seq"))
+                if self.frozen_for() > STALE_AFTER_S:
+                    return None
                 self.log.observe(r.values)
                 return r
             time.sleep(0.05)
         return None
+
+    def _note_seq(self, seq: int | None) -> None:
+        now = time.monotonic()
+        if seq != self._seq or self._seq_at == 0.0:
+            self._seq, self._seq_at = seq, now
+
+    def frozen_for(self) -> float:
+        """Seconds since the strip's sequence number last advanced."""
+        return 0.0 if self._seq_at == 0.0 else time.monotonic() - self._seq_at
 
     def read(self) -> dict | None:
         r = self.reading()
