@@ -233,3 +233,36 @@ NOW: 423 tests. Travel plans and follows. Vision, combat and the teacher are sti
 untouched, deliberately.
 
 NEXT: the rest of the slice — loot/gossip templates, one combat profile, accept/kill/turn-in.
+
+## 2026-09-20 — the weave was the controller
+DID: one controller fix, no new heuristics, planner untouched.
+
+The follower was arguing with its own heading estimate. A pulse arcs the character, and
+the 0.6 s heading window included the arc, so the reading overshot, the error flipped
+sign, and the next tick corrected back. An oscillator, not a router.
+
+Three changes, all in `to()`:
+- **A heading is only taken from unturned motion** — samples from before a pulse ended are
+  excluded, and a partial window gives no answer at all rather than a partial arc.
+- **Cruise deadband 22 degrees**, tightening to 10 on approach. Ten is for docking; with
+  0.12-yard quantisation and 1.5 yards of travel behind a heading, it is inside the noise
+  on a long leg and every tick finds a reason to twitch.
+- **No `_detour` on a planned leg** — a blocked leg re-queries the mesh from where the
+  character actually is. Unstick still runs.
+
+Live, courtyard to McBride, same three-point path:
+
+| | before | after |
+|---|---|---|
+| elapsed | 37.2 s | **11.6 s** |
+| turns | 50 | **8** |
+| stuck events | 3 | **0** |
+| detours | 3 | **0** |
+
+Look-ahead steering along the polyline was specified as optional and is **not built** —
+the weave is gone without it, and it would be cosmetics now.
+
+NOW: 428 tests. Travel plans, follows, and walks straight.
+
+NEXT: the slice, and nothing else. Interact McBride, accept, walk to the kobolds, combat
+profile, turn in.

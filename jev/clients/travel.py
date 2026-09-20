@@ -100,7 +100,8 @@ class Travel:
     # half is far outside normal and still quick to recover from.
     stuck_after_s: float = 1.5
     stuck_step_yards: float = 0.3
-    heading_tolerance: float = math.radians(10.0)
+    heading_tolerance: float = math.radians(10.0)     # docking, near the target
+    cruise_tolerance: float = math.radians(22.0)      # underway, with room to absorb it
     sample_s: float = 0.04
 
     # How far to commit along an obstacle before re-aiming. A building corner is the
@@ -117,6 +118,7 @@ class Travel:
     detours: int = field(default=0, init=False)
     closest_yards: float | None = field(default=None, init=False)
     _detour_side: int = field(default=1, init=False)
+    _pulse_ended_at: float = field(default=0.0, init=False)
     stuck_events: int = field(default=0, init=False)
     last_unstick: str = field(default="", init=False)
     _track: deque = field(default_factory=lambda: deque(maxlen=64), init=False)
@@ -140,17 +142,42 @@ class Travel:
         return None
 
     def _heading_now(self) -> float | None:
-        """Heading over the last `HEADING_WINDOW_S` of motion, or None if too little."""
+        """Heading over the last window of **unturned** motion, or None if too little.
+
+        The exclusion of samples from during and before a turn is the whole point, and
+        leaving it out made the follower an oscillator. A pulse arcs the character, so a
+        window that spans the pulse measures the arc: the heading reads past the target,
+        the error flips sign, and the next tick corrects the other way. Fifty turns in
+        thirty-seven seconds — a pulse every 0.7 s — with a three-point path that a person
+        would have walked as two straight lines.
+
+        So a heading is only taken once the window is full of motion made while going
+        straight. Until then there is no answer, and no answer means no steering.
+        """
         if len(self._track) < 2:
             return None
         newest_t = self._track[-1][0]
-        window = [s for s in self._track if newest_t - s[0] <= HEADING_WINDOW_S]
+        floor = max(newest_t - HEADING_WINDOW_S, self._pulse_ended_at)
+        window = [s for s in self._track if s[0] >= floor]
         if len(window) < 2:
+            return None
+        # A partial window is a partial arc. Wait for a full one rather than steer on it.
+        if window[-1][0] - window[0][0] < HEADING_WINDOW_S * 0.8:
             return None
         a, b = window[0][1], window[-1][1]
         if self.distance(a, b) < MIN_TRAVEL_FOR_HEADING:
             return None
         return heading_yards(a, b, self.bounds)
+
+    def _deadband(self, remaining_yards: float) -> float:
+        """How wrong the heading may be before it is worth a pulse.
+
+        Ten degrees is a docking tolerance and far too tight to cruise with: the position
+        readout quantises at about 0.12 yards and a heading needs 1.5 yards of travel
+        behind it, so ten degrees is inside the noise on a long leg and every tick finds
+        a reason to twitch. Wide while there is distance to absorb it, tight on approach.
+        """
+        return self.heading_tolerance if remaining_yards <= 12.0 else self.cruise_tolerance
 
     def _moved_since(self, seconds: float) -> float | None:
         """Yards covered over the last `seconds`, or None if the window is not full yet."""
@@ -165,7 +192,18 @@ class Travel:
     # -- the loop ------------------------------------------------------------
 
     def to(self, target, *, timeout_s: float = 90.0,
-           abort: Callable[[], bool] | None = None) -> TravelResult:
+           abort: Callable[[], bool] | None = None,
+           allow_detour: bool = True) -> TravelResult:
+        """Walk at a point.
+
+        `allow_detour=False` on a planned leg. `_detour` is the wall heuristic for a
+        straight-line walk at a raw node; on a navmesh polyline it is the follower
+        arguing with the planner, and it showed up as three detours on a route that had
+        already been solved. Unstick still runs — a fence or a root is a fence or a root
+        — but a blocked leg is reported so the caller can ask the planner again from
+        where the character actually is. That is the engine; detour-as-router is the
+        band-aid it replaced.
+        """
         t0 = time.perf_counter()
         start = self.position()
         here = start
@@ -198,6 +236,7 @@ class Travel:
                 if pulse_key is not None and now >= pulse_until:
                     self.hid.key_up(pulse_key)
                     pulse_key = None
+                    self._pulse_ended_at = now
                     observed = self._heading_now()
                     if (observed is not None and pulse_started_heading is not None
                             and pulse_len > 0.15):
@@ -236,6 +275,11 @@ class Travel:
                     # tried from the other rather than repeated. This is deliberately not
                     # a navmesh (`DECISIONS.md` V5): it clears a corner, and when it
                     # cannot, it fails honestly and says the node needs a recorded route.
+                    if not allow_detour:
+                        return self._result(
+                            Outcome.STUCK, start, here, target,
+                            time.perf_counter() - t0,
+                            "blocked on a planned leg; re-plan from here")
                     if self.detours >= self.max_detours:
                         return self._result(
                             Outcome.STUCK, start, here, target,
@@ -257,7 +301,7 @@ class Travel:
                         want = self.bearing(here, target)
                         if want is not None:
                             error = _wrap(want - heading)
-                            if abs(error) > self.heading_tolerance:
+                            if abs(error) > self._deadband(self.distance(here, target)):
                                 pulse_len = min(MAX_PULSE_S,
                                                 abs(error) / max(self.turn_rate, 0.1))
                                 if pulse_len >= MIN_PULSE_S:
@@ -272,7 +316,9 @@ class Travel:
             self.hid.release_all()
 
     def follow(self, path, *, timeout_s: float = 300.0,
-               abort: Callable[[], bool] | None = None) -> TravelResult:
+               abort: Callable[[], bool] | None = None,
+               replan: Callable[[tuple[float, float]], object] | None = None,
+               max_replans: int = 3) -> TravelResult:
         """Walk a planned route, one waypoint at a time.
 
         Sequencing only. The follower is unchanged and learns nothing new about geometry:
@@ -289,6 +335,10 @@ class Travel:
         the last one failing at the wall the planner existed to avoid.
 
         Waypoints *are* the route. Passing near one is not the same as following it.
+
+        A blocked leg asks the planner again from where the character actually is, rather
+        than turning ninety degrees and hoping. The mesh knows about the door; the
+        follower does not and should not learn.
         """
         if not path.usable:
             return self._result(Outcome.STUCK, self.position(), self.position(),
@@ -301,6 +351,7 @@ class Travel:
         legs = _thin(legs, self.bounds, self.waypoint_arrival_yards)
         exact = self.arrival_yards
         last: TravelResult | None = None
+        replans = 0
 
         for i, leg in enumerate(legs[1:], start=1):     # legs[0] is where we already are
             final = i == len(legs) - 1
@@ -312,7 +363,30 @@ class Travel:
                 return self._result(Outcome.TIMEOUT, legs[0], self.position(), leg,
                                     time.perf_counter() - t0,
                                     f"ran out of time on leg {i} of {len(legs) - 1}")
-            last = self.to(leg, timeout_s=remaining, abort=abort)
+            last = self.to(leg, timeout_s=remaining, abort=abort, allow_detour=False)
+
+            if last.outcome is Outcome.STUCK and replan is not None and replans < max_replans:
+                # Blocked. Ask the planner from here instead of improvising: the mesh
+                # knows the way round, and a follower that invents one is the thing this
+                # whole file stopped doing.
+                replans += 1
+                position = self.position()
+                fresh = replan(position) if position is not None else None
+                if fresh is not None and getattr(fresh, "usable", False):
+                    self.arrival_yards = exact
+                    rest = self.follow(
+                        fresh, timeout_s=timeout_s - (time.perf_counter() - t0),
+                        abort=abort, replan=replan, max_replans=max_replans - replans,
+                    )
+                    return TravelResult(
+                        outcome=rest.outcome, start=legs[0], end=rest.end,
+                        remaining_yards=rest.remaining_yards,
+                        elapsed_s=time.perf_counter() - t0, turns=self.turns,
+                        stuck_events=self.stuck_events, detours=self.detours,
+                        turn_rate_deg_s=rest.turn_rate_deg_s,
+                        detail=f"re-planned at leg {i}: {rest.detail}".strip(),
+                    )
+
             if last.outcome is not Outcome.ARRIVED:
                 self.arrival_yards = exact
                 return TravelResult(

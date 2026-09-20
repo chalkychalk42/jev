@@ -95,3 +95,59 @@ def test_outcomes_name_what_happened():
     """A run that ends has to say whether it arrived, was blocked, or ran out of time —
     'stuck' and 'timeout' need different fixes."""
     assert {o.value for o in Outcome} >= {"arrived", "stuck", "timeout", "lost", "aborted"}
+
+
+# --------------------------------------------------------------------- the controller
+
+def test_a_heading_is_never_taken_across_a_turn():
+    """The oscillator. A pulse arcs the character, so a window spanning the pulse
+    measures the arc: the heading reads past the target, the error flips sign, and the
+    next tick corrects the other way. Live, that was 50 turns in 37 seconds — a pulse
+    every 0.7 s — on a three-point path a person would walk as two straight lines.
+    """
+    t = _travel([(0.5, 0.5)])
+    # A full window of motion, all of it before the pulse ended.
+    t._track.extend((i * 0.1, (0.5 + i * 0.001, 0.5)) for i in range(10))
+    assert t._heading_now() is not None, "clean motion should give a heading"
+
+    t._pulse_ended_at = t._track[-1][0]
+    assert t._heading_now() is None, "a heading must not be taken from turned motion"
+
+
+def test_a_partial_window_is_not_a_heading():
+    """A partial window is a partial arc. Waiting beats steering on it."""
+    t = _travel([(0.5, 0.5)])
+    t._track.extend((i * 0.05, (0.5 + i * 0.002, 0.5)) for i in range(3))
+    assert t._heading_now() is None
+
+
+def test_the_deadband_is_wide_underway_and_tight_on_approach():
+    """Ten degrees is a docking tolerance. The readout quantises at 0.12 yards and a
+    heading needs 1.5 yards behind it, so ten degrees is inside the noise on a long leg
+    and every tick finds a reason to twitch."""
+    t = _travel([(0.5, 0.5)])
+    assert t._deadband(60.0) > t._deadband(5.0)
+    assert math.degrees(t._deadband(60.0)) == pytest.approx(22.0, abs=0.1)
+    assert math.degrees(t._deadband(5.0)) == pytest.approx(10.0, abs=0.1)
+
+
+def test_a_planned_leg_does_not_detour():
+    """`_detour` is the wall heuristic for walking at a raw node. On a navmesh polyline
+    it is the follower arguing with the planner, and it showed up as three detours on a
+    route that had already been solved."""
+    import inspect
+
+    from jev.clients.travel import Travel as T
+
+    src = inspect.getsource(T.to)
+    assert "allow_detour" in inspect.signature(T.to).parameters
+    assert "re-plan from here" in src, "a blocked planned leg must say so, not improvise"
+
+
+def test_follow_asks_the_planner_again_rather_than_improvising():
+    """The mesh knows about the door; the follower does not and should not learn."""
+    import inspect
+
+    from jev.clients.travel import Travel as T
+
+    assert "replan" in inspect.signature(T.follow).parameters

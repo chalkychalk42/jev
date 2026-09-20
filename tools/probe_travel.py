@@ -148,7 +148,15 @@ def main() -> int:
 
     try:
         if path is not None and path.usable:
-            result = travel.follow(path, timeout_s=args.timeout)
+            def replan(here_map):
+                """Ask the mesh again from wherever the character actually got to."""
+                w = map_to_world(here_map[0], here_map[1], bounds)
+                fresh = query.path(bounds.map_id, (w[0], w[1], z),
+                                   (target_world[0], target_world[1], z))
+                print(f"  re-planned: {fresh.status.value}, {len(fresh.points)} waypoints")
+                return fresh
+
+            result = travel.follow(path, timeout_s=args.timeout, replan=replan)
         else:
             if path is not None:
                 print("  no usable route; walking straight at it instead")
