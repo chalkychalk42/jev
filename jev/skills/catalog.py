@@ -1,0 +1,168 @@
+"""The skill catalog — what the coach is allowed to arm.
+
+A skill is a temporally extended program, not a keypress (PLAN §8.1). The coach never
+emits raw keys in the happy path; it arms one of these and System 1 runs it at 30 Hz.
+That split is why everything above 2 Hz is allowed to be slow, wrong, or absent.
+
+Every skill declares `success` and `timeout_s`. A skill with no success predicate cannot
+be graded, cannot be promoted or retired, and cannot tell a stall from a slow success —
+so it is not a skill, it is a hope.
+
+The `pre`/`success` predicates are structured rather than string expressions, for the same
+reason the graph's `on_fail` edges are: a typo in a string becomes a silent never-fires.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import StrEnum
+
+from jev.world.state_v1 import State
+
+Predicate = Callable[[State], bool]
+
+
+class Stage(StrEnum):
+    """Promotion state (PLAN §10). Measured, never asserted."""
+
+    BUILTIN = "builtin"      # hand-written, always available
+    PROPOSED = "proposed"    # drafted by the teacher, unproven
+    STABLE = "stable"        # 2 clients x 3 runs succeeded
+    RETIRED = "retired"      # success rate < 0.4 over 20; not retrievable without the teacher
+
+
+@dataclass(frozen=True)
+class Skill:
+    name: str
+    summary: str
+    timeout_s: float
+    success: Predicate
+    pre: Predicate = field(default=lambda _s: True)
+    stage: Stage = Stage.BUILTIN
+    interruptible: bool = True
+    on_fail: str | None = None       # a skill name to try once before escalating
+
+
+def _alive(s: State) -> bool:
+    return s.vitals.dead is not True and s.vitals.ghost is not True
+
+
+# The catalog. Order is PLAN §8.1's implementation order, which is also roughly the order
+# a character needs them in.
+_SKILLS: tuple[Skill, ...] = (
+    Skill("IDLE", "do nothing, deliberately", 5.0,
+          success=lambda s: True),
+
+    Skill("FOLLOW_PATH", "walk a recorded polyline", 300.0,
+          success=lambda s: False,     # ends by arriving, which TRAVEL_TO judges
+          pre=_alive, on_fail="STUCK_RECOVER"),
+
+    Skill("TRAVEL_TO", "get to a point on the zone map", 600.0,
+          success=lambda s: False,     # the tracker owns arrival; it knows the radius
+          pre=_alive, on_fail="STUCK_RECOVER"),
+
+    Skill("COMBAT_PROFILE", "run a named rotation until the target is dead", 120.0,
+          success=lambda s: s.target.has is False or s.vitals.combat is False,
+          pre=lambda s: _alive(s) and s.target.has is True),
+
+    Skill("APPROACH_TARGET", "close to melee reach", 30.0,
+          # Ask the client whether we are in reach. Inferring it from damage having
+          # landed means the character must hit a mob to learn it can reach one.
+          success=lambda s: s.target.in_melee is True,
+          pre=lambda s: _alive(s) and s.target.has is True),
+
+    Skill("FACE", "turn to face the target", 5.0,
+          success=lambda s: True, pre=_alive),
+
+    Skill("LOOT", "clear the loot window", 15.0,
+          success=lambda s: s.ui.loot is False,
+          pre=lambda s: _alive(s) and s.ui.loot is True),
+
+    Skill("EAT_DRINK", "sit and recover to a working level", 60.0,
+          success=lambda s: (s.vitals.hp or 0) > 0.85 and (s.vitals.power or 1) > 0.7,
+          pre=lambda s: _alive(s) and s.vitals.combat is False),
+
+    Skill("VENDOR_REPAIR", "sell greys, repair, make space", 180.0,
+          success=lambda s: (s.bags.free is not None and s.bags.free >= 6
+                             and s.bags.durability_min is not None
+                             and s.bags.durability_min > 0.7),
+          pre=_alive, on_fail="STUCK_RECOVER"),
+
+    Skill("TRAIN_CLASS", "learn available ranks", 120.0,
+          # The client cannot reliably confirm a rank was learned, so this ends on its
+          # timeout and the graph's skip edge. Saying so beats a success predicate that
+          # returns True and means nothing.
+          success=lambda s: False, pre=_alive),
+
+    Skill("RELEASE_SPIRIT", "release to the graveyard", 30.0,
+          success=lambda s: s.vitals.ghost is True,
+          pre=lambda s: s.vitals.dead is True),
+
+    Skill("CORPSE_RUN", "walk the ghost back to the body and resurrect", 420.0,
+          success=lambda s: s.vitals.ghost is False and s.vitals.dead is False,
+          pre=lambda s: s.vitals.ghost is True),
+
+    Skill("HEARTH", "use the hearthstone", 60.0,
+          success=lambda s: False, pre=lambda s: _alive(s) and s.vitals.combat is False),
+
+    Skill("FLIGHT_PATH", "take a known flight", 600.0,
+          success=lambda s: s.flags.on_taxi is False, pre=_alive),
+
+    Skill("BOAT_OR_ZEP", "ride a boat or zeppelin to the next zone", 600.0,
+          # Fragile by nature (PLAN §14): it ends on a zone change and a timer, and there
+          # is nothing to read mid-crossing. The one rule that matters is not to walk off
+          # the dock while waiting.
+          success=lambda s: False, pre=lambda s: _alive(s) and s.vitals.combat is not True),
+
+    Skill("ACCEPT_QUEST", "take the quest from the NPC in front of us", 60.0,
+          success=lambda s: False,     # the tracker checks the log; this only presses
+          pre=lambda s: _alive(s) and s.vitals.combat is not True),
+
+    Skill("TURNIN_QUEST", "hand the quest back", 60.0,
+          success=lambda s: False,
+          pre=lambda s: _alive(s) and s.vitals.combat is not True),
+
+    Skill("GOSSIP_PICK", "choose a gossip option", 20.0,
+          success=lambda s: s.ui.gossip is False,
+          pre=lambda s: _alive(s) and s.ui.gossip is True),
+
+    Skill("GRIND_UNTIL", "kill, loot and eat around a point until a condition holds", 900.0,
+          success=lambda s: False,     # the rib's own predicate ends it
+          pre=_alive),
+
+    Skill("STUCK_RECOVER", "jump, strafe, back up, repath", 45.0,
+          success=lambda s: True, pre=_alive),
+
+    Skill("BAG_MAKE_SPACE", "destroy greys when no vendor is near", 30.0,
+          success=lambda s: s.bags.free is not None and s.bags.free >= 2, pre=_alive),
+
+    Skill("BUY_AMMO_REAGENT_FOOD", "restock consumables", 120.0,
+          success=lambda s: False, pre=_alive),
+
+    Skill("MOUNT_UP", "mount, if we have one and may use it", 15.0,
+          success=lambda s: s.flags.mounted is True,
+          pre=lambda s: _alive(s) and s.vitals.combat is not True
+                        and (s.char.level or 0) >= 30),
+
+    Skill("ABORT_WAIT", "stop and wait out something the client is doing", 30.0,
+          success=lambda s: s.ui.modal is False, pre=lambda s: True),
+)
+
+BY_NAME: dict[str, Skill] = {s.name: s for s in _SKILLS}
+NAMES: frozenset[str] = frozenset(BY_NAME)
+
+
+def get(name: str) -> Skill | None:
+    return BY_NAME.get(name)
+
+
+def retrievable(stages: tuple[Stage, ...] = (Stage.BUILTIN, Stage.STABLE, Stage.PROPOSED)
+                ) -> frozenset[str]:
+    """Skills the coach may retrieve.
+
+    `RETIRED` is excluded deliberately and is not a default anywhere: a skill that failed
+    sixty percent of the time is worse than no skill, because the coach will keep choosing
+    it. It becomes reachable again only with the teacher in the loop (PLAN §10).
+    """
+    return frozenset(n for n, s in BY_NAME.items() if s.stage in stages)

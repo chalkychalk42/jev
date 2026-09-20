@@ -1,0 +1,17 @@
+## Interface: 20400
+## Title: JevRadio
+## Notes: Paints client state as a pixel strip. Reads only, never actuates (PLAN 2.2).
+## Author: Jev
+## Version: 1.0.0
+## DefaultState: enabled
+
+# Load order is a dependency order, not a preference.
+#   Helpers  defines the measurement functions the generated getters call.
+#   Fields   is GENERATED from jev/perceive/fields.py and must never be hand-edited.
+#   JevRadio hands each generated getter its environment, then packs and paints.
+# Fields.lua before Helpers.lua would still load -- the getters resolve names at call
+# time -- but JevRadio.lua genuinely cannot build the getter environment before Helpers
+# has produced it.
+Helpers.lua
+Fields.lua
+JevRadio.lua

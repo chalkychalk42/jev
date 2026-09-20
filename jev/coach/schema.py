@@ -24,9 +24,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Intent(StrEnum):
-    """The coach's entire decision space. Seven values, and most ticks need none of them."""
+    """The coach's entire decision space. Seven values, and most ticks need none of them.
 
-    ADVANCE = "advance"       # the step is done; move the playhead
+    These are *strategies for the current step*, not events. Moving the playhead is the
+    tracker's job and never the coach's — `ADVANCE` means "go at this step head-on", which
+    is what to do when nothing suggests otherwise.
+    """
+
+    ADVANCE = "advance"       # pursue the current step directly — the default strategy
     SKIP = "skip"             # this step is not going to work; take the alternative edge
     REJOIN = "rejoin"         # we are off-route; get back to it
     GRIND_RIB = "grind_rib"   # leave the spine for a grind loop, then recheck

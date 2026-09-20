@@ -1,0 +1,485 @@
+-- JevRadio -- Helpers.lua
+--
+-- Everything the generated Fields.lua getters call. Fields.lua is generated from
+-- jev/perceive/fields.py and is a build error to hand-edit; this file is the half that
+-- may change freely, because nothing on the wire depends on *how* a value is measured.
+--
+-- Two decisions shape the whole file.
+--
+-- 1. Helpers return NORMALISED values, never wire codes. `frac` yields 0..1, `angle`
+--    yields radians, `tri` yields 0/1/2, the integer helpers yield integers. A helper
+--    cannot know a field's bit width -- `frac` is called from an 8-bit field and a
+--    14-bit one in the same table -- so the width-dependent encoding (fields.py's
+--    round(v * (span-1)) and its siblings) belongs to the packer in JevRadio.lua, which
+--    has each field's `bits` and `kind` in hand. The alternative, passing the width to
+--    every helper, would have to be threaded through the generated call sites, and we do
+--    not own those.
+--
+-- 2. nil out of a stock 2.4.3 API is the client answering "no", not "nobody looked".
+--    IsIndoors, IsMounted, UnitAffectingCombat and the rest return 1 or nil. If `tri`
+--    mapped nil to unknown, every flag would read unknown forever and Flags.present()
+--    would never fire once. Genuine ignorance is said one level up: a getter that cannot
+--    evaluate returns nil outright, and the packer paints the not-available code.
+--
+-- Nothing here presses a key, moves, or writes a CVar. See the header of JevRadio.lua.
+
+local TAU = 2 * math.pi
+
+-- --------------------------------------------------------------------- shared state
+--
+-- Kept in this file rather than the painter because these are answers to the client's
+-- own events, and the helpers that report them are here. The painter only paints.
+
+local lastError = 0          -- pending UI-error enum index, cleared once painted
+local questHash = nil        -- cached; rebuilt on QUEST_LOG_UPDATE, not per paint
+local castingByEvent = false -- fallback for clients without UnitCastingInfo
+local mapDirty = true        -- the world map may not be showing the zone we are standing in
+local mapTrusted = false     -- GetPlayerMapPosition/GetMapInfo answer about the right zone
+
+-- --------------------------------------------------------------------- scalar helpers
+
+local function frac(v)
+    if v == nil then return nil end
+    v = tonumber(v)
+    if v == nil then return nil end
+    if v < 0 then return 0 end
+    if v > 1 then return 1 end
+    return v
+end
+
+local function angle(v)
+    if v == nil then return nil end
+    v = tonumber(v)
+    if v == nil then return nil end
+    -- Lua 5.1's % on floats is a floor-modulo, so a negative facing wraps to the
+    -- positive side rather than staying negative and encoding as garbage.
+    return v % TAU
+end
+
+local function tri(v)
+    -- 1 = false, 2 = true, 0 = unknown. Unknown is never produced here; see note 2 in
+    -- the file header. A few 2.4.3 entry points hand back a numeric 0 instead of nil,
+    -- which is truthy in Lua and would otherwise paint "true".
+    if v == nil or v == false or v == 0 then return 1 end
+    return 2
+end
+
+local function clamp(v, hi)
+    if v == nil then return nil end
+    v = tonumber(v)
+    if v == nil then return nil end
+    if v < 0 then return 0 end
+    if v > hi then return hi end
+    return math.floor(v)
+end
+
+-- --------------------------------------------------------------------- FNV-1a
+--
+-- Names travel as numbers. The Python side resolves the number back to a name against
+-- the world DB, so both implementations must agree bit for bit; tests/test_radio_frame.py
+-- holds the reference and the constants below are asserted against it.
+
+local FNV_OFFSET = 2166136261
+local FNV_PRIME  = 16777619
+local UINT32     = 4294967296
+
+local function xor8(a, b)
+    -- 2.4.3 ships Lua 5.1 with no bitwise operators and no `bit` library, so xor is done
+    -- a bit at a time. Eight iterations per input byte. A 256x256 lookup table was the
+    -- alternative and costs 64k entries of memory to save ~20us a frame; the only caller
+    -- that ever sees a long string is QUEST_HASH, and that one is cached behind an event.
+    local r, place = 0, 1
+    for _ = 1, 8 do
+        local x, y = a % 2, b % 2
+        if x ~= y then r = r + place end
+        a, b, place = (a - x) / 2, (b - y) / 2, place * 2
+    end
+    return r
+end
+
+local function fnv1a16(s)
+    if s == nil then return nil end
+    local h = FNV_OFFSET
+    for i = 1, string.len(s) do
+        local low = h % 256
+        h = h - low + xor8(low, string.byte(s, i))   -- xor with a byte touches only the low byte
+        -- h * FNV_PRIME reaches 2^56 and a double carries only 53 bits exactly, so the
+        -- multiply is split into halves and recombined mod 2^32. Getting this wrong is a
+        -- silent failure: the hash still looks random, it just stops matching Python's.
+        local hi = math.floor(h / 65536)
+        local lo = h % 65536
+        h = (lo * FNV_PRIME + ((hi * FNV_PRIME) % 65536) * 65536) % UINT32
+    end
+    -- Fold 32 bits to 16 by xor, not truncation: that is FNV's own recommendation, and
+    -- truncating throws away the mixing the high half did.
+    local hi = math.floor(h / 65536)
+    local lo = h % 65536
+    return xor8(hi % 256, lo % 256) + xor8(math.floor(hi / 256), math.floor(lo / 256)) * 256
+end
+
+local function nameid(s)
+    local h = fnv1a16(s)
+    if h == nil then return nil end
+    -- 65535 is the 16-bit not-available code. A real name that hashed to it would paint
+    -- "no target"; one name in 65536 reading as its neighbour is much cheaper than a
+    -- phantom empty target, so collapse rather than report nothing.
+    if h == 65535 then return 65534 end
+    return h
+end
+
+-- --------------------------------------------------------------------- enum tables
+--
+-- Keyed by the client's own locale-independent tokens. tests/test_radio_frame.py parses
+-- these three tables out of this file and asserts they match the inverse tables in
+-- jev/perceive/radio_frame.py, which is the only thing stopping them drifting -- they
+-- are not generated, and they should be. See the report note on fields.py.
+--
+-- Index 0 is left unused in all three: an unrecognised token yields nil from the lookup,
+-- the packer paints not-available, and the decoder says None rather than guessing class 0.
+
+local CLASS_ID = {
+    WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5,
+    SHAMAN = 6, MAGE = 7, WARLOCK = 8, DRUID = 9,
+}
+
+local RACE_ID = {
+    Human = 1, Dwarf = 2, NightElf = 3, Gnome = 4, Draenei = 5,
+    Orc = 6, Scourge = 7, Tauren = 8, Troll = 9, BloodElf = 10,
+}
+
+local CLASSIFICATION_ID = {
+    normal = 1, elite = 2, rare = 3, rareelite = 4, worldboss = 5,
+}
+
+-- --------------------------------------------------------------------- UI errors
+--
+-- UI_ERROR_MESSAGE carries localised text, so it is matched against the client's own
+-- global strings rather than against English. Index 1 is "other" on purpose: knowing
+-- that *something* failed is most of the value, and an unmatched error must not read as
+-- no error at all. Order is the wire contract; append, never reorder.
+
+local UI_ERRORS = {
+    { key = "other" },
+    { key = "out_of_range",     globals = { "SPELL_FAILED_OUT_OF_RANGE", "ERR_OUT_OF_RANGE", "ERR_BADATTACKPOS" } },
+    { key = "not_facing",       globals = { "SPELL_FAILED_UNIT_NOT_INFRONT", "ERR_BADATTACKFACING" } },
+    { key = "no_line_of_sight", globals = { "SPELL_FAILED_LINE_OF_SIGHT" } },
+    { key = "bad_target",       globals = { "SPELL_FAILED_BAD_TARGETS", "SPELL_FAILED_TARGET_FRIENDLY", "ERR_NO_ATTACK_TARGET" } },
+    { key = "no_target",        globals = { "SPELL_FAILED_BAD_IMPLICIT_TARGETS", "ERR_GENERIC_NO_TARGET" } },
+    { key = "target_dead",      globals = { "SPELL_FAILED_TARGETS_DEAD" } },
+    { key = "no_power",         globals = { "ERR_OUT_OF_MANA", "ERR_OUT_OF_RAGE", "ERR_OUT_OF_ENERGY", "ERR_OUT_OF_FOCUS", "SPELL_FAILED_NO_POWER" } },
+    { key = "not_ready",        globals = { "SPELL_FAILED_NOT_READY", "ERR_SPELL_COOLDOWN", "ERR_ITEM_COOLDOWN" } },
+    { key = "already_casting",  globals = { "SPELL_FAILED_SPELL_IN_PROGRESS", "ERR_SPELL_FAILED_ANOTHER_IN_PROGRESS" } },
+    { key = "moving",           globals = { "SPELL_FAILED_MOVING" } },
+    { key = "immune",           globals = { "SPELL_FAILED_IMMUNE" } },
+    { key = "too_close",        globals = { "SPELL_FAILED_TOO_CLOSE" } },
+    { key = "player_dead",      globals = { "ERR_PLAYER_DEAD", "SPELL_FAILED_CASTER_DEAD" } },
+    { key = "bags_full",        globals = { "ERR_INV_FULL" } },
+    { key = "quest_log_full",   globals = { "ERR_QUEST_LOG_FULL" } },
+    { key = "not_enough_money", globals = { "ERR_NOT_ENOUGH_MONEY" } },
+    { key = "cannot_do_that",   globals = { "SPELL_FAILED_CANT_DO_THAT_RIGHT_NOW", "ERR_CLIENT_LOCKED_OUT" } },
+}
+
+local errorIndex = {}   -- localised text -> enum index, built once at load
+
+local function buildErrorIndex()
+    for i = 2, #UI_ERRORS do
+        local entry = UI_ERRORS[i]
+        for _, name in ipairs(entry.globals) do
+            local text = _G[name]
+            -- Some of these globals do not exist in every 2.4.3 build, and some carry
+            -- format specifiers, which never compare equal to a rendered message. Both
+            -- are skipped so a missing name costs one bucket, not a load error.
+            if type(text) == "string" and string.find(text, "%%") == nil then
+                errorIndex[text] = i
+            end
+        end
+    end
+end
+
+buildErrorIndex()   -- FrameXML's GlobalStrings are loaded before any addon, so this is safe here
+
+local function LAST_ERROR()
+    local v = lastError
+    lastError = 0   -- cleared once painted: the field reports an edge, not a level
+    return v
+end
+
+-- --------------------------------------------------------------------- world queries
+
+local function ZONE_ID()
+    -- mx/my are a percentage of a map, and a percentage means nothing without the map it
+    -- is a percentage of. While the player is browsing the world map we cannot fix it to
+    -- the current zone without fighting them, so the zone goes unknown and the consumer
+    -- is obliged to throw mx/my away with it.
+    if not mapTrusted then return nil end
+    local file = GetMapInfo()
+    if file == nil then return nil end   -- instance, or an area with no world map at all
+    -- 14 bits, so 16383 is the not-available code and the hash is taken modulo it. The
+    -- 68 zone map files in data/zones-tbc-243.json are collision-free under this, which
+    -- tests/test_radio_frame.py asserts rather than assumes.
+    return fnv1a16(file) % 16383
+end
+
+local function BAG_FREE()
+    local total = 0
+    for bag = 0, 4 do
+        local free, kind = GetContainerNumFreeSlots(bag)
+        if free then
+            -- kind is the bag's item-class restriction. A quiver's free slots cannot take
+            -- loot, so counting them would walk the bot past the vendor it needed. The
+            -- second return does not exist on every 2.4.3 build, hence the nil case.
+            if kind == nil or kind == 0 then total = total + free end
+        end
+    end
+    return total
+end
+
+local FIRST_EQUIPPED, LAST_EQUIPPED = 1, 18   -- head..ranged; tabard and bags have no durability
+
+local function DURABILITY_MIN()
+    local worst = nil
+    for slot = FIRST_EQUIPPED, LAST_EQUIPPED do
+        local cur, max = GetInventoryItemDurability(slot)
+        if cur and max and max > 0 then
+            local v = cur / max
+            if worst == nil or v < worst then worst = v end
+        end
+    end
+    -- nil when nothing equipped has durability. That is no observation, not full repair:
+    -- a naked corpse-run character would otherwise report a pristine 1.0.
+    return worst
+end
+
+-- --------------------------------------------------------------------- quests
+
+local function focusQuest()
+    -- The objective fields all describe one quest, and 2.4.3 has no notion of a "current"
+    -- quest beyond the watch list, so the first watch is it. With nothing watched every
+    -- objective field goes unknown, which is the truth: nobody said which quest to read.
+    if GetNumQuestWatches == nil or GetNumQuestWatches() == 0 then return nil end
+    return GetQuestIndexForWatch(1)
+end
+
+local function rebuildQuestHash()
+    local parts = {}
+    local n = GetNumQuestLogEntries()
+    for i = 1, n do
+        local title, level, _, _, isHeader, _, isComplete = GetQuestLogTitle(i)
+        if title and not isHeader then
+            table.insert(parts, title .. "\1" .. tostring(level) .. "\1" .. tostring(isComplete))
+            for j = 1, GetNumQuestLeaderBoards(i) do
+                local text = GetQuestLogLeaderBoard(j, i)
+                if text then table.insert(parts, text) end
+            end
+        end
+    end
+    -- Objective text is included deliberately: a kill counter ticking from 3/8 to 4/8 is
+    -- exactly the change this hash exists to announce, and the titles alone would miss it.
+    local h = fnv1a16(table.concat(parts, "\2"))
+    if h == 65535 then h = 65534 end
+    questHash = h
+end
+
+local function QUEST_HASH()
+    if questHash == nil then rebuildQuestHash() end
+    return questHash
+end
+
+local function WATCHED_QUEST_ID()
+    local q = focusQuest()
+    if q == nil then return nil end
+    -- 2.4.3 has no GetQuestLogQuestID. The quest hyperlink carries the real id, and if
+    -- this build has no GetQuestLink the field goes unknown rather than silently becoming
+    -- a title hash -- the decoder could not tell the two apart.
+    if GetQuestLink == nil then return nil end
+    local link = GetQuestLink(q)
+    if link == nil then return nil end
+    local id = tonumber(string.match(link, "quest:(%d+)"))
+    if id == nil or id >= 65535 then return nil end
+    return id
+end
+
+local function OBJ(i, which)
+    local q = focusQuest()
+    if q == nil then return nil end
+    local text = GetQuestLogLeaderBoard(i, q)
+    if text == nil then return nil end
+    local have, need = string.match(text, "(%d+)%s*/%s*(%d+)")
+    -- An exploration or event objective has no counter at all. Reporting 0/1 for it would
+    -- invent a progress bar the quest does not have.
+    if have == nil then return nil end
+    if which == "have" then return clamp(tonumber(have), 126) end
+    return clamp(tonumber(need), 126)
+end
+
+-- --------------------------------------------------------------------- action bars
+
+local BAR_SLOTS = 12
+local BAR_NA = 4095   -- 12 bits: every slot set is also the not-available code
+
+local function BAR_BITS(which)
+    local v, place = 0, 1
+    for slot = 1, BAR_SLOTS do
+        local on = false
+        if HasAction(slot) then
+            if which == "usable" then
+                on = IsUsableAction(slot) and true or false
+            else
+                local start, duration = GetActionCooldown(slot)
+                on = duration == nil or duration == 0 or (start + duration) <= GetTime()
+            end
+        end
+        if on then v = v + place end
+        place = place * 2
+    end
+    if v >= BAR_NA then
+        -- All twelve set collides with the sentinel, so slot 12 is dropped. Unknown was
+        -- the other option and is worse here: out of combat with a full bar every slot is
+        -- ready, so "all twelve" is the ordinary reading, and reporting it as unknown
+        -- would blind the coach to the whole bar most of the time. The cost is one slot
+        -- reading not-ready in the single case where everything is. bars.usable and
+        -- bars.ready want thirteen bits; see the report note on fields.py.
+        v = BAR_NA - 1
+    end
+    return v
+end
+
+local function GCD_FRAC()
+    local now, best, any = GetTime(), 0, false
+    for slot = 1, BAR_SLOTS do
+        if HasAction(slot) then
+            any = true
+            local start, duration = GetActionCooldown(slot)
+            -- A cooldown of at most 1.5 s on an action that has one is the global
+            -- cooldown; anything longer is the ability's own. TBC's GCD is 1.5 s for
+            -- spells and 1.0 s for energy abilities, so 1.5 is the ceiling that
+            -- separates them.
+            if start and duration and duration > 0 and duration <= 1.5 then
+                local left = (start + duration - now) / duration
+                if left > best then best = left end
+            end
+        end
+    end
+    -- With an empty bar there is no cooldown to read, so the GCD is genuinely unobserved
+    -- rather than zero.
+    if not any then return nil end
+    return frac(best)
+end
+
+local function CASTING()
+    if UnitCastingInfo then
+        if UnitCastingInfo("player") ~= nil then return true end
+        if UnitChannelInfo and UnitChannelInfo("player") ~= nil then return true end
+        return false
+    end
+    return castingByEvent
+end
+
+-- --------------------------------------------------------------------- UI
+
+local function MODAL_UP()
+    local n = STATICPOPUP_NUMDIALOGS or 4
+    for i = 1, n do
+        local f = _G["StaticPopup" .. i]
+        if f and f:IsVisible() then return true end
+    end
+    return false
+end
+
+-- --------------------------------------------------------------------- events
+
+local watcher = CreateFrame("Frame", "JevRadioWatcher")
+watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+watcher:RegisterEvent("PLAYER_LOGIN")
+watcher:RegisterEvent("ZONE_CHANGED")
+watcher:RegisterEvent("ZONE_CHANGED_INDOORS")
+watcher:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+watcher:RegisterEvent("QUEST_LOG_UPDATE")
+watcher:RegisterEvent("UI_ERROR_MESSAGE")
+watcher:RegisterEvent("UNIT_SPELLCAST_START")
+watcher:RegisterEvent("UNIT_SPELLCAST_STOP")
+watcher:RegisterEvent("UNIT_SPELLCAST_FAILED")
+watcher:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+watcher:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+watcher:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+watcher:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+
+watcher:SetScript("OnEvent", function(self, event, a1)
+    -- 2.4.3 delivers event arguments in the globals arg1..argN; named handler parameters
+    -- only arrived in 3.0. Reading both means this file works on either without a fork.
+    local p1 = a1
+    if p1 == nil then p1 = arg1 end
+    local ev = event
+    if ev == nil then ev = _G["event"] end
+
+    if ev == "UI_ERROR_MESSAGE" then
+        if type(p1) == "string" then
+            lastError = errorIndex[p1] or 1   -- 1 = "other": something failed, we just do not model it
+        end
+    elseif ev == "QUEST_LOG_UPDATE" then
+        questHash = nil                       -- recomputed lazily; the log can fire this several times a second
+    elseif ev == "UNIT_SPELLCAST_START" or ev == "UNIT_SPELLCAST_CHANNEL_START" then
+        if p1 == "player" then castingByEvent = true end
+    elseif ev == "UNIT_SPELLCAST_STOP" or ev == "UNIT_SPELLCAST_CHANNEL_STOP"
+        or ev == "UNIT_SPELLCAST_FAILED" or ev == "UNIT_SPELLCAST_INTERRUPTED"
+        or ev == "UNIT_SPELLCAST_SUCCEEDED" then
+        if p1 == "player" then castingByEvent = false end
+    else
+        mapDirty = true                       -- a zone event; the world map is now showing the wrong zone
+        mapTrusted = false
+        questHash = nil
+    end
+end)
+
+local function syncMap()
+    -- Called once per paint, not once per frame, and it does nothing at all unless a zone
+    -- event has fired. GetPlayerMapPosition answers 0,0 unless the world map is set to the
+    -- zone the player is standing in, but SetMapToCurrentZone yanks the map out from under
+    -- anyone reading it, so it waits until the map is closed. Calling this every frame
+    -- would make the world map unusable for a human watching the run.
+    if WorldMapFrame and WorldMapFrame:IsVisible() then
+        mapDirty = true
+        mapTrusted = false
+        return
+    end
+    if mapDirty then
+        SetMapToCurrentZone()
+        mapDirty = false
+        mapTrusted = true
+    end
+end
+
+-- --------------------------------------------------------------------- export
+--
+-- Exported as one table rather than as globals. The generated getters call bare names
+-- like `frac` and `tri`, which are far too generic to own in WoW's single shared global
+-- namespace; JevRadio.lua gives each getter a function environment holding these, falling
+-- through to _G for the client API. A second addon defining its own `frac` then cannot
+-- change what this strip paints.
+
+JevRadioHelpers = {
+    frac = frac,
+    angle = angle,
+    tri = tri,
+    clamp = clamp,
+    nameid = nameid,
+    fnv1a16 = fnv1a16,
+    ZONE_ID = ZONE_ID,
+    BAG_FREE = BAG_FREE,
+    DURABILITY_MIN = DURABILITY_MIN,
+    QUEST_HASH = QUEST_HASH,
+    WATCHED_QUEST_ID = WATCHED_QUEST_ID,
+    OBJ = OBJ,
+    BAR_BITS = BAR_BITS,
+    GCD_FRAC = GCD_FRAC,
+    CASTING = CASTING,
+    MODAL_UP = MODAL_UP,
+    LAST_ERROR = LAST_ERROR,
+    CLASS_ID = CLASS_ID,
+    RACE_ID = RACE_ID,
+    CLASSIFICATION_ID = CLASSIFICATION_ID,
+    UI_ERRORS = UI_ERRORS,
+    syncMap = syncMap,
+    buildErrorIndex = buildErrorIndex,
+    SEQ = 0,
+}

@@ -81,7 +81,16 @@ def _abort_conditions_present(d: Decision, s: State, catalog: frozenset[str]) ->
 
 
 def _advance_needs_a_step(d: Decision, s: State, catalog: frozenset[str]) -> Verdict:
-    if d.intent in (Intent.ADVANCE, Intent.SKIP) and s.guide.step_id is None:
+    """Pursuing or skipping a step requires there to be one.
+
+    The step may be named by the plan rather than by the state. State is sampled at 2 Hz
+    and the playhead moves on tracker ticks, so a plan built from the current node can
+    legitimately run ahead of the last state that was read. Requiring the *state* to
+    already know would reject correct plans for being early.
+    """
+    if d.intent not in (Intent.ADVANCE, Intent.SKIP):
+        return Verdict.accept()
+    if s.guide.step_id is None and not d.params.get("step_id"):
         return Verdict.refuse("advance_needs_a_step", f"{d.intent} with no playhead")
     return Verdict.accept()
 
