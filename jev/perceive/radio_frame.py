@@ -43,7 +43,6 @@ from jev.world.state_v1 import (
     Char,
     Classification,
     Flags,
-    Objective,
     Pos,
     PowerType,
     Quest,
@@ -771,16 +770,10 @@ def to_state(reading: RadioReading, *, t: float, client_id: str) -> State:
         else None,
     )
 
-    # The strip carries objective counters, not objective text. An empty `text` is the
-    # absence of a label, not a label that is empty; the tracker's predicate is
-    # `objective_counts()` and joins on numbers. `quests.log_hash` has no home in the
-    # model at all — it is a change detector for whoever is reading, not state — so it
-    # stays in `reading.values` for the caller that wants it.
-    objectives = tuple(
-        Objective(text="", have=v[f"quests.o{i}_have"], need=v[f"quests.o{i}_need"])
-        for i in range(3)
-        if v[f"quests.o{i}_have"] is not None and v[f"quests.o{i}_need"] is not None
-    )
+    # Objectives are assembled in `jev.perceive.questlog`, not here, for the same reason
+    # the log is: one frame carries one slot's counters, and a `Quest` built from them
+    # would claim to describe a log this function has not seen. `quests.log_hash` stays in
+    # `reading.values` — it is a change detector for whoever is reading, not state.
     # One frame is never a log.
     #
     # The strip cycles one entry per paint, so a frame carries one quest out of however

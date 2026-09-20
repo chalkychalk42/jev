@@ -121,7 +121,7 @@ def main() -> int:
         speeds, headings = [], []
         for i in range(args.repeats):
             key = "w" if i % 2 == 0 else "s"
-            start, end, samples, elapsed = walk(hid, cap, key, args.walk_s)
+            start, end, _samples, elapsed = walk(hid, cap, key, args.walk_s)
             dist = math.hypot(end[0] - start[0], end[1] - start[1])
             h = heading(start, end)
             # `s` walks backwards, so its heading is the reverse of where we face.

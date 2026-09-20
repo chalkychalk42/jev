@@ -18,6 +18,7 @@ has to be turned into a threshold.
 from __future__ import annotations
 
 import argparse
+import itertools
 import math
 import pathlib
 import statistics
@@ -138,15 +139,15 @@ def main() -> int:
     # cannot tell "not moving" from "moving slowly" and a threshold under it is noise.
     quantum = 1.0 / 16383
     frozen, longest, start_t = 0.0, 0.0, None
-    for (ta, pa), (tb, pb) in zip(track, track[1:], strict=False):
+    for (ta, pa), (tb, pb) in itertools.pairwise(track):
         if math.hypot(pb[0] - pa[0], pb[1] - pa[1]) < quantum * 2:
             start_t = ta if start_t is None else start_t
             frozen = tb - start_t
             longest = max(longest, frozen)
         else:
             start_t, frozen = None, 0.0
-    steps = [math.hypot(b[0] - a[0], b[1] - a[1]) for (_, a), (_, b) in
-             zip(track, track[1:], strict=False)]
+    steps = [math.hypot(b[0] - a[0], b[1] - a[1])
+             for (_, a), (_, b) in itertools.pairwise(track)]
     print(f"\nper-sample movement: median {statistics.median(steps):.6f}, "
           f"min {min(steps):.6f}, max {max(steps):.6f} map units")
     print(f"longest frozen run while w held: {longest:.2f}s "

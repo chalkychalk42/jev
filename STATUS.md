@@ -449,7 +449,40 @@ and `AdvanceQuestFrame` will not report success on anything less.
 The grid is now exactly full: 62 fields, 408 payload bits, 36 cells in 12x4, 8 spare bits.
 The next field costs a row.
 
-NOW: 488 tests. Willem gives 783 unattended, start to finish: login, plan, walk, click,
-accept.
+### The step-back caught one before McBride did
+
+The rule is to re-read the plan after every push, and it earned its keep. The docstring
+claimed Accept, Complete and Continue were one intent; `run()` pressed **once** and
+confirmed `quest_id in ids`. Both halves are wrong for a turn-in, which needs two presses
+— Continue moves the progress page to the reward page, Complete Quest closes it — and the
+opposite confirmation, the quest *leaving* the log.
+
+That would not have shown up as a bug. It would have shown up as "the turn-in skill",
+which is precisely the per-case module the global-engine rule exists to prevent. So the
+cap became the goal rather than a count:
+
+    Goal.HELD      the quest is in the log      accepting
+    Goal.CLEARED   the quest is gone from it    turning in
+
+and `run` loops, re-reading the radio before **every** press. That is not the sweep the
+caps were written against: each press is justified by a button the client is painting at
+that moment, the loop stops the instant the log reaches the goal, and the frame closing is
+a terminal success rather than `NO_FRAME`. Accept still costs exactly one click.
+
+`CLEARED` is the dangerous direction and gets the same partial-cycle rule: mid-cycle the
+strip has painted no slots, so every quest looks absent, and a turn-in would confirm on a
+log nobody finished reading.
+
+Named as **not** covered, rather than discovered later: a reward page offering a *choice*
+of items. Complete Quest is pressable there and does nothing until an item is picked, so
+this fails honestly with the log unchanged. Choosing is a decision, not a button, and
+multi-option gossip is the same shape — a list.
+
+Four ruff findings that predated this went with it, including an `objectives` tuple in
+`radio_frame` orphaned when the log moved to `QuestLog`.
+
+NOW: 494 tests, ruff clean. Willem gives 783 unattended, start to finish: login, plan,
+walk, click, accept. The turn-in path is built and covered by tests; it has not yet met
+the live client.
 
 NEXT: McBride turn-in on the same two skills, then Echo Ridge.
