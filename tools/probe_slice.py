@@ -1,17 +1,31 @@
 #!/usr/bin/env python3
-"""The first vertical slice, driven by the playhead rather than by proximity.
+"""The vertical slice, driven by the playhead rather than by flags.
 
-    /mnt/c/forever-win/Scripts/python.exe tools/probe_slice.py
+    /mnt/c/forever-win/Scripts/python.exe tools/probe_slice.py --steps 1
 
-    empty log -> graph.entry -> mmap to Willem -> interact -> accept 783 -> log shows 783
+The character's parking spot is irrelevant, and so is which quest is next: the step comes
+from the graph and the quest log. Naming the NPC on the command line was scaffolding for
+the first accept, and it hid the fact that nothing was reading the chain.
 
-The character's parking spot is irrelevant. The step comes from the graph and the quest
-log, which is the whole point of having generated one.
+Three pieces, none of which know about each other:
 
-The unknown here is the Accept button. Its position is deterministic in the stock UI but
-not worth remembering wrongly, so it is swept for like the interact offset was — and the
-sweep is self-verifying: the log gaining 783 means Accept was clicked, and nothing means
-it was not. Decline closes the frame, which is recoverable by interacting again.
+    the graph     which step        content/tbc/ally_human_1_12.json
+    the mesh      how to stand there jev.guide.path + Travel.follow
+    the locator   where to click     jev.perceive.units.find
+
+and one skill per node kind, both of which are `Interact` followed by `AdvanceQuestFrame`
+with a different goal. Accepting and turning in differ by `Goal.HELD` vs `Goal.CLEARED`
+and by nothing else.
+
+Where the playhead is still naive
+---------------------------------
+It walks the chain in order and steps past a node whose postcondition holds — a quest in
+the log for accept, out of it for turn-in. That is right while the chain is being walked
+forwards for the first time and wrong after a restart, because a quest turned in last
+session is indistinguishable from one never accepted: both are simply absent. Fixing it
+needs completed-quest state on the strip, which is a field, not a workaround. Until then
+a stale start re-offers a finished quest and fails honestly at the NPC, which is the
+failure mode worth having.
 """
 
 from __future__ import annotations
@@ -26,7 +40,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 from jev.clients import win32  # noqa: E402
-from jev.clients.advance import AdvanceQuestFrame  # noqa: E402
+from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
 from jev.clients.capture import Backend, WindowCapture  # noqa: E402
 from jev.clients.hid import Hid, Humaniser  # noqa: E402
 from jev.clients.interact import Interact  # noqa: E402
@@ -34,14 +48,16 @@ from jev.clients.travel import Travel  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
+from jev.guide.tracker import Tracker  # noqa: E402
 from jev.perceive import radio_frame  # noqa: E402
 from jev.perceive.questlog import QuestLog  # noqa: E402
+from jev.world.state_v1 import StepKind  # noqa: E402
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--npc", default="Deputy Willem")
-    ap.add_argument("--quest", type=int, default=783)
+    ap.add_argument("--steps", type=int, default=1,
+                    help="how many graph nodes to attempt; one at a time by default")
     ap.add_argument("--timeout", type=float, default=180.0)
     ap.add_argument("--mmaps", default="/home/ash/cmangos/run/bin/mmaps")
     ap.add_argument("--jevpath", default="/home/ash/ForeverV2/tools/jevpath/jevpath")
@@ -97,11 +113,28 @@ def main() -> int:
             time.sleep(0.08)
         return None
 
+    def state():
+        """A `State` carrying the **assembled** log, which is what the tracker needs.
+
+        `to_state` will not call one frame a log and is right not to, so the accumulated
+        one is handed in. Without this the tracker sees an empty log on every tick and
+        every accept step looks unfinished.
+        """
+        for _ in range(6):
+            r = radio_frame.read(cap.grab().rgb)
+            if r.ok:
+                log.observe(r.values)
+                return radio_frame.to_state(r, t=time.time(), client_id="slice",
+                                            quests=log.complete)
+            time.sleep(0.05)
+        return None
+
     v = read()
     if v is None:
         print("cannot read the strip")
         return 1
-    bounds = bounds_by_radio_id(str(ROOT / "data" / "zones-tbc-243.json"))[v["pos.zone_id"]]
+    zones = bounds_by_radio_id(str(ROOT / "data" / "zones-tbc-243.json"))
+    bounds = zones[v["pos.zone_id"]]
     graph = Graph.load(str(ROOT / "content" / "tbc" / "ally_human_1_12.json"))
 
     print("--- 1. what does the log say ---")
@@ -111,18 +144,12 @@ def main() -> int:
         print("  the log never completed a cycle; stopping rather than guessing")
         return 1
 
-    node = graph.get(graph.entry)
-    print("\n--- 2. playhead ---")
-    print(f"  entry {node.id}")
-    print(f"  {node.kind.value} quest {node.quest_id} at {node.notes} {node.pos}")
-    if args.quest in ids:
-        print(f"  quest {args.quest} is already in the log; nothing to accept")
-        return 0
-
-    print("\n--- 3. stand on him, with the mesh ---")
     launcher = ("wsl.exe", "-d", "Ubuntu-24.04", "-e") if win32.IS_WINDOWS else ()
     query = MmapQuery(args.jevpath, args.mmaps, launcher=launcher)
-    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos, arrival_yards=3.0)
+    def playhead():
+        """Which step, according to the graph and the log. The tracker owns the rule."""
+        st = state()
+        return None if st is None else graph.get(Tracker.resume(graph, st).step_id)
 
     def approach(node_world) -> bool:
         """Plan from here to the NPC's world point and follow it.
@@ -153,42 +180,63 @@ def main() -> int:
               f"{result.stuck_events} stuck")
         return result.outcome.value == "arrived"
 
-    print(f"\n--- 4. interact with {args.npc} ---")
-    if not win32.is_foreground(hwnd):
-        win32.focus(hwnd)
-        time.sleep(0.5)
-
+    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos, arrival_yards=3.0)
     inter = Interact(hid=hid, bounds=bounds, read=read, read_frame=read_frame,
                      read_pos=read_pos, window_centre=(ox + w // 2, oy + h // 2),
                      window_origin=(ox, oy), approach=approach)
-    result = inter.open_on(args.npc, node_world=node.world, node_map=node.pos)
-    query.close()
-
-    if inter.sighting is not None:
-        sg = inter.sighting
-        print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) torso {sg.torso}")
-    print(f"  used_centre={inter.used_centre}  clicked={inter.clicked}")
-    print(f"  {result.value}" + (f" — {inter.detail}" if inter.detail else ""))
-    if not result.opened:
-        cap.close()
-        return 1
-
-
-    print(f"\n--- 5. accept quest {args.quest} ---")
     advance = AdvanceQuestFrame(hid=hid, read=read, quest_ids=lambda: quest_ids(tries=1),
                                 window_origin=(ox, oy), window_size=(w, h))
-    v = read()
-    print(f"  advance button painted at "
-          f"{(v.get('ui.advance_x'), v.get('ui.advance_y')) if v else None}")
-    log.reset()
-    outcome = advance.run(args.quest)
-    print(f"  clicked {advance.clicked}  -> {outcome.value}"
-          + (f" — {advance.detail}" if advance.detail else ""))
 
-    ids = quest_ids()
-    print(f"  log now: {ids}")
+    # The only difference between accepting and turning in.
+    GOALS = {StepKind.QUEST_ACCEPT: Goal.HELD, StepKind.QUEST_TURNIN: Goal.CLEARED}
+
+    rc = 0
+    for step in range(args.steps):
+        node = playhead()
+        if node is None:
+            print("\ncannot read the client; stopping")
+            rc = 1
+            break
+
+        print(f"\n--- step {step + 1}: {node.id} ---")
+        print(f"  {node.kind.value} quest {node.quest_id} at {node.notes} {node.pos}")
+
+        goal = GOALS.get(node.kind)
+        if goal is None:
+            print(f"  {node.kind.value} is not built yet; stopping rather than "
+                  f"pretending the step is done")
+            rc = 1
+            break
+        if node.world is None or node.npc_id is None:
+            print(f"  no spawn for this node ({node.notes}); the graph cannot place it")
+            rc = 1
+            break
+
+        if not win32.is_foreground(hwnd):
+            win32.focus(hwnd)
+            time.sleep(0.5)
+
+        result = inter.open_on(node.notes, node_world=node.world, node_map=node.pos)
+        if inter.sighting is not None:
+            sg = inter.sighting
+            print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) torso {sg.torso}")
+        print(f"  {result.value}" + (f" — {inter.detail}" if inter.detail else ""))
+        if not result.opened:
+            rc = 1
+            break
+
+        log.reset()
+        outcome = advance.run(node.quest_id, goal)
+        print(f"  {goal.value}: pressed {advance.clicked} -> {outcome.value}"
+              + (f" — {advance.detail}" if advance.detail else ""))
+        if not outcome.ok:
+            rc = 1
+            break
+        print(f"  log now: {quest_ids()}")
+
+    query.close()
     cap.close()
-    return 0 if outcome.ok else 1
+    return rc
 
 
 if __name__ == "__main__":

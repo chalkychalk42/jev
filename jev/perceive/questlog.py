@@ -81,6 +81,16 @@ class QuestLog:
         return self._complete
 
     @property
+    def complete(self) -> tuple[Quest, ...] | None:
+        """The whole log, or `None` if a cycle has never finished.
+
+        Public because every caller that wants a log wants *this* one, and reaching for
+        `_complete` from outside was the alternative. `None` is not an empty log: it means
+        nobody has read one yet, and the difference is a skipped step.
+        """
+        return self._complete
+
+    @property
     def progress(self) -> tuple[int, int | None]:
         """Slots seen against slots expected. For a dashboard, and for a postmortem that
         needs to say whether the log was ever actually read."""

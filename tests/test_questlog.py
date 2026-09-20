@@ -101,3 +101,41 @@ def test_a_frame_that_could_not_be_read_changes_nothing():
     log = QuestLog()
     log.observe(frame(1, slot=0, quest_id=783))
     assert log.observe({"quests.count": None}) is not None
+
+
+def _full(values):
+    """`to_state` reads the whole strip, so fill the keys this module does not care about
+    with the `None` that means unreadable."""
+    from jev.perceive.fields import FIELDS
+
+    return {f.name: values.get(f.name) for f in FIELDS}
+
+
+def test_the_assembled_log_is_public_and_none_until_a_cycle_finishes():
+    """`None` is not an empty log. A caller that cannot tell them apart concludes its
+    step's quest is missing and skips a live step."""
+    log = QuestLog()
+    assert log.complete is None, "a log before any frame is unread, not empty"
+    for slot, qid in enumerate((783, 7)):
+        log.observe(frame(2, slot=slot, quest_id=qid))
+    assert log.complete is not None
+    assert tuple(q.quest_id for q in log.complete) == (783, 7)
+    assert log.complete is log._complete, "a second copy of the assembly"
+
+
+def test_an_assembled_log_beats_the_single_frame_answer_in_to_state():
+    """`to_state` refuses to call one frame a log, correctly — so the accumulated one has
+    to reach it some other way, or the tracker sees an empty log for every quest held."""
+    from jev.perceive import radio_frame
+
+    last = frame(1, slot=0, quest_id=783)
+    log = QuestLog()
+    log.observe(last)
+
+    reading = radio_frame.RadioReading(values=_full(last), ok=True,
+                                   fault=radio_frame.SenseFault.NONE)
+    alone = radio_frame.to_state(reading, t=0.0, client_id="c")
+    assert alone.quests is None, "one frame of a non-empty log settled anything"
+
+    with_log = radio_frame.to_state(reading, t=0.0, client_id="c", quests=log.complete)
+    assert tuple(q.quest_id for q in with_log.quests) == (783,)

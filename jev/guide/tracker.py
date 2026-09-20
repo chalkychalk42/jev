@@ -95,6 +95,30 @@ class Tracker:
             xp_at_entry=state.char.xp_pct,
         )
 
+    @classmethod
+    def resume(cls, graph: Graph, state: State, *, start: str | None = None) -> Tracker:
+        """A playhead placed on the first step the world does not already satisfy.
+
+        Cold start: nothing knows how far a character got, so the chain is walked from the
+        entry and each node is asked its own predicate. Using `enter`/`tick` rather than a
+        fresh comparison is the point — a turn-in is only complete if the quest was seen
+        in the log first, and a second rule written at the call site would forget that and
+        walk straight past every turn-in in the guide.
+
+        It stops at the first unsatisfied step, so a quest **turned in during an earlier
+        session** looks identical to one never accepted: both are simply absent from the
+        log. That needs completed-quest state on the strip to fix properly. Until then the
+        result is re-offering a finished quest and failing at the NPC, which is loud.
+        """
+        tracker = cls(graph=graph, step_id=start or graph.entry)
+        tracker.enter(tracker.step_id, state)
+        for _ in range(len(graph.nodes) + 1):
+            verdict = tracker.tick(state)
+            if verdict.event is not Event.ADVANCE or not verdict.goto:
+                return tracker
+            tracker.enter(verdict.goto, state)
+        return tracker
+
     def _node(self, step_id: str | None = None) -> Node | None:
         return self.graph.get(step_id or self.step_id)
 

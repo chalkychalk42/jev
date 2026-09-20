@@ -162,3 +162,52 @@ def test_a_step_past_its_timeout_with_no_edge_is_the_coachs_problem():
     tr = Tracker(g, "x")
     tr.enter("x", _s())
     assert tr.is_blocked(_s(t=999.0)), "nothing mechanical can resolve this"
+
+
+# -- cold start: where is this character in the guide? ------------------------------
+
+def _graph_1_12():
+    from jev.guide.graph import Graph
+    return Graph.load("content/tbc/ally_human_1_12.json")
+
+
+def _state_with(quests, t=0.0):
+    """A readable state whose only interesting content is the quest log."""
+    from jev.world.state_v1 import Char, Pos, State, Vitals
+    return State(t=t, client_id="c", char=Char(level=1),
+                 pos=Pos(zone_id=12080, mx=0.48, my=0.43),
+                 vitals=Vitals(dead=False, ghost=False), quests=quests)
+
+
+def test_resume_puts_a_fresh_character_on_the_first_step():
+    g = _graph_1_12()
+    t = Tracker.resume(g, _state_with(()))
+    assert t.step_id == g.entry
+    assert g.get(t.step_id).kind is StepKind.QUEST_ACCEPT
+
+
+def test_resume_walks_past_an_accept_the_log_already_satisfies():
+    """The real case after the first live run: 783 is held, so the next thing to do is
+    take it to McBride — not stand in front of Willem asking for it again."""
+    from jev.world.state_v1 import Quest
+
+    g = _graph_1_12()
+    t = Tracker.resume(g, _state_with((Quest(quest_id=783),)))
+    node = g.get(t.step_id)
+    assert node.kind is StepKind.QUEST_TURNIN and node.quest_id == 783
+
+
+def test_resume_does_not_walk_past_a_turnin_just_because_the_log_is_empty():
+    """A turn-in's predicate needs the quest to have been *seen* in the log. Without that
+    memory an empty log satisfies every turn-in in the guide and the playhead runs off the
+    end of the chain on the first tick."""
+    g = _graph_1_12()
+    t = Tracker.resume(g, _state_with(()))
+    assert g.get(t.step_id).kind is not StepKind.QUEST_TURNIN
+
+
+def test_resume_stops_rather_than_guessing_when_the_log_was_never_read():
+    """`None` is unread. Treating it as empty is how a live step gets skipped."""
+    g = _graph_1_12()
+    t = Tracker.resume(g, _state_with(None))
+    assert t.step_id == g.entry

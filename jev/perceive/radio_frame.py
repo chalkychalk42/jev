@@ -663,7 +663,8 @@ def advance_point(reading: RadioReading) -> tuple[int, int] | None:
     return None if x is None or y is None else (x, y)
 
 
-def to_state(reading: RadioReading, *, t: float, client_id: str) -> State:
+def to_state(reading: RadioReading, *, t: float, client_id: str,
+             quests: tuple[Quest, ...] | None = None) -> State:
     """A decoded strip as `state_v1`.
 
     Field names in `fields.py` are the dotted paths of this model, so this is a
@@ -785,8 +786,12 @@ def to_state(reading: RadioReading, *, t: float, client_id: str) -> State:
     # So `count > 0` is **unread** here. `jev.perceive.questlog.QuestLog` accumulates
     # across frames and is the only thing allowed to produce a log. The one case a single
     # frame does settle is an empty one: there are no slots to wait for.
-    count = v["quests.count"]
-    quests: tuple[Quest, ...] | None = () if count == 0 else None
+    # An assembled log from `QuestLog` beats this frame, and is the only way the result
+    # has a log with anything in it. Passing it in rather than importing the accumulator
+    # keeps the decode a pure function of one frame.
+    if quests is None:
+        count = v["quests.count"]
+        quests = () if count == 0 else None
 
     return State(
         t=t,
