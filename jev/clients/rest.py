@@ -23,11 +23,15 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-# Where food and water live on a fresh character's bar. Default bindings run 1-9, 0, then
-# the two keys left of Backspace, and this is where the game itself puts them.
-FOOD_SLOT = 11
-DRINK_SLOT = 12
-SLOT_KEYS = {11: "minus", 12: "equals"}
+from jev.world.combat import CombatProfile, Role, for_class
+
+# Which slot holds food is **not** a constant. Both consumables are item class 0,
+# subclass 5 and neither says which is which in its name, so the generated profile tells
+# them apart by what their spell restores: aura 84 is health and 85 is mana. On a human
+# paladin that is Darnassian Bleu in slot 12 and Refreshing Spring Water in slot 11 —
+# the opposite way round from the constant this file used to carry, which is why it
+# reported "out of food" with a wheel of cheese sitting in the bar.
+SLOT_KEYS = {**{n: str(n) for n in range(1, 10)}, 10: "0", 11: "minus", 12: "equals"}
 
 
 class Rested(StrEnum):
@@ -46,36 +50,52 @@ class Rested(StrEnum):
 class Rest:
     hid: object
     read: Callable[[], dict | None]
-    slot: int = FOOD_SLOT
+    profile: CombatProfile | None = None
 
+    slot: int | None = field(default=None, init=False)
     started_at: float | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
 
-    def until(self, fraction: float = 0.92, *, timeout_s: float = 45.0) -> Rested:
-        """Eat until health reaches `fraction`, or say why not."""
+    def until(self, fraction: float = 0.92, *, role: Role = Role.FOOD,
+              timeout_s: float = 45.0) -> Rested:
+        """Eat until health reaches `fraction`, or say why not.
+
+        `role` picks what to consume: food restores health, drink restores mana. Which
+        slot that is comes from the profile, because it differs by race and the two are
+        indistinguishable by item class.
+        """
         self.detail = ""
         deadline = time.monotonic() + timeout_s
         eating = False
+        gauge = "vitals.power" if role is Role.DRINK else "vitals.hp"
 
         while time.monotonic() < deadline:
             v = self.read()
             if v is None:
                 return Rested.BLIND
-            hp = v.get("vitals.hp")
-            if hp is not None and hp >= fraction:
+            level = v.get(gauge)
+            if level is not None and level >= fraction:
                 return Rested.HEALTHY
             if v.get("vitals.combat") is True:
                 self.detail = "in combat; not a moment to eat"
                 return Rested.INTERRUPTED
 
+            profile = self.profile or for_class(v.get("char.class_id"),
+                                                v.get("char.race_id"))
+            ability = profile.first(role)
+            if ability is None:
+                self.detail = f"this character has no {role.value} on its bar"
+                return Rested.NO_FOOD
+            self.slot = ability.slot
+
             usable = v.get("bars.usable")
-            if usable is not None and not (usable & (1 << (self.slot - 1))):
-                self.detail = f"slot {self.slot} is not usable; out of food"
+            if usable is not None and not (usable & (1 << (ability.slot - 1))):
+                self.detail = (f"slot {ability.slot} ({ability.name or role.value}) "
+                               f"is not usable; out of {role.value}")
                 return Rested.NO_FOOD
 
             if not eating:
-                key = SLOT_KEYS.get(self.slot, str(self.slot))
-                self.hid.tap(key)
+                self.hid.tap(SLOT_KEYS.get(ability.slot, str(ability.slot)))
                 self.started_at = time.monotonic()
                 eating = True
             time.sleep(1.0)

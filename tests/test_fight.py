@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import time
 
 from jev.clients.fight import (
     DEAD_HP,
@@ -14,7 +15,7 @@ from jev.clients.fight import (
     Fight,
     Fought,
 )
-from jev.world.combat import GENERIC, PROFILES, Ability, for_class
+from jev.world.combat import GENERIC, Ability, Role, for_class
 
 
 class _Hid:
@@ -109,25 +110,100 @@ def test_the_rotation_respects_the_global_cooldown_and_casting():
     f._rotate({**ALIVE, "bars.casting": True})
     assert hid.taps == [], "pressed through the GCD or through a cast"
     f._rotate(ALIVE)
-    assert hid.taps == ["1"]
+    assert hid.taps == ["2"], "a lapsed buff outranks a swing"
 
 
 def test_a_slot_the_client_says_is_not_ready_is_not_pressed():
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
-    f._rotate({**ALIVE, "bars.ready": 0b110})     # slot 1 on cooldown
-    assert hid.taps == ["2"], "ignored bars.ready"
+    f._rotate({**ALIVE, "bars.ready": 0b101})     # the buff in slot 2 is on cooldown
+    assert hid.taps == ["1"], "ignored bars.ready"
 
 
 def test_a_seal_is_not_re_pressed_every_tick():
     """`bars.ready` says a self-buff is pressable on every single tick, so without a
-    worth-pressing interval the character stands there re-sealing and never swings."""
+    worth-pressing interval the character stands there re-sealing and never swings. The
+    interval is the spell's own duration less a margin, read from the world database."""
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
     f._rotate(ALIVE)
     f._rotate(ALIVE)
-    assert hid.taps == ["1", "2"], "slot 1 was re-pressed while still up"
-    assert PROFILES[2].abilities[0].every_s > 0
+    assert hid.taps == ["2", "1"], "the seal was re-pressed while still up"
+    seal = for_class(2, 1).first(Role.BUFF)
+    assert seal is not None and seal.every_s == 25.0   # 30s duration, 5s margin
+
+
+def test_melee_auto_attack_is_a_toggle_and_is_pressed_once():
+    """Spell 6603 toggles the swing: pressing it while already swinging stops it. The
+    first live rotation pressed `[1, 2, 2, ..., 1, 2, ...]` and turned the character's
+    attack on and off all fight."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    for _ in range(4):
+        f._rotate(ALIVE)
+    assert hid.taps.count("1") == 1, "auto-attack was toggled more than once"
+    attack = for_class(2, 1).first(Role.ATTACK)
+    assert attack is not None and attack.toggle
+
+
+def test_a_toggle_is_not_pressed_once_damage_is_already_landing():
+    """Health coming off the target means the swing is already going; pressing the toggle
+    then is how it stops."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.last_hp = 0.6
+    for _ in range(3):
+        f._rotate(ALIVE)
+    assert "1" not in hid.taps
+
+
+def test_healing_is_a_role_not_a_class():
+    """No `if paladin`. The engine asks for a row with role=heal and presses it if the
+    bars say it is ready; a warrior is the same list with one fewer row."""
+    import inspect
+
+    # Code, not prose: the docstrings name paladins on purpose, to say why there is no
+    # module for them.
+    code = "".join(ln.split("#")[0] for ln in inspect.getsource(Fight).splitlines()
+                   if not ln.strip().startswith(("#", '"', "'")))
+    for branch in ("class_id ==", "class_id in", "PaladinHeal", '== "paladin"'):
+        assert branch not in code, f"{branch}: the engine is branching on class"
+
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f._rotate({**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
+               "vitals.power": 0.9, "vitals.power_max": 100})
+    assert hid.taps == ["3"], "stood there at 20% with a heal on the bar"
+    assert for_class(1, 1).first(Role.HEAL) is None, "a warrior grew a heal"
+
+
+def test_a_heal_is_not_started_without_the_mana_to_finish_it():
+    """Out of mana falls through to swinging, and the caller falls through to food, a
+    vendor, or breaking off. There is deliberately no drinking inside a fight."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    dying = {**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
+             "vitals.power": 0.02, "vitals.power_max": 100}
+    f._rotate(dying)
+    assert "3" not in hid.taps
+
+
+def test_a_heal_is_confirmed_by_the_client_not_by_having_tapped_a_key():
+    """A press the client ignored looks identical to one that worked if nobody checks,
+    and what it hides is a picker predicate that never fires."""
+    hurt = {**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    f = _fight([hurt])
+    f._rotate(hurt)
+    assert f._pending_heal is not None
+    f._watch_heal({**hurt, "vitals.hp": 0.5}, hurt["bars.ready"])
+    assert f.heals_landed == 1 and f.heals_ignored == 0
+
+    f2 = _fight([hurt])
+    f2._rotate(hurt)
+    f2._pending_heal = (0.2, time.monotonic() - 5.0)
+    f2._watch_heal(hurt, hurt["bars.ready"])
+    assert f2.heals_ignored == 1, "a press nothing happened after was counted as a heal"
 
 
 def test_slot_keys_cover_the_bar_including_food_and_water():

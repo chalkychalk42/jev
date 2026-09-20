@@ -41,16 +41,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 from jev.clients import win32  # noqa: E402
 from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
 from jev.clients.choose import ChooseListLine  # noqa: E402
-from jev.clients.fight import Fight, Fought  # noqa: E402
+from jev.clients.fight import Fight  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
-from jev.clients.rest import Rest, Rested  # noqa: E402
+from jev.clients.rest import Rest  # noqa: E402
 from jev.guide import playhead  # noqa: E402
-from jev.guide.coords import bounds_by_radio_id  # noqa: E402
+from jev.guide.coords import bounds_by_radio_id, distance_yards  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
 from jev.guide.tracker import Tracker  # noqa: E402
 from jev.perceive.radio_frame import name_id  # noqa: E402
 from jev.run.client import NotRunning, attach, with_travel  # noqa: E402
+from jev.run.hunt import Hunt  # noqa: E402
 from jev.world.state_v1 import StepKind  # noqa: E402
 
 
@@ -59,8 +60,8 @@ def main() -> int:
     ap.add_argument("--steps", type=int, default=1,
                     help="how many graph nodes to attempt; one at a time by default")
     ap.add_argument("--timeout", type=float, default=180.0)
-    ap.add_argument("--kills", type=int, default=12,
-                    help="attempts at an objective before reporting where it got to")
+    ap.add_argument("--hunt", type=float, default=600.0,
+                    help="seconds to work an objective before reporting where it got to")
     ap.add_argument("--mmaps", default="/home/ash/cmangos/run/bin/mmaps")
     ap.add_argument("--jevpath", default="/home/ash/ForeverV2/tools/jevpath/jevpath")
     args = ap.parse_args()
@@ -148,46 +149,26 @@ def main() -> int:
         return (None, None)
 
     def do_objective(node) -> int:
-        """Stand in the camp and kill the thing the step names, until the count is in."""
+        """Work the objective's **disk** until the server's counter says it is done.
+
+        The node carries a point and a radius, and the radius is the part that matters: a
+        spawn pin is one kobold out of a camp full of them, and standing on it is how a
+        run reaches 1/10 and then reports "not visible" twenty times while the rest of the
+        camp wanders about fifteen yards away.
+        """
         wanted = name_id(node.notes) if node.notes else None
         print(f"  objective: {node.objectives[0]}")
-        if not client.approach(node.world):
-            print("  could not get to the camp")
-            return 1
-
-        for attempt in range(args.kills):
-            have, need = progress(node.quest_id)
-            print(f"  progress: {have}/{need}")
-            if need is not None and have is not None and have >= need:
-                print("  objective complete")
-                return 0
-            outcome = fight.run(wanted)
-            print(f"    kill {attempt + 1}: {outcome.value} "
-                  f"(pressed {fight.pressed}, closed {fight.closed}, "
-                  f"last hp {fight.last_hp})"
-                  + (f" — {fight.detail}" if fight.detail else ""))
-            if outcome is Fought.DIED:
-                return 1
-            if outcome in (Fought.TOO_HURT, Fought.LOSING):
-                # Twenty seconds sitting down against a two-hundred-yard corpse run.
-                ate = rest.until()
-                print(f"    rest: {ate.value}" + (f" — {rest.detail}" if rest.detail else ""))
-                if ate is Rested.NO_FOOD:
-                    print("  out of food; stopping rather than dying tired")
-                    return 1
-                # Interrupted means something is already hitting us. There is nothing to
-                # decide: the next pass fights it.
-                continue
-            if outcome in (Fought.NO_TARGET, Fought.NOT_VISIBLE, Fought.UNREACHABLE,
-                           Fought.LOST, Fought.TIMEOUT):
-                # A bad pick, not a dead end: a camp is a moving crowd and the next look
-                # sees a different one. The attempt budget is what stops this being a
-                # loop with no exit.
-                continue
-
+        radius = distance_yards(node.pos, (node.pos[0] + node.r, node.pos[1]), bounds)
+        print(f"  disk: {radius:.0f} yards around {node.pos}")
+        hunt = Hunt(fight=fight, rest=rest, read=client.read,
+                    approach=lambda world: client.approach(world, timeout_s=args.timeout),
+                    progress=lambda: progress(node.quest_id))
+        outcome = hunt.run(node.world, radius, wanted, timeout_s=args.hunt)
         have, need = progress(node.quest_id)
-        print(f"  progress: {have}/{need} after {args.kills} attempts")
-        return 0 if (need is not None and have is not None and have >= need) else 1
+        print(f"  {outcome.value}: {have}/{need} after {hunt.kills} kills over "
+              f"{hunt.moves} stations"
+              + (f" — {hunt.detail}" if hunt.detail else ""))
+        return 0 if outcome.ok else 1
 
     memory = playhead.load(graph.graph_id)
     print(f"  completed so far: {sorted(memory.completed) or 'nothing remembered'}")

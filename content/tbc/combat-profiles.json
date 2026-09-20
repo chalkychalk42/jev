@@ -1,0 +1,2334 @@
+{
+ "10:2": {
+  "class": 2,
+  "name": "paladin",
+  "race": 10,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "every_s": 25.0,
+    "mana": 20,
+    "name": "Seal of Righteousness",
+    "role": "buff",
+    "slot": 2,
+    "spell": 20154
+   },
+   {
+    "mana": 35,
+    "name": "Holy Light",
+    "role": "heal",
+    "slot": 3,
+    "spell": 635
+   },
+   {
+    "mana": 0,
+    "name": "Mana Tap",
+    "role": "attack",
+    "slot": 4,
+    "spell": 28734
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "Arcane Torrent",
+    "role": "buff",
+    "slot": 5,
+    "spell": 28730
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 20857,
+    "name": "Honey Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "10:3": {
+  "class": 3,
+  "name": "hunter",
+  "race": 10,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Raptor Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 2973
+   },
+   {
+    "mana": 0,
+    "name": "Auto Shot",
+    "role": "attack",
+    "slot": 3,
+    "spell": 75
+   },
+   {
+    "mana": 0,
+    "name": "Mana Tap",
+    "role": "attack",
+    "slot": 4,
+    "spell": 28734
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "Arcane Torrent",
+    "role": "buff",
+    "slot": 5,
+    "spell": 28730
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 20857,
+    "name": "Honey Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "10:4": {
+  "class": 4,
+  "name": "rogue",
+  "race": 10,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 45,
+    "name": "Sinister Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 1752
+   },
+   {
+    "mana": 35,
+    "name": "Eviscerate",
+    "role": "attack",
+    "slot": 3,
+    "spell": 2098
+   },
+   {
+    "mana": 0,
+    "name": "Throw",
+    "role": "attack",
+    "slot": 4,
+    "spell": 2764
+   },
+   {
+    "mana": 0,
+    "name": "Mana Tap",
+    "role": "attack",
+    "slot": 5,
+    "spell": 28734
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "Arcane Torrent",
+    "role": "buff",
+    "slot": 6,
+    "spell": 25046
+   },
+   {
+    "item": 20857,
+    "name": "Honey Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "10:5": {
+  "class": 5,
+  "name": "priest",
+  "race": 10,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Smite",
+    "role": "attack",
+    "slot": 2,
+    "spell": 585
+   },
+   {
+    "mana": 30,
+    "name": "Lesser Heal",
+    "role": "heal",
+    "slot": 3,
+    "spell": 2050
+   },
+   {
+    "mana": 0,
+    "name": "Mana Tap",
+    "role": "attack",
+    "slot": 4,
+    "spell": 28734
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "Arcane Torrent",
+    "role": "buff",
+    "slot": 5,
+    "spell": 28730
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 20857,
+    "name": "Honey Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "10:8": {
+  "class": 8,
+  "name": "warlock",
+  "race": 10,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 30,
+    "name": "Fireball",
+    "role": "attack",
+    "slot": 2,
+    "spell": 133
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 60,
+    "name": "Frost Armor",
+    "role": "buff",
+    "slot": 3,
+    "spell": 168
+   },
+   {
+    "mana": 0,
+    "name": "Mana Tap",
+    "role": "attack",
+    "slot": 4,
+    "spell": 28734
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "Arcane Torrent",
+    "role": "buff",
+    "slot": 5,
+    "spell": 28730
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 20857,
+    "name": "Honey Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "10:9": {
+  "class": 9,
+  "name": "druid",
+  "race": 10,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 25,
+    "name": "Shadow Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 686
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 20,
+    "name": "Demon Skin",
+    "role": "buff",
+    "slot": 3,
+    "spell": 687
+   },
+   {
+    "mana": 0,
+    "name": "Mana Tap",
+    "role": "attack",
+    "slot": 4,
+    "spell": 28734
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "Arcane Torrent",
+    "role": "buff",
+    "slot": 5,
+    "spell": 28730
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 20857,
+    "name": "Honey Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "11:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 11,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "every_s": 10.0,
+    "mana": 0,
+    "name": "Gift of the Naaru",
+    "role": "buff",
+    "slot": 75,
+    "spell": 28880
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 84
+   },
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 85,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 97,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 109,
+    "spell": 6603,
+    "toggle": true
+   }
+  ]
+ },
+ "11:2": {
+  "class": 2,
+  "name": "paladin",
+  "race": 11,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "every_s": 25.0,
+    "mana": 20,
+    "name": "Seal of Righteousness",
+    "role": "buff",
+    "slot": 2,
+    "spell": 20154
+   },
+   {
+    "mana": 35,
+    "name": "Holy Light",
+    "role": "heal",
+    "slot": 3,
+    "spell": 635
+   },
+   {
+    "every_s": 10.0,
+    "mana": 0,
+    "name": "Gift of the Naaru",
+    "role": "buff",
+    "slot": 4,
+    "spell": 28880
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "11:3": {
+  "class": 3,
+  "name": "hunter",
+  "race": 11,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Raptor Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 2973
+   },
+   {
+    "mana": 0,
+    "name": "Auto Shot",
+    "role": "attack",
+    "slot": 3,
+    "spell": 75
+   },
+   {
+    "every_s": 10.0,
+    "mana": 0,
+    "name": "Gift of the Naaru",
+    "role": "buff",
+    "slot": 4,
+    "spell": 28880
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   },
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Raptor Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 2973
+   },
+   {
+    "mana": 0,
+    "name": "Auto Shot",
+    "role": "attack",
+    "slot": 75,
+    "spell": 75
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 83
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "11:5": {
+  "class": 5,
+  "name": "priest",
+  "race": 11,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Smite",
+    "role": "attack",
+    "slot": 2,
+    "spell": 585
+   },
+   {
+    "mana": 30,
+    "name": "Lesser Heal",
+    "role": "heal",
+    "slot": 3,
+    "spell": 2050
+   },
+   {
+    "every_s": 10.0,
+    "mana": 0,
+    "name": "Gift of the Naaru",
+    "role": "buff",
+    "slot": 4,
+    "spell": 28880
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "11:7": {
+  "class": 7,
+  "name": "mage",
+  "race": 11,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Lightning Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 403
+   },
+   {
+    "mana": 25,
+    "name": "Healing Wave",
+    "role": "heal",
+    "slot": 3,
+    "spell": 331
+   },
+   {
+    "every_s": 10.0,
+    "mana": 0,
+    "name": "Gift of the Naaru",
+    "role": "buff",
+    "slot": 4,
+    "spell": 28880
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "11:8": {
+  "class": 8,
+  "name": "warlock",
+  "race": 11,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 30,
+    "name": "Fireball",
+    "role": "attack",
+    "slot": 2,
+    "spell": 133
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 60,
+    "name": "Frost Armor",
+    "role": "buff",
+    "slot": 3,
+    "spell": 168
+   },
+   {
+    "every_s": 10.0,
+    "mana": 0,
+    "name": "Gift of the Naaru",
+    "role": "buff",
+    "slot": 4,
+    "spell": 28880
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "1:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 1,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "1:2": {
+  "class": 2,
+  "name": "paladin",
+  "race": 1,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "every_s": 25.0,
+    "mana": 20,
+    "name": "Seal of Righteousness",
+    "role": "buff",
+    "slot": 2,
+    "spell": 20154
+   },
+   {
+    "mana": 35,
+    "name": "Holy Light",
+    "role": "heal",
+    "slot": 3,
+    "spell": 635
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 2070,
+    "name": "Darnassian Bleu",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "1:4": {
+  "class": 4,
+  "name": "rogue",
+  "race": 1,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 45,
+    "name": "Sinister Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 1752
+   },
+   {
+    "mana": 35,
+    "name": "Eviscerate",
+    "role": "attack",
+    "slot": 3,
+    "spell": 2098
+   },
+   {
+    "mana": 0,
+    "name": "Throw",
+    "role": "attack",
+    "slot": 4,
+    "spell": 2764
+   },
+   {
+    "item": 2070,
+    "name": "Darnassian Bleu",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "1:5": {
+  "class": 5,
+  "name": "priest",
+  "race": 1,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Smite",
+    "role": "attack",
+    "slot": 2,
+    "spell": 585
+   },
+   {
+    "mana": 30,
+    "name": "Lesser Heal",
+    "role": "heal",
+    "slot": 3,
+    "spell": 2050
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 2070,
+    "name": "Darnassian Bleu",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "1:8": {
+  "class": 8,
+  "name": "warlock",
+  "race": 1,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 30,
+    "name": "Fireball",
+    "role": "attack",
+    "slot": 2,
+    "spell": 133
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 60,
+    "name": "Frost Armor",
+    "role": "buff",
+    "slot": 3,
+    "spell": 168
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 2070,
+    "name": "Darnassian Bleu",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "1:9": {
+  "class": 9,
+  "name": "druid",
+  "race": 1,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 25,
+    "name": "Shadow Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 686
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 20,
+    "name": "Demon Skin",
+    "role": "buff",
+    "slot": 3,
+    "spell": 687
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "2:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 2,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "2:3": {
+  "class": 3,
+  "name": "hunter",
+  "race": 2,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Raptor Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 2973
+   },
+   {
+    "mana": 0,
+    "name": "Auto Shot",
+    "role": "attack",
+    "slot": 3,
+    "spell": 75
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "2:4": {
+  "class": 4,
+  "name": "rogue",
+  "race": 2,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 45,
+    "name": "Sinister Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 1752
+   },
+   {
+    "mana": 35,
+    "name": "Eviscerate",
+    "role": "attack",
+    "slot": 3,
+    "spell": 2098
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "2:7": {
+  "class": 7,
+  "name": "mage",
+  "race": 2,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Lightning Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 403
+   },
+   {
+    "mana": 25,
+    "name": "Healing Wave",
+    "role": "heal",
+    "slot": 3,
+    "spell": 331
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "2:9": {
+  "class": 9,
+  "name": "druid",
+  "race": 2,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 25,
+    "name": "Shadow Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 686
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 20,
+    "name": "Demon Skin",
+    "role": "buff",
+    "slot": 3,
+    "spell": 687
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "3:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 3,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "3:2": {
+  "class": 2,
+  "name": "paladin",
+  "race": 3,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "every_s": 25.0,
+    "mana": 20,
+    "name": "Seal of Righteousness",
+    "role": "buff",
+    "slot": 2,
+    "spell": 20154
+   },
+   {
+    "mana": 35,
+    "name": "Holy Light",
+    "role": "heal",
+    "slot": 3,
+    "spell": 635
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "3:3": {
+  "class": 3,
+  "name": "hunter",
+  "race": 3,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Raptor Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 2973
+   },
+   {
+    "mana": 0,
+    "name": "Auto Shot",
+    "role": "attack",
+    "slot": 3,
+    "spell": 75
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "3:4": {
+  "class": 4,
+  "name": "rogue",
+  "race": 3,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 45,
+    "name": "Sinister Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 1752
+   },
+   {
+    "mana": 35,
+    "name": "Eviscerate",
+    "role": "attack",
+    "slot": 3,
+    "spell": 2098
+   },
+   {
+    "mana": 0,
+    "name": "Throw",
+    "role": "attack",
+    "slot": 4,
+    "spell": 2764
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "3:5": {
+  "class": 5,
+  "name": "priest",
+  "race": 3,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Smite",
+    "role": "attack",
+    "slot": 2,
+    "spell": 585
+   },
+   {
+    "mana": 30,
+    "name": "Lesser Heal",
+    "role": "heal",
+    "slot": 3,
+    "spell": 2050
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "4:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 4,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "every_s": 4294962.295,
+    "mana": 0,
+    "name": "Shadowmeld",
+    "role": "buff",
+    "slot": 75,
+    "spell": 20580
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "4:11": {
+  "class": 11,
+  "name": "11",
+  "race": 4,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Wrath",
+    "role": "attack",
+    "slot": 2,
+    "spell": 5176
+   },
+   {
+    "mana": 25,
+    "name": "Healing Touch",
+    "role": "heal",
+    "slot": 3,
+    "spell": 5185
+   },
+   {
+    "every_s": 4294962.295,
+    "mana": 0,
+    "name": "Shadowmeld",
+    "role": "buff",
+    "slot": 4,
+    "spell": 20580
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4536,
+    "name": "Shiny Red Apple",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "4:3": {
+  "class": 3,
+  "name": "hunter",
+  "race": 4,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Raptor Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 2973
+   },
+   {
+    "mana": 0,
+    "name": "Auto Shot",
+    "role": "attack",
+    "slot": 3,
+    "spell": 75
+   },
+   {
+    "every_s": 4294962.295,
+    "mana": 0,
+    "name": "Shadowmeld",
+    "role": "buff",
+    "slot": 4,
+    "spell": 20580
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "4:4": {
+  "class": 4,
+  "name": "rogue",
+  "race": 4,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 45,
+    "name": "Sinister Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 1752
+   },
+   {
+    "mana": 35,
+    "name": "Eviscerate",
+    "role": "attack",
+    "slot": 3,
+    "spell": 2098
+   },
+   {
+    "mana": 0,
+    "name": "Throw",
+    "role": "attack",
+    "slot": 4,
+    "spell": 2764
+   },
+   {
+    "every_s": 4294962.295,
+    "mana": 0,
+    "name": "Shadowmeld",
+    "role": "buff",
+    "slot": 5,
+    "spell": 20580
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "4:5": {
+  "class": 5,
+  "name": "priest",
+  "race": 4,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Smite",
+    "role": "attack",
+    "slot": 2,
+    "spell": 585
+   },
+   {
+    "mana": 30,
+    "name": "Lesser Heal",
+    "role": "heal",
+    "slot": 3,
+    "spell": 2050
+   },
+   {
+    "every_s": 4294962.295,
+    "mana": 0,
+    "name": "Shadowmeld",
+    "role": "buff",
+    "slot": 4,
+    "spell": 20580
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 2070,
+    "name": "Darnassian Bleu",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "5:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 5,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "5:4": {
+  "class": 4,
+  "name": "rogue",
+  "race": 5,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 45,
+    "name": "Sinister Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 1752
+   },
+   {
+    "mana": 35,
+    "name": "Eviscerate",
+    "role": "attack",
+    "slot": 3,
+    "spell": 2098
+   },
+   {
+    "mana": 0,
+    "name": "Throw",
+    "role": "attack",
+    "slot": 4,
+    "spell": 2764
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "5:5": {
+  "class": 5,
+  "name": "priest",
+  "race": 5,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Smite",
+    "role": "attack",
+    "slot": 2,
+    "spell": 585
+   },
+   {
+    "mana": 30,
+    "name": "Lesser Heal",
+    "role": "heal",
+    "slot": 3,
+    "spell": 2050
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "5:8": {
+  "class": 8,
+  "name": "warlock",
+  "race": 5,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 30,
+    "name": "Fireball",
+    "role": "attack",
+    "slot": 2,
+    "spell": 133
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 60,
+    "name": "Frost Armor",
+    "role": "buff",
+    "slot": 3,
+    "spell": 168
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "5:9": {
+  "class": 9,
+  "name": "druid",
+  "race": 5,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 25,
+    "name": "Shadow Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 686
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 20,
+    "name": "Demon Skin",
+    "role": "buff",
+    "slot": 3,
+    "spell": 687
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "6:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 6,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "War Stomp",
+    "role": "buff",
+    "slot": 75,
+    "spell": 20549
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "6:11": {
+  "class": 11,
+  "name": "11",
+  "race": 6,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Wrath",
+    "role": "attack",
+    "slot": 2,
+    "spell": 5176
+   },
+   {
+    "mana": 25,
+    "name": "Healing Touch",
+    "role": "heal",
+    "slot": 3,
+    "spell": 5185
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "War Stomp",
+    "role": "buff",
+    "slot": 4,
+    "spell": 20549
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4536,
+    "name": "Shiny Red Apple",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "6:3": {
+  "class": 3,
+  "name": "hunter",
+  "race": 6,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Raptor Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 2973
+   },
+   {
+    "mana": 0,
+    "name": "Auto Shot",
+    "role": "attack",
+    "slot": 3,
+    "spell": 75
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "War Stomp",
+    "role": "buff",
+    "slot": 4,
+    "spell": 20549
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "6:7": {
+  "class": 7,
+  "name": "mage",
+  "race": 6,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Lightning Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 403
+   },
+   {
+    "mana": 25,
+    "name": "Healing Wave",
+    "role": "heal",
+    "slot": 3,
+    "spell": 331
+   },
+   {
+    "every_s": 1.0,
+    "mana": 0,
+    "name": "War Stomp",
+    "role": "buff",
+    "slot": 4,
+    "spell": 20549
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "7:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 7,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "7:4": {
+  "class": 4,
+  "name": "rogue",
+  "race": 7,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 45,
+    "name": "Sinister Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 1752
+   },
+   {
+    "mana": 35,
+    "name": "Eviscerate",
+    "role": "attack",
+    "slot": 3,
+    "spell": 2098
+   },
+   {
+    "mana": 0,
+    "name": "Throw",
+    "role": "attack",
+    "slot": 4,
+    "spell": 2764
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "7:8": {
+  "class": 8,
+  "name": "warlock",
+  "race": 7,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 30,
+    "name": "Fireball",
+    "role": "attack",
+    "slot": 2,
+    "spell": 133
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 60,
+    "name": "Frost Armor",
+    "role": "buff",
+    "slot": 3,
+    "spell": 168
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4536,
+    "name": "Shiny Red Apple",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "7:9": {
+  "class": 9,
+  "name": "druid",
+  "race": 7,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 25,
+    "name": "Shadow Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 686
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 20,
+    "name": "Demon Skin",
+    "role": "buff",
+    "slot": 3,
+    "spell": 687
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "8:1": {
+  "class": 1,
+  "name": "warrior",
+  "race": 8,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 73,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 150,
+    "name": "Heroic Strike",
+    "role": "attack",
+    "slot": 74,
+    "spell": 78
+   },
+   {
+    "mana": 0,
+    "name": "Throw",
+    "role": "attack",
+    "slot": 75,
+    "spell": 2764
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 84
+   }
+  ]
+ },
+ "8:3": {
+  "class": 3,
+  "name": "hunter",
+  "race": 8,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Raptor Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 2973
+   },
+   {
+    "mana": 0,
+    "name": "Auto Shot",
+    "role": "attack",
+    "slot": 3,
+    "spell": 75
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4604,
+    "name": "Forest Mushroom Cap",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "8:4": {
+  "class": 4,
+  "name": "rogue",
+  "race": 8,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 45,
+    "name": "Sinister Strike",
+    "role": "attack",
+    "slot": 2,
+    "spell": 1752
+   },
+   {
+    "mana": 35,
+    "name": "Eviscerate",
+    "role": "attack",
+    "slot": 3,
+    "spell": 2098
+   },
+   {
+    "mana": 0,
+    "name": "Throw",
+    "role": "attack",
+    "slot": 4,
+    "spell": 2764
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "8:5": {
+  "class": 5,
+  "name": "priest",
+  "race": 8,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 20,
+    "name": "Smite",
+    "role": "attack",
+    "slot": 2,
+    "spell": 585
+   },
+   {
+    "mana": 30,
+    "name": "Lesser Heal",
+    "role": "heal",
+    "slot": 3,
+    "spell": 2050
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 4540,
+    "name": "Tough Hunk of Bread",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "8:7": {
+  "class": 7,
+  "name": "mage",
+  "race": 8,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 15,
+    "name": "Lightning Bolt",
+    "role": "attack",
+    "slot": 2,
+    "spell": 403
+   },
+   {
+    "mana": 25,
+    "name": "Healing Wave",
+    "role": "heal",
+    "slot": 3,
+    "spell": 331
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ },
+ "8:8": {
+  "class": 8,
+  "name": "warlock",
+  "race": 8,
+  "rows": [
+   {
+    "mana": 0,
+    "name": "Attack",
+    "role": "attack",
+    "slot": 1,
+    "spell": 6603,
+    "toggle": true
+   },
+   {
+    "mana": 30,
+    "name": "Fireball",
+    "role": "attack",
+    "slot": 2,
+    "spell": 133
+   },
+   {
+    "every_s": 1795.0,
+    "mana": 60,
+    "name": "Frost Armor",
+    "role": "buff",
+    "slot": 3,
+    "spell": 168
+   },
+   {
+    "item": 159,
+    "name": "Refreshing Spring Water",
+    "role": "drink",
+    "slot": 11
+   },
+   {
+    "item": 117,
+    "name": "Tough Jerky",
+    "role": "food",
+    "slot": 12
+   }
+  ]
+ }
+}

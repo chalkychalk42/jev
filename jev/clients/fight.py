@@ -42,7 +42,14 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from jev.perceive.units import Plate, find, find_plates
-from jev.world.combat import CombatProfile, for_class
+from jev.world.combat import (
+    HEAL_IN_COMBAT,
+    MIN_MANA_TO_HEAL,
+    Ability,
+    CombatProfile,
+    Role,
+    for_class,
+)
 
 # How dead is dead. The strip carries health as a fraction in 10 bits, so "zero" arrives as
 # a very small number rather than exactly nothing.
@@ -122,6 +129,10 @@ class Fight:
     closed: int = field(default=0, init=False)
     # The plate that produced the current selection, if a plate did.
     selected_plate: Plate | None = field(default=None, init=False)
+    heals_landed: int = field(default=0, init=False)
+    heals_ignored: int = field(default=0, init=False)
+    _toggled: bool = field(default=False, init=False)
+    _pending_heal: tuple[float, float] | None = field(default=None, init=False)
     last_hp: float | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
     _last_use: dict[int, float] = field(default_factory=dict, init=False)
@@ -132,6 +143,8 @@ class Fight:
         """Select, engage, and hold the rotation until something settles it."""
         self.pressed = []
         self.closed = 0
+        self._toggled = False
+        self._pending_heal = None
         self.last_hp = None
         self.detail = ""
         self._last_use = {}
@@ -334,33 +347,110 @@ class Fight:
         return False
 
     def _rotate(self, values: dict) -> None:
-        """Press the highest-priority slot the client says is ready."""
+        """Press the highest-priority row the client says is ready.
+
+        Roles, not classes. There is no `if paladin` here and there is not going to be:
+        the engine asks for a row with `role=heal` and presses it if the bars say it is
+        ready, so a warrior is the same list with one fewer row and nothing changes.
+        """
         if values.get("bars.casting") is True:
             return
         gcd = values.get("bars.gcd")
         if gcd is not None and gcd > 0.0:
             return
-        ready = values.get("bars.ready")
-        usable = values.get("bars.usable")
+        ready, usable = values.get("bars.ready"), values.get("bars.usable")
         if ready is None or usable is None:
             return
 
-        profile = self.profile or for_class(values.get("char.class_id"))
-        now = time.monotonic()
-        for ability in profile.abilities:
-            bit = 1 << (ability.slot - 1)
-            if not (ready & bit) or not (usable & bit):
-                continue
-            last = self._last_use.get(ability.slot)
-            if last is not None and now - last < ability.every_s:
-                continue
-            key = SLOT_KEYS.get(ability.slot)
-            if key is None:
-                continue
-            self.hid.tap(key)
-            self._last_use[ability.slot] = now
-            self.pressed.append(ability.slot)
+        profile = self.profile or for_class(values.get("char.class_id"),
+                                            values.get("char.race_id"))
+        self._watch_heal(values, ready)
+
+        def pressable(a: Ability) -> bool:
+            bit = 1 << (a.slot - 1)
+            return bool(ready & bit) and bool(usable & bit)
+
+        # 1. Stay alive. A heal is a global cooldown not spent swinging, so the line is
+        #    low — but standing there at 20% because healing is "not the rotation" is how
+        #    a character ends up running back from the graveyard.
+        heal = profile.first(Role.HEAL)
+        hp = values.get("vitals.hp")
+        if (heal is not None and pressable(heal)
+                and values.get("vitals.combat") is True
+                and hp is not None and hp < HEAL_IN_COMBAT
+                and self._has_mana_for(heal, values)):
+            self._press(heal)
+            self._pending_heal = (hp, time.monotonic())
             return
+
+        # 2. Keep the buff up, and only when it is actually lapsing: `bars.ready` says a
+        #    seal is pressable on every single tick, so without the interval the
+        #    character stands there re-sealing and never swings.
+        now = time.monotonic()
+        for buff in profile.by_role(Role.BUFF):
+            last = self._last_use.get(buff.slot)
+            if pressable(buff) and (last is None or now - last >= buff.every_s):
+                self._press(buff)
+                return
+
+        # 3. Swing. A toggle is pressed at most once and only before anything has landed,
+        #    because pressing melee auto-attack while already swinging **stops** it.
+        for attack in profile.by_role(Role.ATTACK):
+            if not pressable(attack):
+                continue
+            if attack.toggle:
+                landed = self.last_hp is not None and self.last_hp < 1.0
+                if self._toggled or landed:
+                    continue
+                self._toggled = True
+            self._press(attack)
+            return
+
+    def _press(self, ability: Ability) -> None:
+        key = SLOT_KEYS.get(ability.slot)
+        if key is None:
+            return
+        self.hid.tap(key)
+        self._last_use[ability.slot] = time.monotonic()
+        self.pressed.append(ability.slot)
+
+    def _has_mana_for(self, ability: Ability, values: dict) -> bool:
+        """Enough mana for this, and enough left afterwards to matter.
+
+        Out of mana is not a reason to keep pressing: it falls through to swinging, and
+        the caller falls through to food, a vendor, or breaking the fight off. There is
+        deliberately no drinking inside a fight.
+        """
+        frac = values.get("vitals.power")
+        if frac is None:
+            return True                      # unreadable is not a refusal
+        if frac < MIN_MANA_TO_HEAL:
+            return False
+        pool = values.get("vitals.power_max")
+        if pool and ability.mana:
+            return frac * pool >= ability.mana
+        return True
+
+    def _watch_heal(self, values: dict, ready: int) -> None:
+        """Did the last heal actually fire?
+
+        Confirmed on health rising or the slot going unready — **not** on having tapped
+        the key. A press that the client ignored looks identical to one that worked if
+        nobody checks, and the failure it hides is a picker predicate that never fires.
+        """
+        if self._pending_heal is None:
+            return
+        at_press, when = self._pending_heal
+        hp = values.get("vitals.hp")
+        heal = (self.profile or for_class(values.get("char.class_id"),
+                                          values.get("char.race_id"))).first(Role.HEAL)
+        went_unready = heal is not None and not (ready & (1 << (heal.slot - 1)))
+        if (hp is not None and hp > at_press + 0.02) or went_unready:
+            self.heals_landed += 1
+            self._pending_heal = None
+        elif time.monotonic() - when > 2.5:
+            self.heals_ignored += 1
+            self._pending_heal = None
 
     def _settle(self) -> Fought:
         """It is gone. Did we kill it?
