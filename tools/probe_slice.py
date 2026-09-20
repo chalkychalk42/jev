@@ -118,80 +118,60 @@ def main() -> int:
         print(f"  quest {args.quest} is already in the log; nothing to accept")
         return 0
 
-    print("\n--- 3. plan and walk ---")
+    print("\n--- 3. stand on him, with the mesh ---")
     launcher = ("wsl.exe", "-d", "Ubuntu-24.04", "-e") if win32.IS_WINDOWS else ()
     query = MmapQuery(args.jevpath, args.mmaps, launcher=launcher)
-    # Arrival for an NPC is interact range, not a tight radius. The client
-    # answers that directly through CheckInteractDistance, which the radio paints as
-    # target.in_melee — so the walk only has to get close enough for the client to
-    # say yes, and a travel run that reports stuck at 4.3 yards has in fact arrived.
-    # Stop the planned walk **short** of the NPC and let the approach cover the last
-    # yards. Pathing onto his spawn point and accepting "within five yards" is how the
-    # character ended up standing past him: the mesh aims at where he stands, and the
-    # follower will happily walk through him to get there.
-    # The mesh handles terrain; the walk-in handles the last step. Stopping nine yards
-    # short left the walk-in to cover ground the planner had routed around, and it walked
-    # into a fence — the planner knew the fence was there and the blind walk did not.
-    # Six yards, between two measured failures. At four the player model stands in front
-    # of the selection ring and the locator sees a solid sliver instead of a hollow
-    # ellipse; at nine the blind walk-in covers ground the planner had routed around and
-    # found a fence. Six leaves the ring in view and the last step short.
-    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos, arrival_yards=6.0)
-    here = travel.position()
-    hw = map_to_world(here[0], here[1], bounds)
-    tw = map_to_world(node.pos[0], node.pos[1], bounds)
-    z = node.world[2] if node.world else 0.0
-    path = query.path(bounds.map_id, (hw[0], hw[1], z), (tw[0], tw[1], z))
-    print(f"  {path.status.value}: {len(path.points)} waypoints, {path.length_yards():.1f} yards")
+    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos, arrival_yards=3.0)
 
-    def replan(here_map):
-        """Ask the mesh again from wherever the character actually got to. This is the
-        engine; a follower that invents its own way round is the thing we retired."""
-        w = map_to_world(here_map[0], here_map[1], bounds)
-        fresh = query.path(bounds.map_id, (w[0], w[1], z), (tw[0], tw[1], z))
-        print(f"  re-planned: {fresh.status.value}, {len(fresh.points)} waypoints")
-        return fresh
+    def approach(node_world) -> bool:
+        """Plan from here to the NPC's world point and follow it.
 
-    result = (travel.follow(path, timeout_s=args.timeout, replan=replan)
-              if path.usable else travel.to(node.pos, timeout_s=args.timeout))
-    remaining = ("unknown" if result.remaining_yards is None
-                 else f"{result.remaining_yards:.1f} yards")
-    print(f"  {result.outcome.value}, {remaining} left, "
-          f"{result.turns} turns, {result.stuck_events} stuck")
-    query.close()
-    # `remaining_yards` on a failed leg is the distance to **that leg's waypoint**, not to
-    # the destination. Reading it as "nearly at the NPC" is how a run concluded it was
-    # 4.3 yards from Deputy Willem while wedged in a room thirty yards away with a wall
-    # in between. Measure against the node.
-    here = travel.position()
-    to_node = travel.distance(here, node.pos) if here else None
-    print(f"  {to_node:.1f} yards from the node itself"
-          if to_node is not None else "  position unreadable")
-    if result.outcome.value != "arrived":
-        print(f"  {result.detail}")
+        The planner is the only thing that knows about terrain; the skill above knows only
+        where to click. Nine yards of blind walking found a fence this had already routed
+        around.
+        """
+        here = travel.position()
+        if here is None:
+            print("  cannot read a position")
+            return False
+        hw = map_to_world(here[0], here[1], bounds)
+        path = query.path(bounds.map_id, (hw[0], hw[1], node_world[2]), node_world)
+        print(f"  {path.status.value}: {len(path.points)} waypoints, "
+              f"{path.length_yards():.1f} yards")
+        if not path.usable:
+            return False
+
+        def replan(here_map):
+            w = map_to_world(here_map[0], here_map[1], bounds)
+            return query.path(bounds.map_id, (w[0], w[1], node_world[2]), node_world)
+
+        result = travel.follow(path, timeout_s=args.timeout, replan=replan)
+        remaining = ("unknown" if result.remaining_yards is None
+                     else f"{result.remaining_yards:.1f} yards")
+        print(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "
+              f"{result.stuck_events} stuck")
+        return result.outcome.value == "arrived"
 
     print(f"\n--- 4. interact with {args.npc} ---")
-    # Deliberate, not a reflex (DECISIONS.md V18): the planner may have raised a console
-    # during the walk, and input is refused while the game is not foreground.
     if not win32.is_foreground(hwnd):
-        print("  window lost focus during the walk; raising it")
         win32.focus(hwnd)
         time.sleep(0.5)
 
     inter = Interact(hid=hid, bounds=bounds, read=read, read_frame=read_frame,
                      read_pos=read_pos, window_centre=(ox + w // 2, oy + h // 2),
-                     window_origin=(ox, oy))
-    result = inter.open_on(args.npc)
+                     window_origin=(ox, oy), approach=approach)
+    result = inter.open_on(args.npc, node_world=node.world, node_map=node.pos)
+    query.close()
+
     if inter.sighting is not None:
         sg = inter.sighting
-        print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) "
-              f"plate ({sg.plate.cx:.0f},{sg.plate.cy:.0f}) torso {sg.torso}")
-    print(f"  yawed={inter.yawed}  used_centre={inter.used_centre}  "
-          f"clicked={inter.clicked}  origin={(ox, oy)} centre={(ox + w // 2, oy + h // 2)}")
+        print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) torso {sg.torso}")
+    print(f"  used_centre={inter.used_centre}  clicked={inter.clicked}")
     print(f"  {result.value}" + (f" — {inter.detail}" if inter.detail else ""))
     if not result.opened:
         cap.close()
         return 1
+
 
     print(f"\n--- 5. accept quest {args.quest} ---")
     print("  STOP. There is no deterministic way to press Accept yet.")

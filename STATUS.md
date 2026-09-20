@@ -374,3 +374,37 @@ Two physical constraints measured on the way, both real:
 
 NEXT: why a centred, yawed unit is not reached by walking forward. That is one question,
 and it wants instrumenting from a fixed pose rather than another skill change.
+
+## 2026-09-20 — the quest frame opens
+DID: split the skill from the walk, and it worked on the first live run.
+
+    --- 3. stand on him, with the mesh ---
+    --- 4. interact with Deputy Willem ---
+      complete: 2 waypoints, 12.1 yards
+      arrived, 2.9 yards left, 2 turns, 0 stuck
+      saw it: ring (765,494) torso (765, 418)
+      clicked=(781, 474)
+      quest
+
+`Interact` no longer walks. `_walk_in` and `_yaw_toward` are deleted and a test asserts
+they stay deleted. The reason they had to go is that `W` follows **character** facing
+while `find()` reports **camera** pixels, so a turn computed from a pixel error does not
+point the body at anything — twelve yards in the wrong direction, and every fix was a
+better pulse for a problem that was never the pulse.
+
+The two halves belong apart and were already built:
+
+    the mesh     how to stand there   jev.guide.path + Travel.follow
+    the locator  where to click       jev.perceive.units.find
+
+`approach` is injected, so the skill knows nothing about navmeshes. A mesh that cannot
+stand on an NPC is a recorded-route question (V5), not a locator one.
+
+It opened `quest` rather than `gossip`: Willem has exactly one quest, so a right-click
+goes straight to the detail frame.
+
+NOW: 483 tests. The frame is open and Accept is the next named gap — still no
+deterministic way to press it, and a sweep over the quest frame is the same flail one step
+later, so it is not here.
+
+NEXT: Accept, then kill, then turn in.
