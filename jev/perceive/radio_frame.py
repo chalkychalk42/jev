@@ -358,28 +358,122 @@ def _score_row0(img: np.ndarray, grid: Grid) -> tuple[float | None, float]:
 
 MAX_CANDIDATES = 24
 MIN_FILL = 0.7          # a marker cell is solid, not an outline
+MAX_CELL_PX = 64.0      # past this the 'strip' spans half the screen
 ASPECT_TOLERANCE = 1.8  # generous: a scaled capture is not exactly square
 
 
-def _marker_candidates(mask: np.ndarray, limit: int = MAX_CANDIDATES) -> list[_Blob]:
-    """Blobs that could be a marker cell: square, solid, and big enough to sample.
+def _runs(row: np.ndarray) -> list[tuple[int, int]]:
+    """Contiguous True spans in one mask row, as (start, end) inclusive."""
+    xs = np.flatnonzero(row)
+    if xs.size == 0:
+        return []
+    breaks = np.flatnonzero(np.diff(xs) > 1)
+    starts = np.concatenate(([xs[0]], xs[breaks + 1]))
+    ends = np.concatenate((xs[breaks], [xs[-1]]))
+    return list(zip(starts.tolist(), ends.tolist(), strict=True))
 
-    Filtering on **shape before size** is what makes this work on a real screen rather
-    than on a fixture. The markers are square filled cells; the rest of the magenta and
-    cyan on a WoW screen is text, bar fill, spell-effect glow and icon edging, none of
-    which is square.
 
-    Measured against a live 1600x900 client: the cyan mask held 3,798 pixels, of which
-    the marker was 196. Ranking by area alone put five 57x7 slivers of interface ahead of
-    it and pushed the real marker out of a six-candidate cut — so the strip was on screen,
-    painting correctly, decoding perfectly when sampled by hand, and reported as absent.
+def _strip_candidates(left: np.ndarray, right: np.ndarray,
+                      limit: int = MAX_CANDIDATES) -> list[tuple[_Blob, _Blob]]:
+    """Propose (left marker, right marker) pairs from **row runs**, not from blobs.
+
+    Connected-component detection is the wrong primitive for this image, and two live
+    runs proved it in opposite directions. A marker sits flush against payload cells that
+    can carry its exact colour — magenta quantises to nibbles (15,0,15) and cyan to
+    (0,15,15), both of which payload reaches — so the component containing a marker is
+    whatever happens to touch it that frame. Once it was five slivers of interface ranked
+    above it by area. Once it was a 46x48 sprawl at 0.56 fill that a solidity filter then
+    discarded, while the marker sat in plain sight at the centre of it.
+
+    A row run is immune to all of that. The strip occupies twelve cells on one row, its
+    first cell is magenta and its last is cyan, so **the left edge of a magenta run and
+    the right edge of a cyan run bracket the strip** however much either run has merged
+    with its neighbours. Cell width follows from the span, and the caller then scores the
+    ten known swatches between them — which is the signature that actually identifies the
+    strip.
     """
-    out = [
-        b for b in _blobs(mask)
-        if b.w >= MIN_CELL_PX and b.h >= MIN_CELL_PX
-        and (1 / ASPECT_TOLERANCE) <= (b.w / max(1.0, b.h)) <= ASPECT_TOLERANCE
-        and b.area >= MIN_FILL * b.w * b.h
-    ]
+    rows = np.flatnonzero(left.any(axis=1) & right.any(axis=1))
+    out: list[tuple[_Blob, _Blob]] = []
+    seen: set[tuple[int, int, int]] = set()
+
+    for y in rows.tolist():
+        for lx0, _lx1 in _runs(left[y]):
+            for _rx0, rx1 in _runs(right[y]):
+                span = rx1 - lx0 + 1
+                if span <= 0:
+                    continue
+                cell = span / GRID_COLS
+                if cell < MIN_CELL_PX or cell > MAX_CELL_PX:
+                    continue
+                key = (lx0, rx1, int(cell))
+                if key in seen:
+                    continue
+                seen.add(key)
+                half = cell / 2.0
+
+                # Two hypotheses per side, because neither is right in both cases.
+                # A run that is exactly one cell gives its centre directly, which
+                # survives the edge erosion that blur and rescaling cause. A run that
+                # has merged with a same-coloured neighbour has a meaningless centre,
+                # and only its outer edge locates the strip. Offering both costs a
+                # handful of candidates and the calibration score decides between them —
+                # which is what the score is for.
+                lefts = {lx0 + half, (lx0 + _lx1) / 2.0}
+                rights = {rx1 - half, (_rx0 + rx1) / 2.0}
+                cy = y + half - 0.5
+                for lcx in lefts:
+                    for rcx in rights:
+                        if rcx - lcx < MIN_CELL_PX * (GRID_COLS - 1):
+                            continue
+                        out.append((
+                            _Blob(area=int(cell * cell), cx=lcx, cy=cy, w=cell, h=cell),
+                            _Blob(area=int(cell * cell), cx=rcx, cy=cy, w=cell, h=cell),
+                        ))
+                if len(out) >= limit:
+                    return out
+    return out
+
+
+def _marker_candidates(mask: np.ndarray, limit: int = MAX_CANDIDATES) -> list[_Blob]:
+    """Blobs that could be a marker cell: square, solid, big enough — or *inside* one.
+
+    Filtering on **shape before size** is what makes this work on a real screen. The
+    markers are square filled cells; the rest of the magenta and cyan on a WoW screen is
+    text, bar fill, spell glow and icon edging, none of which is square. Measured live:
+    the cyan mask held 3,798 pixels against the marker's 196, and ranking by area put five
+    57x7 slivers of interface ahead of the real marker.
+
+    But a square-only filter is brittle in the other direction, and that cost a live run
+    too. A payload cell next to a marker can carry the *same* colour — magenta is nibbles
+    (15,0,15), cyan is (0,15,15), and payload reaches both — so the two merge into one
+    blob twice as wide as it is tall, and the marker disappears from the candidate list
+    entirely while sitting in plain sight. So a wide blob is not discarded: it is split at
+    its ends, because whichever cell in it is the real marker, the marker is flush with
+    one edge of the run.
+    """
+    out: list[_Blob] = []
+    for b in _blobs(mask):
+        if b.w < MIN_CELL_PX or b.h < MIN_CELL_PX:
+            continue
+        if b.area < MIN_FILL * b.w * b.h:
+            continue
+
+        aspect = b.w / max(1.0, b.h)
+        if (1 / ASPECT_TOLERANCE) <= aspect <= ASPECT_TOLERANCE:
+            out.append(b)
+            continue
+
+        # Too wide to be one cell: offer the cell at each end of the run. A marker is
+        # always at an edge of the merge, because it is at an edge of the strip.
+        if aspect > ASPECT_TOLERANCE:
+            half = b.h / 2.0
+            left_edge = b.cx - b.w / 2.0
+            right_edge = b.cx + b.w / 2.0
+            for cx in (left_edge + half, right_edge - half):
+                out.append(_Blob(area=int(b.h * b.h), cx=cx, cy=b.cy,
+                                 w=b.h, h=b.h))
+
+    out.sort(key=lambda blob: -blob.area)
     return out[:limit]
 
 
@@ -403,16 +497,15 @@ def locate(frame: np.ndarray) -> Grid | None:
     """
     img = _rgb(frame)
     left_mask, right_mask = _marker_masks(frame)
-    lefts = _marker_candidates(left_mask)
-    rights = _marker_candidates(right_mask)
-    if not lefts or not rights:
+    pairs = _strip_candidates(left_mask, right_mask)
+    if not pairs:
         return None
 
     best: tuple[float, Grid] | None = None
     fallback: tuple[float, Grid] | None = None
 
-    for bl in lefts:
-        for br in rights:
+    for bl, br in pairs:
+        if True:
             dx = (br.cx - bl.cx) / (GRID_COLS - 1)
             cell_w = abs(dx)
             if cell_w < MIN_CELL_PX:

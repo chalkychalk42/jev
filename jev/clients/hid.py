@@ -21,6 +21,7 @@ import ctypes
 import random
 import string
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from jev.clients import win32
@@ -149,6 +150,46 @@ class Hid:
         ok = self.key_up(key)
         self._sleep(self.h.gap())
         return ok
+
+    def hold(self, key: str, seconds: float,
+             on_tick: Callable[[], None] | None = None,
+             tick_s: float = 0.05) -> bool:
+        """Hold a key down for a measured duration.
+
+        Movement is a held key, not a tap, and the duration is the control signal — a
+        turn is "press D for 0.31 s", so the accuracy of that hold is the accuracy of the
+        heading. `on_tick` lets a caller sample position *while* the key is down, which is
+        the only way to measure a speed without stopping first and measuring a different
+        thing.
+
+        The key is released in a `finally`. A held movement key that survives an exception
+        is a character running into the sea for as long as it takes someone to notice.
+        """
+        if not self.key_down(key):
+            return False
+        try:
+            deadline = time.perf_counter() + seconds
+            while time.perf_counter() < deadline:
+                if on_tick is not None:
+                    on_tick()
+                time.sleep(min(tick_s, max(0.0, deadline - time.perf_counter())))
+        finally:
+            self.key_up(key)
+        self._sleep(self.h.gap())
+        return True
+
+    # Default 2.4.3 bindings, confirmed by measurement rather than memory: W/S move,
+    # **A/D turn**, and **Q/E strafe**. Holding D for a second moved the character zero
+    # yards while turning it, which is why an unstick built on "strafe with D" never
+    # freed anything.
+    MOVEMENT_KEYS = ("w", "a", "s", "d", "q", "e", "space", "shift")
+    TURN_LEFT, TURN_RIGHT = "a", "d"
+    STRAFE_LEFT, STRAFE_RIGHT = "q", "e"
+
+    def release_all(self) -> None:
+        """Let go of everything that moves. Cheap, and worth calling on any abort path."""
+        for key in self.MOVEMENT_KEYS:
+            self.key_up(key)
 
     def chord(self, modifier: str, key: str) -> bool:
         """Modifier plus key, with the modifier genuinely held around it."""

@@ -24,16 +24,16 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from jev.clients import win32  # noqa: E402
-from jev.clients.capture import Backend, WindowCapture  # noqa: E402
-from jev.clients.hid import Hid, Humaniser  # noqa: E402
-from jev.perceive import radio_frame  # noqa: E402
+from jev.clients import win32
+from jev.clients.capture import Backend, WindowCapture
+from jev.clients.hid import Hid, Humaniser
+from jev.perceive import radio_frame
 
 
 def sample(cap: WindowCapture) -> dict | None:
     try:
         reading = radio_frame.read(cap.grab().rgb)
-    except Exception as exc:                      # noqa: BLE001 - diagnostic tool
+    except Exception as exc:
         print(f"  capture/read raised: {exc}")
         return None
     return reading.values if reading.ok else None

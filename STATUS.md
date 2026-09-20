@@ -160,3 +160,46 @@ NEXT: movement. Closed-loop turn-and-walk to a node, measured on this terrain �
 arrival tolerance, and what stuck actually looks like are all things to measure rather
 than design. Then vision heads for loot/gossip/quest frames, a combat profile for this
 character, and the slice.
+
+## 2026-09-20 — TRAVEL_TO walks 60 yards; McBride is behind a wall
+DID: closed-loop travel, measured on live Northshire dirt rather than designed.
+
+**Measured, not chosen:** walk 0.00227 map units/s; turn ~134 deg/s seed, converging to
+60–100 deg/s in practice; heading spread 0.2 degrees over a 1.6 s sample; capture and
+decode at 19–20 Hz; per-sample movement 0.19 yards against a quantisation floor of 0.12.
+
+**Open ground works.** 59.7 yards to a known-walkable spot: **arrived**, 4.9 yards
+remaining, 29.2 s, 44 turns, 2 stuck events (both freed by jump-forward), 2 detours.
+
+**McBride does not, and that is the real finding.** The node is his spawn coordinate and
+Northshire Abbey is between us and it. Best run reached 16.0 yards and then could not get
+round. The loop now says so in as many words — *"7 detours did not get around it (closest
+16.0 yards); this node needs a recorded route"* — which is the honest failure, not a bug.
+`DECISIONS.md` V5 already says the DB knows where things are and not how to walk there;
+this is the first time that bill came due.
+
+Five things the live client corrected, none of which reading would have caught:
+- **A and D turn; they do not strafe.** Q/E strafe. An unstick built on "strafe with D"
+  turned in place and reported a failed recovery. Measured: forward 0.00 yards, back 3.91,
+  turn-left 0.00, turn-right 0.00, **jump-forward 3.39** — so jump-forward leads the
+  recovery order now.
+- **A single torn frame is not a lost position.** `_unstick` skipped an attempt whenever
+  its "before" read came back None, so one bad decode skipped *all five* attempts in about
+  no time and reported failure having tried nothing. 3.7 s = 1.5 s detect + 0 s of doing
+  nothing.
+- **Measuring and moving are the same activity.** The first loop stopped to take a heading
+  before and after each turn, dragging the character nine yards per correction: 11 turns,
+  17 stuck events, timeout. Forward is now held throughout and turns are pulsed into it.
+- **Map space is stretched 1.5:1**, so angles taken in map fractions are wrong by up to
+  eleven degrees and the first turn-rate measurement was contaminated by it. Everything is
+  in yards now.
+- **Connectivity is the wrong primitive for finding the strip.** A marker merges with a
+  same-coloured payload neighbour: once into five slivers of UI ranked above it by area,
+  once into a 46x48 sprawl at 0.56 fill that a solidity filter discarded with the marker
+  sitting in the middle of it. Detection is from **row runs** now, which cannot merge.
+
+NOW: 412 tests. Travel works; one node needs a route.
+
+NEXT: this is the point the plan predicted — recorded routes. The graph supplies
+destinations; the paths between them have to be walked once. Everything else on the NOT
+NEXT list stays there.

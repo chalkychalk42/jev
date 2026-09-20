@@ -23,6 +23,7 @@ uint32 bit patterns, so they are reinterpreted rather than cast.
 
 from __future__ import annotations
 
+import pathlib
 import sqlite3
 import struct
 from dataclasses import dataclass
@@ -103,6 +104,69 @@ def map_to_world(mx: float, my: float, bounds: ZoneBounds) -> tuple[float, float
     y = bounds.left - mx * (bounds.left - bounds.right)
     x = bounds.top - my * (bounds.top - bounds.bottom)
     return x, y
+
+
+@lru_cache(maxsize=2)
+def bounds_by_radio_id(zones_json: str) -> dict[int, ZoneBounds]:
+    """Zone bounds keyed by the id the radio actually paints.
+
+    The addon cannot send an area id — 2.4.3 gives it `GetMapInfo()`, a map *file* name —
+    so it sends a 16-bit hash of that name and the decoder inverts it here. Verified
+    collision-free across all 68 zone maps in the table, and asserted rather than assumed
+    because a collision would silently put a character in the wrong zone's coordinate
+    frame and every distance after that would be wrong by a constant nobody could see.
+    """
+    import json
+
+    from jev.perceive.radio_frame import zone_id
+
+    entries = json.loads(pathlib.Path(zones_json).read_text(encoding="utf-8"))["zones"]
+    out: dict[int, ZoneBounds] = {}
+    for e in entries:
+        key = zone_id(e["name"])
+        if key in out:
+            raise ValueError(f"zone hash collision: {e['name']} and {out[key].area_id}")
+        out[key] = ZoneBounds(area_id=e["area_id"], map_id=e["map_id"],
+                              left=e["left"], right=e["right"],
+                              top=e["top"], bottom=e["bottom"])
+    return out
+
+
+def to_yards(dmx: float, dmy: float, bounds: ZoneBounds) -> tuple[float, float]:
+    """A map-space delta in yards, along the map's own axes.
+
+    **Map space is not isotropic and this is the correction for it.** Elwynn's map box is
+    3,470.8 yards wide against 2,314.6 tall — a 1.5:1 stretch — so `atan2(dmy, dmx)` on
+    raw fractions is wrong by up to 11 degrees near the diagonal, and a turn computed from
+    that angle is wrong by the same amount. Measured, not assumed: an early turn-rate
+    reading taken in map space was contaminated exactly this way.
+
+    Returned as (along-mx, along-my) in yards, which is a proper Euclidean frame. It is
+    still the *map's* orientation rather than the world's, and that is fine: the target is
+    a map position and the reading is a map position, so nothing in the loop needs world
+    axes.
+    """
+    return (dmx * abs(bounds.left - bounds.right),
+            dmy * abs(bounds.top - bounds.bottom))
+
+
+def heading_yards(a: tuple[float, float], b: tuple[float, float],
+                  bounds: ZoneBounds) -> float | None:
+    """True bearing from `a` to `b`, radians, or `None` if they are too close to mean it."""
+    import math
+
+    dx, dy = to_yards(b[0] - a[0], b[1] - a[1], bounds)
+    if math.hypot(dx, dy) < 0.5:        # half a yard is inside the readout's own noise
+        return None
+    return math.atan2(dy, dx)
+
+
+def distance_yards(a: tuple[float, float], b: tuple[float, float],
+                   bounds: ZoneBounds) -> float:
+    import math
+
+    dx, dy = to_yards(b[0] - a[0], b[1] - a[1], bounds)
+    return math.hypot(dx, dy)
 
 
 def on_map(mx: float, my: float, slack: float = 0.02) -> bool:

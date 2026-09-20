@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import json
 import math
+import pathlib
 import re
 from pathlib import Path
-
-import pathlib
 
 import numpy as np
 import pytest
@@ -875,9 +874,31 @@ def test_the_strip_reads_from_a_real_client_frame():
 
 @pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")
 def test_a_real_screen_is_full_of_the_marker_colours():
-    """The premise behind the shape filter, asserted rather than remembered."""
+    """The premise behind detecting the strip from row runs, asserted not remembered.
+
+    Live, the cyan mask held thousands of pixels of interface against the marker's 196,
+    and on one frame the marker's connected component was a 46x48 sprawl at 0.56 fill —
+    square, but far too sparse to pass a solidity filter, with the real marker sitting in
+    the middle of it. Connectivity is not a usable primitive here; a row run is.
+    """
     frame = np.load(LIVE)
     left, right = radio_frame._marker_masks(frame)
     assert right.sum() > 1000, "this frame should have plenty of non-marker cyan in it"
-    candidates = radio_frame._marker_candidates(right)
-    assert len(candidates) < 30, "shape filtering should cut the field down hard"
+
+    pairs = radio_frame._strip_candidates(left, right)
+    assert pairs, "no candidate pair from a frame that definitely contains the strip"
+    assert len(pairs) <= radio_frame.MAX_CANDIDATES
+
+
+def test_a_marker_merged_with_its_neighbour_is_still_found():
+    """A payload cell next to a marker can carry the marker's exact colour, so the two
+    merge into one run. The strip is still bracketed by the run's outer edge."""
+    values = _values()
+    frame = _paint(values, origin=(40, 40), cell=CELL_PX)
+    # Paint a cyan block flush against the right marker, as a neighbouring cell would be.
+    x = 40 + GRID_COLS * CELL_PX
+    frame[40:40 + CELL_PX, x:x + CELL_PX] = np.array(MARKER_R, dtype=np.uint8)
+
+    reading = radio_frame.read(frame)
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    assert reading.values["char.level"] == values["char.level"]
