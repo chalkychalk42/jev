@@ -55,7 +55,15 @@ class Reaction(StrEnum):
 # written down here rather than left for later so the engine is whole, and they carry a
 # note that they have not yet met a live hostile target — see `MEASURED`.
 _RULES: dict[Reaction, dict[str, int]] = {
-    Reaction.FRIENDLY: {"hi": 1, "lo": 2, "other": 0, "hi_min": 150, "gap": 140, "lo_max": 40},
+    # `lo_max` is 70, not 40. Forty was measured on the selection **ring** — (95, 200, 5),
+    # almost no blue — and silently excluded the **nameplate bar**, which is a different
+    # green at (72, 219, 48). Both are drawn by the same client around the same unit and
+    # both have to pass.
+    #
+    # Widening it is safe because `gap` does the discriminating, not `lo_max`: the plate
+    # clears it at 219-48 = 171, while Northshire grass at (104, 87, 9) manages 78 and is
+    # nowhere near.
+    Reaction.FRIENDLY: {"hi": 1, "lo": 2, "other": 0, "hi_min": 150, "gap": 140, "lo_max": 70},
     Reaction.HOSTILE: {"hi": 0, "lo": 2, "other": 1, "hi_min": 150, "gap": 120, "lo_max": 60},
     Reaction.NEUTRAL: {"hi": 1, "lo": 2, "other": 0, "hi_min": 170, "gap": 130, "lo_max": 60},
 }

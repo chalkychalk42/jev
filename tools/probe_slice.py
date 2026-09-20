@@ -129,7 +129,14 @@ def main() -> int:
     # yards. Pathing onto his spawn point and accepting "within five yards" is how the
     # character ended up standing past him: the mesh aims at where he stands, and the
     # follower will happily walk through him to get there.
-    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos, arrival_yards=9.0)
+    # The mesh handles terrain; the walk-in handles the last step. Stopping nine yards
+    # short left the walk-in to cover ground the planner had routed around, and it walked
+    # into a fence — the planner knew the fence was there and the blind walk did not.
+    # Six yards, between two measured failures. At four the player model stands in front
+    # of the selection ring and the locator sees a solid sliver instead of a hollow
+    # ellipse; at nine the blind walk-in covers ground the planner had routed around and
+    # found a fence. Six leaves the ring in view and the last step short.
+    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos, arrival_yards=6.0)
     here = travel.position()
     hw = map_to_world(here[0], here[1], bounds)
     tw = map_to_world(node.pos[0], node.pos[1], bounds)
@@ -179,7 +186,8 @@ def main() -> int:
         sg = inter.sighting
         print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) "
               f"plate ({sg.plate.cx:.0f},{sg.plate.cy:.0f}) torso {sg.torso}")
-    print(f"  yawed={inter.yawed}  clicked={inter.clicked}")
+    print(f"  yawed={inter.yawed}  used_centre={inter.used_centre}  "
+          f"clicked={inter.clicked}  origin={(ox, oy)} centre={(ox + w // 2, oy + h // 2)}")
     print(f"  {result.value}" + (f" — {inter.detail}" if inter.detail else ""))
     if not result.opened:
         cap.close()

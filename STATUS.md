@@ -335,3 +335,42 @@ moves the character, which is why the position kept drifting between runs.
 NEXT: interact, with a probe that does **not** reposition between attempts. The failure is
 in `_walk_in` losing the sighting, and it needs to be watched from a fixed start rather
 than chased.
+
+## 2026-09-20 — the six-step skill fails closed; gossip is not open
+DID: the skill now matches the specified shape, and fails closed rather than wandering.
+
+    /target + name hash -> find() once -> one yaw -> hold W -> find() again -> click -> confirm
+
+**The walk no longer consults the locator.** Re-finding every tick turned a snapshot into
+a homing missile: the walk changes pitch, distance and which pixels the ring occupies, so
+requiring a fresh sighting per frame fails on the first one that blinks — and the miss
+tolerances that follow are the sprawl the module was rewritten to remove. Aim once, walk,
+look again.
+
+**It fails closed, and it no longer walks a hundred yards to do it.** A timeout-only bound
+let one run walk the full twenty seconds. Bounded at twelve yards now, which is generous
+for a unit that was visible and centred when it was aimed at.
+
+**Stopping against a fence is not a reason to click.** `in_melee` cannot answer "can I
+gossip" — duel range, about eleven yards — but it is reliable as a *negative*: not within
+eleven yards means we certainly did not walk into the target. A live run stopped against a
+wooden fence with Willem back in the courtyard and clicked the screen centre hopefully.
+That is `APPROACH_FAILED` now.
+
+**Locator: the nameplate is a different green from the ring.** Measured, the bar is
+(72, 219, 48) and the ring (95, 200, 5), and a blue cap of 40 taken from the ring silently
+excluded every bar. Widening it to 70 is safe because the *gap* discriminates — the bar
+clears 171 where Northshire grass manages 78.
+
+NOW: 487 tests. Gossip does **not** open. The skill finds the unit, yaws to it, walks
+twelve yards and never collides — so walking at a centred unit is not walking at the unit,
+and the camera/character explanation for that was tried and did not fix it.
+
+Two physical constraints measured on the way, both real:
+- At under four yards the player model occludes the selection ring, so the locator sees a
+  solid sliver rather than a hollow ellipse and refuses — correctly.
+- At nine yards the blind walk-in covers ground the planner routed around, and finds
+  fences the mesh already knew about.
+
+NEXT: why a centred, yawed unit is not reached by walking forward. That is one question,
+and it wants instrumenting from a fixed pose rather than another skill change.

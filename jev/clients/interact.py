@@ -42,10 +42,14 @@ CENTRED_PX = 260
 STILL_YARDS = 0.3
 STILL_FOR_S = 0.7
 
-# Consecutive failed looks tolerated while walking. Roughly half a second at the rate the
-# loop turns over — long enough for grass to pass in front of a ring, short enough that a
-# unit which genuinely left the screen is noticed.
-MISSES_BEFORE_LOST = 6
+# How far the walk-in may travel before giving up. A unit that was visible and centred
+# when it was aimed at is a few yards away, not a hundred — which is where a timeout-only
+# bound put the character on a live run.
+WALK_BUDGET_YARDS = 12.0
+
+# Shortest yaw worth sending. Long enough that the client registers the turn and brings
+# the camera behind the character; short enough that it barely moves the aim.
+MIN_YAW_S = 0.08
 
 
 class Result(StrEnum):
@@ -56,6 +60,7 @@ class Result(StrEnum):
     NO_TARGET = "no_target"        # /target found nothing, or the wrong thing
     NOT_VISIBLE = "not_visible"    # targeted, but no ring and plate on screen
     NO_WINDOW = "no_window"        # clicked the unit and nothing opened
+    APPROACH_FAILED = "approach_failed"   # walked into a fence, a slope, the wrong thing
     BLIND = "blind"                # no readable frame at all
 
     @property
@@ -76,6 +81,8 @@ class Interact:
     sighting: Sighting | None = field(default=None, init=False)
     clicked: tuple[int, int] | None = field(default=None, init=False)
     yawed: bool = field(default=False, init=False)
+    used_centre: bool = field(default=False, init=False)
+    walked_too_far: bool = field(default=False, init=False)
     detail: str = field(default="", init=False)
 
     # -- the skill -----------------------------------------------------------
@@ -94,25 +101,51 @@ class Interact:
             self.detail = "no ring and nameplate on screen"
             return Result.NOT_VISIBLE
 
-        if abs(sighting.torso[0] - self._centre_x()) > CENTRED_PX:
-            self._yaw_toward(sighting)
-            sighting = self._look()
-            if sighting is None:
-                self.detail = "lost it while centring"
-                return Result.NOT_VISIBLE
-
-        if not self._walk_in(walk_timeout_s):
-            self.detail = "lost sight of it on the way in"
-            return Result.NOT_VISIBLE
-
-        sighting = self._look()                 # we moved; where is it now
+        # Always. Not only when off-centre.
+        #
+        # The locator reports where a unit is relative to the **camera**, and walking is
+        # relative to the **character** — and in this client those are not the same
+        # heading. The camera can sit rotated away from the character's facing, so a unit
+        # dead centre on screen can be well off to one side of where W will go. Measured:
+        # a unit centred and requiring no correction, walked at for twelve yards, never
+        # reached.
+        #
+        # A keyboard turn moves the character and brings the camera round behind it, so
+        # the yaw is doing two jobs — aiming, and making "centred" mean "in front". It is
+        # still one turn.
+        self._yaw_toward(sighting)
+        sighting = self._look()
         if sighting is None:
-            self.detail = "arrived but cannot see it"
+            self.detail = "lost it while centring"
             return Result.NOT_VISIBLE
 
-        self.sighting = sighting
+        # A unit that was visible and centred is within a few yards. Twelve is generous
+        # for that and nowhere near the hundred a timeout-only bound allowed.
+        collided = self._walk_in(walk_timeout_s, max_yards=WALK_BUDGET_YARDS)
+        if not collided:
+            self.detail = ("walked past the budget without stopping" if self.walked_too_far
+                           else "walked without stopping against anything")
+            return Result.NOT_VISIBLE
+
         ox, oy = self.window_origin
-        self.clicked = (ox + sighting.torso[0], oy + sighting.torso[1])
+        sighting = self._look()                 # we moved; where is it now
+        if sighting is not None:
+            self.sighting = sighting
+            self.clicked = (ox + sighting.torso[0], oy + sighting.torso[1])
+        else:
+            # The ring is gone. Two very different reasons, and the duel-range flag tells
+            # them apart — not as "can I gossip", which it cannot answer, but as a
+            # **negative**: if the target is not within eleven yards, we certainly did not
+            # walk into it.
+            v = self.read()
+            if v is None or v.get("target.in_melee") is not True:
+                self.detail = "stopped against something that was not the target"
+                return Result.APPROACH_FAILED
+            # Within range and no ring: pressed against the model, where it can be
+            # underfoot and out of frame. One click at centre. `window_centre` is already
+            # in screen coordinates.
+            self.used_centre = True
+            self.clicked = self.window_centre
         self.hid.click(*self.clicked, right=True)
         time.sleep(0.9)
         return self._window_open() or Result.NO_WINDOW
@@ -156,60 +189,57 @@ class Interact:
         view, this only stops a click landing on a model clipped by the screen edge."""
         self.yawed = True
         error = sighting.torso[0] - self._centre_x()
-        self.hid.hold("d" if error > 0 else "a", min(0.6, abs(error) / 1200.0))
+        # A floor on the duration: a turn of zero length presses nothing, and pressing
+        # nothing is what leaves the camera where it was.
+        seconds = max(MIN_YAW_S, min(0.6, abs(error) / 1200.0))
+        self.hid.hold("d" if error > 0 else "a", seconds)
         time.sleep(0.3)
 
-    def _walk_in(self, timeout_s: float) -> bool:
-        """Walk **toward it** until the character stops moving, which is its hitbox.
+    def _walk_in(self, timeout_s: float, max_yards: float = 12.0) -> bool:
+        """Hold forward until the body stops. **The locator is not consulted in here.**
 
-        Steering is not a separate step bolted on — walking toward something is what this
-        is. A first version of this method pressed forward and nothing else, on the
-        reasoning that the caller had already looked; with the unit eight yards away and
-        off to one side it walked straight past and the next look found nothing. The ring
-        says where it is on every frame, so there is no reason to walk blind for even one
-        of them.
+        The temptation is to re-find every tick and steer, and that was tried: the walk
+        changes pitch, distance and which pixels the ring occupies, so requiring a fresh
+        sighting on every frame turns a snapshot into a homing missile and the skill
+        fails on the first frame that blinks. Six-miss tolerances and re-finds are the
+        beginning of the same sprawl this module was rewritten to remove.
 
-        No range flag decides arrival. The one available reads duel range and says "near"
-        when the answer needed is "close enough to speak to".
+        So the caller aims once, and this walks. Arrival is the client's own collision —
+        the character stops because something is in the way, and at the end of a walk
+        aimed at a unit, that something is usually the unit.
 
-        Returns whether it stopped against something, as opposed to running out of time.
+        Returns True if it stopped against something, False otherwise. A failure is a
+        failed approach — a fence, a slope, a bad aim — and not a reason to grow the
+        locator.
+
+        **Bounded by distance, not only by time.** A unit that was six yards away when it
+        was aimed at is not twenty seconds of walking away, so twenty seconds of walking
+        means the aim was wrong and every further step makes it worse. A live run did
+        exactly that and ended a hundred yards from where it started. The caller knows
+        roughly how far the unit is; past a few times that, this stops.
         """
         deadline = time.perf_counter() + timeout_s
-        centre_x = self._centre_x()
+        start = self.read_pos()
         last: tuple[float, float] | None = None
         still_since: float | None = None
-        misses = 0
 
         self.hid.key_down("w")
         try:
             while time.perf_counter() < deadline:
                 now = time.perf_counter()
-
                 here = self.read_pos()
-                if here is not None:
-                    if last is not None and distance_yards(last, here, self.bounds) < STILL_YARDS:
-                        still_since = still_since or now
-                        if now - still_since > STILL_FOR_S:
-                            return True
-                    else:
-                        still_since = None
-                    last = here
-
-                sighting = self._look()
-                if sighting is None:
-                    # One failed look is not a lost unit. Grass occludes part of the ring
-                    # for a frame, a capture lands mid-render — the same class of
-                    # transient that made a torn radio frame look like a lost position.
-                    # Keep walking on the last known heading and only give up on a run of
-                    # them.
-                    misses += 1
-                    if misses > MISSES_BEFORE_LOST:
-                        return False
+                if here is None:
                     continue
-                misses = 0
-                error = sighting.torso[0] - centre_x
-                if abs(error) > 60:
-                    self.hid.hold("d" if error > 0 else "a", min(0.25, abs(error) / 1600.0))
+                if start is not None and distance_yards(start, here, self.bounds) > max_yards:
+                    self.walked_too_far = True
+                    return False
+                if last is not None and distance_yards(last, here, self.bounds) < STILL_YARDS:
+                    still_since = still_since or now
+                    if now - still_since > STILL_FOR_S:
+                        return True
+                else:
+                    still_since = None
+                last = here
         finally:
             self.hid.release_all()
         return False
