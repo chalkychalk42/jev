@@ -33,7 +33,6 @@ from __future__ import annotations
 import argparse
 import pathlib
 import sys
-import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
@@ -41,18 +40,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 from jev.clients import win32  # noqa: E402
 from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
-from jev.clients.capture import Backend, WindowCapture  # noqa: E402
 from jev.clients.choose import ChooseListLine  # noqa: E402
-from jev.clients.hid import Hid, Humaniser  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
-from jev.clients.travel import Travel  # noqa: E402
 from jev.guide import playhead  # noqa: E402
-from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
+from jev.guide.coords import bounds_by_radio_id  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
 from jev.guide.tracker import Tracker  # noqa: E402
-from jev.perceive import radio_frame  # noqa: E402
-from jev.perceive.questlog import QuestLog  # noqa: E402
+from jev.run.client import NotRunning, attach, with_travel  # noqa: E402
 from jev.world.state_v1 import StepKind  # noqa: E402
 
 
@@ -65,100 +60,35 @@ def main() -> int:
     ap.add_argument("--jevpath", default="/home/ash/ForeverV2/tools/jevpath/jevpath")
     args = ap.parse_args()
 
-    if not win32.available():
-        print("run this with Windows Python")
+    try:
+        client = attach("slice")
+    except NotRunning as e:
+        print(e)
         return 2
-    hwnds = win32.find_windows("World of Warcraft")
-    if not hwnds:
+    if not client.focused():
+        print("could not bring the client to the foreground")
         return 1
-    hwnd = hwnds[0]
-    win32.focus(hwnd)
-    time.sleep(0.4)
 
-    hid = Hid(hwnd=hwnd, humaniser=Humaniser.for_client("slice"))
-    cap = WindowCapture(hwnd, backend=Backend.SCREEN)
-    ox, oy, w, h = win32.client_rect(hwnd)
-    log = QuestLog()
-
-    def read():
-        for _ in range(6):
-            r = radio_frame.read(cap.grab().rgb)
-            if r.ok:
-                log.observe(r.values)
-                return r.values
-            time.sleep(0.05)
-        return None
-
-    def read_reading():
-        """The whole reading, not just its values: list lines are a property of the
-        frame, not of the character, so they never entered `state_v1`."""
-        for _ in range(6):
-            r = radio_frame.read(cap.grab().rgb)
-            if r.ok:
-                log.observe(r.values)
-                return r
-            time.sleep(0.05)
-        return None
-
-    def read_frame():
-        try:
-            return cap.grab().rgb
-        except Exception:
-            return None
-
-    def read_pos():
-        try:
-            r = radio_frame.read(cap.grab().rgb)
-        except Exception:
-            return None
-        if not r.ok or r.values.get("pos.mx") is None:
-            return None
-        log.observe(r.values)
-        return (r.values["pos.mx"], r.values["pos.my"])
-
-    def quest_ids(tries: int = 40) -> tuple[int, ...] | None:
-        """Wait for a whole cycle. A partial one is unread, never a short log."""
-        for _ in range(tries):
-            read()
-            assembled = log._complete
-            if assembled is not None:
-                return tuple(q.quest_id for q in assembled)
-            time.sleep(0.08)
-        return None
-
-    def state():
-        """A `State` carrying the **assembled** log, which is what the tracker needs.
-
-        `to_state` will not call one frame a log and is right not to, so the accumulated
-        one is handed in. Without this the tracker sees an empty log on every tick and
-        every accept step looks unfinished.
-        """
-        for _ in range(6):
-            r = radio_frame.read(cap.grab().rgb)
-            if r.ok:
-                log.observe(r.values)
-                return radio_frame.to_state(r, t=time.time(), client_id="slice",
-                                            quests=log.complete)
-            time.sleep(0.05)
-        return None
-
-    v = read()
+    v = client.read()
     if v is None:
         print("cannot read the strip")
+        client.close()
         return 1
-    zones = bounds_by_radio_id(str(ROOT / "data" / "zones-tbc-243.json"))
-    bounds = zones[v["pos.zone_id"]]
+    bounds = bounds_by_radio_id(str(ROOT / "data" / "zones-tbc-243.json"))[v["pos.zone_id"]]
     graph = Graph.load(str(ROOT / "content" / "tbc" / "ally_human_1_12.json"))
 
     print("--- 1. what does the log say ---")
-    ids = quest_ids()
+    ids = client.quest_ids()
     print(f"  quests: {ids}   (() = read and empty, None = never read)")
     if ids is None:
         print("  the log never completed a cycle; stopping rather than guessing")
+        client.close()
         return 1
 
     launcher = ("wsl.exe", "-d", "Ubuntu-24.04", "-e") if win32.IS_WINDOWS else ()
-    query = MmapQuery(args.jevpath, args.mmaps, launcher=launcher)
+    with_travel(client, bounds, MmapQuery(args.jevpath, args.mmaps, launcher=launcher),
+                arrival_yards=GOSSIP_YARDS, say=print)
+
     def next_step():
         """Which step, according to the graph, the log, and where we got to last time.
 
@@ -168,7 +98,7 @@ def main() -> int:
         absent — and without it the run after a hand-in walks back to the giver.
         """
         nonlocal memory
-        st = state()
+        st = client.state()
         if st is None:
             return None
         memory = playhead.load(graph.graph_id)
@@ -177,44 +107,16 @@ def main() -> int:
         playhead.save(graph.graph_id, tracker.step_id, memory.completed)
         return graph.get(tracker.step_id)
 
-    def approach(node_world) -> bool:
-        """Plan from here to the NPC's world point and follow it.
-
-        The planner is the only thing that knows about terrain; the skill above knows only
-        where to click. Nine yards of blind walking found a fence this had already routed
-        around.
-        """
-        here = travel.position()
-        if here is None:
-            print("  cannot read a position")
-            return False
-        hw = map_to_world(here[0], here[1], bounds)
-        path = query.path(bounds.map_id, (hw[0], hw[1], node_world[2]), node_world)
-        print(f"  {path.status.value}: {len(path.points)} waypoints, "
-              f"{path.length_yards():.1f} yards")
-        if not path.usable:
-            return False
-
-        def replan(here_map):
-            w = map_to_world(here_map[0], here_map[1], bounds)
-            return query.path(bounds.map_id, (w[0], w[1], node_world[2]), node_world)
-
-        result = travel.follow(path, timeout_s=args.timeout, replan=replan)
-        remaining = ("unknown" if result.remaining_yards is None
-                     else f"{result.remaining_yards:.1f} yards")
-        print(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "
-              f"{result.stuck_events} stuck"
-              + (f" — {result.detail}" if result.detail else ""))
-        return result.outcome.value == "arrived"
-
-    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos,
-                    arrival_yards=GOSSIP_YARDS)
-    inter = Interact(hid=hid, bounds=bounds, read=read, read_frame=read_frame,
-                     read_pos=read_pos, window_centre=(ox + w // 2, oy + h // 2),
-                     window_origin=(ox, oy), approach=approach)
-    advance = AdvanceQuestFrame(hid=hid, read=read, quest_ids=lambda: quest_ids(tries=1),
+    ox, oy = client.origin
+    w, h = client.size
+    inter = Interact(hid=client.hid, bounds=bounds, read=client.read,
+                     read_frame=client.frame, read_pos=client.position,
+                     window_centre=(ox + w // 2, oy + h // 2), window_origin=(ox, oy),
+                     approach=lambda world: client.approach(world, timeout_s=args.timeout))
+    advance = AdvanceQuestFrame(hid=client.hid, read=client.read,
+                                quest_ids=lambda: client.quest_ids(tries=1),
                                 window_origin=(ox, oy), window_size=(w, h))
-    chooser = ChooseListLine(hid=hid, read=read_reading,
+    chooser = ChooseListLine(hid=client.hid, read=client.reading,
                              window_origin=(ox, oy), window_size=(w, h))
 
     # The only difference between accepting and turning in.
@@ -245,9 +147,7 @@ def main() -> int:
             rc = 1
             break
 
-        if not win32.is_foreground(hwnd):
-            win32.focus(hwnd)
-            time.sleep(0.5)
+        client.focused()
 
         result = inter.open_on(node.notes, node_world=node.world, node_map=node.pos)
         if inter.sighting is not None:
@@ -268,7 +168,7 @@ def main() -> int:
                 rc = 1
                 break
 
-        log.reset()
+        client.log.reset()
         outcome = advance.run(node.quest_id, goal)
         print(f"  {goal.value}: pressed {advance.clicked} -> {outcome.value}"
               + (f" — {advance.detail}" if advance.detail else ""))
@@ -280,10 +180,9 @@ def main() -> int:
             # witnessed, because the log forgets a quest the instant it is handed in.
             memory = playhead.with_completed(memory, node.quest_id)
             playhead.save(graph.graph_id, node.id, memory.completed)
-        print(f"  log now: {quest_ids()}")
+        print(f"  log now: {client.quest_ids()}")
 
-    query.close()
-    cap.close()
+    client.close()
     return rc
 
 

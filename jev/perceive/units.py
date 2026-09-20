@@ -40,45 +40,85 @@ import numpy as np
 from jev.perceive.radio_frame import _Blob, _blobs
 
 
-class Reaction(StrEnum):
-    FRIENDLY = "friendly"
-    HOSTILE = "hostile"
-    NEUTRAL = "neutral"
+class RingColour(StrEnum):
+    """The colour the client draws a unit's ring and nameplate in.
+
+    Named by **colour, not by reaction**, and that is the correction. The rules here used
+    to be called `HOSTILE`, `NEUTRAL` and `FRIENDLY`, which quietly claimed that finding a
+    ring told you what the unit was. It does not, and the measurement that proved it is
+    Kobold Vermin: the radio reported `target.reaction` hostile while the client drew a
+    bright **yellow** ring, because WoW colours unfriendly and neutral the same way a
+    camera cannot tell apart.
+
+    So this answers one question — *where is the unit on screen* — and identity comes from
+    `target.name_id` after the click, which is the only source that cannot be wrong about
+    it. A ring matched by the "wrong" colour costs nothing, because nothing downstream
+    believes the colour.
+    """
+
+    GREEN = "green"      # friendly
+    YELLOW = "yellow"    # neutral, and unfriendly, which look identical
+    RED = "red"          # hostile
 
 
-# Measured on live 1600x900 frames of a friendly target in Northshire: the ring runs
-# RGB (89, 191, 3) to (102, 211, 7) — saturated yellow-green with **near-zero blue**,
-# which is what separates it from grass. Northshire grass averages (104, 87, 9): brighter
-# in red than green, where the ring is the reverse.
+@dataclass(frozen=True)
+class ColourRule:
+    """Channels that must be bright, channels that must be dark, and by how much.
+
+    The shape matters and the old one was wrong. It named a single `hi` channel, which
+    cannot express yellow — R and G both high — so the yellow ring was unrepresentable
+    rather than merely mis-thresholded, and the `NEUTRAL` rule written by symmetry
+    demanded G >> R and would never have matched anything.
+    """
+
+    high: tuple[int, ...]
+    low: tuple[int, ...]
+    high_min: int
+    gap: int
+
+    def mask(self, frame: np.ndarray) -> np.ndarray:
+        a = frame.astype(np.int16)
+        hi = np.minimum.reduce([a[:, :, c] for c in self.high])
+        lo = np.maximum.reduce([a[:, :, c] for c in self.low])
+        return (hi > self.high_min) & (hi - lo > self.gap)
+
+
+# Measured on live 1600x900 frames, and the numbers are the point:
 #
-# Hostile and neutral rules are the same shape with the channels permuted. They are
-# written down here rather than left for later so the engine is whole, and they carry a
-# note that they have not yet met a live hostile target — see `MEASURED`.
-_RULES: dict[Reaction, dict[str, int]] = {
-    # `lo_max` is 70, not 40. Forty was measured on the selection **ring** — (95, 200, 5),
-    # almost no blue — and silently excluded the **nameplate bar**, which is a different
-    # green at (72, 219, 48). Both are drawn by the same client around the same unit and
-    # both have to pass.
-    #
-    # Widening it is safe because `gap` does the discriminating, not `lo_max`: the plate
-    # clears it at 219-48 = 171, while Northshire grass at (104, 87, 9) manages 78 and is
-    # nowhere near.
-    Reaction.FRIENDLY: {"hi": 1, "lo": 2, "other": 0, "hi_min": 150, "gap": 140, "lo_max": 70},
-    Reaction.HOSTILE: {"hi": 0, "lo": 2, "other": 1, "hi_min": 150, "gap": 120, "lo_max": 60},
-    Reaction.NEUTRAL: {"hi": 1, "lo": 2, "other": 0, "hi_min": 170, "gap": 130, "lo_max": 60},
+#   friendly ring   Deputy Willem      ( 95, 200,   5)   min(G) - max(R,B) = 105
+#   friendly plate  Deputy Willem      ( 72, 219,  48)                     = 147
+#   yellow   ring   Kobold Vermin      (211, 173,   8)   min(R,G) - B      = 165
+#   yellow   plate  Kobold Vermin      (130, 117,   3)                     = 114
+#
+# and the two things that must **not** pass:
+#
+#   Northshire grass                   (104,  87,   9)   as green: G=87  < 150
+#   Northshire dirt                    (104,  87,  20)   as yellow: min=87 < 150
+#
+# Dirt is why `high_min` carries the weight here rather than the gap. Dirt is low-blue and
+# R-ish-equals-G, which is the *shape* of yellow — it is separated by being dark, not by
+# being a different hue, and a rule that leaned on the gap alone would paint a ring on the
+# ground. The earlier guessed hostile rule did exactly that.
+_RULES: dict[RingColour, ColourRule] = {
+    RingColour.GREEN: ColourRule(high=(1,), low=(0, 2), high_min=150, gap=90),
+    # `high_min` is lower for yellow than for green, and the gap does the work instead.
+    # The yellow **plate** is much darker than the yellow ring — min(R,G) of 117 against
+    # 173 — so a brightness threshold set by the ring silently excluded every nameplate.
+    # Dirt is not separated by brightness either (min 87, close to the plate's 117); it is
+    # separated by the gap, 67 against 114.
+    RingColour.YELLOW: ColourRule(high=(0, 1), low=(2,), high_min=105, gap=100),
+    RingColour.RED: ColourRule(high=(0,), low=(1, 2), high_min=150, gap=90),
 }
 
-MEASURED: tuple[Reaction, ...] = (Reaction.FRIENDLY,)
+MEASURED: tuple[RingColour, ...] = (RingColour.GREEN, RingColour.YELLOW)
 """Which rules have met a real frame, and **the default search set**.
 
-Hostile and neutral are written above by symmetry with the measured friendly rule, and
-they are not trusted until a live hostile target has confirmed them. That is not caution
-for its own sake: enabling the unmeasured hostile rule immediately produced a confident
-false ring at (588, 574) on a frame whose only ring was friendly at (722, 355) — terrain,
-matched by a threshold nobody had checked.
+Red is written above by symmetry and is not searched, because no frame has proved it yet.
+That is not caution for its own sake: the previous guessed rule, switched on untested,
+produced a confident ring on a patch of Northshire terrain.
 
-An unmeasured rule is a guess with a type annotation. Add a reaction here when a frame
-has proved it, not before.
+An unmeasured rule is a guess with a type annotation. Add a colour here when a frame has
+proved it, not before.
 """
 
 # A ring is hollow; a bar is not. **Fill is the whole discrimination**, and aspect is
@@ -88,19 +128,46 @@ has proved it, not before.
 # the ground seen in perspective, so how flat it looks is a function of camera pitch —
 # which nothing here controls. Measured at 1.79 on one frame and 4.29 on another, both
 # unambiguously rings, and the tight range rejected the second while the unit stood
-# centred and in plain sight. The bounds below only exclude shapes no ellipse can be.
+# centred and in plain sight. A third, on a distant kobold, measured 5.56.
+#
+# The ceiling is 8 rather than 12 because 12 let a **nameplate plus its name text** in at
+# 11.4 — a bar and a line of writing stacked, which is not an ellipse at any pitch. The
+# bounds only exclude shapes no ellipse can be; they do not try to identify one.
 RING_FILL_MAX = 0.55
-RING_ASPECT = (0.8, 12.0)
+RING_ASPECT = (0.8, 8.0)
 RING_MIN_AREA = 60
 
-BAR_FILL_MIN = 0.8
+# 0.65, not 0.8. A friendly nameplate measured 0.99 because it is a flat colour, but a
+# kobold's is a gradient with a highlight down the middle and only 0.72 of it clears the
+# mask. Rings top out at 0.55, and `BAR_ASPECT_MIN` separates the two anyway, so the
+# looser fill costs nothing.
+BAR_FILL_MIN = 0.65
 BAR_ASPECT_MIN = 12.0
 
-# The player and target frames live in the top-left corner and are the same shape as a
-# nameplate bar. Excluded by geometry rather than by colour, because they are the same
-# colour on purpose.
-INTERFACE_MARGIN_Y = 120
-INTERFACE_MARGIN_X = 560
+# Where the stock 2.4.3 interface is, as fractions of the frame, so a resolution change
+# does not silently move the exclusions off the thing they exclude.
+#
+# Geometry rather than colour, because the interface is the same colour as the thing it
+# would be confused with **on purpose**: the player and target health bars are drawn
+# exactly like a nameplate because they mean the same thing.
+#
+# Every entry here is a measured false positive, not a precaution:
+#
+#   frames    player and target bars, top-left, identical in shape to a nameplate
+#   minimap   the sun/clock icon is a small yellow disc that scores as a ring, and it
+#             outranked a real selection ring by area on a live frame
+#   strip     our own radio, top-centre, which paints every colour there is by design
+#   bars      the action bars, bottom, full of coloured square icons
+_UI_ZONES: tuple[tuple[float, float, float, float], ...] = (
+    (0.00, 0.00, 0.35, 0.14),    # frames
+    (0.84, 0.00, 1.00, 0.26),    # minimap
+    (0.38, 0.00, 0.62, 0.13),    # strip
+    (0.00, 0.88, 1.00, 1.00),    # bars
+)
+
+# A nameplate is a wide bar. Thirteen pixels of something solid is not one, and one such
+# blob presented itself as a plate on a live frame.
+BAR_MIN_W = 30
 
 # How far a plate may sit from a ring, horizontally, and still belong to the same unit.
 # Generous, because the ring's centroid is pulled sideways by grass occluding one arc.
@@ -115,7 +182,7 @@ class Ring:
     cy: float
     w: int
     h: int
-    reaction: Reaction
+    colour: RingColour
     area: int
 
 
@@ -126,7 +193,7 @@ class Plate:
     cx: float
     cy: float
     w: int
-    reaction: Reaction
+    colour: RingColour
 
     def unit_below(self, drop: float = 0.55) -> tuple[int, int]:
         """Roughly where the unit is, below its plate. Bars are wider than rings for the
@@ -143,32 +210,30 @@ class Sighting:
     torso: tuple[int, int]
 
     @property
-    def reaction(self) -> Reaction:
-        return self.ring.reaction
+    def colour(self) -> RingColour:
+        """What the client drew, not who the unit is. See `RingColour`."""
+        return self.ring.colour
 
 
-def mask_for(frame: np.ndarray, reaction: Reaction) -> np.ndarray:
-    """Pixels that could belong to this reaction's ring or bar."""
-    rule = _RULES[reaction]
-    a = frame.astype(np.int16)
-    hi = a[:, :, rule["hi"]]
-    lo = a[:, :, rule["lo"]]
-    other = a[:, :, rule["other"]]
-    return (
-        (hi > rule["hi_min"])
-        & (hi - lo > rule["gap"])
-        & (lo < rule["lo_max"])
-        & (hi - other > 60)
-    )
+def mask_for(frame: np.ndarray, colour: RingColour) -> np.ndarray:
+    """Pixels that could belong to a ring or bar drawn in this colour."""
+    return _RULES[colour].mask(frame)
 
 
-def _outside_interface(blob: _Blob) -> bool:
-    """Interface bars sit in the top-left and are otherwise indistinguishable."""
-    return not (blob.cy < INTERFACE_MARGIN_Y and blob.cx < INTERFACE_MARGIN_X)
+def _outside_interface(blob: _Blob, shape: tuple[int, int] | None = None) -> bool:
+    """Is this blob clear of the stock interface?
+
+    `shape` is `(height, width)` of the frame. It is optional only so the existing
+    shape-level tests can call this with a blob alone; a caller with a frame should pass
+    it, because the zones are fractions and a default guesses the resolution.
+    """
+    h, w = shape if shape is not None else (900, 1600)
+    fx, fy = blob.cx / max(1, w), blob.cy / max(1, h)
+    return not any(x0 <= fx <= x1 and y0 <= fy <= y1 for x0, y0, x1, y1 in _UI_ZONES)
 
 
 def find(frame: np.ndarray,
-         reactions: tuple[Reaction, ...] = MEASURED) -> Sighting | None:
+         colours: tuple[RingColour, ...] = MEASURED) -> Sighting | None:
     """Where the selected unit is, or `None`.
 
     The whole public surface. A sighting needs **both** a ring and its nameplate, because
@@ -182,10 +247,10 @@ def find(frame: np.ndarray,
     nothing. A guessed pixel is worse than an honest `None` — the caller can act on
     "cannot see it" and cannot act on a plausible wrong answer.
     """
-    ring = _find_ring(frame, reactions)
+    ring = _find_ring(frame, colours)
     if ring is None:
         return None
-    plate = plate_for(ring, find_plates(frame, reactions))
+    plate = plate_for(ring, find_plates(frame, colours))
     if plate is None:
         return None
     return Sighting(ring=ring, plate=plate,
@@ -193,12 +258,12 @@ def find(frame: np.ndarray,
 
 
 def _find_ring(frame: np.ndarray,
-               reactions: tuple[Reaction, ...] = MEASURED) -> Ring | None:
+               colours: tuple[RingColour, ...] = MEASURED) -> Ring | None:
     """The selection ring. Exactly one exists, under whatever is targeted."""
     best: Ring | None = None
-    for reaction in reactions:
-        for blob in _blobs(mask_for(frame, reaction)):
-            if blob.area < RING_MIN_AREA or not _outside_interface(blob):
+    for colour in colours:
+        for blob in _blobs(mask_for(frame, colour)):
+            if blob.area < RING_MIN_AREA or not _outside_interface(blob, frame.shape[:2]):
                 continue
             aspect = blob.w / max(1.0, blob.h)
             fill = blob.area / max(1.0, blob.w * blob.h)
@@ -208,7 +273,7 @@ def _find_ring(frame: np.ndarray,
                 continue        # solid: a bar, or an icon, not a ring
             if best is None or blob.area > best.area:
                 best = Ring(cx=blob.cx, cy=blob.cy, w=int(blob.w), h=int(blob.h),
-                            reaction=reaction, area=blob.area)
+                            colour=colour, area=blob.area)
     return best
 
 
@@ -229,7 +294,7 @@ def plate_for(ring: Ring, plates: list[Plate]) -> Plate | None:
 
 
 def find_plates(frame: np.ndarray,
-                reactions: tuple[Reaction, ...] = MEASURED) -> list[Plate]:
+                colours: tuple[RingColour, ...] = MEASURED) -> list[Plate]:
     """Every nameplate health bar on screen, biggest first.
 
     Not needed to click the current target — the ring is better for that — but it is how
@@ -237,13 +302,13 @@ def find_plates(frame: np.ndarray,
     a camp requires.
     """
     out: list[Plate] = []
-    for reaction in reactions:
-        for blob in _blobs(mask_for(frame, reaction)):
-            if not _outside_interface(blob):
+    for colour in colours:
+        for blob in _blobs(mask_for(frame, colour)):
+            if blob.w < BAR_MIN_W or not _outside_interface(blob, frame.shape[:2]):
                 continue
             aspect = blob.w / max(1.0, blob.h)
             fill = blob.area / max(1.0, blob.w * blob.h)
             if aspect >= BAR_ASPECT_MIN and fill >= BAR_FILL_MIN:
-                out.append(Plate(cx=blob.cx, cy=blob.cy, w=int(blob.w), reaction=reaction))
+                out.append(Plate(cx=blob.cx, cy=blob.cy, w=int(blob.w), colour=colour))
     out.sort(key=lambda p: -p.w)
     return out
