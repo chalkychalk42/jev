@@ -198,7 +198,8 @@ FIELDS: tuple[Field, ...] = (
     _tri("target.in_melee",
          "if not UnitExists('target') then return 0 end\n"
          "return tri(CheckInteractDistance('target', 3))",
-         "ask the client; do not infer reach from damage having landed"),
+         "CheckInteractDistance index 3 is DUEL range, about 11 yards -- NOT the ~5 yards "
+         "gossip needs. True here means 'near', not 'close enough to talk to'"),
 
     # -- bags and money ----------------------------------------------------------
     Field("bags.free", 6, Kind.UINT, "return clamp(BAG_FREE(), 62)"),
