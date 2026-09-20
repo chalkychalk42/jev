@@ -169,6 +169,15 @@ class Travel:
             return None
         return heading_yards(a, b, self.bounds)
 
+    # There was a `last_heading()` here, and a `take_heading()`, and both were wrong for
+    # the same reason: **there is no facing on arrival**. Heading is a 0.6 s window over
+    # motion, and on arrival the character has stopped — so the window is either stale or
+    # it is the last arc *into* the point. Treating it as "which way am I looking" is the
+    # same shape of lie as reading a leg's remaining distance as the distance to the NPC.
+    #
+    # Facing is not measured. It is *arranged*: walk toward the thing and stop the instant
+    # the client says you are in range. See `jev.clients.interact.approach`.
+
     def _deadband(self, remaining_yards: float) -> float:
         """How wrong the heading may be before it is worth a pulse.
 

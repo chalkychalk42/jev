@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 import pathlib
 import subprocess
+import sys
 import threading
 from dataclasses import dataclass
 from enum import StrEnum
@@ -112,10 +113,17 @@ class MmapQuery:
                 return proc
             if not self.launcher and not pathlib.Path(self.binary).exists():
                 return None
+            # CREATE_NO_WINDOW, because the planner must not steal focus from the game.
+            # Launched through `wsl.exe` on Windows it opens a console, Windows raises
+            # that console, and the next keypress the bot sends is refused by its own
+            # focus guard — which presents as "could not type /target" a full minute
+            # later, in a completely different part of the run.
+            flags = 0x08000000 if sys.platform == "win32" else 0
             proc = subprocess.Popen(
                 [*self.launcher, self.binary, self.mmaps_dir, str(map_id)],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, text=True, bufsize=1,
+                creationflags=flags,
             )
             ready = proc.stdout.readline()
             if '"ready"' not in ready:
