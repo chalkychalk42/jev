@@ -187,9 +187,16 @@ class Fight:
                 self.detail = "the character died"
                 return Fought.DIED
             mine = v.get("vitals.hp")
-            if mine is not None and mine < FLEE_HP:
-                # Break off rather than finish the fight standing up. Both live deaths
-                # were fights that were already lost several seconds earlier.
+            if (mine is not None and mine < FLEE_HP
+                    and v.get("vitals.combat") is not True):
+                # Breaking off is only a choice when nothing is hitting us. In combat it
+                # is not a choice, it is standing still: this returned LOSING on the first
+                # iteration, before the rotation, so the caller rested, was interrupted
+                # because something was attacking, tried again, and got LOSING again -
+                # eight times, pressing nothing, while health went 29, 27, 21, 18, 18, 15,
+                # 9, 6, dead.
+                #
+                # A guard picks fights. It does not freeze one already started.
                 self.detail = f"broke off at {mine:.0%} health"
                 return Fought.LOSING
 
@@ -362,6 +369,11 @@ class Fight:
         heal = profile.first(Role.HEAL)
         hp = values.get("vitals.hp")
         if (heal is not None and pressable(heal)
+                # One at a time. `_watch_heal` is what decides whether the last one
+                # landed, and pressing again before it answers is how a live fight got
+                # `pressed [2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]` - fifteen
+                # Holy Lights, none of which healed anything, on a 2.5 second cast.
+                and self._pending_heal is None
                 and values.get("vitals.combat") is True
                 and hp is not None and hp < HEAL_IN_COMBAT
                 and self._has_mana_for(heal, values)):

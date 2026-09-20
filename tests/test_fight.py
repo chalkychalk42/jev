@@ -319,3 +319,43 @@ def test_in_combat_the_name_filter_comes_off():
     f2.acquire = lambda name_id: seen.append(name_id) or Fought.NO_TARGET
     f2.run(1161, timeout_s=1)
     assert seen == [1161], "picked a fight with something that was not the objective"
+
+
+def test_a_guard_does_not_freeze_a_fight_already_started():
+    """Breaking off is only a choice when nothing is hitting us. In combat it is not a
+    choice, it is standing still: this returned LOSING on the first iteration, before the
+    rotation, so the caller rested, was interrupted because something was attacking,
+    tried again, and got LOSING again - eight times, pressing nothing, while health went
+    29, 27, 21, 18, 18, 15, 9, 6, dead."""
+    hid = _Hid()
+    sinking = {**ALIVE, "vitals.hp": 0.1, "vitals.combat": True}
+    f = _fight([sinking], hid=hid)
+    f.acquire = lambda name_id: None
+    f.engage = lambda: True
+    f.run(timeout_s=1)
+    assert f.pressed, "stood at 10% health in combat and pressed nothing"
+
+    # Out of combat it is a real choice, and still taken.
+    free = {**ALIVE, "vitals.hp": 0.1, "vitals.combat": False}
+    g = _fight([ALIVE, free])
+    g.acquire = lambda name_id: None
+    g.engage = lambda: True
+    assert g.run(timeout_s=5) is Fought.LOSING
+
+
+def test_a_heal_is_not_pressed_again_until_the_last_one_answers():
+    """Holy Light is a 2.5 second cast. A live fight pressed it fifteen times in a row,
+    none of which healed anything, because nothing stopped the next tick from pressing
+    again."""
+    hid = _Hid()
+    hurt = {**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    f = _fight([hurt], hid=hid)
+    for _ in range(5):
+        f._rotate(hurt)
+    assert hid.taps.count("3") == 1, "spammed the heal without waiting for an answer"
+
+    # Once it answers, the next one is allowed.
+    f._watch_heal({**hurt, "vitals.hp": 0.5}, hurt["bars.ready"])
+    f._rotate(hurt)
+    assert hid.taps.count("3") == 2

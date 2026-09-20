@@ -974,7 +974,7 @@ def test_the_strip_reads_against_a_saturated_blue_banner():
     Measured on this frame: the banner's `|G-B|/max(G,B)` is 0.55 and the marker's is 0.
     The fixture keeps the banner in it on purpose."""
     frame = np.load(BANNER)["frame"]
-    left, right = radio_frame._marker_masks(frame)
+    _left, right = radio_frame._marker_masks(frame)
     assert right.sum() < 20000, "the banner is flooding the cyan mask"
 
     reading = radio_frame.read(frame)

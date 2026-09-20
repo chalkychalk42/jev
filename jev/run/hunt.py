@@ -130,7 +130,8 @@ class Hunt:
 
             outcome = self.fight.run(name_id)
             self.say(f"    {outcome.value} ({have}/{need}) "
-                     f"pressed {self.fight.pressed} closed {self.fight.closed}"
+                     f"pressed {self.fight.pressed} closed {self.fight.closed} "
+                     f"heals {self.fight.heals_landed}/{self.fight.heals_ignored}"
                      + (f" - {self.fight.detail}" if self.fight.detail else ""))
 
             if outcome is Fought.DIED:

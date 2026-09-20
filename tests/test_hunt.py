@@ -14,6 +14,8 @@ class _Fight:
         self.calls = 0
         self.pressed: list[int] = []
         self.closed = 0
+        self.heals_landed = 0
+        self.heals_ignored = 0
         self.detail = ""
 
     def run(self, name_id=None, **_):
