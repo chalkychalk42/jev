@@ -42,6 +42,11 @@ CENTRED_PX = 260
 STILL_YARDS = 0.3
 STILL_FOR_S = 0.7
 
+# Consecutive failed looks tolerated while walking. Roughly half a second at the rate the
+# loop turns over — long enough for grass to pass in front of a ring, short enough that a
+# unit which genuinely left the screen is noticed.
+MISSES_BEFORE_LOST = 6
+
 
 class Result(StrEnum):
     GOSSIP = "gossip"
@@ -96,11 +101,13 @@ class Interact:
                 self.detail = "lost it while centring"
                 return Result.NOT_VISIBLE
 
-        self._walk_in(walk_timeout_s)
+        if not self._walk_in(walk_timeout_s):
+            self.detail = "lost sight of it on the way in"
+            return Result.NOT_VISIBLE
 
         sighting = self._look()                 # we moved; where is it now
         if sighting is None:
-            self.detail = "lost it on the way in"
+            self.detail = "arrived but cannot see it"
             return Result.NOT_VISIBLE
 
         self.sighting = sighting
@@ -152,31 +159,60 @@ class Interact:
         self.hid.hold("d" if error > 0 else "a", min(0.6, abs(error) / 1200.0))
         time.sleep(0.3)
 
-    def _walk_in(self, timeout_s: float) -> None:
-        """Forward until the character stops moving, which is the unit's hitbox.
+    def _walk_in(self, timeout_s: float) -> bool:
+        """Walk **toward it** until the character stops moving, which is its hitbox.
 
-        No range flag decides this. The one available reads duel range and says "near"
+        Steering is not a separate step bolted on — walking toward something is what this
+        is. A first version of this method pressed forward and nothing else, on the
+        reasoning that the caller had already looked; with the unit eight yards away and
+        off to one side it walked straight past and the next look found nothing. The ring
+        says where it is on every frame, so there is no reason to walk blind for even one
+        of them.
+
+        No range flag decides arrival. The one available reads duel range and says "near"
         when the answer needed is "close enough to speak to".
+
+        Returns whether it stopped against something, as opposed to running out of time.
         """
         deadline = time.perf_counter() + timeout_s
+        centre_x = self._centre_x()
         last: tuple[float, float] | None = None
         still_since: float | None = None
+        misses = 0
+
         self.hid.key_down("w")
         try:
             while time.perf_counter() < deadline:
                 now = time.perf_counter()
+
                 here = self.read_pos()
-                if here is None:
+                if here is not None:
+                    if last is not None and distance_yards(last, here, self.bounds) < STILL_YARDS:
+                        still_since = still_since or now
+                        if now - still_since > STILL_FOR_S:
+                            return True
+                    else:
+                        still_since = None
+                    last = here
+
+                sighting = self._look()
+                if sighting is None:
+                    # One failed look is not a lost unit. Grass occludes part of the ring
+                    # for a frame, a capture lands mid-render — the same class of
+                    # transient that made a torn radio frame look like a lost position.
+                    # Keep walking on the last known heading and only give up on a run of
+                    # them.
+                    misses += 1
+                    if misses > MISSES_BEFORE_LOST:
+                        return False
                     continue
-                if last is not None and distance_yards(last, here, self.bounds) < STILL_YARDS:
-                    still_since = still_since or now
-                    if now - still_since > STILL_FOR_S:
-                        return
-                else:
-                    still_since = None
-                last = here
+                misses = 0
+                error = sighting.torso[0] - centre_x
+                if abs(error) > 60:
+                    self.hid.hold("d" if error > 0 else "a", min(0.25, abs(error) / 1600.0))
         finally:
             self.hid.release_all()
+        return False
 
     def _window_open(self) -> Result | None:
         v = self.read()

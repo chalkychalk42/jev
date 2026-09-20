@@ -70,6 +70,12 @@ def main() -> int:
             time.sleep(0.05)
         return None
 
+    def read_frame():
+        try:
+            return cap.grab().rgb
+        except Exception:
+            return None
+
     def read_pos():
         try:
             r = radio_frame.read(cap.grab().rgb)

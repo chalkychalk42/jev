@@ -73,9 +73,16 @@ An unmeasured rule is a guess with a type annotation. Add a reaction here when a
 has proved it, not before.
 """
 
-# A ring is hollow; a bar is not. This is the whole discrimination.
+# A ring is hollow; a bar is not. **Fill is the whole discrimination**, and aspect is
+# deliberately loose.
+#
+# Aspect looked like a good second test and is not one: a selection ring is a circle on
+# the ground seen in perspective, so how flat it looks is a function of camera pitch —
+# which nothing here controls. Measured at 1.79 on one frame and 4.29 on another, both
+# unambiguously rings, and the tight range rejected the second while the unit stood
+# centred and in plain sight. The bounds below only exclude shapes no ellipse can be.
 RING_FILL_MAX = 0.55
-RING_ASPECT = (1.1, 3.2)
+RING_ASPECT = (0.8, 12.0)
 RING_MIN_AREA = 60
 
 BAR_FILL_MIN = 0.8

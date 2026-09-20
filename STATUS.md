@@ -302,3 +302,36 @@ Human Paladin — `1` Attack, `2` Seal of Righteousness, `3` Holy Light, `-` wat
 NOW: 434 tests. The bot can read its own quest log.
 
 NEXT: the slice, from the entry node. Empty log -> Willem -> accept -> McBride -> turn in.
+
+## 2026-09-20 — login works unattended; interact does not yet
+DID: the client disconnected with nobody at the keyboard, so the bot now logs itself in.
+
+**`jev/clients/session.py`** — four stages, three read from the frame and one honest
+"elsewhere". `IN_WORLD` is the only certain one, because the addon only paints in the
+world. Login and character select both show an interface-red plate and are told apart by
+*where* it is: Enter World measured (98, 23, 1) while the login button's position on that
+same frame was (80, 73, 66). Verified live, login through to Testvii in the courtyard.
+
+It closed the client twice before working, both times for one reason, now a rule:
+**nothing is pressed at a screen that has not been measured.** The first version pressed
+Escape and Enter at anything it did not recognise — twenty-five presses found the Quit
+button. The second pressed Escape once, inside the credential step, to dismiss a dialog
+that was not there; at the login screen with no dialog, Escape opens the *quit* prompt and
+the Enter that submits credentials confirms it. An unrecognised screen now stops the run
+and keeps the frame, which is exactly how the character-select stage came to be measured.
+
+**`jev/perceive/units.py`** — one correction worth keeping. Ring aspect was a tight
+discriminator and should never have been one: a selection ring is a circle seen in
+perspective, so its flatness is a function of camera pitch, which nothing here controls.
+Measured 1.79 on one frame and 4.29 on another, both unambiguous rings, and the tight
+range rejected the second while the unit stood centred in plain sight. **Fill is the
+invariant** — hollow ring against solid bar — and aspect now only excludes shapes no
+ellipse can be.
+
+NOW: 476 tests. Login is unattended. The interact skill finds the unit, walks toward it
+and loses it on the way in — and the last hour of that was iterated with a probe that
+moves the character, which is why the position kept drifting between runs.
+
+NEXT: interact, with a probe that does **not** reposition between attempts. The failure is
+in `_walk_in` losing the sighting, and it needs to be watched from a fixed start rather
+than chased.
