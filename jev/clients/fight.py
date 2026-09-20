@@ -176,14 +176,6 @@ class Fight:
                 return acquired
         if not self.engage():
             return Fought.NOT_VISIBLE
-        if not self.close_in():
-            # Eight bursts of walking and the target has taken nothing. Standing in the
-            # rotation for another ninety seconds does not change that, and a live run
-            # spent exactly that pressing abilities at a full-health kobold it never
-            # reached. Give the attempt up and let the caller pick something else.
-            self.detail = (f"closed {self.closed} times and landed nothing; "
-                           "cannot reach it")
-            return Fought.UNREACHABLE
 
 
         deadline = time.monotonic() + timeout_s
@@ -206,6 +198,25 @@ class Fight:
                 self.last_hp = hp
             if v.get("target.has") is not True or (hp is not None and hp <= DEAD_HP):
                 return self._settle()
+
+            # Walking and swinging are the same loop, not one after the other.
+            #
+            # Closing used to be a gate: walk until the target takes damage, *then* start
+            # the rotation. Damage comes from swinging, swinging is the rotation, and the
+            # rotation was behind the gate — so a live run reported
+            # `unreachable pressed [] closed 8` eight times over. It had walked at the
+            # kobold and never once pressed anything at it.
+            landing = self.last_hp is not None and self.last_hp < 1.0
+            if not landing and self.closed < MAX_CLOSE_BURSTS:
+                # Not while casting: movement cancels a cast, and the only thing being
+                # cast here is a heal that is keeping us alive.
+                if v.get("bars.casting") is not True:
+                    self.hid.hold("w", CLOSE_BURST_S)
+                    self.closed += 1
+            elif not landing and not self.pressed:
+                self.detail = (f"closed {self.closed} times, pressed nothing, and landed "
+                               "nothing; cannot reach it")
+                return Fought.UNREACHABLE
 
             self._rotate(v)
             time.sleep(0.2)
@@ -265,31 +276,6 @@ class Fight:
         if hp is not None and hp <= DEAD_HP:
             return False                       # a corpse is selectable and not a fight
         return name_id is None or v.get("target.name_id") == name_id
-
-    def close_in(self) -> bool:
-        """Walk onto it, along the heading the right-click just set.
-
-        Watches **health**, not a range flag: `target.in_melee` is
-        `CheckInteractDistance` index 3 — about eleven yards — and a melee class swings at
-        five, so it reads true from well outside the range that matters.
-        """
-        start = self.last_hp
-        for _ in range(MAX_CLOSE_BURSTS):
-            v = self.read()
-            if v is None:
-                return False
-            hp = v.get("target.hp")
-            if hp is not None:
-                self.last_hp = hp
-            if v.get("target.has") is not True:
-                return False
-            if hp is not None and (hp <= DEAD_HP or (start is not None and hp < start)):
-                return True                    # damage is landing; we are close enough
-            if v.get("vitals.combat") is True and v.get("target.in_melee") is True:
-                return True
-            self.hid.hold("w", CLOSE_BURST_S)
-            self.closed += 1
-        return False
 
     def select(self, name_id: int | None) -> Fought | None:
         """`Tab`, as a fallback when no nameplate was clickable.

@@ -9,6 +9,7 @@ from jev.clients.fight import (
     DEAD_HP,
     FLEE_HP,
     LOST_HP,
+    MAX_CLOSE_BURSTS,
     MAX_SELECTS,
     MIN_START_HP,
     SLOT_KEYS,
@@ -22,6 +23,11 @@ class _Hid:
     def __init__(self):
         self.taps = []
         self.clicks = []
+        self.holds = []
+
+    def hold(self, key, seconds, **_):
+        self.holds.append((key, seconds))
+        return True
 
     def tap(self, key):
         self.taps.append(key)
@@ -237,7 +243,6 @@ def test_a_losing_fight_is_broken_off_rather_than_finished():
     f = _fight([ALIVE, sinking])
     f.acquire = lambda name_id: None
     f.engage = lambda: True
-    f.close_in = lambda: True
     assert f.run(timeout_s=5) is Fought.LOSING
     assert "broke off" in f.detail
 
@@ -273,14 +278,28 @@ def test_resting_stops_for_combat_and_says_when_there_is_no_food():
     assert Rest(hid=hid, read=lambda: {"vitals.hp": 1.0}).until() is Rested.HEALTHY
 
 
-def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
-    """A live run spent ninety seconds pressing abilities at a full-health kobold it had
-    engaged and never reached. Eight bursts of walking with nothing landing is the
-    answer already; the rotation cannot improve on it."""
-    f = _fight([ALIVE])
+def test_walking_at_it_and_swinging_at_it_are_the_same_loop():
+    """Closing used to be a gate: walk until the target takes damage, *then* start the
+    rotation. Damage comes from swinging, swinging is the rotation, and the rotation was
+    behind the gate — so a live run reported `unreachable pressed [] closed 8` eight
+    times over, having walked at a kobold without once pressing anything at it."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
     f.acquire = lambda name_id: None
     f.engage = lambda: True
-    f.close_in = lambda: False
+    f.run(timeout_s=2)
+    assert f.pressed, "walked at it and never swung"
+    assert f.closed > 0, "swung at it and never closed"
+
+
+def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
+    """Out of bursts, nothing pressed and nothing landed is the answer already; more
+    seconds cannot improve on it. A live run spent ninety on exactly that."""
+    hid = _Hid()
+    f = _fight([{**ALIVE, "bars.ready": 0, "bars.usable": 0}], hid=hid)
+    f.acquire = lambda name_id: None
+    f.engage = lambda: True
+    f.closed = MAX_CLOSE_BURSTS
     assert f.run(timeout_s=5) is Fought.UNREACHABLE
     assert "cannot reach" in f.detail
 
