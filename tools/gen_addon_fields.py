@@ -121,7 +121,7 @@ def main() -> int:
     if args.check:
         have = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
         if have != want:
-            print(f"stale: {OUT} does not match fields.py — run tools/gen_addon_fields.py")
+            print(f"stale: {OUT} does not match fields.py - run tools/gen_addon_fields.py")
             return 1
         print(f"up to date: {OUT}")
         return 0
@@ -130,13 +130,13 @@ def main() -> int:
     OUT.write_text(want, encoding="utf-8")
     lay = layout()
     print(
-        f"wrote {OUT} — {lay['field_count']} fields, {lay['payload_bits']} payload bits, "
+        f"wrote {OUT} - {lay['field_count']} fields, {lay['payload_bits']} payload bits, "
         f"{lay['payload_cells']} cells in a {lay['cols']}x{lay['rows']} grid "
         f"({lay['spare_bits']} spare bits)"
     )
     if args.install:
         dest = install(pathlib.Path(args.install))
-        print(f"installed to {dest} — the client needs /console reloadui to pick it up")
+        print(f"installed to {dest} - the client needs /console reloadui to pick it up")
     return 0
 
 

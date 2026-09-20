@@ -167,7 +167,7 @@ class Client:
                      else f"{result.remaining_yards:.1f} yards")
         self._say(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "
                   f"{result.stuck_events} stuck"
-                  + (f" — {result.detail}" if result.detail else ""))
+                  + (f" - {result.detail}" if result.detail else ""))
         return result.outcome.value == "arrived"
 
     def focused(self) -> bool:

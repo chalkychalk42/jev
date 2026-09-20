@@ -129,7 +129,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(profiles, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     roles = sorted({r["role"] for p in profiles.values() for r in p["rows"]})
-    print(f"wrote {out} — {len(profiles)} race/class profiles, roles {roles}")
+    print(f"wrote {out} - {len(profiles)} race/class profiles, roles {roles}")
     return 0
 
 

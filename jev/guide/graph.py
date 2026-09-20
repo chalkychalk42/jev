@@ -77,6 +77,16 @@ class Node(BaseModel):
     map_id: int | None = None
     r: float = 0.03                    # arrival radius, in map fractions
 
+    # How far a kill objective's mobs are spread, in **yards**, from the spawn cluster
+    # this node was placed from. `None` on nodes that are a point you stand at.
+    #
+    # Deliberately not `r`, and deliberately a different unit. A hunt borrowed `r` once,
+    # and `r` is the tracker's arrival slop in *map fractions* — 0.06 of a zone the size
+    # of Northshire is two hundred and eight yards, which contains Northshire Abbey. The
+    # bot walked into the Main Hall, stood facing a wall, and correctly reported that it
+    # could not see any kobolds. The mesh had told the truth the whole way.
+    hunt_yards: float | None = None
+
     quest_id: int | None = None
     # The quest's name as the client shows it, when this step has a quest.
     #

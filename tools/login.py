@@ -60,7 +60,7 @@ def main() -> int:
 
     hwnds = win32.find_windows("World of Warcraft")
     if not hwnds:
-        print("no game window — is the client running?")
+        print("no game window - is the client running?")
         return 1
     hwnd = hwnds[0]
     win32.focus(hwnd)

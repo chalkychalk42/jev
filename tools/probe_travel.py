@@ -140,7 +140,7 @@ def main() -> int:
                           (target_world[0], target_world[1], z))
         print(f"  {path.status.value} via {path.source}: {len(path.points)} waypoints, "
               f"{path.length_yards():.1f} yards"
-              + (f" — {path.detail}" if path.detail else ""))
+              + (f" - {path.detail}" if path.detail else ""))
         for pt in path.points:
             frac = world_to_map_safe(pt, bounds)
             print(f"    ({pt[0]:9.1f},{pt[1]:9.1f},{pt[2]:7.1f})"

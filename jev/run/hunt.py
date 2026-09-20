@@ -43,6 +43,13 @@ STATIONS = 1 + len(RINGS) * PER_RING
 # and one empty look says very little.
 DRY_LOOKS = 2
 
+# What to walk when a node does not say. **Not** the node's `r`: `r` is the tracker's
+# arrival slop in map fractions, and a hunt that borrowed it walked a two-hundred-yard
+# disk that contained Northshire Abbey, stood in the Main Hall facing a wall, and
+# correctly reported that it could not see any kobolds. A wrong default is recoverable;
+# reaching for a field that means something else is how that bug comes back.
+DEFAULT_HUNT_YARDS = 30.0
+
 
 class Hunted(StrEnum):
     DONE = "done"                # the counter reached its requirement
@@ -86,12 +93,14 @@ class Hunt:
     say: Callable[[str], None] = print
 
     kills: int = field(default=0, init=False)
+    _outdoors: bool | None = field(default=None, init=False)
     moves: int = field(default=0, init=False)
     detail: str = field(default="", init=False)
 
     def run(self, centre: tuple[float, float, float], radius_yards: float,
             name_id: int | None = None, *, timeout_s: float = 900.0) -> Hunted:
         self.kills = self.moves = 0
+        self._outdoors = None
         self.detail = ""
         deadline = time.monotonic() + timeout_s
         posts = stations(centre, radius_yards)
@@ -114,13 +123,15 @@ class Hunt:
                 self.moves += 1
                 if not self.approach(target):
                     continue          # a station we cannot stand on is not a dead end
+                if self._wrong_side_of_a_door():
+                    continue
                 stood = True
                 dry = 0
 
             outcome = self.fight.run(name_id)
             self.say(f"    {outcome.value} ({have}/{need}) "
                      f"pressed {self.fight.pressed} closed {self.fight.closed}"
-                     + (f" — {self.fight.detail}" if self.fight.detail else ""))
+                     + (f" - {self.fight.detail}" if self.fight.detail else ""))
 
             if outcome is Fought.DIED:
                 self.detail = "died on the objective"
@@ -145,10 +156,29 @@ class Hunt:
         self.detail = f"{timeout_s:.0f}s and the counter is {have}/{need}"
         return Hunted.TIMEOUT
 
+    def _wrong_side_of_a_door(self) -> bool:
+        """Is this station indoors when the camp is not?
+
+        `pos.indoors` is a flag the strip already paints, so this is not knowledge about
+        the Abbey — it is one bit that says a station cannot be the camp. The first
+        station is the node itself and settles which kind of place this is.
+        """
+        v = self.read()
+        if v is None:
+            return False
+        inside = v.get("pos.indoors")
+        if self._outdoors is None:
+            self._outdoors = inside is False
+            return False
+        if self._outdoors and inside is True:
+            self.say("    indoors, and the camp is not; trying another station")
+            return True
+        return False
+
     def _recover(self) -> Rested:
         """Eat if it is a moment to eat. Interrupted is not a failure: it means something
         is already hitting us, and the next pass fights it."""
         outcome = self.rest.until(max(EAT_BELOW + 0.3, 0.9))
         self.say(f"    rest: {outcome.value}"
-                 + (f" — {self.rest.detail}" if self.rest.detail else ""))
+                 + (f" - {self.rest.detail}" if self.rest.detail else ""))
         return outcome

@@ -21,6 +21,7 @@ looks exactly like success until a character runs out of things to do.
 
 from __future__ import annotations
 
+import math
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
@@ -63,6 +64,25 @@ class Spawn:
     y: float
     z: float
     area_id: int | None = None
+    # How far the rest of the group sits from this point, in yards. Zero for a lone NPC;
+    # for a camp it is how big the camp is, which is the only honest thing to search once
+    # the mobs standing on the node have been killed.
+    spread: float = 0.0
+
+
+# Spawn clustering, in yards. A cell wide enough that one camp lands in one or two
+# buckets, a reach wide enough to gather a camp and not its neighbour.
+CLUSTER_CELL = 60.0
+CLUSTER_REACH = 150.0
+
+# What a hunt is allowed to believe about a camp's size. The floor keeps a lone spawn
+# searchable; the ceiling is the thing that stops this class of bug coming back, because
+# no camp in the game is a hundred yards across and a disk that big is a zone.
+#
+# If a generated `hunt_yards` sits at the ceiling, the cluster query is wrong and the
+# ceiling is hiding it. Fix the query.
+HUNT_MIN_YARDS = 15.0
+HUNT_MAX_YARDS = 50.0
 
 
 @dataclass(frozen=True)
@@ -77,6 +97,45 @@ class QuestRow:
     objectives: str
     req_counts: tuple[int, ...]
     xp_est: int
+
+
+def _cluster(npc_id: int, name: str, map_id: int, rows) -> Spawn:
+    """The densest group of these spawns, and how far across it is.
+
+    Densest rather than the plain centroid, because a creature that appears in three
+    zones has a centroid in none of them. Buckets on a coarse grid, takes the fullest
+    bucket, then keeps everything within `CLUSTER_REACH` of it.
+
+    The spread is the **median** distance from the centroid, not the maximum and not a
+    high percentile. Measured on Kobold Vermin: 31 spawns, one contiguous population
+    along Echo Ridge, median 49 yards and 90th percentile 76. The 90th is the outer
+    envelope — a circle drawn to contain the stragglers — and a hunt does not want that.
+    It wants the scale at which walking somewhere else finds another mob, and half the
+    camp is inside the median by construction.
+    """
+    buckets: dict[tuple[int, int], list] = {}
+    for row in rows:
+        key = (int(row["px"] // CLUSTER_CELL), int(row["py"] // CLUSTER_CELL))
+        buckets.setdefault(key, []).append(row)
+    seed = max(buckets.values(), key=len)
+    sx = sum(r["px"] for r in seed) / len(seed)
+    sy = sum(r["py"] for r in seed) / len(seed)
+
+    near = [r for r in rows
+            if math.hypot(r["px"] - sx, r["py"] - sy) <= CLUSTER_REACH] or seed
+    n = len(near)
+    x = sum(r["px"] for r in near) / n
+    y = sum(r["py"] for r in near) / n
+    z = sum(r["pz"] for r in near) / n
+    reaches = sorted(math.hypot(r["px"] - x, r["py"] - y) for r in near)
+    spread = reaches[len(reaches) // 2] if reaches else 0.0
+    return Spawn(npc_id, name, map_id, x, y, z, spread=spread)
+
+
+def hunt_yards(spawn: Spawn | None) -> float:
+    """What a hunt should walk for this cluster, clamped to something a camp can be."""
+    reach = spawn.spread if spawn is not None else 0.0
+    return min(HUNT_MAX_YARDS, max(HUNT_MIN_YARDS, reach))
 
 
 def _note(spawn: Spawn | None, frac: tuple[float, float] | None, role: str) -> str:
@@ -240,6 +299,10 @@ class WorldDB:
         taken. Uses the first required creature's densest spawn area: with ten wolves in
         a field, the centroid of that field is a place you can stand, unlike the centroid
         of an NPC's several spawns.
+
+        The returned spawn carries the group's **spread**, which is what was missing. A
+        hunt with no idea how big a camp is borrows the node's arrival radius instead, and
+        that is in map fractions.
         """
         r = self.con.execute(
             "select ReqCreatureOrGOId1 as a from world_quest_template where entry = ?",
@@ -257,11 +320,7 @@ class WorldDB:
             return None
         m = rows[0]["map"]
         same = [x for x in rows if x["map"] == m]
-        n = len(same)
-        return Spawn(r["a"], same[0]["Name"] or "mobs", m,
-                     sum(x["px"] for x in same) / n,
-                     sum(x["py"] for x in same) / n,
-                     sum(x["pz"] for x in same) / n)
+        return _cluster(r["a"], same[0]["Name"] or "mobs", m, same)
 
     # -- services ------------------------------------------------------------
 
@@ -326,13 +385,13 @@ class WorldDB:
         for group in best:
             if len(group) < 6:      # a "cluster" of four wolves is not a grind rib
                 continue
-            n = len(group)
+            # Same clustering as a kill objective's, so a rib carries a real reach
+            # rather than the floor. `x`/`y`/`z` here, `px`/`py`/`pz` there.
+            rekeyed = [{"px": g["x"], "py": g["y"], "pz": g["z"]} for g in group]
             out.append((
-                Spawn(group[0]["id"], group[0]["Name"] or "mobs", group[0]["map"],
-                      sum(g["x"] for g in group) / n,
-                      sum(g["y"] for g in group) / n,
-                      sum(g["z"] for g in group) / n),
-                n,
+                _cluster(group[0]["id"], group[0]["Name"] or "mobs",
+                         group[0]["map"], rekeyed),
+                len(group),
             ))
         return out
 
@@ -453,6 +512,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
                 id=rid, kind=StepKind.GRIND, zone=zone_names.get(zid, str(zid)), zone_id=zid,
                 level=(level_min, level_max), pos=frac, world=world, map_id=map_id,
                 r=0.06,   # a rib is a loop you walk, not a point you stand on
+                hunt_yards=hunt_yards(spawn),
                 objectives=(f"grind {spawn.name}",),
                 skills=("GRIND_UNTIL",), timeout_s=900.0, skippable=True,
                 notes=f"{count} spawns of {spawn.name} clustered here; route not recorded",
@@ -533,15 +593,16 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         chain.append(f"{base}_accept")
 
         if needs_objective:
-            ofrac, oworld, omap = place(db.objective_spawn(q.quest_id) or giver, zid)
+            mobs = db.objective_spawn(q.quest_id)
+            ofrac, oworld, omap = place(mobs or giver, zid)
             nodes.append(Node(
                 id=f"{base}_do", kind=StepKind.QUEST_OBJECTIVE, zone=zname, zone_id=zid,
                 level=band, pos=ofrac, world=oworld, map_id=omap, quest_id=q.quest_id,
-                title=q.title,
+                title=q.title, hunt_yards=hunt_yards(mobs),
                 objectives=tuple(filter(None, [q.objectives[:120]])) or ("complete objectives",),
                 skills=("TRAVEL_TO", "COMBAT_PROFILE", "LOOT"), timeout_s=600.0,
                 r=0.06, xp_est=q.xp_est,
-                notes=_note(db.objective_spawn(q.quest_id) or giver, ofrac, "objective"),
+                notes=_note(mobs or giver, ofrac, "objective"),
                 # Escape edges are filled in by the wiring pass below, which is the
                 # only place that knows what comes next. A rib is preferred when the
                 # zone has one; small zones like Northshire have no cluster that clears

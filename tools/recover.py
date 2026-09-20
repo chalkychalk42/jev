@@ -81,7 +81,7 @@ def main() -> int:
         corpse = (mx, my)
     outcome = skill.run(corpse)
     print(f"  corpse at {skill.corpse}")
-    print(f"  {outcome.value}" + (f" — {skill.detail}" if skill.detail else ""))
+    print(f"  {outcome.value}" + (f" - {skill.detail}" if skill.detail else ""))
     client.close()
     return 0 if outcome.ok else 1
 

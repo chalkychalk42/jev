@@ -19,7 +19,7 @@ and by nothing else.
 
 Where the playhead is still naive
 ---------------------------------
-It walks the chain in order and steps past a node whose postcondition holds — a quest in
+It walks the chain in order and steps past a node whose postcondition holds - a quest in
 the log for accept, out of it for turn-in. That is right while the chain is being walked
 forwards for the first time and wrong after a restart, because a quest turned in last
 session is indistinguishable from one never accepted: both are simply absent. Fixing it
@@ -45,13 +45,13 @@ from jev.clients.fight import Fight  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
 from jev.clients.rest import Rest  # noqa: E402
 from jev.guide import playhead  # noqa: E402
-from jev.guide.coords import bounds_by_radio_id, distance_yards  # noqa: E402
+from jev.guide.coords import bounds_by_radio_id  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
 from jev.guide.tracker import Tracker  # noqa: E402
 from jev.perceive.radio_frame import name_id  # noqa: E402
 from jev.run.client import NotRunning, attach, with_travel  # noqa: E402
-from jev.run.hunt import Hunt  # noqa: E402
+from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt  # noqa: E402
 from jev.world.state_v1 import StepKind  # noqa: E402
 
 
@@ -100,8 +100,8 @@ def main() -> int:
 
         The remembered position is a **floor**, not an answer: the scan still runs from
         it, so anything since finished is skipped. It exists because the log cannot say
-        that a quest was turned in — a finished quest and an untaken one are both simply
-        absent — and without it the run after a hand-in walks back to the giver.
+        that a quest was turned in - a finished quest and an untaken one are both simply
+        absent - and without it the run after a hand-in walks back to the giver.
         """
         nonlocal memory
         st = client.state()
@@ -158,8 +158,10 @@ def main() -> int:
         """
         wanted = name_id(node.notes) if node.notes else None
         print(f"  objective: {node.objectives[0]}")
-        radius = distance_yards(node.pos, (node.pos[0] + node.r, node.pos[1]), bounds)
-        print(f"  disk: {radius:.0f} yards around {node.pos}")
+        # `node.hunt_yards` only. Never `r` - see `DEFAULT_HUNT_YARDS`.
+        radius = node.hunt_yards or DEFAULT_HUNT_YARDS
+        print(f"  disk: {radius:.0f} yards around {node.pos}"
+              + ("" if node.hunt_yards else "  (node carries none; using the default)"))
         hunt = Hunt(fight=fight, rest=rest, read=client.read,
                     approach=lambda world: client.approach(world, timeout_s=args.timeout),
                     progress=lambda: progress(node.quest_id))
@@ -167,7 +169,7 @@ def main() -> int:
         have, need = progress(node.quest_id)
         print(f"  {outcome.value}: {have}/{need} after {hunt.kills} kills over "
               f"{hunt.moves} stations"
-              + (f" — {hunt.detail}" if hunt.detail else ""))
+              + (f" - {hunt.detail}" if hunt.detail else ""))
         return 0 if outcome.ok else 1
 
     memory = playhead.load(graph.graph_id)
@@ -212,7 +214,7 @@ def main() -> int:
         if inter.sighting is not None:
             sg = inter.sighting
             print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) torso {sg.torso}")
-        print(f"  {result.value}" + (f" — {inter.detail}" if inter.detail else ""))
+        print(f"  {result.value}" + (f" - {inter.detail}" if inter.detail else ""))
         if not result.opened:
             rc = 1
             break
@@ -222,7 +224,7 @@ def main() -> int:
         if result is Result.GOSSIP:
             chose = chooser.run(node.title)
             print(f"  chose {node.title!r}: {chose.value} at {chooser.clicked}"
-                  + (f" — {chooser.detail}" if chooser.detail else ""))
+                  + (f" - {chooser.detail}" if chooser.detail else ""))
             if not chose.ok:
                 rc = 1
                 break
@@ -230,7 +232,7 @@ def main() -> int:
         client.log.reset()
         outcome = advance.run(node.quest_id, goal)
         print(f"  {goal.value}: pressed {advance.clicked} -> {outcome.value}"
-              + (f" — {advance.detail}" if advance.detail else ""))
+              + (f" - {advance.detail}" if advance.detail else ""))
         if not outcome.ok:
             rc = 1
             break
