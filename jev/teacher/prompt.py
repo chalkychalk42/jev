@@ -104,6 +104,27 @@ class StepNode:
             bits.append(f"on_fail->{self.on_fail}")
         return " ".join(bits)
 
+    @staticmethod
+    def of(node: Any) -> StepNode:
+        """Project a `jev.guide.graph.Node` down to what a teacher needs.
+
+        The projection is the point — a full node carries world coordinates, arrival
+        radii, skill lists and generation provenance, none of which help answer "what is
+        the durable fix for this step" and all of which cost prompt budget.
+
+        Typed loosely on purpose: `jev.teacher` importing `jev.guide` would tie the
+        question-asking layer to the curriculum layer, and the teacher is supposed to work
+        for any caller that can name a step.
+        """
+        objectives = getattr(node, "objectives", ()) or ()
+        fail = getattr(node, "on_fail", ()) or ()
+        return StepNode(
+            step_id=node.id,
+            kind=getattr(getattr(node, "kind", None), "value", None),
+            title=objectives[0] if objectives else None,
+            on_fail=fail[0].goto if fail else None,
+        )
+
 
 @dataclass(frozen=True)
 class SkillCard:
@@ -131,6 +152,20 @@ class PromptContext:
     death_postmortem: str | None = None
     question: str | None = None
     catalog: tuple[str, ...] = ()
+
+
+def context_for(node: Any, graph: Any, **kw: Any) -> PromptContext:
+    """Build a context from a real graph node and its successors.
+
+    This adapter is the wire between the curriculum and the teacher. Without it the two
+    halves type-check independently and fail the first time anything tries to ask a
+    question about an actual step — which is what happened.
+    """
+    nxt = tuple(
+        StepNode.of(n) for n in
+        (graph.get(i) for i in getattr(node, "next", ()) or ()) if n is not None
+    )
+    return PromptContext(active_step=StepNode.of(node), next_nodes=nxt, **kw)
 
 
 DEFAULT_QUESTION = (

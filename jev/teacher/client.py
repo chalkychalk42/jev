@@ -79,11 +79,30 @@ from typing import Any, Protocol
 from jev.coach.schema import Status
 
 # Bounded so one hung child cannot hold the farm's single worker for the rest of the run.
-# 45 s, not 120: `jev.coach.situation` bins step age at 60 s and `jev.learn.episode.grade`
-# measures outcomes over a 60 s window, so an answer that takes longer than that is about a
-# situation which has already moved into a different bucket. Observed latency for a trivial
-# real call was 1.2 s, so this is ~35x headroom and still inside the window that matters.
-DEFAULT_TIMEOUT_S = 45.0
+DEFAULT_MODEL = "sonnet"
+"""The teacher's tier. See the note in `ClaudeSubscriptionClient.__init__`: pinned so a
+farm never contends with the human for the Opus allocation."""
+
+# 180 s, and the reason it is not 45 is worth writing down, because 45 was the defensible
+# number until it was measured.
+#
+# The original argument: `jev.coach.situation` bins step age at 60 s and
+# `jev.learn.episode.grade` measures outcomes over a 60 s window, so an answer slower than
+# that is about a situation which has already moved into another bucket. Sound — and it
+# was set against a *trivial* probe that answered in 1.2 s.
+#
+# A realistic question does not behave like a trivial one. Measured end to end: a
+# 5,406-character prompt about a stalled kill objective took **52 s** and returned 2,544
+# in / 4,595 out. At 45 s every real teacher call timed out, which is not a conservative
+# setting, it is an off switch.
+#
+# What the measurement actually settles is `DECISIONS.md` V11. The teacher's valuable
+# output is the **durable artifact** — a combat profile, an `on_fail` edge — and an
+# artifact is about the *step*, not the tick. It does not go stale in sixty seconds. Only
+# the fallback `decision` is time-sensitive, and by the time it lands the scripted coach
+# has long since acted anyway. So the right call is to wait for the artifact and let the
+# caller discard the stale action, which is what the runtime does.
+DEFAULT_TIMEOUT_S = 180.0
 
 # Sent on every call, for reasons that are all "do not let the teacher touch the run":
 #   --print / --output-format json  the contract, V4
@@ -193,7 +212,22 @@ class ClaudeSubscriptionClient:
         # next one. "claude" is kept as the last resort so the failure is a clear ENOENT
         # transport error rather than an import-time crash on a machine without it.
         self.binary = binary or shutil.which("claude") or "claude"
-        self.model = model
+        # Pinned, never left to the CLI's default — and pinned *down*.
+        #
+        # An unpinned call inherits whatever the user's default model is, which on this
+        # machine is Opus: the scarcest, most rate-limited model on the plan, and the one
+        # the human is actively using to build the thing. A farm of ten clients quietly
+        # contending for that is a farm that takes the developer's capacity away.
+        #
+        # This was not theoretical. Leaving it unset produced a 429 "out of usage credits"
+        # on every call while Sonnet and Haiku answered immediately — the Opus allocation
+        # was exhausted, the plan was untouched, and the error message said neither.
+        #
+        # Sonnet is the right tier on the merits too. The teacher resolves ambiguity,
+        # drafts skills and patches graph edges against a small prompt and a fixed output
+        # schema. Nothing in that job is Opus work, and `ARCHITECTURE.md` §0 already says
+        # quality matters less here than being affordable enough to call at all.
+        self.model = model or DEFAULT_MODEL
         self.timeout_s = timeout_s
         self.cwd = cwd
         # Unverified against the live CLI: the subscription was out of credits when this
@@ -204,7 +238,7 @@ class ClaudeSubscriptionClient:
         self.json_schema = json_schema
         self.extra_args = tuple(extra_args)
         self.env = env
-        self.model_name = model or "claude-sub"
+        self.model_name = f"claude-sub:{self.model}"
 
     def argv(self, prompt: str) -> list[str]:
         """Built as a list and executed without a shell, so a prompt containing quotes,

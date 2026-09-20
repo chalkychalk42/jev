@@ -62,6 +62,7 @@ class Counters:
     teacher_applied: int = 0
     blind_ticks: int = 0
 
+    teacher_stale: int = 0
     skills_closed: int = 0
     skills_succeeded: int = 0
 
@@ -107,6 +108,20 @@ class ClientRuntime:
     # bucket to an unrelated question about another, which is precisely the mis-join
     # this field exists to remove.
     _asked: dict[str, str] = field(default_factory=dict, init=False)
+    # The buckets this client has outstanding questions under, and when it asked.
+    #
+    # Not just the current key: `situation_key` bins step age, so a step crosses from
+    # "fresh" into "slow" at sixty seconds and its key changes underneath us. The measured
+    # teacher round trip is ~52 s, which means an answer routinely comes back addressed to
+    # a bucket the character has already left — and a lookup on the *current* key would
+    # miss it every time, re-ask, and never once hit the cache that `situation_key` exists
+    # to make possible.
+    _asked_at: dict[str, float] = field(default_factory=dict, init=False)
+
+    # How old a teacher answer may be and still be acted on. Matched to the step-age bin
+    # in `jev.coach.situation`: past it, the answer is about a different bucket than the
+    # one the character is in now.
+    stale_after_s: float = 60.0
 
     def __post_init__(self) -> None:
         self.tracker = Tracker(self.graph, self.graph.entry)
@@ -198,12 +213,22 @@ class ClientRuntime:
         """
         plan = scripted.decide(state, node)
 
-        if self.take is not None and state.situation_key:
-            answer = self.take(state.situation_key)
+        if self.take is not None:
+            answer, key = self._collect(state)
             if answer is not None:
-                self.counters.teacher_applied += 1
-                self._record_applied(state, answer)
-                return answer, ArmedBy.TEACHER, "teacher"
+                # Record it either way — a late answer's *artifacts* are the part worth
+                # having, and they are about the step rather than this tick, so they do
+                # not go stale (`DECISIONS.md` V11). The measured round trip is ~52 s
+                # against a 60 s situation bin, so this is the common case, not an edge
+                # one, and discarding the whole reply would throw away the durable half
+                # to avoid acting on the perishable half.
+                stale = self._is_stale(state, key)
+                self._record_applied(state, answer, key, stale=stale)
+                if stale:
+                    self.counters.teacher_stale += 1
+                else:
+                    self.counters.teacher_applied += 1
+                    return answer, ArmedBy.TEACHER, "teacher"
 
         if scripted.wants_teacher(plan):
             self.counters.unresolved += 1
@@ -298,9 +323,44 @@ class ClientRuntime:
         ))
         if state.situation_key:
             self._asked[state.situation_key] = decision_id
+            # `setdefault`, not assignment: the timestamp is when this bucket's question
+            # was *first* posed, because that is when the state it describes was true.
+            # Refreshing it on every re-ask resets the staleness clock every tick, so an
+            # answer could never be older than one tick and nothing was ever stale.
+            self._asked_at.setdefault(state.situation_key, state.t)
         return decision_id
 
-    def _record_applied(self, state: State, answer: Decision) -> None:
+    def _collect(self, state: State) -> tuple[Decision | None, str]:
+        """Look for an answer under the current bucket, then under any we asked about.
+
+        Oldest question first, so a backlog drains in the order it was created rather
+        than repeatedly serving the freshest and starving the rest.
+        """
+        current = state.situation_key or ""
+        if current:
+            answer = self.take(current)
+            if answer is not None:
+                return answer, current
+
+        for key in sorted(self._asked_at, key=self._asked_at.get):
+            if key == current:
+                continue
+            answer = self.take(key)
+            if answer is not None:
+                return answer, key
+        return None, current
+
+    def _is_stale(self, state: State, key: str) -> bool:
+        """Has the situation moved on since we asked?
+
+        Unasked buckets are never stale: an unsolicited answer has no age of its own, and
+        inventing one would silently drop every cached and shared answer in the farm.
+        """
+        asked_at = self._asked_at.get(key)
+        return asked_at is not None and (state.t - asked_at) > self.stale_after_s
+
+    def _record_applied(self, state: State, answer: Decision, key: str,
+                        *, stale: bool = False) -> None:
         """A teacher answer, linked back to the escalation that asked for it.
 
         `escalated_from` is what lets the board count questions rather than reconstruct
@@ -314,19 +374,33 @@ class ClientRuntime:
             tick_id=self.recorder._tick_id + 1,
             t=state.t,
             client_id=self.client_id,
-            situation_key=state.situation_key or "",
+            # The bucket the question was asked under, not the one the character is in
+            # now. They differ routinely — `situation_key` re-bins step age at sixty
+            # seconds and the round trip is longer than that — and recording the current
+            # one would file the answer against a question nobody asked.
+            situation_key=key,
             author=ArmedBy.TEACHER,
             model="teacher",
             intent=answer.intent.value,
             skill=answer.skill,
             params=dict(answer.params),
             confidence=answer.confidence,
-            why=answer.why,
+            # A stale answer is recorded as `rejected`, the same status the verifier uses
+            # for a well-formed reply that may not be acted on. Its artifacts are still
+            # good — they describe the step, not the tick — and a later pass promotes them
+            # from this row.
+            status="rejected" if stale else "ok",
+            why=(f"stale by {state.t - self._asked_at.get(key, state.t):.0f}s; "
+                 f"artifacts kept, action discarded — {answer.why}")[:280]
+                 if stale else answer.why,
             # `None` is honest here: an answer for a bucket this client never asked
             # about is unsolicited — a cache hit, or another client's question — and
             # claiming a link would invent one.
-            escalated_from=self._asked.pop(state.situation_key or "", None),
+            escalated_from=self._asked.pop(key, None),
         ))
+        # Answered, one way or the other. Leaving it outstanding would have every later
+        # tick re-collect the same reply.
+        self._asked_at.pop(key, None)
 
     def _record(self, state: State, plan: Decision, by: ArmedBy) -> None:
         intent = skill = None

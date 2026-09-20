@@ -419,3 +419,116 @@ def test_a_run_that_ended_mid_skill_is_not_evidence(tmp_path):
         duration_s=9.0, situation_key="k",
     )
     assert not row.counts_toward_rate
+
+
+class FakeQueue:
+    """A teacher queue with latency, answering only under the key it was asked about.
+
+    Both halves matter and both were got wrong by a simpler fake. Answering any key hides
+    the fact that `situation_key` re-bins step age at sixty seconds, so the key moves
+    underneath a round trip. Answering instantly hides staleness entirely, which is the
+    common case at a measured ~52s.
+    """
+
+    def __init__(self, answer, latency_s: float) -> None:
+        self.answer = answer
+        self.latency_s = latency_s
+        self.asked: dict[str, float] = {}
+        self.delivered: set[str] = set()
+        self.now = 0.0
+
+    def ask(self, state, key: str) -> None:
+        self.now = state.t
+        self.asked.setdefault(key, state.t)
+
+    def take(self, key: str):
+        if key in self.delivered or key not in self.asked:
+            return None
+        if self.now - self.asked[key] < self.latency_s:
+            return None
+        self.delivered.add(key)
+        return self.answer
+
+
+def test_a_late_answer_keeps_its_artifacts_and_loses_its_action(tmp_path):
+    """The measured teacher round trip is ~52s against a 60s situation bin, so a late
+    answer is the common case rather than an edge one.
+
+    Discarding the whole reply to avoid acting on a stale instruction would throw away
+    the durable half — the combat profile, the on_fail edge — which is about the step and
+    does not go stale at all (DECISIONS.md V11).
+    """
+    from jev.coach.schema import Decision, Intent
+    from jev.learn.episode import read
+
+    answer = Decision(goal="g", intent=Intent.GRIND_RIB, skill="GRIND_UNTIL",
+                      abort_if=["dead"], confidence=0.9, why="grind a while")
+    q = FakeQueue(answer, latency_s=90.0)
+
+    states = [State(t=float(i) * 20.0, client_id="c01") for i in range(14)]
+    rt = _runtime(states, tmp_path, ask=q.ask, take=q.take)
+    for state in states:
+        q.now = state.t
+        rt.tick()
+
+    assert rt.counters.teacher_stale > 0, "nothing aged past the bound"
+    rows = [r for r in read(rt.recorder.dir / "decisions.jsonl") if r["author"] == "teacher"]
+    assert rows, "a stale answer must still be recorded, not dropped"
+    assert any(r["status"] == "rejected" for r in rows)
+    assert any("artifacts kept" in (r["why"] or "") for r in rows)
+
+
+def test_an_answer_inside_the_window_is_acted_on(tmp_path):
+    from jev.coach.schema import Decision, Intent
+
+    answer = Decision(goal="g", intent=Intent.GRIND_RIB, skill="GRIND_UNTIL",
+                      abort_if=["dead"], confidence=0.9, why="grind a while")
+    q = FakeQueue(answer, latency_s=2.0)
+
+    states = [State(t=float(i), client_id="c01") for i in range(8)]
+    rt = _runtime(states, tmp_path, ask=q.ask, take=q.take)
+    for state in states:
+        q.now = state.t
+        rt.tick()
+
+    assert rt.counters.teacher_applied > 0
+    assert rt.counters.teacher_stale == 0
+
+
+def test_an_answer_is_found_even_though_the_bucket_moved(tmp_path):
+    """`situation_key` bins step age, so a step crossing from "fresh" into "slow" changes
+    its own key mid-flight. A lookup on only the *current* key would miss every slow
+    answer, re-ask, and never once hit the cache the key exists to make possible."""
+    from jev.coach.schema import Decision, Intent
+
+    answer = Decision(goal="g", intent=Intent.GRIND_RIB, skill="GRIND_UNTIL",
+                      abort_if=["dead"], confidence=0.9, why="grind a while")
+    q = FakeQueue(answer, latency_s=50.0)
+
+    states = [State(t=float(i) * 20.0, client_id="c01") for i in range(12)]
+    rt = _runtime(states, tmp_path, ask=q.ask, take=q.take)
+    keys = []
+    for state in states:
+        q.now = state.t
+        keys.append(rt.tick().situation_key)
+
+    assert len(set(keys)) > 1, "the key should re-bin as the step ages"
+    assert q.delivered, "no answer was ever collected"
+    assert rt.counters.teacher_applied + rt.counters.teacher_stale == len(q.delivered)
+
+
+def test_an_unsolicited_answer_is_never_stale(tmp_path):
+    """A cached or shared answer has no age of its own. Inventing one would silently drop
+    every answer the farm reuses, which is the saving `situation_key` exists for."""
+    from jev.coach.schema import Decision, Intent
+
+    answer = Decision(goal="g", intent=Intent.GRIND_RIB, skill="GRIND_UNTIL",
+                      abort_if=["dead"], confidence=0.9, why="from another client")
+    graph = Graph.load(GRAPH)
+    node = graph.get(graph.entry)
+    rt = _runtime([_at(node, float(i) * 500.0) for i in range(4)], tmp_path,
+                  take=lambda key: answer)
+    rt.run(ticks=4, period_s=0)
+
+    assert rt.counters.teacher_stale == 0
+    assert rt.counters.teacher_applied == 4

@@ -856,3 +856,38 @@ def test_a_reply_is_the_schema_the_prompt_advertised(state: State):
     assert reply.artifacts and isinstance(reply.artifacts[0], Artifact)
     assert not reply.is_empty()
     assert "TeacherReply" in build_prompt(state)
+
+
+def test_the_teacher_never_inherits_the_default_model():
+    """An unpinned call takes whatever the user's default is — on this machine, Opus.
+
+    That is the scarcest model on the plan and the one the human is using to build the
+    thing, so a farm of ten clients would quietly take the developer's own capacity. It
+    was not theoretical: unpinned calls returned 429 "out of usage credits" while Sonnet
+    and Haiku answered immediately. The plan was untouched; only Opus was exhausted, and
+    the error message said neither.
+    """
+    from jev.teacher.client import DEFAULT_MODEL, ClaudeSubscriptionClient
+
+    argv = ClaudeSubscriptionClient().argv("hello")
+    assert "--model" in argv, "an unpinned teacher inherits the user's default"
+    assert argv[argv.index("--model") + 1] == DEFAULT_MODEL
+    assert DEFAULT_MODEL != "opus", "the teacher must not contend for the Opus allocation"
+
+
+def test_the_model_is_named_in_the_corpus():
+    """`DecisionRow.model` has to say which tier answered, or a later analysis cannot tell
+    a cheap answer from an expensive one."""
+    from jev.teacher.client import ClaudeSubscriptionClient
+
+    assert ClaudeSubscriptionClient().model_name == "claude-sub:sonnet"
+    assert ClaudeSubscriptionClient(model="haiku").model_name == "claude-sub:haiku"
+
+
+def test_an_explicit_model_still_wins():
+    """Pinning a default must not stop a caller choosing — escalating a hard postmortem
+    to a stronger tier is a legitimate thing to want."""
+    from jev.teacher.client import ClaudeSubscriptionClient
+
+    argv = ClaudeSubscriptionClient(model="haiku").argv("hello")
+    assert argv[argv.index("--model") + 1] == "haiku"
