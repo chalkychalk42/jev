@@ -34,6 +34,17 @@ VK = {
     "w": 0x57, "a": 0x41, "s": 0x53, "d": 0x44, "q": 0x51, "e": 0x45,
     "x": 0x58, "f": 0x46, "t": 0x54, "g": 0x47, "r": 0x52,
     **{str(d): 0x30 + d for d in range(10)},
+    # Action slots 11 and 12. Default bindings are 1-9, 0, then these two, and that is
+    # where a fresh character's food and water sit — so without them EAT_DRINK presses
+    # nothing and reports success.
+    "minus": 0xBD, "equals": 0xBB,
+    # Punctuation, because a command is not a word. Without `/` in this table `type_text`
+    # skipped it and `slash("/reload")` typed **reload** into say — the addon was never
+    # reloaded and the character announced itself to Northshire instead. Every character
+    # a slash command can contain belongs here.
+    "/": 0xBF, ".": 0xBE, ",": 0xBC, ";": 0xBA, "'": 0xDE,
+    "[": 0xDB, "]": 0xDD, "\\": 0xDC, "`": 0xC0,
+    "-": 0xBD, "=": 0xBB,
     **{c: 0x41 + i for i, c in enumerate(string.ascii_lowercase)},
     **{f"f{n}": 0x6F + n for n in range(1, 13)},
 }
@@ -91,6 +102,7 @@ class Hid:
         self.require_focus = require_focus
         self.sent = 0
         self.refused = 0
+        self.unsendable: list[str] = []
 
     # -- guards --------------------------------------------------------------
 
@@ -202,19 +214,32 @@ class Hid:
 
     def type_text(self, text: str) -> bool:
         """For chat commands. `/target Kobold Worker` is deterministic acquisition and
-        needs no vision, which makes typing worth having as a first-class action."""
+        needs no vision, which makes typing worth having as a first-class action.
+
+        **A character this cannot type is a failure, not something to skip.** Skipping
+        silently turned `/reload` into `reload`: the slash was dropped, the addon was
+        never reloaded, and the run spent its time wondering why a schema bump had not
+        taken effect while the character stood in Northshire saying "reload" out loud.
+        Unsendable characters are recorded and the call returns False.
+        """
         ok = True
+        self.unsendable = []
         for ch in text:
             key = ch.lower()
             if key == " ":
                 key = "space"
             if key not in VK:
+                self.unsendable.append(ch)
+                ok = False
                 continue
             ok = (self.chord("shift", key) if ch.isupper() else self.tap(key)) and ok
         return ok
 
     def slash(self, command: str) -> bool:
         """Open chat, type a slash command, send it.
+
+        Returns False if any character could not be typed, because a half-typed command
+        is a chat message.
 
         Enter-first rather than typing `/` blind: with chat already open the `/` is a
         character in a message, and the difference is invisible until a run ends with the

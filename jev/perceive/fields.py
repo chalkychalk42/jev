@@ -51,7 +51,9 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 1                                    # bump when the field table changes shape
+SCHEMA = 2                                    # bump when the field table changes shape
+"""2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
+quest field that was unknown on every live client because nothing sets a watch."""
 
 # Quantisation step: nibble n renders as n * STEP, so 15 -> 255 exactly.
 STEP = 255 // (LEVELS - 1)                    # 17
@@ -220,7 +222,27 @@ FIELDS: tuple[Field, ...] = (
     # -- quests ------------------------------------------------------------------
     Field("quests.log_hash", 16, Kind.UINT, "return QUEST_HASH()",
           "cheap change detector over the whole log; a changed hash means re-read"),
-    Field("quests.watched_id", 16, Kind.UINT, "return WATCHED_QUEST_ID()"),
+
+    # The log arrives one entry per paint, not all at once.
+    #
+    # There is no room on the wire for twenty quests and no "current quest" in 2.4.3
+    # beyond the watch list — and nothing sets a watch, so the previous design reported
+    # every quest field as unknown on a live client with quests in the log. The tracker
+    # then could not answer "did I accept this?", which is the predicate the whole
+    # questing half of the guide rests on.
+    #
+    # So the addon cycles: each paint describes one log entry, and `slot`/`count` let the
+    # decoder assemble the whole log over about two seconds at 10 Hz. `log_hash` says when
+    # to throw that assembly away. The addon stays stateless and paint-only; nothing has
+    # to tell it which quest matters.
+    Field("quests.count", 5, Kind.UINT, "return QUEST_COUNT()",
+          "entries in the log, headers excluded"),
+    Field("quests.slot", 5, Kind.UINT, "return QUEST_SLOT()",
+          "which entry the fields below describe; advances once per paint"),
+    Field("quests.slot_id", 16, Kind.UINT, "return QUEST_SLOT_ID()",
+          "quest id at `slot`, from the hyperlink; unknown rather than a title hash, "
+          "which the decoder could not tell apart"),
+    _tri("quests.slot_complete", "return tri(QUEST_SLOT_COMPLETE())"),
     Field("quests.o0_have", 7, Kind.UINT, "return OBJ(1, 'have')"),
     Field("quests.o0_need", 7, Kind.UINT, "return OBJ(1, 'need')"),
     Field("quests.o1_have", 7, Kind.UINT, "return OBJ(2, 'have')"),

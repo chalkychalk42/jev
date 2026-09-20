@@ -204,6 +204,9 @@ local TOTAL_BITS = CELLS * CELL_BITS
 
 local function paint()
     JevRadioHelpers.syncMap()
+    -- Once per frame, before any getter runs: every quest field in this paint has
+    -- to describe the same log entry, or the decoder assembles a chimera.
+    JevRadioHelpers.advanceQuestSlot()
 
     ENV.SEQ = (ENV.SEQ + 1) % 256
 

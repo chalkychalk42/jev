@@ -423,8 +423,8 @@
         "ACCEPT_QUEST"
       ],
       "xp_est": 90,
-      "timeout_s": 240.0,
-      "skippable": false,
+      "timeout_s": 5.0,
+      "skippable": true,
       "notes": "no giver spawn found",
       "source": "generated"
     },
@@ -472,8 +472,8 @@
         "TURNIN_QUEST"
       ],
       "xp_est": 90,
-      "timeout_s": 240.0,
-      "skippable": false,
+      "timeout_s": 5.0,
+      "skippable": true,
       "notes": "no turn-in spawn found",
       "source": "generated"
     },
@@ -6878,8 +6878,8 @@
         "ACCEPT_QUEST"
       ],
       "xp_est": 900,
-      "timeout_s": 240.0,
-      "skippable": false,
+      "timeout_s": 5.0,
+      "skippable": true,
       "notes": "no giver spawn found",
       "source": "generated"
     },
@@ -6928,8 +6928,8 @@
         "LOOT"
       ],
       "xp_est": 900,
-      "timeout_s": 600.0,
-      "skippable": false,
+      "timeout_s": 5.0,
+      "skippable": true,
       "notes": "no objective spawn found",
       "source": "generated"
     },
@@ -7260,8 +7260,8 @@
         "TURNIN_QUEST"
       ],
       "xp_est": 900,
-      "timeout_s": 240.0,
-      "skippable": false,
+      "timeout_s": 5.0,
+      "skippable": true,
       "notes": "Gryan Stoutmantle; turn-in spawn at -10509,1045 is off every zone map",
       "source": "generated"
     }

@@ -768,10 +768,20 @@ def to_state(reading: RadioReading, *, t: float, client_id: str) -> State:
         for i in range(3)
         if v[f"quests.o{i}_have"] is not None and v[f"quests.o{i}_need"] is not None
     )
-    watched = v["quests.watched_id"]
-    quests: tuple[Quest, ...] = ()
-    if watched is not None or objectives:
-        quests = (Quest(quest_id=watched, objectives=objectives),)
+    # One log entry per frame (`fields.py`, quests.slot). What `to_state` can honestly
+    # say is "this quest was in the log at this instant" — assembling the whole log takes
+    # a couple of seconds of frames and belongs to whatever is reading them in sequence,
+    # not to a function looking at one.
+    slot_id = v["quests.slot_id"]
+    count = v["quests.count"]
+    quests: tuple[Quest, ...] | None = None
+    if count == 0:
+        # Positively observed as empty, which is a different fact from not having looked
+        # and is exactly what tells a fresh character it is on the entry step.
+        quests = ()
+    elif slot_id is not None:
+        quests = (Quest(quest_id=slot_id, objectives=objectives,
+                        complete=v["quests.slot_complete"]),)
 
     return State(
         t=t,

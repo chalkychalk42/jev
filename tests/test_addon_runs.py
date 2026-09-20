@@ -18,7 +18,15 @@ import subprocess
 import pytest
 
 from jev.perceive import radio
-from jev.perceive.fields import CALIBRATION_SWATCHES, GRID_COLS, MARKER_L, MARKER_R
+from jev.perceive.fields import (
+    CALIBRATION_SWATCHES,
+    GRID_COLS,
+    MARKER_L,
+    MARKER_R,
+    layout,
+)
+
+PAYLOAD_CELLS = layout()["payload_cells"]
 
 LUA = shutil.which("lua5.1") or shutil.which("lua")
 pytestmark = pytest.mark.skipif(LUA is None, reason="needs lua5.1 to run the real addon")
@@ -83,7 +91,7 @@ def test_what_the_client_knows_comes_back_out_of_the_decoder():
     """The end-to-end claim: values set on the stubbed client survive the addon's packer,
     the twelve-bit cells and the Python decoder unchanged."""
     cells = paint({"level": 23, "hp": 45, "hpMax": 90, "freePerBag": 3, "dur": 60})
-    values = radio.unpack(payload(cells)[:33])
+    values = radio.unpack(payload(cells)[:PAYLOAD_CELLS])
 
     assert values["char.level"] == 23
     assert values["vitals.hp"] == pytest.approx(0.5, abs=0.01)
@@ -96,7 +104,7 @@ def test_a_position_survives_the_round_trip():
     """Map fractions are the highest-resolution thing on the wire; if anything loses
     precision in the packer it shows here first."""
     cells = paint({"mx": 0.4817, "my": 0.4294})
-    values = radio.unpack(payload(cells)[:33])
+    values = radio.unpack(payload(cells)[:PAYLOAD_CELLS])
     assert values["pos.mx"] == pytest.approx(0.4817, abs=0.0005)
     assert values["pos.my"] == pytest.approx(0.4294, abs=0.0005)
 
@@ -104,8 +112,8 @@ def test_a_position_survives_the_round_trip():
 def test_the_sequence_counter_advances_between_paints():
     """A frozen sequence is how a hung addon is told apart from a misread, so it has to
     actually move."""
-    a = radio.unpack(payload(paint())[:33])["seq"]
-    b = radio.unpack(payload(paint({"time": 2000.0}))[:33])["seq"]
+    a = radio.unpack(payload(paint())[:PAYLOAD_CELLS])["seq"]
+    b = radio.unpack(payload(paint({"time": 2000.0}))[:PAYLOAD_CELLS])["seq"]
     assert a is not None and b is not None
 
 
@@ -113,7 +121,7 @@ def test_an_unobservable_field_is_painted_as_unknown_not_as_false():
     """`UnitAffectingCombat` returns nil out of combat, which is a real observation, but a
     getter that cannot evaluate at all must paint the NA code. Unknown is not a negative
     fact, all the way down to the wire."""
-    values = radio.unpack(payload(paint({"hasTarget": False}))[:33])
+    values = radio.unpack(payload(paint({"hasTarget": False}))[:PAYLOAD_CELLS])
     assert values["target.has"] is False
     assert values["target.hp"] is None, "an absent target has no health, not zero health"
     assert values["target.level"] is None

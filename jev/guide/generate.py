@@ -581,5 +581,16 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
                 )
         wired.append(n.model_copy(update={"next": nxt, "on_fail": fails}))
 
-    entry = chain[0] if chain else (wired[0].id if wired else "")
-    return Graph(graph_id=graph_id, faction=faction, nodes=tuple(wired), entry=entry)
+    # A node with no position cannot be travelled to, so servicing it means standing
+    # still until it times out. Quest 7961 sits at position two of the Human spine with
+    # no giver in the database at all: at the default 240 s that is eight minutes of a
+    # fresh character doing nothing before the escape edge fires. Mark it skippable and
+    # give it seconds rather than minutes — the step is recorded as existing on this
+    # server, which is the point of emitting it, and the playhead moves past immediately.
+    final = tuple(
+        n.model_copy(update={"skippable": True, "timeout_s": min(n.timeout_s, 5.0)})
+        if n.pos is None and n.kind is not StepKind.GRIND else n
+        for n in wired
+    )
+    entry = chain[0] if chain else (final[0].id if final else "")
+    return Graph(graph_id=graph_id, faction=faction, nodes=final, entry=entry)

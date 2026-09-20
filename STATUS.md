@@ -266,3 +266,39 @@ NOW: 428 tests. Travel plans, follows, and walks straight.
 
 NEXT: the slice, and nothing else. Interact McBride, accept, walk to the kobolds, combat
 profile, turn in.
+
+## 2026-09-20 — the playhead can finally see the quest log
+DID: the slice was blocked on something I had assumed worked.
+
+**The radio was not painting quests.** It carried `log_hash` and one *watched* quest, and
+nothing in 2.4.3 sets a watch — so `watched_id` and all six objective fields read `None`
+on a live client, and `to_state` was collapsing that to `()`, an empty log. The tracker
+would have concluded a quest was missing from a log it never saw, and `QUEST_MISSING`
+would have skipped a good step. Schema 2 cycles one log entry per paint instead (V23).
+
+Live, after `/console reloadui`: `schema 2`, `count 0`, `State.quests -> ()` — a
+**positively empty** log on a fresh paladin, which is exactly what puts the playhead on
+`graph.entry` rather than on whoever is standing nearby.
+
+`graph.entry` was already right: `alli_human_1_12_783_a_threat_within_accept`, **Deputy
+Willem** at (-8933.5, -136.5, 83.4), because `PrevQuestId 783 -> 7` put him ahead of
+McBride in the topological sort. The generator was correct; I had hand-picked
+`--to-npc 197` and walked to the wrong NPC. `nodes[0]` being a grind rib is array order.
+
+Three other things, all silent failures:
+- **`/` was not in the key table**, so `slash("/reload")` typed `reload`. The addon was
+  never reloaded and the character said "reload" out loud in Northshire (V24).
+- **`/reload` does not work in this build; `/console reloadui` does** — which is what the
+  V1 addon's own TOC comment said.
+- **Quest 7961 sits at spine position two with no giver in the database at all.** At the
+  default timeout that is eight minutes of a fresh character standing still before the
+  escape edge fires. Unpositioned nodes are now `skippable` with a five-second timeout.
+- `-`, `=` and the rest of the slash-command punctuation added to the key table. Action
+  slots 11 and 12 are where a fresh character's food and water sit.
+
+Paladin, read not remembered: `world_playercreateinfo_action` gives the default bar for a
+Human Paladin — `1` Attack, `2` Seal of Righteousness, `3` Holy Light, `-` water, `=` food.
+
+NOW: 434 tests. The bot can read its own quest log.
+
+NEXT: the slice, from the entry node. Empty log -> Willem -> accept -> McBride -> turn in.

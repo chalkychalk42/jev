@@ -253,12 +253,69 @@ end
 
 -- --------------------------------------------------------------------- quests
 
+-- The log is painted one entry per frame.
+--
+-- 2.4.3 has no notion of a "current" quest beyond the watch list, and nothing watches, so
+-- keying every objective field to the first watch reported the whole quest log as unknown
+-- on a live client that had quests in it. Cycling costs nothing here and needs no channel
+-- into the addon: the decoder reassembles the log from `slot` and `count`, and throws the
+-- assembly away when `log_hash` changes.
+local questSlot = 0
+
+local function questIndices()
+    -- Real log indices, headers removed, in log order. Headers are collapsed zone
+    -- separators; treating them as quests would paint "Elwynn Forest" as a step.
+    local out = {}
+    local n = GetNumQuestLogEntries()
+    for i = 1, n do
+        local title, _, _, _, isHeader = GetQuestLogTitle(i)
+        if title and not isHeader then out[#out + 1] = i end
+    end
+    return out
+end
+
+local function advanceQuestSlot()
+    local count = #questIndices()
+    if count == 0 then
+        questSlot = 0
+    else
+        questSlot = (questSlot + 1) % count
+    end
+end
+
+local function QUEST_COUNT()
+    return clamp(#questIndices(), 30)
+end
+
+local function QUEST_SLOT()
+    return clamp(questSlot, 30)
+end
+
 local function focusQuest()
-    -- The objective fields all describe one quest, and 2.4.3 has no notion of a "current"
-    -- quest beyond the watch list, so the first watch is it. With nothing watched every
-    -- objective field goes unknown, which is the truth: nobody said which quest to read.
-    if GetNumQuestWatches == nil or GetNumQuestWatches() == 0 then return nil end
-    return GetQuestIndexForWatch(1)
+    local idx = questIndices()
+    if #idx == 0 then return nil end
+    return idx[(questSlot % #idx) + 1]
+end
+
+local function QUEST_SLOT_ID()
+    local q = focusQuest()
+    if q == nil then return nil end
+    -- 2.4.3 has no GetQuestLogQuestID. The quest hyperlink carries the real id, and if
+    -- this build has no GetQuestLink the field goes unknown rather than silently becoming
+    -- a title hash -- the decoder could not tell the two apart.
+    if GetQuestLink == nil then return nil end
+    local link = GetQuestLink(q)
+    if link == nil then return nil end
+    local id = tonumber(string.match(link, "quest:(%d+)"))
+    if id == nil or id >= 65535 then return nil end
+    return id
+end
+
+local function QUEST_SLOT_COMPLETE()
+    local q = focusQuest()
+    if q == nil then return nil end
+    local _, _, _, _, _, _, isComplete = GetQuestLogTitle(q)
+    return isComplete and 1 or false
 end
 
 local function rebuildQuestHash()
@@ -474,7 +531,11 @@ JevRadioHelpers = {
     BAG_FREE = BAG_FREE,
     DURABILITY_MIN = DURABILITY_MIN,
     QUEST_HASH = QUEST_HASH,
-    WATCHED_QUEST_ID = WATCHED_QUEST_ID,
+    QUEST_COUNT = QUEST_COUNT,
+    QUEST_SLOT = QUEST_SLOT,
+    QUEST_SLOT_ID = QUEST_SLOT_ID,
+    QUEST_SLOT_COMPLETE = QUEST_SLOT_COMPLETE,
+    advanceQuestSlot = advanceQuestSlot,
     OBJ = OBJ,
     BAR_BITS = BAR_BITS,
     GCD_FRAC = GCD_FRAC,

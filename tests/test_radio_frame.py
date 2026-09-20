@@ -32,6 +32,7 @@ from jev.perceive.fields import (
     MARKER_L,
     MARKER_R,
     PAYLOAD_CELLS,
+    SCHEMA,
     STEP,
     Kind,
     layout,
@@ -245,7 +246,10 @@ def _values() -> dict:
         "ui.modal": False,
         "ui.error_id": 2,
         "quests.log_hash": 4242,
-        "quests.watched_id": 62,
+        "quests.count": 3,
+        "quests.slot": 1,
+        "quests.slot_id": 62,
+        "quests.slot_complete": False,
         "quests.o0_have": 3,
         "quests.o0_need": 8,
         "bars.usable": 273,
@@ -766,7 +770,7 @@ def test_a_decoded_strip_becomes_a_state():
     assert state.bags.free == 11
     assert state.bags.money_copper == 183400
     assert state.ui.error == "out_of_range"
-    assert state.quests[0].quest_id == 62
+    assert state.quests[0].quest_id == 62, "the slot this frame described"
     assert state.objective_counts() == [(3, 8)]
     assert state.sense.addon_ok is True
     assert state.sense.fault is SenseFault.NONE
@@ -866,10 +870,16 @@ def test_the_strip_reads_from_a_real_client_frame():
     reading = radio_frame.read(frame)
     assert reading.ok, f"{reading.fault}: {reading.detail}"
     v = reading.values
-    assert v["schema"] == 1
+    assert v["schema"] == SCHEMA, "the fixture and the field table must agree"
     assert 1 <= v["char.level"] <= 70
     assert 0.0 <= v["pos.mx"] <= 1.0 and 0.0 <= v["pos.my"] <= 1.0
     assert v["vitals.hp_max"] > 0
+
+    # A fresh character with nothing accepted. `count == 0` is a positive observation of
+    # an empty log, which is what tells the playhead to be at the graph entry rather than
+    # at whichever NPC happens to be nearby.
+    assert v["quests.count"] == 0
+    assert radio_frame.to_state(reading, t=0.0, client_id="c").quests == ()
 
 
 @pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")
