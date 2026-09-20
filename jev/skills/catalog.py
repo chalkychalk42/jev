@@ -75,6 +75,14 @@ _SKILLS: tuple[Skill, ...] = (
     Skill("FACE", "turn to face the target", 5.0,
           success=lambda s: True, pre=_alive),
 
+    Skill("ACQUIRE_TARGET", "select something to fight", 10.0,
+          # Mechanical, not a judgement: `/target <exact name>` when the step names its
+          # mobs, nearest hostile nameplate otherwise. Being in combat with nothing
+          # selected is a gap System 1 closes, and treating it as ambiguity sent 42% of a
+          # simulated run to the teacher for "pick a target".
+          success=lambda s: s.target.has is True,
+          pre=lambda s: _alive(s) and s.target.has is not True),
+
     Skill("LOOT", "clear the loot window", 15.0,
           success=lambda s: s.ui.loot is False,
           pre=lambda s: _alive(s) and s.ui.loot is True),

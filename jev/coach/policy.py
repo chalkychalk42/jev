@@ -137,11 +137,14 @@ def _fight(state: State) -> Plan | None:
     if state.vitals.combat is not True:
         return None
     if state.target.has is not True:
-        # In combat with nothing selected. The right move is to acquire, and that is a
-        # System 1 job rather than a plan — but saying so beats arming a rotation at
-        # nothing.
-        return Plan(_d(Intent.WAIT, "FACE", "in combat with no target; acquire", 0.5,
-                       ("dead", "no_combat")), False, "fight.no_target")
+        # In combat with nothing selected. This is mechanical — name-target the step's
+        # mobs, or take the nearest hostile plate — so it is armed with confidence rather
+        # than escalated. Marking it uncertain sent 42% of a simulated run to the teacher
+        # to be told "pick a target", which is the precise waste a rate-limited teacher
+        # cannot absorb.
+        return Plan(_d(Intent.ADVANCE, "ACQUIRE_TARGET", "in combat with nothing selected",
+                       0.8, ("dead", "no_combat", "has_target")), True,
+                    "fight.acquire")
     if state.target.in_melee is False:
         return Plan(_d(Intent.SERVICE, "APPROACH_TARGET", "target is out of reach", 0.8,
                        ("dead", "no_combat")), True, "fight.approach")

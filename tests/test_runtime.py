@@ -195,3 +195,93 @@ def test_a_long_corpse_run_is_one_death_not_a_hundred(tmp_path):
     rt = _runtime(dead, tmp_path)
     rt.run(ticks=30, period_s=0)
     assert rt.counters.deaths == 1
+
+
+def test_a_healthy_run_only_escalates_when_it_cannot_see(tmp_path):
+    """`unresolved/h` is the headline metric and it has to mean something.
+
+    In a simulated run with working senses the only ticks no rule can settle should be
+    the ones where perception failed. This test exists because it caught a real design
+    flaw: "in combat with nothing selected" was marked uncertain, which sent 42% of a run
+    to the teacher to be told to pick a target. Acquiring a target is mechanical, and a
+    rate-limited teacher cannot absorb that kind of waste.
+    """
+    from jev.clients.sim import Pretend
+
+    graph = Graph.load(GRAPH)
+    pretend = Pretend(graph, seed=1, trouble=0.08)
+    rt = ClientRuntime(client_id="sim", graph=graph, source=pretend,
+                       recorder=Recorder(root=tmp_path))
+    for _ in range(400):
+        rt.tick()
+        pretend.follow(rt.tracker.step_id)
+
+    c = rt.counters
+    assert c.unresolved <= c.blind_ticks, (
+        f"{c.unresolved} unresolved ticks against {c.blind_ticks} blind ones — "
+        "something resolvable by rule is escalating"
+    )
+    assert c.unresolved / c.ticks < 0.15, "a perception problem wearing an intelligence costume"
+    assert c.advances > 10, "the run has to actually progress for the ratio to mean anything"
+
+
+def test_a_grind_rib_rejoins_the_spine(tmp_path):
+    """A rib is a detour, not a destination.
+
+    It is shared by every step in its zone, so the graph cannot name the way back and the
+    tracker has to remember it. Without that the first simulated run spent four hundred
+    ticks on a boar.
+
+    The property is *leaving* a rib, not where the run happens to stop: ending on one is
+    legitimate if the character only just failed into it.
+    """
+    from jev.clients.sim import Pretend
+
+    graph = Graph.load(GRAPH)
+    pretend = Pretend(graph, seed=3, trouble=0.25)   # trouble enough to fail into ribs
+    rt = ClientRuntime(client_id="sim", graph=graph, source=pretend,
+                       recorder=Recorder(root=tmp_path))
+
+    def is_rib(step_id):
+        node = graph.get(step_id)
+        return node is not None and node.kind is StepKind.GRIND
+
+    was_on_rib = False
+    rejoined = 0
+    for _ in range(900):
+        rt.tick()
+        pretend.follow(rt.tracker.step_id)
+        now = is_rib(rt.tracker.step_id)
+        if was_on_rib and not now:
+            rejoined += 1
+        was_on_rib = now
+
+    assert rt.counters.fails > 0, "this seed should have failed into a rib"
+    assert rejoined > 0, "entered a rib and never came back out"
+
+
+def test_an_entry_fact_read_blind_is_backfilled_not_lost(tmp_path):
+    """A step entered during a perception outage must not keep a degraded exit condition.
+
+    A grind rib entered blind recorded no entry level, which silently changed its exit
+    from "gain one level" to "reach the top of the band" — the rest of the game.
+    """
+    from jev.clients.source import ScriptedSource
+    from jev.guide.tracker import Tracker
+    from jev.world.state_v1 import Char, SenseFault
+
+    graph = Graph.load(GRAPH)
+    tracker = Tracker(graph, graph.entry)
+    node = graph.get(graph.entry)
+
+    tracker.enter(graph.entry, blind(0.0, "c", SenseFault.CHECKSUM))
+    assert tracker.memory.level_at_entry is None
+
+    seeing = _at(node, 1.0).model_copy(update={"char": Char(level=7, xp_pct=0.3)})
+    tracker.tick(seeing)
+    assert tracker.memory.level_at_entry == 7
+
+    later = _at(node, 2.0).model_copy(update={"char": Char(level=9, xp_pct=0.1)})
+    tracker.tick(later)
+    assert tracker.memory.level_at_entry == 7, "a later reading is not the entry state"
+    assert ScriptedSource is not None  # import used

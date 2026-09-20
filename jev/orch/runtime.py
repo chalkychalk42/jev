@@ -139,7 +139,11 @@ class ClientRuntime:
             case Event.FAIL:
                 self.counters.fails += 1
                 if verdict.goto:
-                    self.tracker.enter(verdict.goto, state)
+                    # Remember where to come back to. A rib is shared by every step in its
+                    # zone, so the graph cannot name the way back — only the caller knows.
+                    node = self.graph.get(self.tracker.step_id)
+                    rejoin = node.next[0] if node and node.next else None
+                    self.tracker.enter(verdict.goto, state, rejoin_to=rejoin)
             case Event.DEATH:
                 # Counted once per death, not once per tick spent dead — otherwise a long
                 # corpse run reads as a hundred deaths and the eval board panics.

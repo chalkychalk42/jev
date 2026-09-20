@@ -44,6 +44,13 @@ class StepMemory:
 
     step_id: str
     entered_at: float
+    # Where to go when this step finishes, if that is not simply `next[0]`.
+    #
+    # Ribs need this and cannot get it from the graph. A rib is shared by every step in
+    # its zone, so it has no single correct successor to hard-code — and a rib with no way
+    # back is a character that grinds forever, which is exactly what the simulator did on
+    # its first run: eight advances, then four hundred ticks on a boar.
+    rejoin_to: str | None = None
     quest_was_in_log: bool = False
     off_route_since: float | None = None
     deaths: int = 0
@@ -77,11 +84,12 @@ class Tracker:
 
     # -- playhead ------------------------------------------------------------
 
-    def enter(self, step_id: str, state: State) -> None:
+    def enter(self, step_id: str, state: State, rejoin_to: str | None = None) -> None:
         self.step_id = step_id
         self.memory = StepMemory(
             step_id=step_id,
             entered_at=state.t,
+            rejoin_to=rejoin_to,
             quest_was_in_log=_quest_in_log(state, self._node(step_id)),
             level_at_entry=state.char.level,
             xp_at_entry=state.char.xp_pct,
@@ -89,6 +97,14 @@ class Tracker:
 
     def _node(self, step_id: str | None = None) -> Node | None:
         return self.graph.get(step_id or self.step_id)
+
+    def _exit_of(self, node: Node) -> str | None:
+        """Where a satisfied step leads.
+
+        A remembered rejoin point wins over the graph's own edge, because that is the only
+        place the rib's caller is recorded.
+        """
+        return self.memory.rejoin_to or _next_of(node)
 
     # -- the 250 ms tick -----------------------------------------------------
 
@@ -103,16 +119,25 @@ class Tracker:
         if state.vitals.dead is True or state.vitals.ghost is True:
             return Verdict(Event.DEATH, reason="dead or ghost")
 
+        self._backfill(state)
         age = state.t - self.memory.entered_at
         off_route_s = self._update_off_route(state, node)
 
         if _predicate(state, node, self.memory):
-            return Verdict(Event.ADVANCE, goto=_next_of(node), reason=f"{node.kind} satisfied")
+            return Verdict(Event.ADVANCE, goto=self._exit_of(node),
+                           reason=f"{node.kind} satisfied")
 
         fail = self._match_fail(state, node, age)
         if fail is not None:
             return Verdict(Event.FAIL, goto=fail.goto,
                            reason=f"{fail.when}={fail.value}", off_route_s=off_route_s)
+
+        # A rib that has run its course rejoins even without having levelled. It is a
+        # detour, not a destination, and the step that sent us here may well be passable
+        # now that the character is better fed and better geared.
+        if node.kind is StepKind.GRIND and age > node.timeout_s and self.memory.rejoin_to:
+            return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
+                           reason="rib timed out; rejoin the spine", off_route_s=off_route_s)
 
         if off_route_s > self.off_route_grace_s:
             return Verdict(Event.OFF_ROUTE, reason=f"{off_route_s:.0f}s off route",
@@ -125,6 +150,27 @@ class Tracker:
         return Verdict(Event.NONE, off_route_s=off_route_s)
 
     # -- internals -----------------------------------------------------------
+
+    def _backfill(self, state: State) -> None:
+        """Fill in entry facts that were unreadable when the step was entered.
+
+        A step can be entered on a blind tick — a failed radio decode, a loading screen —
+        and the entry level is then `None` forever, which silently changes the step's exit
+        condition. A grind rib entered blind fell back from "gain one level" to "reach the
+        top of the band", and a simulated run spent four hundred ticks on a boar because
+        of it.
+
+        First readable value wins. Later readings are not the entry state and must not
+        overwrite it.
+        """
+        if self.memory.level_at_entry is None and state.char.level is not None:
+            self.memory.level_at_entry = state.char.level
+        if self.memory.xp_at_entry is None and state.char.xp_pct is not None:
+            self.memory.xp_at_entry = state.char.xp_pct
+        if not self.memory.quest_was_in_log:
+            node = self._node()
+            if node is not None and _quest_in_log(state, node):
+                self.memory.quest_was_in_log = True
 
     def _update_off_route(self, state: State, node: Node) -> float:
         """Distance from the node, in map fractions, with a grace period.
@@ -213,9 +259,7 @@ def _predicate(state: State, node: Node, mem: StepMemory) -> bool:
             return _in_radius(state, node)
 
         case StepKind.GRIND:
-            # A rib ends on the level it was hung off, or when the step that sent us here
-            # became satisfiable again — the caller re-checks that, not the rib.
-            return state.char.level is not None and state.char.level >= node.level[1]
+            return _grind_done(state, node, mem)
 
         case StepKind.VENDOR | StepKind.REPAIR:
             free, dur = state.bags.free, state.bags.durability_min
@@ -240,6 +284,24 @@ def _predicate(state: State, node: Node, mem: StepMemory) -> bool:
 
         case _:
             return False
+
+
+def _grind_done(state: State, node: Node, mem: StepMemory) -> bool:
+    """When is a grind rib finished?
+
+    **One level gained**, when we know the level we arrived at. Not `level >= node.level[1]`:
+    a 1-12 rib entered at level 3 would then run until level 12, which is not a detour,
+    it is the rest of the game. A rib exists to unstick a step, and one level is enough
+    to have changed the odds.
+
+    Falling back to the band's top only when the entry level was never read keeps the old
+    behaviour for a blind character, where something has to bound it.
+    """
+    if state.char.level is None:
+        return False
+    if mem.level_at_entry is not None:
+        return state.char.level > mem.level_at_entry
+    return state.char.level >= node.level[1]
 
 
 def _fail_matches(edge: FailEdge, state: State, node: Node,
