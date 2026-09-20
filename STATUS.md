@@ -822,7 +822,7 @@ One bug worth naming: the isolated-plate ordering silently did nothing, because
 `list.sort` empties the list while computing keys — so the key function read an empty list,
 every plate looked isolated, and the ordering collapsed back to plain centrality.
 
-NOW: 553 tests, ruff clean. One kobold down, nine to go, and the character is alive.
+NOW: 555 tests, ruff clean. One kobold down, nine to go, and the character is alive.
 
 NEXT: it cannot finish the objective yet. When nothing is in reach it stands still, so a
 `quest_objective` needs to **search its own radius** rather than treat the spawn point as
