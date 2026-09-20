@@ -862,6 +862,41 @@ the game is that loop; there is no camp-shaped special case and no second pathfi
 station it cannot stand on is not a dead end, which is already earning its keep — the
 first live run could not reach the centre and moved out to the ring by itself.
 
+### V32 — a ghost could not see its own strip, and the server was kicking us
+
+The hunt ran and reported `unreachable: 1/10 after 0 kills over 9 stations`. Neither
+number was about hunting.
+
+**The server was kicking the session every ten to twenty minutes.**
+
+    WARDEN: Account - 205 get opcode 00 - Load module failed or module is missing
+    WARDEN: Account 205 ip 172.30.112.1 timeout
+
+Warden cannot load its module into this client, waits thirty seconds, and drops the
+connection. Three disconnects in one afternoon, and the one that ended the hunt. Disabled
+on the dev server, with the timeout raised as well because this build initialises Warden
+regardless of `Warden.Enable`.
+
+**And a ghost is blind.** Dying applies a full-screen desaturation shader that turns the
+world blue-green. The marker masks were hue margins and nothing else, and Elwynn ground
+reads `(100, 140, 153)`, which clears both of them comfortably. On a live ghost frame that
+put **293,555 pixels** in the cyan mask; the candidate search drowned and `locate`
+returned `None` — while both markers sat on screen pixel-exact and all ten calibration
+swatches matched to the byte.
+
+So the bot went blind exactly when it was a ghost and needed to find its corpse.
+
+The fix is a saturation test, and deliberately a **ratio** rather than a brightness floor.
+The first attempt was a floor at 150 and it broke a test immediately: this decoder already
+promises to read a capture at a gain of 0.25, where a marker painted `(0, 255, 255)`
+arrives as `(0, 64, 64)`. Gain scales every channel together, so the *shape* of a colour
+survives it and its brightness does not. A marker's low channel is 0; the shaded world's
+is two thirds of its high ones. Half is a clean gap on both sides.
+
+The new fixture keeps a slab of the shaded world in it on purpose, and the row-run premise
+test measures against that frame now — the other live fixture is a strip-only crop with no
+scenery left to be confused by.
+
 NEXT: it cannot finish the objective yet. When nothing is in reach it stands still, so a
 `quest_objective` needs to **search its own radius** rather than treat the spawn point as
 a spot. And it is out of food — `Rest` says so honestly instead of pressing a blank
