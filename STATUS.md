@@ -127,3 +127,36 @@ a node; then the 1–12 slice — accept, kill, turn in.
 NOT NEXT, deliberately: more teacher/GLM/distill/promote, a second class, the Horde spine,
 extra vision heads, ten-client orchestration. None of it until one character has accepted
 a quest, killed, and turned it in.
+
+## 2026-09-20 — first contact: the loop is closed
+DID: the addon loaded on the real client and the whole chain was exercised against it.
+
+**Perception works live.** A 1600x900 capture decodes the strip at 10 Hz — schema 1, seq
+advancing, level 3, hp 1.00 of 104, 13 free bags, no target, out of combat, at map
+(0.476, 0.423), which is Northshire a few yards from Marshal McBride. The frame is kept
+as `tests/fixtures/live-northshire-1600x900.npy`.
+
+Getting there needed one real fix. `locate()` reported the strip absent while it was on
+screen, painting correctly and decoding perfectly when sampled by hand: a WoW screen holds
+**3,798 cyan pixels** against the marker's 196, and ranking candidates by area put five
+57x7 slivers of interface ahead of the real marker, which a six-candidate cut then dropped.
+Filter on shape before size — a marker is a square filled cell and interface text is not.
+
+**Input works live, and so does the guard.** First attempt refused to press anything
+because `SetForegroundWindow` had failed and the window was not focused — exactly right,
+and the alternative is typing into somebody's chat. With `AttachThreadInput` the window
+raises, and then: `tap("space")` → `flags.falling` true across seven consecutive paints.
+Input reached the game, the game changed, the addon painted it, the decoder read it back.
+No vision involved anywhere in that loop.
+
+**There is no facing API in this client** (V17). `GetPlayerFacing` is 3.0+, so heading has
+to be measured from movement rather than read. Closed-loop turning needs no absolute
+facing at all, which is the better shape anyway.
+
+NOW: capture, decode and input are each verified against the live client and against each
+other, not in isolation. 402 tests.
+
+NEXT: movement. Closed-loop turn-and-walk to a node, measured on this terrain — turn rate,
+arrival tolerance, and what stuck actually looks like are all things to measure rather
+than design. Then vision heads for loot/gossip/quest frames, a combat profile for this
+character, and the slice.

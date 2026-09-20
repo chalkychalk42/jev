@@ -198,15 +198,49 @@ def is_foreground(hwnd: int) -> bool:
 
 
 def focus(hwnd: int) -> bool:
-    """Bring a window to the foreground.
+    """Bring a window to the foreground, and say whether it worked.
 
-    Windows refuses this from a process that does not own the foreground, which is a
-    real restriction and not a bug to route around — so the return value is checked by
-    callers rather than assumed.
+    `SetForegroundWindow` alone fails from a process that does not own the foreground —
+    measured, not assumed: called from a console process it returned False and the window
+    stayed where it was, while the input guard correctly refused to type into whatever
+    *was* focused.
+
+    The documented way round that is `AttachThreadInput`: attach to the thread that
+    currently owns the foreground, which makes this process part of the same input queue
+    and so permitted to raise a window, then detach. It is the mechanism the shell itself
+    uses, not a trick — but it still fails in some states, so the result is returned and
+    checked rather than assumed.
+
+    This is for a supervisor restoring a window after a loading screen or a stray
+    alt-tab. It is not a licence to fight the operator for the desktop: `Hid` refuses to
+    act whenever the window is not focused, and that guard stays regardless of what
+    happens here.
     """
     _require()                                          # pragma: no cover - platform
     user32.ShowWindow(hwnd, SW_RESTORE)                 # pragma: no cover - platform
-    return bool(user32.SetForegroundWindow(hwnd))       # pragma: no cover - platform
+    if user32.SetForegroundWindow(hwnd):                # pragma: no cover - platform
+        return True
+
+    current = user32.GetForegroundWindow()              # pragma: no cover - platform
+    if not current:                                     # pragma: no cover - platform
+        return False
+
+    target_thread = user32.GetWindowThreadProcessId(hwnd, None)   # pragma: no cover
+    current_thread = user32.GetWindowThreadProcessId(current, None)  # pragma: no cover
+    ours = kernel32.GetCurrentThreadId()                # pragma: no cover - platform
+
+    attached = []                                       # pragma: no cover - platform
+    for other in {current_thread, target_thread} - {ours}:   # pragma: no cover
+        if user32.AttachThreadInput(ours, other, True):
+            attached.append(other)
+    try:                                                # pragma: no cover - platform
+        user32.BringWindowToTop(hwnd)
+        user32.SetForegroundWindow(hwnd)
+        user32.SetActiveWindow(hwnd)
+    finally:                                            # pragma: no cover - platform
+        for other in attached:
+            user32.AttachThreadInput(ours, other, False)
+    return is_foreground(hwnd)                          # pragma: no cover - platform
 
 
 def send_inputs(inputs: list[INPUT]) -> int:
