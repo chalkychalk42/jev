@@ -12,6 +12,7 @@ from jev.clients.fight import (
     MAX_CLOSE_BURSTS,
     MAX_SELECTS,
     MIN_START_HP,
+    REAIM_EVERY,
     SLOT_KEYS,
     Fight,
     Fought,
@@ -365,3 +366,19 @@ def test_a_heal_is_not_pressed_again_until_the_last_one_answers():
     f._watch_heal({**hurt, "vitals.hp": 0.5}, hurt["bars.ready"])
     f._rotate(hurt)
     assert hid.taps.count("3") == 2
+
+
+def test_closing_re_aims_because_only_a_click_turns_the_character():
+    """A right-click is the only thing that turns this character, and it happens once,
+    before the walking starts. When it misses - no ring, so the click went below the
+    nameplate and landed on grass - nothing faces the target and `W` walks the old
+    heading for every burst after it. Six fights in one run reported `closed 8` and
+    landed nothing."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    engages = []
+    f.acquire = lambda name_id: None
+    f.engage = lambda: engages.append(1) or True
+    f.run(timeout_s=6)
+    assert f.closed >= REAIM_EVERY, "did not close far enough to need re-aiming"
+    assert len(engages) > 1, "walked the whole way without ever re-aiming"

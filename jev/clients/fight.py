@@ -91,6 +91,18 @@ ENGAGE_LOOKS = 5
 CLOSE_BURST_S = 0.45
 MAX_CLOSE_BURSTS = 8
 
+# Re-aim every this many bursts while closing.
+#
+# A right-click is the only thing that turns this character, and it happens once, before
+# the walking starts. When it misses - no ring, so the click went below the nameplate and
+# landed on grass - nothing faces the target and `W` walks the old heading for every burst
+# after it. Six fights in one live run reported `closed 8` and landed nothing, and the
+# seventh killed its kobold the moment a fallback click happened to connect.
+#
+# Re-clicking a unit whose identity the radio has already confirmed is not a sweep. It is
+# the one action available that re-establishes facing.
+REAIM_EVERY = 3
+
 # Which key an action slot is. The default bindings run 1-9, then 0, then the two keys
 # left of Backspace — which is where a fresh character's food and water sit, so getting
 # 10-12 wrong is not academic.
@@ -218,6 +230,8 @@ class Fight:
                 # Not while casting: movement cancels a cast, and the only thing being
                 # cast here is a heal that is keeping us alive.
                 if v.get("bars.casting") is not True:
+                    if self.closed and self.closed % REAIM_EVERY == 0:
+                        self.engage()          # walking blind is walking the old heading
                     self.hid.hold("w", CLOSE_BURST_S)
                     self.closed += 1
             elif not landing:
