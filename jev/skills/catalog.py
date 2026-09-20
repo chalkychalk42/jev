@@ -32,6 +32,23 @@ class Stage(StrEnum):
     RETIRED = "retired"      # success rate < 0.4 over 20; not retrievable without the teacher
 
 
+def JUDGED_ELSEWHERE(_s: State) -> bool:
+    """Success for a skill that does not judge itself.
+
+    Nine skills in this catalog end on something only the tracker knows — arrival inside
+    a node radius, a quest appearing in the log, a rib's own predicate. They were all
+    written as `lambda s: False`, which is indistinguishable at runtime from "tried and
+    failed": every one showed up as aborted, and PLAN §10's retirement rule would have
+    retired the entire travel and questing half of the catalog for never succeeding at
+    something it was never asked to decide.
+
+    Identity matters, not the return value — callers compare against this function to
+    know the answer is not theirs to give, and record `UNKNOWN` rather than a failure.
+    Absence of an answer is not an answer, applied to skills.
+    """
+    return False
+
+
 @dataclass(frozen=True)
 class Skill:
     name: str
@@ -55,11 +72,11 @@ _SKILLS: tuple[Skill, ...] = (
           success=lambda s: True),
 
     Skill("FOLLOW_PATH", "walk a recorded polyline", 300.0,
-          success=lambda s: False,     # ends by arriving, which TRAVEL_TO judges
+          success=JUDGED_ELSEWHERE,
           pre=_alive, on_fail="STUCK_RECOVER"),
 
     Skill("TRAVEL_TO", "get to a point on the zone map", 600.0,
-          success=lambda s: False,     # the tracker owns arrival; it knows the radius
+          success=JUDGED_ELSEWHERE,
           pre=_alive, on_fail="STUCK_RECOVER"),
 
     Skill("COMBAT_PROFILE", "run a named rotation until the target is dead", 120.0,
@@ -101,7 +118,7 @@ _SKILLS: tuple[Skill, ...] = (
           # The client cannot reliably confirm a rank was learned, so this ends on its
           # timeout and the graph's skip edge. Saying so beats a success predicate that
           # returns True and means nothing.
-          success=lambda s: False, pre=_alive),
+          success=JUDGED_ELSEWHERE, pre=_alive),
 
     Skill("RELEASE_SPIRIT", "release to the graveyard", 30.0,
           success=lambda s: s.vitals.ghost is True,
@@ -112,7 +129,7 @@ _SKILLS: tuple[Skill, ...] = (
           pre=lambda s: s.vitals.ghost is True),
 
     Skill("HEARTH", "use the hearthstone", 60.0,
-          success=lambda s: False, pre=lambda s: _alive(s) and s.vitals.combat is False),
+          success=JUDGED_ELSEWHERE, pre=lambda s: _alive(s) and s.vitals.combat is False),
 
     Skill("FLIGHT_PATH", "take a known flight", 600.0,
           success=lambda s: s.flags.on_taxi is False, pre=_alive),
@@ -121,14 +138,14 @@ _SKILLS: tuple[Skill, ...] = (
           # Fragile by nature (PLAN §14): it ends on a zone change and a timer, and there
           # is nothing to read mid-crossing. The one rule that matters is not to walk off
           # the dock while waiting.
-          success=lambda s: False, pre=lambda s: _alive(s) and s.vitals.combat is not True),
+          success=JUDGED_ELSEWHERE, pre=lambda s: _alive(s) and s.vitals.combat is not True),
 
     Skill("ACCEPT_QUEST", "take the quest from the NPC in front of us", 60.0,
-          success=lambda s: False,     # the tracker checks the log; this only presses
+          success=JUDGED_ELSEWHERE,
           pre=lambda s: _alive(s) and s.vitals.combat is not True),
 
     Skill("TURNIN_QUEST", "hand the quest back", 60.0,
-          success=lambda s: False,
+          success=JUDGED_ELSEWHERE,
           pre=lambda s: _alive(s) and s.vitals.combat is not True),
 
     Skill("GOSSIP_PICK", "choose a gossip option", 20.0,
@@ -136,7 +153,7 @@ _SKILLS: tuple[Skill, ...] = (
           pre=lambda s: _alive(s) and s.ui.gossip is True),
 
     Skill("GRIND_UNTIL", "kill, loot and eat around a point until a condition holds", 900.0,
-          success=lambda s: False,     # the rib's own predicate ends it
+          success=JUDGED_ELSEWHERE,
           pre=_alive),
 
     Skill("STUCK_RECOVER", "jump, strafe, back up, repath", 45.0,
@@ -146,7 +163,7 @@ _SKILLS: tuple[Skill, ...] = (
           success=lambda s: s.bags.free is not None and s.bags.free >= 2, pre=_alive),
 
     Skill("BUY_AMMO_REAGENT_FOOD", "restock consumables", 120.0,
-          success=lambda s: False, pre=_alive),
+          success=JUDGED_ELSEWHERE, pre=_alive),
 
     Skill("MOUNT_UP", "mount, if we have one and may use it", 15.0,
           success=lambda s: s.flags.mounted is True,
@@ -163,6 +180,11 @@ NAMES: frozenset[str] = frozenset(BY_NAME)
 
 def get(name: str) -> Skill | None:
     return BY_NAME.get(name)
+
+
+def judges_itself(skill: Skill) -> bool:
+    """Can this skill tell whether it worked? If not, its rate is not its own."""
+    return skill.success is not JUDGED_ELSEWHERE
 
 
 def retrievable(stages: tuple[Stage, ...] = (Stage.BUILTIN, Stage.STABLE, Stage.PROPOSED)

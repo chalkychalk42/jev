@@ -285,3 +285,137 @@ def test_an_entry_fact_read_blind_is_backfilled_not_lost(tmp_path):
     tracker.tick(later)
     assert tracker.memory.level_at_entry == 7, "a later reading is not the entry state"
     assert ScriptedSource is not None  # import used
+
+
+def test_an_unresolved_tick_reaches_the_corpus_not_just_the_counter(tmp_path):
+    """The in-process counter is this client's dashboard; the corpus is what the eval
+    board and every later analysis read. An unresolved tick that exists only in memory
+    is a headline metric that reports zero for a run full of them."""
+    from jev.learn.episode import read
+
+    rt = _runtime([State(t=float(i), client_id="c01") for i in range(6)], tmp_path)
+    rt.run(ticks=6, period_s=0)
+
+    assert rt.counters.unresolved > 0
+    decisions = read(rt.recorder.dir / "decisions.jsonl")
+    assert len(decisions) == rt.counters.unresolved
+    assert all(d["intent"] == "escalate" for d in decisions)
+    assert all(d["situation_key"] for d in decisions)
+
+
+def test_a_teacher_answer_is_linked_to_the_escalation_that_asked_for_it(tmp_path):
+    """`escalated_from` lets the board count questions rather than reconstruct them from
+    timestamps and buckets, which over-counts the moment one client escalates the same
+    bucket twice on a tick."""
+    from jev.coach.schema import Decision, Intent
+    from jev.learn.episode import read
+
+    answer = Decision(goal="g", intent=Intent.GRIND_RIB, skill="GRIND_UNTIL",
+                      abort_if=["dead"], confidence=0.9, why="teacher says grind")
+
+    # Answer only after the client has actually asked about this situation, which is the
+    # order real operation has: escalate, then hear back some ticks later.
+    ready: list[bool] = [False]
+    rt = _runtime([State(t=float(i), client_id="c01") for i in range(6)], tmp_path,
+                  ask=lambda state, key: ready.__setitem__(0, True),
+                  take=lambda key: answer if ready[0] else None)
+    rt.run(ticks=6, period_s=0)
+
+    rows = read(rt.recorder.dir / "decisions.jsonl")
+    applied = [r for r in rows if r["author"] == "teacher"]
+    assert applied, "no teacher answer was recorded"
+    assert any(r["escalated_from"] for r in applied), "no answer linked to its question"
+
+
+def test_an_unsolicited_answer_does_not_invent_a_link(tmp_path):
+    """An answer for a bucket this client never asked about — a cache hit, or another
+    client's question — has no escalation of its own, and saying so beats claiming one."""
+    from jev.coach.schema import Decision, Intent
+    from jev.learn.episode import read
+
+    answer = Decision(goal="g", intent=Intent.GRIND_RIB, skill="GRIND_UNTIL",
+                      abort_if=["dead"], confidence=0.9, why="from another client")
+    graph = Graph.load(GRAPH)
+    node = graph.get(graph.entry)
+    rt = _runtime([_at(node, float(i)) for i in range(3)], tmp_path, take=lambda key: answer)
+    rt.run(ticks=3, period_s=0)
+
+    applied = [r for r in read(rt.recorder.dir / "decisions.jsonl")
+               if r["author"] == "teacher"]
+    assert applied
+    assert all(r["escalated_from"] is None for r in applied)
+
+
+def test_a_healthy_run_writes_few_decision_rows(tmp_path):
+    """One row per unresolved tick is bounded by construction — and when it is not
+    bounded, that is the signal rather than the cost."""
+    from jev.clients.sim import Pretend
+    from jev.learn.episode import read
+
+    graph = Graph.load(GRAPH)
+    pretend = Pretend(graph, seed=5, trouble=0.08)
+    rt = ClientRuntime(client_id="sim", graph=graph, source=pretend,
+                       recorder=Recorder(root=tmp_path))
+    for _ in range(400):
+        rt.tick()
+        pretend.follow(rt.tracker.step_id)
+
+    decisions = read(rt.recorder.dir / "decisions.jsonl")
+    ticks = read(rt.recorder.dir / "ticks.jsonl")
+    assert len(decisions) / len(ticks) < 0.2, "escalating on a fifth of ticks is the signal"
+
+
+def test_a_skill_armed_mechanically_still_gets_an_outcome(tmp_path):
+    """Skills the tracker or a System 1 preempt armed write no decision row, so joining
+    decisions to grades left them permanently ungraded — and PLAN §10's retirement rule,
+    "success rate below 0.4 over 20", had no rate to compute."""
+    from jev.clients.sim import Pretend
+    from jev.learn.episode import read
+
+    graph = Graph.load(GRAPH)
+    pretend = Pretend(graph, seed=5, trouble=0.12)
+    rt = ClientRuntime(client_id="sim", graph=graph, source=pretend,
+                       recorder=Recorder(root=tmp_path))
+    for _ in range(300):
+        rt.tick()
+        pretend.follow(rt.tracker.step_id)
+
+    rows = read(rt.recorder.dir / "skills.jsonl")
+    assert rows, "no skill outcome was ever recorded"
+    assert len(rows) == rt.counters.skills_closed
+    assert {r["skill"] for r in rows} - set(), "skills should be named"
+    assert any(r["outcome"] == "succeeded" for r in rows)
+    assert all(r["duration_s"] >= 0 for r in rows)
+
+
+def test_an_interrupted_skill_is_not_a_failed_one(tmp_path):
+    """Counting a preemption as failure retires exactly the skills that run in dangerous
+    places — the ones most worth keeping."""
+    from jev.learn.episode import SkillOutcome, SkillResultRow
+
+    row = SkillResultRow(
+        run_id="r", client_id="c", t=1.0, tick_id=1, skill="TRAVEL_TO",
+        armed_by=ArmedBy.POLICY, outcome=SkillOutcome.PREEMPTED,
+        duration_s=3.0, situation_key="k",
+    )
+    assert not row.counts_toward_rate
+    assert not row.succeeded
+
+    ok = SkillResultRow(
+        run_id="r", client_id="c", t=1.0, tick_id=1, skill="LOOT",
+        armed_by=ArmedBy.S1_PREEMPT, outcome=SkillOutcome.SUCCEEDED,
+        duration_s=1.0, situation_key="k",
+    )
+    assert ok.counts_toward_rate and ok.succeeded
+
+
+def test_a_run_that_ended_mid_skill_is_not_evidence(tmp_path):
+    """Absence of an outcome is not a bad outcome — the same rule grading already uses."""
+    from jev.learn.episode import SkillOutcome, SkillResultRow
+
+    row = SkillResultRow(
+        run_id="r", client_id="c", t=1.0, tick_id=1, skill="GRIND_UNTIL",
+        armed_by=ArmedBy.POLICY, outcome=SkillOutcome.UNKNOWN,
+        duration_s=9.0, situation_key="k",
+    )
+    assert not row.counts_toward_rate

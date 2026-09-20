@@ -31,13 +31,20 @@ from dataclasses import dataclass, field
 
 from jev.clients.source import Source
 from jev.coach import policy as scripted
-from jev.coach.schema import Decision, Verdict
+from jev.coach.schema import Decision, Intent, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
 from jev.guide.graph import Graph
 from jev.guide.tracker import Event, Tracker
-from jev.learn.episode import Recorder, TickRow
-from jev.skills.catalog import NAMES
+from jev.learn.episode import (
+    DecisionRow,
+    Recorder,
+    SkillOutcome,
+    SkillResultRow,
+    TickRow,
+)
+from jev.skills.catalog import NAMES, judges_itself
+from jev.skills.catalog import get as get_skill
 from jev.world.state_v1 import ArmedBy, State
 
 
@@ -54,6 +61,9 @@ class Counters:
     escalated: int = 0
     teacher_applied: int = 0
     blind_ticks: int = 0
+
+    skills_closed: int = 0
+    skills_succeeded: int = 0
 
     # The headline number (ARCHITECTURE.md §1): ticks no rule could settle. It is the one
     # that must fall, and it distinguishes a perception problem from an intelligence one.
@@ -91,6 +101,12 @@ class ClientRuntime:
     armed: Armed | None = None
     tracker: Tracker = field(init=False)
     _entered: bool = field(default=False, init=False)
+    _escalations: int = field(default=0, init=False)
+    # The most recent escalation per situation, so an answer links to the question that
+    # actually asked it. A single "last escalation" would attribute an answer about one
+    # bucket to an unrelated question about another, which is precisely the mis-join
+    # this field exists to remove.
+    _asked: dict[str, str] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         self.tracker = Tracker(self.graph, self.graph.entry)
@@ -124,6 +140,7 @@ class ClientRuntime:
             fallback = scripted.decide(state, node)
             plan, by, rule = fallback.decision, ArmedBy.POLICY, f"rejected:{check.rule}"
 
+        self._close_armed(state, plan)
         self.armed = Armed(plan, by, state.t, rule)
         self._record(state, plan, by)
         return state
@@ -185,10 +202,16 @@ class ClientRuntime:
             answer = self.take(state.situation_key)
             if answer is not None:
                 self.counters.teacher_applied += 1
+                self._record_applied(state, answer)
                 return answer, ArmedBy.TEACHER, "teacher"
 
         if scripted.wants_teacher(plan):
             self.counters.unresolved += 1
+            # Write it down. The in-process counter is for this client's own dashboard;
+            # the corpus is what the eval board and every later analysis actually read,
+            # and an unresolved tick that exists only in memory is a headline metric that
+            # reports zero for a run full of them.
+            self._record_unresolved(state, plan)
             if self.ask is not None and state.situation_key:
                 # Enqueue and move on. This is the only contact with the teacher in the
                 # hot loop, and it does not block.
@@ -197,6 +220,113 @@ class ClientRuntime:
 
         by = ArmedBy.S1_PREEMPT if plan.rule.startswith("preempt.") else ArmedBy.POLICY
         return plan.decision, by, plan.rule
+
+    def _close_armed(self, state: State, next_plan: Decision) -> None:
+        """Judge the skill that was running, before replacing it.
+
+        Nothing else can answer this. Skills armed by the tracker or by a System 1
+        preempt — which is most of them — write no decision row, so joining decisions to
+        grades leaves them permanently ungraded and PLAN §10's retirement rule has no
+        rate to compute. The skill's own success predicate is the judge, which is why
+        every skill is required to declare one.
+        """
+        prev = self.armed
+        if prev is None or prev.decision.skill is None:
+            return
+        if prev.decision.skill == next_plan.skill:
+            return                                  # still running; nothing has ended
+
+        skill = get_skill(prev.decision.skill)
+        duration = state.t - prev.at
+
+        if skill is not None and not judges_itself(skill):
+            # This skill ends on something only the tracker knows. Calling that a failure
+            # would retire the whole travel and questing half of the catalog for never
+            # succeeding at a question it was never asked.
+            outcome = SkillOutcome.UNKNOWN
+        elif skill is not None and skill.success(state):
+            outcome = SkillOutcome.SUCCEEDED
+        elif skill is not None and duration >= skill.timeout_s:
+            outcome = SkillOutcome.TIMED_OUT
+        elif next_plan.skill and self.armed and self.armed.rule.startswith("preempt."):
+            # Interrupted by something more urgent. Not a failure of the skill: counting
+            # it as one would retire exactly the skills that run in dangerous places.
+            outcome = SkillOutcome.PREEMPTED
+        else:
+            outcome = SkillOutcome.ABORTED
+
+        self.counters.skills_closed += 1
+        if outcome is SkillOutcome.SUCCEEDED:
+            self.counters.skills_succeeded += 1
+
+        self.recorder.skill_result(SkillResultRow(
+            run_id=self.recorder.run_id,
+            client_id=self.client_id,
+            t=state.t,
+            tick_id=self.recorder._tick_id,
+            skill=prev.decision.skill,
+            armed_by=prev.by,
+            outcome=outcome,
+            duration_s=duration,
+            situation_key=state.situation_key or "",
+            step_id=self.tracker.step_id,
+            detail=prev.rule,
+        ))
+
+    def _record_unresolved(self, state: State, plan: scripted.Plan) -> str:
+        """One decision row per tick no rule could settle.
+
+        Bounded by construction: in a healthy run this fires on a few percent of ticks,
+        and when it fires on most of them that is the signal, not the cost.
+        """
+        self._escalations += 1
+        decision_id = f"{self.recorder.run_id}:u{self._escalations}"
+        self.recorder.decision(DecisionRow(
+            run_id=self.recorder.run_id,
+            decision_id=decision_id,
+            tick_id=self.recorder._tick_id + 1,     # the row this tick is about to write
+            t=state.t,
+            client_id=self.client_id,
+            situation_key=state.situation_key or "",
+            author=ArmedBy.POLICY,
+            model=f"scripted:{plan.rule}",
+            intent=Intent.ESCALATE.value,
+            skill=plan.decision.skill,
+            params=dict(plan.decision.params),
+            confidence=plan.decision.confidence,
+            why=plan.decision.why,
+        ))
+        if state.situation_key:
+            self._asked[state.situation_key] = decision_id
+        return decision_id
+
+    def _record_applied(self, state: State, answer: Decision) -> None:
+        """A teacher answer, linked back to the escalation that asked for it.
+
+        `escalated_from` is what lets the board count questions rather than reconstruct
+        them from timestamps and buckets — a reconstruction that over-counts the moment
+        one client escalates the same bucket twice on a tick.
+        """
+        self._escalations += 1
+        self.recorder.decision(DecisionRow(
+            run_id=self.recorder.run_id,
+            decision_id=f"{self.recorder.run_id}:a{self._escalations}",
+            tick_id=self.recorder._tick_id + 1,
+            t=state.t,
+            client_id=self.client_id,
+            situation_key=state.situation_key or "",
+            author=ArmedBy.TEACHER,
+            model="teacher",
+            intent=answer.intent.value,
+            skill=answer.skill,
+            params=dict(answer.params),
+            confidence=answer.confidence,
+            why=answer.why,
+            # `None` is honest here: an answer for a bucket this client never asked
+            # about is unsolicited — a cache hit, or another client's question — and
+            # claiming a link would invent one.
+            escalated_from=self._asked.pop(state.situation_key or "", None),
+        ))
 
     def _record(self, state: State, plan: Decision, by: ArmedBy) -> None:
         intent = skill = None
@@ -212,6 +342,7 @@ class ClientRuntime:
             state=state.model_dump(mode="json"),
             situation_key=state.situation_key or "",
             armed_skill=plan.skill,
+            armed_intent=plan.intent.value,
             armed_by=by,
             shadow_intent=intent,
             shadow_skill=skill,

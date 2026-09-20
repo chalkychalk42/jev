@@ -316,8 +316,12 @@ end
 -- --------------------------------------------------------------------- action bars
 
 local BAR_SLOTS = 12
-local BAR_NA = 4095   -- 12 bits: every slot set is also the not-available code
 
+-- No sentinel collision to work around any more. `bars.usable` and `bars.ready` carry
+-- thirteen bits precisely so that the all-twelve-slots mask (4095) is an ordinary value
+-- rather than the not-available code — which matters because out of combat with a full
+-- bar, every slot ready *is* the normal reading, and the old twelve-bit layout reported
+-- the common case as unknown. Genuine ignorance is still expressible: return nil.
 local function BAR_BITS(which)
     local v, place = 0, 1
     for slot = 1, BAR_SLOTS do
@@ -332,15 +336,6 @@ local function BAR_BITS(which)
         end
         if on then v = v + place end
         place = place * 2
-    end
-    if v >= BAR_NA then
-        -- All twelve set collides with the sentinel, so slot 12 is dropped. Unknown was
-        -- the other option and is worse here: out of combat with a full bar every slot is
-        -- ready, so "all twelve" is the ordinary reading, and reporting it as unknown
-        -- would blind the coach to the whole bar most of the time. The cost is one slot
-        -- reading not-ready in the single case where everything is. bars.usable and
-        -- bars.ready want thirteen bits; see the report note on fields.py.
-        v = BAR_NA - 1
     end
     return v
 end

@@ -39,3 +39,50 @@ NEXT, in order:
 5. First vertical slice: accept a quest, kill ten mobs, turn it in, fully recorded.
 
 Open: **V7**, the multi-client input path. Not blocking until Gate B.
+
+## 2026-09-20 — three parallel streams, and the schema gaps they exposed
+DID: JevRadio (addon + frame decoder), the teacher queue, the eval board and
+distillation, plus the guide generator, tracker, skill catalog, scripted coach, client
+runtime and headless simulator. **365 tests, ruff clean, none need the game.**
+
+The GuideGraph is generated from the server's own world DB, not walked. All eight
+starting spines build; Human 1–12 is 132 nodes / 47 quests / 127 positioned, starting at
+"A Threat Within" in Northshire Abbey with the Kobold objective at Echo Ridge Mine, and
+ribs on real spawn clusters (111 Stonetusk Boar at 43,81).
+
+**What the work found, rather than what it built:**
+- `unresolved/h` was 45% of ticks. `fight.no_target` was marked uncertain, so 42% of a
+  run escalated to ask the teacher to pick a target. It fell to 3%, and the remainder is
+  exactly the blind ticks — the only ticks needing help are the ones that cannot see.
+- Ribs were one-way; a rib is shared by every step in its zone so only the caller knows
+  the way back. And a 1–12 rib exiting at "level 12" is not a detour, it is the rest of
+  the game.
+- `QUEST_MISSING` on accept nodes fires on arrival and skips every quest in the graph.
+- Entry facts read during a perception outage stayed `None` forever, silently degrading
+  a step's exit condition.
+- The markers-are-unique claim in `fields.py` was false; the decoder locked onto
+  payload-derived pairs until it scored the calibration row instead.
+- `bars.ready` at 12 bits made "all twelve off cooldown" — the ordinary out-of-combat
+  state — indistinguishable from unknown.
+- Nine skills wrote `success=lambda s: False` because the tracker judges them. That is
+  indistinguishable from "tried and failed", and PLAN §10 would have retired the whole
+  travel and questing half of the catalog.
+- The runtime counted `unresolved` in memory and wrote nothing, so the board read zero
+  for a run full of them.
+
+Schema changes forced by the above: `armed_intent` on ticks (agreement was measurable on
+a minority of the run and called the whole of it), `escalated_from` on decisions,
+`GradeRow.t`, `artifacts` on decisions, a fourth `skills` stream, and `state.quests` as
+tri-state — `None` unread, `()` read-and-empty, which the dataset now learns from.
+
+NOW: the brain runs end to end headless. `python -m jev.clients.sim --ticks 500` walks
+the spine, dies, recovers, grinds and rejoins; `python -m jev.eval.board runs/<id>` reads
+it back.
+
+NEXT: capture and HID are the only untouched layer, and they are the ones that need the
+Windows side. Then a live run.
+
+BLOCKED: **the Claude subscription is out of usage credits** (429 on the primary model;
+`--model haiku` works). Not blocking the build — the loop ran 900 ticks to level 16 with
+zero teacher calls, which is the invariant doing its job — but no live teaching until it
+resets or the GLM rung is wired.

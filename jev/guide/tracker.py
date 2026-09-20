@@ -220,13 +220,24 @@ class Tracker:
 
 
 def _quest_in_log(state: State, node: Node | None) -> bool:
-    if node is None or node.quest_id is None:
+    """Is this node's quest in the log? `False` also for an unread log — see below."""
+    if node is None or node.quest_id is None or state.quests is None:
         return False
     return any(q.quest_id == node.quest_id for q in state.quests)
 
 
+def _quest_log_readable(state: State) -> bool:
+    """Did anything actually read the quest log this tick?
+
+    Predicates may treat an unread log as "not present" — that only delays a step. Fail
+    edges may not: `QUEST_MISSING` firing because nobody looked would skip a perfectly
+    good quest, permanently, on the strength of no evidence at all.
+    """
+    return state.quests is not None
+
+
 def _quest_complete(state: State, node: Node) -> bool:
-    for q in state.quests:
+    for q in state.quests or ():
         if q.quest_id == node.quest_id:
             if q.complete is True:
                 return True
@@ -314,11 +325,15 @@ def _fail_matches(edge: FailEdge, state: State, node: Node,
         case FailWhen.ATTEMPTS:
             return mem.attempts >= (edge.value or 3)
         case FailWhen.QUEST_MISSING:
-            # Only once we are standing where the quest lives. Firing this from across
-            # the zone would skip every quest before the character arrived.
-            return mem.arrived and node.quest_id is not None and not _quest_in_log(state, node)
+            # Only once we are standing where the quest lives, and only on a log we
+            # actually read. Firing from across the zone would skip every quest before
+            # the character arrived; firing on an unread log would skip a good quest on
+            # no evidence.
+            return (mem.arrived and node.quest_id is not None
+                    and _quest_log_readable(state) and not _quest_in_log(state, node))
         case FailWhen.QUEST_NOT_OFFERED:
-            return mem.arrived and mem.attempts >= 2 and not _quest_in_log(state, node)
+            return (mem.arrived and mem.attempts >= 2
+                    and _quest_log_readable(state) and not _quest_in_log(state, node))
         case FailWhen.LEVEL_BELOW:
             return state.char.level is not None and state.char.level < (edge.value or 0)
         case FailWhen.GOLD_BELOW:

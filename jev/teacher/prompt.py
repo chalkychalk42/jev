@@ -175,7 +175,7 @@ def trim_state(state: State) -> dict[str, Any]:
     ui_open = [k.upper() for k, v in state.ui.model_dump().items() if v is True]
 
     quests = []
-    for q in state.quests[:MAX_QUESTS]:
+    for q in state.quest_log()[:MAX_QUESTS]:
         objectives = [
             f"{_clip(o.text, MAX_TEXT)} {o.have}/{o.need}" for o in q.objectives[:MAX_OBJECTIVES]
         ]

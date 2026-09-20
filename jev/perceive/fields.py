@@ -20,11 +20,17 @@ Row 0 of the grid is the **calibration row** and carries no payload:
 
     [ MARKER_L | k0 k1 ... k9 | MARKER_R ]
 
-The two markers are saturated colours no payload cell can produce after quantisation, so
-the decoder *locates and scales the grid* from them instead of trusting a fixed offset —
-the strip survives the window being moved or resized. The ten swatches between them are
-known values, so the decoder solves the observed colour transform and inverts it before
-reading any payload.
+The markers bracket the row so the decoder can *locate and scale the grid* rather than
+trust a fixed offset — the strip survives the window being moved or resized. The ten
+swatches between them are known values, so the decoder solves the observed colour
+transform and inverts it before reading any payload.
+
+**The markers are not unique.** Magenta quantises to nibbles (15, 0, 15) and cyan to
+(0, 15, 15); both are ordinary payload cells and a grid of them will produce matching
+pairs by chance. An earlier version of this comment claimed otherwise and the decoder
+duly locked onto payload-derived pairs. `radio_frame.locate` therefore scores a candidate
+pair on the **calibration row between them** — ten known colours are a far stronger
+signature than two — and only then accepts it.
 
 Unknown is not a negative fact
 ------------------------------
@@ -223,9 +229,14 @@ FIELDS: tuple[Field, ...] = (
     Field("quests.o2_need", 7, Kind.UINT, "return OBJ(3, 'need')"),
 
     # -- action bars -------------------------------------------------------------
-    Field("bars.usable", 12, Kind.UINT, "return BAR_BITS('usable')",
-          "slots 1-12, bit 0 = slot 1"),
-    Field("bars.ready", 12, Kind.UINT, "return BAR_BITS('ready')"),
+    # Thirteen bits, not twelve. These are bitmasks over twelve slots, so all 4,096
+    # patterns are meaningful — and at twelve bits the all-ones pattern collides with the
+    # not-available code. For `bars.ready` "all twelve off cooldown" is the *ordinary*
+    # out-of-combat state, so the common case would have reported as unknown.
+    Field("bars.usable", 13, Kind.UINT, "return BAR_BITS('usable')",
+          "slots 1-12, bit 0 = slot 1; 13 bits so the all-ones mask is not the NA code"),
+    Field("bars.ready", 13, Kind.UINT, "return BAR_BITS('ready')",
+          "as above; all twelve ready is the normal out-of-combat state"),
     Field("bars.gcd", 8, Kind.FRAC, "return GCD_FRAC()"),
     _tri("bars.casting", "return tri(CASTING())"),
 )

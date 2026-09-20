@@ -24,9 +24,16 @@ def _graph() -> Graph:
 
 
 def _s(t=0.0, **kw) -> State:
+    """A healthy character whose quest log has been read and is empty.
+
+    `quests=()` rather than the default `None` matters: `None` means nobody looked, and
+    a fail edge must not fire on an unread log. Tests about quests being *absent* have to
+    say the log was actually read.
+    """
     from jev.world.state_v1 import Pos
     base = dict(pos=Pos(zone="Elwynn", zone_id=12, mx=0.5, my=0.5),
-                vitals=Vitals(hp=1.0, dead=False, ghost=False, combat=False))
+                vitals=Vitals(hp=1.0, dead=False, ghost=False, combat=False),
+                quests=())
     return State(t=t, client_id="c", **{**base, **kw})
 
 

@@ -12,6 +12,19 @@ def test_every_skill_declares_a_timeout():
         assert skill.timeout_s > 0, f"{skill.name} can run forever"
 
 
+def test_a_skill_that_cannot_judge_itself_says_so_by_name():
+    """Nine skills end on something only the tracker knows. Written as `lambda s: False`
+    they were indistinguishable from "tried and failed", and PLAN §10's retirement rule
+    would have retired the entire travel and questing half of the catalog."""
+    from jev.skills.catalog import JUDGED_ELSEWHERE, judges_itself
+
+    deferring = [n for n, sk in BY_NAME.items() if not judges_itself(sk)]
+    assert "TRAVEL_TO" in deferring, "arrival is the tracker's call, not the skill's"
+    assert "ACCEPT_QUEST" in deferring, "the quest log decides, not the keypress"
+    assert "LOOT" not in deferring, "an empty loot window is a fact the skill can read"
+    assert all(BY_NAME[n].success is JUDGED_ELSEWHERE for n in deferring)
+
+
 def test_every_skill_has_a_success_predicate_that_runs():
     empty = State(t=0.0, client_id="c")
     for skill in BY_NAME.values():

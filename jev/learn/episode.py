@@ -40,6 +40,7 @@ class Stream(StrEnum):
     TICKS = "ticks"
     DECISIONS = "decisions"
     GRADES = "grades"
+    SKILLS = "skills"
 
 
 class Outcome(StrEnum):
@@ -72,6 +73,11 @@ class TickRow:
     situation_key: str
 
     armed_skill: str | None
+    # The *intent*, not just the skill. Without it, Gate C's agreement can only be
+    # recovered on the single tick a decision acted on — not on the ticks that decision
+    # keeps driving — so the headline agreement number would be measured over a minority
+    # of the run and silently called the whole of it.
+    armed_intent: str | None
     armed_by: ArmedBy
     keys: list[str] = field(default_factory=list)
 
@@ -120,6 +126,13 @@ class DecisionRow:
     cache_hit: bool = False
     dedup_of: str | None = None      # the decision_id this was coalesced onto
 
+    # Which escalation produced this answer. `dedup_of` links duplicate *questions*;
+    # this links a teacher answer back to the coach tick that could not settle it.
+    # Without it `unresolved/h` — the headline metric — has to be reconstructed by
+    # joining on (run_id, situation_key, tick_id), which over-counts whenever one client
+    # escalates the same bucket twice on one tick.
+    escalated_from: str | None = None
+
     # Durable artifacts the teacher produced: skill drafts, graph patches, on_fail edges.
     # `DECISIONS.md` V11 makes these the *preferred* output — a decision helps one client
     # once, a skill helps every client forever — and on a rate-limited teacher that
@@ -136,6 +149,9 @@ class GradeRow:
     run_id: str
     decision_id: str
     tick_id: int
+    # Grades were borrowing their decision's timestamp to be windowed at all, which made
+    # every rolling-window calculation depend on a join it should not have needed.
+    t: float
     window_s: float
 
     outcome: Outcome
@@ -149,6 +165,52 @@ class GradeRow:
     # The training filter. A decision is only an example if what followed it was good —
     # which is what lets a wrong teacher call cost nothing (ARCHITECTURE.md §2).
     good: bool
+
+
+class SkillOutcome(StrEnum):
+    SUCCEEDED = "succeeded"    # the skill's own success predicate fired
+    TIMED_OUT = "timed_out"    # ran to its declared timeout without succeeding
+    ABORTED = "aborted"        # an abort_if condition tripped
+    PREEMPTED = "preempted"    # something more urgent took the body
+    UNKNOWN = "unknown"        # the run ended mid-skill; not evidence either way
+
+
+@dataclass(frozen=True)
+class SkillResultRow:
+    """How one armed skill actually ended.
+
+    A fourth stream, because nothing else could answer the question. Decisions and grades
+    cover skills armed through a coach or teacher decision; skills the tracker or System 1
+    armed mechanically — which is most of them — wrote no decision row and so had no
+    outcome to join to. The eval board reported every skill as `ungraded` and PLAN §10's
+    retirement rule, "success rate below 0.4 over 20", had nothing to compute a rate from.
+
+    `PREEMPTED` is deliberately not a failure. A skill that was interrupted by a corpse
+    run did not fail at its job; counting it as failure would retire exactly the skills
+    that run in dangerous places.
+    """
+
+    run_id: str
+    client_id: str
+    t: float
+    tick_id: int
+    skill: str
+    armed_by: ArmedBy
+    outcome: SkillOutcome
+    duration_s: float
+    situation_key: str
+    step_id: str | None = None
+    detail: str | None = None
+
+    @property
+    def counts_toward_rate(self) -> bool:
+        """Only outcomes that say something about the skill itself."""
+        return self.outcome in (SkillOutcome.SUCCEEDED, SkillOutcome.TIMED_OUT,
+                                SkillOutcome.ABORTED)
+
+    @property
+    def succeeded(self) -> bool:
+        return self.outcome is SkillOutcome.SUCCEEDED
 
 
 # --------------------------------------------------------------------------- reward
@@ -237,6 +299,7 @@ def grade(
         run_id=decision.run_id,
         decision_id=decision.decision_id,
         tick_id=decision.tick_id,
+        t=window[-1].t if window else decision.t,
         window_s=window_s,
         outcome=outcome,
         step_advanced=step_advanced,
@@ -317,6 +380,9 @@ class Recorder:
 
     def gradation(self, row: GradeRow) -> None:
         self._write(Stream.GRADES, row)
+
+    def skill_result(self, row: SkillResultRow) -> None:
+        self._write(Stream.SKILLS, row)
 
     def close(self) -> None:
         for h in self._files.values():

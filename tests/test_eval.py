@@ -78,6 +78,7 @@ def _tick(i: int, s: State, **kw: Any) -> dict[str, Any]:
             state=s.model_dump(mode="json"),
             situation_key=situation_key(s),
             armed_skill=kw.pop("armed_skill", "GRIND_UNTIL"),
+            armed_intent="advance",
             armed_by=kw.pop("armed_by", ArmedBy.TRACKER),
             **kw,
         )
@@ -105,7 +106,7 @@ def _decision(did: str, t: float, **kw: Any) -> dict[str, Any]:
 def _grade(did: str, *, good: bool = True) -> dict[str, Any]:
     return _row(
         GradeRow(
-            run_id=RUN, decision_id=did, tick_id=0, window_s=60.0,
+            run_id=RUN, decision_id=did, tick_id=0, t=0.0, window_s=60.0,
             outcome=Outcome.ADVANCED if good else Outcome.DIED,
             step_advanced=good, level_progress_delta=0.1, died=not good,
             stuck_s=0.0, off_route_s=0.0, reward=1.1 if good else -1.0, good=good,

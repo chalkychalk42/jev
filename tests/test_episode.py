@@ -23,6 +23,7 @@ def _tick(run: str, i: int, s: State, **kw) -> TickRow:
         run_id=run, tick_id=i, t=s.t, client_id="c01",
         state=s.model_dump(mode="json"), situation_key=situation_key(s),
         armed_skill=kw.pop("armed_skill", "GRIND_UNTIL"),
+        armed_intent=kw.pop("armed_intent", "grind_rib"),
         armed_by=kw.pop("armed_by", ArmedBy.POLICY), **kw,
     )
 

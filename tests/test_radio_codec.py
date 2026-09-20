@@ -155,3 +155,34 @@ def test_calibration_refuses_a_washed_out_strip():
     flat = [(128.0, 128.0, 128.0)] * len(CALIBRATION_SWATCHES)
     with pytest.raises(radio.DecodeError, match="calibration"):
         radio.solve_transform(flat)
+
+
+def test_a_full_action_bar_is_a_value_not_an_absence():
+    """`bars.ready` with every slot off cooldown is the ordinary out-of-combat reading.
+
+    At twelve bits the all-ones mask collided with the not-available code, so the most
+    common state on the bar reported as unknown and the coach was blind to it whenever
+    nothing was on cooldown. Thirteen bits is the whole fix.
+    """
+    from jev.perceive.fields import by_name
+
+    for name in ("bars.usable", "bars.ready"):
+        field = by_name()[name]
+        all_twelve = 0b111111111111
+        assert all_twelve != field.na, f"{name}: a full bar is indistinguishable from unknown"
+        assert radio.decode_field(field, radio.encode_field(field, all_twelve)) == all_twelve
+        assert radio.decode_field(field, field.na) is None
+
+
+def test_the_markers_are_not_unique_and_the_format_does_not_pretend_otherwise():
+    """Magenta and cyan quantise to ordinary payload nibbles, so a grid of cells will
+    produce matching pairs by chance. Locating on the pair alone locks onto payload;
+    the calibration row between them is the actual signature."""
+    from jev.perceive.fields import MARKER_L, MARKER_R
+
+    producible = {cell for cell in radio.bits_to_cells("0" * 240)}
+    assert MARKER_L == (255, 0, 255) and MARKER_R == (0, 255, 255)
+    # Both are reachable from nibble triples, which is the point being asserted.
+    assert radio.cells_to_bits([MARKER_L]) == "111100001111"
+    assert radio.cells_to_bits([MARKER_R]) == "000011111111"
+    assert producible is not None

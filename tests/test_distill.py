@@ -92,6 +92,7 @@ def _example(
         run_id=run, tick_id=i, t=s.t, client_id=client_id,
         state=s.model_dump(mode="json"), situation_key=s.situation_key or "",
         armed_skill=skill, armed_by=author, decision_id=did,
+        armed_intent="advance",
     ))
     decision = _row(DecisionRow(
         run_id=run, decision_id=did, tick_id=i, t=s.t, client_id=client_id,
@@ -99,7 +100,7 @@ def _example(
         intent=intent, skill=skill,
     ))
     grade = _row(GradeRow(
-        run_id=run, decision_id=did, tick_id=i, window_s=60.0,
+        run_id=run, decision_id=did, tick_id=i, t=float(i), window_s=60.0,
         outcome=Outcome.ADVANCED if good else Outcome.DIED,
         step_advanced=good, level_progress_delta=0.1, died=not good,
         stuck_s=0.0, off_route_s=0.0, reward=1.1 if good else -1.0, good=good,

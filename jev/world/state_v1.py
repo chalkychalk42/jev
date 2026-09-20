@@ -312,7 +312,11 @@ class State(Frozen):
     target: Target = Target()
     bags: Bags = Bags()
     ui: Ui = Ui()
-    quests: tuple[Quest, ...] = ()
+    # `None` means the quest log was not read; `()` means it was read and is empty.
+    # These are different facts and the difference is load-bearing: "the objective counter
+    # is not ticking" is the first ambiguity `ARCHITECTURE.md` §1 names, and defaulting an
+    # unread log to empty answers it wrongly and confidently.
+    quests: tuple[Quest, ...] | None = None
     guide: GuidePos = GuidePos()
     sense: Sense = Sense()
     control: Control = Control()
@@ -322,9 +326,23 @@ class State(Frozen):
     # that may have been versioned since. See ARCHITECTURE.md §2.
     situation_key: str | None = None
 
-    def objective_counts(self) -> list[tuple[int, int]]:
-        """Flattened (have, need) across every tracked quest. The tracker's predicate."""
+    def objective_counts(self) -> list[tuple[int, int]] | None:
+        """Flattened (have, need) across every tracked quest, or `None` if unread.
+
+        Returning `[]` for an unread log would let a caller conclude "no objectives" from
+        "nobody looked", which is the mistake this schema exists to prevent.
+        """
+        if self.quests is None:
+            return None
         return [(o.have, o.need) for q in self.quests for o in q.objectives]
+
+    def quest_log(self) -> tuple[Quest, ...]:
+        """The log as a sequence, treating unread as empty.
+
+        For callers that genuinely cannot act on the distinction. Naming it explicitly
+        means the choice to discard it is visible at the call site.
+        """
+        return self.quests or ()
 
 
 def json_schema() -> dict:

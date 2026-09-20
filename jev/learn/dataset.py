@@ -151,8 +151,13 @@ def _f(v: float | int | None) -> float:
 def featurize(state: State) -> dict[str, Any]:
     """One state to one feature row. Pure, and the only place features are defined."""
     g, v, b, tg = state.guide, state.vitals, state.bags, state.target
+    # `None` is an unread log; `[]` is a log that was read and holds no objectives.
+    # The schema used to conflate these and both had to be emitted as NaN, which blinded
+    # the model to the first ambiguity ARCHITECTURE.md §1 names — "the objective counter
+    # is not ticking". A read-but-empty log is now a real, learnable zero.
     counts = state.objective_counts()
-    done = sum(1 for have, need in counts if have >= need)
+    done = None if counts is None else sum(1 for have, need in counts if have >= need)
+    open_ = None if counts is None else len(counts) - done
 
     return {
         "step_kind": g.kind.value if g.kind else "?",
@@ -189,8 +194,8 @@ def featurize(state: State) -> dict[str, Any]:
         # so it reads as unknown rather than as "no objectives". Reporting zero open
         # objectives for a log nobody looked at would invent the one observation the first
         # named ambiguity in ARCHITECTURE.md §1 turns on.
-        "objectives_done": _f(done if counts else None),
-        "objectives_open": _f(len(counts) - done if counts else None),
+        "objectives_done": _f(done),
+        "objectives_open": _f(open_),
         "vision_conf": _f(state.sense.vision_conf),
     }
 

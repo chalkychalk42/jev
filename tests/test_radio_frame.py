@@ -248,7 +248,7 @@ def _values() -> dict:
         "quests.o0_have": 3,
         "quests.o0_need": 8,
         "bars.usable": 273,
-        "bars.ready": 4094,
+        "bars.ready": 4095,   # all twelve ready: now a value, not the NA code
         "bars.gcd": 0.0,
         "bars.casting": False,
     }
