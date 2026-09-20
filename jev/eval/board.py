@@ -99,9 +99,12 @@ def progress_block(c: Counters) -> list[str]:
 
 
 def safety_block(c: Counters) -> list[str]:
+    # A blind tick can hide a rez and the next death, so deaths/h is a floor whenever the
+    # vitals were unreadable. Saying so on the line is cheaper than a reader trusting it.
+    floor = f"   ({c.vitals_unobserved} ticks blind, so a floor)" if c.vitals_unobserved else ""
     return [
         f"  SAFETY       deaths/h {_n(c.deaths_per_h)}"
-        f"   time-to-rez {_dur(c.time_to_rez_s)} (n={c.rez_samples})",
+        f"   time-to-rez {_dur(c.time_to_rez_s)} (n={c.rez_samples}){floor}",
         f"               stuck>{15:g}s events {c.stuck_long_events}"
         f"   stuck/h {_n(c.stuck_events_per_h)}   off-route {_dur(c.off_route_s)}",
         f"  SENSE        addon_ok {_pct(c.addon_ok_pct)}",

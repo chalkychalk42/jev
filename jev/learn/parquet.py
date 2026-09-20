@@ -52,7 +52,15 @@ ROW_GROUP = 20_000
 enough that a filtered scan skips most of the file, large enough that the footer does not
 become the file."""
 
-JSON_COLUMNS = frozenset({"state", "params"})
+JSON_COLUMNS = frozenset({"state", "params", "artifacts"})
+"""Columns held as JSON text. `artifacts` joins them for the same reason `state` does: it
+is a list of open-shaped dicts whose inferred struct type would differ between a night the
+teacher wrote graph patches and a night it wrote skill drafts."""
+
+EMPTY_LIST_COLUMNS = frozenset({"keys", "artifacts"})
+"""Columns the recorder defaults to `[]`. A row that omits them round-trips as `[]` rather
+than as null, because null here would mean something the writer never writes."""
+
 EXTRA = "extra_json"
 
 
@@ -99,6 +107,7 @@ DECISIONS_SCHEMA = pa.schema([
     ("tokens_out", pa.int64()),
     ("cache_hit", pa.bool_()),
     ("dedup_of", pa.string()),
+    ("artifacts", _json_str()),
     (EXTRA, pa.string()),
 ])
 
@@ -151,12 +160,9 @@ def _normalise(row: dict[str, Any], schema: pa.Schema) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for name in declared:
         v = row.get(name)
-        if name in JSON_COLUMNS:
-            out[name] = None if v is None else json.dumps(v)
-        else:
-            out[name] = v
-    if out.get("keys") is None and "keys" in declared:
-        out["keys"] = []
+        if v is None and name in EMPTY_LIST_COLUMNS:
+            v = []
+        out[name] = json.dumps(v) if (name in JSON_COLUMNS and v is not None) else v
     leftovers = {k: v for k, v in row.items() if k not in declared}
     out[EXTRA] = json.dumps(leftovers) if leftovers else None
     return out

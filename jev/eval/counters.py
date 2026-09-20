@@ -299,6 +299,7 @@ class Counters:
     deaths_per_h: float | None
     time_to_rez_s: float | None
     rez_samples: int
+    vitals_unobserved: int
 
     stuck_events: int
     stuck_events_per_h: float | None
@@ -379,8 +380,7 @@ def compute(
         intent_agreement=_intent_agreement(ticks, streams.decisions),
         skill_agreement=_skill_agreement(ticks),
         bracket=bracket_of(progress["level"]),
-        **{k: v for k, v in progress.items() if k != "level"},
-        level=progress["level"],
+        **progress,
         **safety,
     )
 
@@ -418,11 +418,21 @@ def _progress_counters(ticks: list[dict[str, Any]], span: float) -> dict[str, An
 
 def _safety_counters(ticks: list[dict[str, Any]], span: float) -> dict[str, Any]:
     deaths = 0
+    blind = 0
     rez_times: list[float] = []
     down_since: float | None = None
     for row in ticks:
         d = _dead(row)
         t = float(row.get("t", 0.0))
+        if d is None:
+            # An unobserved tick carries no information either way, so it neither opens nor
+            # closes a death. That makes deaths/h a **floor**: a rez and the next death can
+            # both hide inside one blind gap and arrive as a single death. Under-counting
+            # is the dangerous direction here — the freeze rule and promotion both read
+            # this number — so the blind ticks are counted and shown beside it rather than
+            # guessed at.
+            blind += 1
+            continue
         if d is True and down_since is None:
             # A death is an edge, not a state: counting ticks-while-dead would score one
             # corpse run as forty deaths and make deaths/h a function of the tick rate.
@@ -441,6 +451,7 @@ def _safety_counters(ticks: list[dict[str, Any]], span: float) -> dict[str, Any]
         "deaths_per_h": _per_h(deaths, span),
         "time_to_rez_s": (sum(rez_times) / len(rez_times)) if rez_times else None,
         "rez_samples": len(rez_times),
+        "vitals_unobserved": blind,
         "stuck_events": len(stuck),
         "stuck_events_per_h": _per_h(len(stuck), span),
         "stuck_long_events": len(long_stuck),

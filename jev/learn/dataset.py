@@ -411,7 +411,10 @@ def load_streams(run_dir: str | pathlib.Path) -> tuple[list[dict], list[dict], l
     up with rows of the same shape, which is the point of `parquet.read_parquet` being an
     exact inverse.
     """
-    from jev.learn.parquet import read_parquet  # local: the board must not need pyarrow
+    # Imported here, not at module scope: `jev.learn.parquet` needs pyarrow, and this
+    # module is also what the live coach featurises through. A client that only wants to
+    # predict must not have to install the whole `learn` extra to do it.
+    from jev.learn.parquet import read_parquet
 
     d = pathlib.Path(run_dir)
     out: list[list[dict]] = []
