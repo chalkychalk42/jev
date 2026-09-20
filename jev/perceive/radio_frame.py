@@ -157,6 +157,18 @@ POWER_BY_ID: dict[int, PowerType] = {
 # A channel gap that survives the worst transform `solve_transform` will still accept.
 # The markers differ by a full 255 in two channels; at the 0.25 gain floor that lands at
 # 64, so 40 leaves headroom without admitting ordinary UI purple.
+MARKER_LOW_RATIO = 0.5
+"""How dark a marker's remaining channel must be, **as a fraction of its high ones**.
+
+A ratio rather than a threshold, because this file already promises to decode a capture
+at a gain of 0.25 — where a marker painted (0, 255, 255) arrives as (0, 64, 64) and any
+absolute floor rejects it. Gain scales every channel together, so the *shape* of a colour
+survives it and its brightness does not.
+
+Measured on the frame that needed this: the marker is (0, 255, 255), and the desaturated
+world a ghost sees is cyan and bright but not saturated — (125, 173, 188), a low channel
+at two thirds of its high ones. Half is a clean gap on both sides."""
+
 MARKER_MARGIN = 40
 
 # How far an inverted calibration swatch may sit from the colour it is supposed to be,
@@ -308,10 +320,26 @@ def _blobs(mask: np.ndarray) -> list[_Blob]:
 
 
 def _marker_masks(frame: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Pixels that could be a marker: the right *hue*, and saturated with it.
+
+    The brightness floor is not decoration. The margins alone are relative, and a
+    character that dies gets a full-screen desaturation shader that turns the entire world
+    blue-green — Elwynn ground reads (100, 140, 153), which clears `g - r` and `b - r`
+    comfortably. On a live ghost frame that put **293,555 pixels** in the cyan mask, the
+    candidate search drowned, and `locate` returned `None` while both markers sat on
+    screen pixel-exact. The bot went blind precisely when it was a ghost and needed to
+    find its corpse.
+
+    The test is a **ratio**, not a brightness floor, because this file already promises to
+    decode a capture at a gain of 0.25 — where a marker arrives at (0, 64, 64) and any
+    absolute floor throws it away.
+    """
     d = _rgb(frame).astype(np.int16)
     r, g, b = d[:, :, 0], d[:, :, 1], d[:, :, 2]
-    left = (r - g >= MARKER_MARGIN) & (b - g >= MARKER_MARGIN)    # magenta
-    right = (g - r >= MARKER_MARGIN) & (b - r >= MARKER_MARGIN)   # cyan
+    left = ((r - g >= MARKER_MARGIN) & (b - g >= MARKER_MARGIN)      # magenta
+            & (g <= MARKER_LOW_RATIO * np.minimum(r, b)))
+    right = ((g - r >= MARKER_MARGIN) & (b - r >= MARKER_MARGIN)     # cyan
+             & (r <= MARKER_LOW_RATIO * np.minimum(g, b)))
     return left, right
 
 

@@ -853,6 +853,7 @@ def test_an_impossible_level_is_refused_rather_than_carried():
 # --------------------------------------------------------------------------- live frame
 
 LIVE = pathlib.Path(__file__).parent / "fixtures" / "live-northshire-1600x900.npy"
+GHOST = pathlib.Path(__file__).parent / "fixtures" / "live-ghost-elwynn.npz"
 
 
 @pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")
@@ -890,7 +891,7 @@ def test_the_strip_reads_from_a_real_client_frame():
         assert radio_frame.to_state(reading, t=0.0, client_id="c").quests == ()
 
 
-@pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")
+@pytest.mark.skipif(not GHOST.exists(), reason="no live capture fixture")
 def test_a_real_screen_is_full_of_the_marker_colours():
     """The premise behind detecting the strip from row runs, asserted not remembered.
 
@@ -898,10 +899,13 @@ def test_a_real_screen_is_full_of_the_marker_colours():
     and on one frame the marker's connected component was a 46x48 sprawl at 0.56 fill —
     square, but far too sparse to pass a solidity filter, with the real marker sitting in
     the middle of it. Connectivity is not a usable primitive here; a row run is.
+
+    Measured on the ghost frame because it is the one that still carries a slab of world:
+    the other live fixture is a strip-only crop and has no scenery left to be confused by.
     """
-    frame = np.load(LIVE)
+    frame = np.load(GHOST)["frame"]
     left, right = radio_frame._marker_masks(frame)
-    assert right.sum() > 1000, "this frame should have plenty of non-marker cyan in it"
+    assert right.sum() > 2 * 196, "this frame should have non-marker cyan in it"
 
     pairs = radio_frame._strip_candidates(left, right)
     assert pairs, "no candidate pair from a frame that definitely contains the strip"
@@ -920,3 +924,39 @@ def test_a_marker_merged_with_its_neighbour_is_still_found():
     reading = radio_frame.read(frame)
     assert reading.ok, f"{reading.fault}: {reading.detail}"
     assert reading.values["char.level"] == values["char.level"]
+
+
+
+def test_the_strip_reads_while_the_character_is_a_ghost():
+    """Dying applies a full-screen desaturation shader that turns the world blue-green,
+    and the marker masks were purely relative — Elwynn ground reads (100, 140, 153), which
+    clears both hue margins. On this frame that put **293,555 pixels** in the cyan mask,
+    the candidate search drowned, and `locate` returned `None` while both markers sat on
+    screen pixel-exact.
+
+    The bot went blind precisely when it was a ghost and needed to find its corpse, so
+    this frame keeps a slab of the shaded world in it on purpose."""
+    frame = np.load(GHOST)["frame"]
+    left, right = radio_frame._marker_masks(frame)
+    assert left.sum() < 2000 and right.sum() < 2000, "the ghost world is flooding a mask"
+
+    reading = radio_frame.read(frame)
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    assert reading.values["vitals.ghost"] is True
+    assert reading.values["vitals.hp"] < 0.1
+
+
+def test_a_marker_must_be_saturated_not_merely_the_right_hue():
+    """The shaded world a ghost sees is cyan *and* bright, so only saturation separates
+    it: its pixels sit at a low channel two thirds of their high ones where the marker is
+    painted 0. The test is a ratio because a capture at a gain of 0.25 delivers the marker
+    as (0, 64, 64), and an absolute floor throws that away."""
+    def mask(rgb):
+        return radio_frame._marker_masks(np.full((4, 4, 3), rgb, dtype=np.uint8))[1]
+
+    from jev.perceive.fields import MARKER_R
+
+    assert mask(MARKER_R).all(), "the marker itself"
+    assert mask((0, 64, 64)).all(), "the same marker at a quarter gain"
+    assert not mask((100, 140, 153)).any(), "Elwynn ground, seen as a ghost"
+    assert not mask((125, 173, 188)).any(), "the median pixel that flooded the mask"
