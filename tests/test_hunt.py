@@ -47,15 +47,22 @@ def _hunt(outcomes, counts, rest=None, approach=None):
                 progress=progress, say=lambda _s: None), walked
 
 
-def test_stations_start_at_the_centre_and_then_ring_it():
-    """The node is usually a reasonable place to stand; the ring is for when it is not."""
+def test_stations_work_outward_from_the_node_and_stay_on_the_disk():
+    """A node's `r` is a map fraction, and 0.06 of Northshire is two hundred yards — so a
+    single ring at two-thirds of it sends the character a hundred and forty yards from a
+    camp it was standing next to. Near before far."""
     posts = stations((100.0, 200.0, 50.0), 30.0)
     assert posts[0] == (100.0, 200.0, 50.0)
-    assert len(posts) == STATIONS + 1
-    for x, y, z in posts[1:]:
-        assert z == 50.0
-        reach = ((x - 100.0) ** 2 + (y - 200.0) ** 2) ** 0.5
-        assert 15.0 < reach < 30.0, "the ring left the disk the node describes"
+    assert len(posts) == STATIONS
+
+    def reach(p):
+        return ((p[0] - 100.0) ** 2 + (p[1] - 200.0) ** 2) ** 0.5
+
+    assert all(p[2] == 50.0 for p in posts)
+    assert all(reach(p) <= 30.0 + 1e-6 for p in posts), "a station left the disk"
+    rings = [round(reach(p), 3) for p in posts]
+    assert rings == sorted(rings), "it does not search outward"
+    assert reach(posts[1]) < 10.0, "the first move is a long way from the node"
 
 
 def test_the_counter_ends_it_and_nothing_counts_its_own_kills():
@@ -79,7 +86,7 @@ def test_nothing_to_fight_moves_to_another_station():
 def test_a_station_it_cannot_stand_on_is_not_a_dead_end():
     h, _ = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
     assert h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5) is Hunted.UNREACHABLE
-    assert h.moves == STATIONS + 1, "it gave up before trying the whole disk"
+    assert h.moves == STATIONS, "it gave up before trying the whole disk"
 
 
 def test_dying_stops_the_hunt_rather_than_looping():

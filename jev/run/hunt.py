@@ -28,8 +28,16 @@ from jev.clients.fight import Fight, Fought
 from jev.clients.rest import Rest, Rested
 from jev.world.combat import EAT_BELOW
 
-# How many stations to visit around the disk before giving up on it being the right disk.
-STATIONS = 8
+# Fractions of the radius to ring, nearest first, and how many points on each ring.
+#
+# Outward rather than straight to the edge. A node's `r` is a map fraction, and in a zone
+# as small as Northshire 0.06 of the map is two hundred yards — so a single ring at
+# two-thirds of it sends the character a hundred and forty yards away from a camp it was
+# standing next to. Searching near before far is not camp knowledge; it is the obvious
+# order to look in.
+RINGS = (0.15, 0.35, 0.6, 1.0)
+PER_RING = 4
+STATIONS = 1 + len(RINGS) * PER_RING
 
 # Fruitless looks at one station before moving on. Two, because a camp is a moving crowd
 # and one empty look says very little.
@@ -50,19 +58,21 @@ class Hunted(StrEnum):
 
 
 def stations(centre: tuple[float, float, float], radius_yards: float,
-             count: int = STATIONS) -> list[tuple[float, float, float]]:
-    """Points to stand on, working outward.
+             rings: tuple[float, ...] = RINGS,
+             per_ring: int = PER_RING) -> list[tuple[float, float, float]]:
+    """Points to stand on, working outward from the node.
 
-    The centre first, because the node is usually a reasonable place to be; then a ring at
-    two thirds of the radius, which is far enough to reach a different part of a camp and
-    near enough to still be the same camp.
+    The centre first, because the node is usually a reasonable place to be, then rings at
+    increasing fractions of the radius. Each ring is offset half a step from the last so
+    the points do not line up on spokes and re-walk the same ground.
     """
     cx, cy, cz = centre
     out = [(cx, cy, cz)]
-    ring = radius_yards * 0.66
-    for i in range(count):
-        angle = 2.0 * math.pi * i / count
-        out.append((cx + ring * math.cos(angle), cy + ring * math.sin(angle), cz))
+    for r, fraction in enumerate(rings):
+        reach = radius_yards * fraction
+        for i in range(per_ring):
+            angle = 2.0 * math.pi * (i + 0.5 * r) / per_ring
+            out.append((cx + reach * math.cos(angle), cy + reach * math.sin(angle), cz))
     return out
 
 
