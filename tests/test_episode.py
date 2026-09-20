@@ -142,3 +142,19 @@ def test_shadow_prediction_exists_from_the_first_row(state: State):
     row = _tick("r", 1, state, shadow_intent="advance", shadow_confidence=0.8)
     assert row.shadow_intent == "advance"
     assert "shadow_intent" in {f.name for f in __import__("dataclasses").fields(TickRow)}
+
+
+def test_a_decision_records_the_artifacts_it_produced():
+    """V11 makes durable artifacts the teacher's preferred output. If the decision stream
+    cannot hold them, the ratio we optimise for is invisible in the corpus — and a ratio
+    nobody can compute is a ratio nobody improves."""
+    row = _decision("r", artifacts=[
+        {"kind": "skill_draft", "target": "VENDOR_REPAIR", "payload": {}},
+        {"kind": "on_fail_edge", "target": "step_12", "payload": {"goto": "rib"}},
+    ])
+    assert len(row.artifacts) == 2
+    assert row.artifacts[0]["kind"] == "skill_draft"
+
+
+def test_a_decision_with_no_artifacts_is_the_default_not_an_error():
+    assert _decision("r").artifacts == []

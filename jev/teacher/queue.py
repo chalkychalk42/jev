@@ -224,6 +224,11 @@ class _Outcome:
     result: TeacherResult | None = None
     detail: str | None = None
     attempts: int = 0
+    # Carried rather than inferred from `detail`: every requester behind a dropped job —
+    # the origin and anyone coalesced onto it — has to be able to say "dropped" rather
+    # than "transport failure", and matching on a message string to find that out is the
+    # kind of coupling that survives until somebody improves the wording.
+    dropped: bool = False
 
 
 @dataclass
@@ -279,6 +284,8 @@ class TeacherQueue:
     ) -> None:
         if maxsize < 1:
             raise ValueError("maxsize must be at least 1; a queue that holds nothing drops everything")
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1; a teacher that never calls is not one")
         # Required rather than defaulted: the verifier refuses any skill outside the
         # catalog, so an empty default would silently reject every answer the teacher gave
         # and look like the model being useless.
@@ -394,6 +401,7 @@ class TeacherQueue:
                 situation_key=key,
                 outcome=outcome,
                 dedup_of=existing.origin_decision_id,
+                dropped=outcome.dropped,
             )
 
         if self._closed:
@@ -410,21 +418,12 @@ class TeacherQueue:
         )
         self._pending[key] = job
         self.start()
-
-        if not self._enqueue(job):
-            self._pending.pop(key, None)
-            self.counters.drops += 1
-            return self._finish(
-                state=state, client_id=who, tick_id=tick_id, situation_key=key,
-                outcome=_Outcome(status="transport", detail="queue full"),
-                decision_id=job.origin_decision_id, dropped=True,
-            )
+        self._enqueue(job)
 
         outcome = await self._wait(job)
         return self._finish(
             state=state, client_id=who, tick_id=tick_id, situation_key=key,
-            outcome=outcome, decision_id=job.origin_decision_id,
-            dropped=outcome.detail == "queue full",
+            outcome=outcome, decision_id=job.origin_decision_id, dropped=outcome.dropped,
         )
 
     def _context(self, context: PromptContext | None) -> PromptContext:
@@ -445,23 +444,27 @@ class TeacherQueue:
             catalog=tuple(sorted(self.catalog)),
         )
 
-    def _enqueue(self, job: _Job) -> bool:
-        """Make room by dropping the stalest question. See the module docstring."""
+    def _enqueue(self, job: _Job) -> None:
+        """Always admits `job`, making room by dropping the stalest question if it must.
+
+        The newest question therefore cannot be dropped, which is the point: overflow exists
+        because answers go stale, so the thing thrown away is the one that has been waiting
+        longest. `drops` counts jobs, not waiters — three clients coalesced onto one dropped
+        question were one question.
+        """
         try:
             self._q.put_nowait(job)
-            return True
+            return
         except asyncio.QueueFull:
             pass
-        try:
-            stale = self._q.get_nowait()
-        except asyncio.QueueEmpty:  # pragma: no cover - only reachable with maxsize 0
-            return False
+        # Safe because maxsize >= 1 is enforced in __init__, so a full queue has an item,
+        # and nothing is awaited between the get and the put.
+        stale = self._q.get_nowait()
         self._pending.pop(stale.situation_key, None)
         self.counters.drops += 1
-        self._resolve(stale, _Outcome(status="transport", detail="queue full"))
+        self._resolve(stale, _Outcome(status="transport", detail="queue full", dropped=True))
         self._q.task_done()
         self._q.put_nowait(job)
-        return True
 
     async def _wait(self, job: _Job) -> _Outcome:
         return await asyncio.shield(job.future)
@@ -575,9 +578,10 @@ class TeacherQueue:
                 status = "rejected"
                 self.counters.rejections += 1
                 detail = f"{verdict.rule}: {verdict.reason}"
-                # The cache entry is not invalidated: the refusal may be about this client's
-                # zone or combat state, and throwing the answer away would cost every other
-                # client in the bucket a call to learn the same thing.
+                # Nothing is cached and nothing already cached is invalidated. A refusal is
+                # often about *this* client — its zone, its combat state — so caching it
+                # would serve a refusal to everyone at cache speed, and invalidating on it
+                # would cost every other client in the bucket a call to learn the same.
         if status == "ok":
             self.counters.ok += 1
             if reply is not None and not cache_hit and dedup_of is None:

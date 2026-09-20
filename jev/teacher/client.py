@@ -255,15 +255,21 @@ class ClaudeSubscriptionClient:
             )
 
         latency_ms = (time.perf_counter() - started) * 1000.0
-        return self._classify(
+        return self.classify(
             stdout=out.decode("utf-8", "replace"),
             stderr=err.decode("utf-8", "replace"),
             returncode=proc.returncode if proc.returncode is not None else -1,
             latency_ms=latency_ms,
         )
 
-    def _classify(self, *, stdout: str, stderr: str, returncode: int, latency_ms: float) -> TeacherResult:
-        """Parse first, judge second — see trap 2 in the module docstring."""
+    def classify(self, *, stdout: str, stderr: str, returncode: int, latency_ms: float) -> TeacherResult:
+        """Turn one CLI invocation into one of the four outcomes.
+
+        Parse first, judge second — see trap 2 in the module docstring. Public on purpose:
+        it is the seam that lets the real output shapes be pinned down in tests without
+        spawning a process or spending a call, and the shape is exactly the thing most
+        likely to move under us on a CLI upgrade.
+        """
         raw = stdout.strip()
         if not raw:
             return TeacherResult(

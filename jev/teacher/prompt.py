@@ -40,7 +40,7 @@ rendering `None` as `false` would invent an observation nobody made (`ARCHITECTU
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from jev.coach.schema import teacher_json_schema
@@ -130,7 +130,7 @@ class PromptContext:
     events: tuple[str, ...] = ()
     death_postmortem: str | None = None
     question: str | None = None
-    catalog: tuple[str, ...] = field(default=())
+    catalog: tuple[str, ...] = ()
 
 
 DEFAULT_QUESTION = (

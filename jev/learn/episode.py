@@ -120,6 +120,14 @@ class DecisionRow:
     cache_hit: bool = False
     dedup_of: str | None = None      # the decision_id this was coalesced onto
 
+    # Durable artifacts the teacher produced: skill drafts, graph patches, on_fail edges.
+    # `DECISIONS.md` V11 makes these the *preferred* output — a decision helps one client
+    # once, a skill helps every client forever — and on a rate-limited teacher that
+    # difference is the whole economics. Recording only the immediate action would leave
+    # the thing we actually optimise for invisible in the corpus, and a ratio nobody can
+    # compute is a ratio nobody improves.
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
+
 
 @dataclass(frozen=True)
 class GradeRow:
