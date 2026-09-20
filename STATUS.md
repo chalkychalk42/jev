@@ -897,6 +897,31 @@ The new fixture keeps a slab of the shaded world in it on purpose, and the row-r
 test measures against that frame now — the other live fixture is a strip-only crop with no
 scenery left to be confused by.
 
+### V33 — it walked at the kobold and never swung
+
+With a working client and the server no longer kicking, the hunt finally produced clean
+evidence, and it was damning:
+
+    unreachable (1/10) pressed [] closed 8 — closed 8 times and landed nothing
+    losing      (1/10) pressed [] closed 0 — broke off at 29% health
+
+`pressed []`. It walked at a kobold, and later stood being beaten to 29% health, and never
+once pressed anything at either.
+
+Closing was a **gate in front of the fight**: walk until the target takes damage, *then*
+start the rotation. Damage comes from swinging, swinging is the rotation, and the rotation
+was behind the gate. Nothing could ever open it.
+
+That is the same shape as a heal gated on the pull rather than on health — a predicate
+hung on the wrong fact — except it was the attack, which is why the character could not
+even defend itself.
+
+`close_in()` is gone. The loop reads, rotates, and takes one burst of `W` when nothing is
+landing yet, so the character walks and swings at the same time. Not while casting:
+movement cancels a cast, and the only thing being cast is the heal keeping it alive.
+`UNREACHABLE` now means out of bursts **and** nothing pressed **and** nothing landed —
+an answer, rather than a consequence of never having tried.
+
 NEXT: it cannot finish the objective yet. When nothing is in reach it stands still, so a
 `quest_objective` needs to **search its own radius** rather than treat the spawn point as
 a spot. And it is out of food — `Rest` says so honestly instead of pressing a blank
