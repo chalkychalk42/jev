@@ -33,6 +33,7 @@ local TAU = 2 * math.pi
 local lastError = 0          -- pending UI-error enum index, cleared once painted
 local questHash = nil        -- cached; rebuilt on QUEST_LOG_UPDATE, not per paint
 local castingByEvent = false -- fallback for clients without UnitCastingInfo
+local inWorld = false        -- SetMapToCurrentZone before the world exists is an error, not a no-op
 local mapDirty = true        -- the world map may not be showing the zone we are standing in
 local mapTrusted = false     -- GetPlayerMapPosition/GetMapInfo answer about the right zone
 
@@ -418,6 +419,11 @@ watcher:SetScript("OnEvent", function(self, event, a1)
         end
     elseif ev == "QUEST_LOG_UPDATE" then
         questHash = nil                       -- recomputed lazily; the log can fire this several times a second
+    elseif ev == "PLAYER_ENTERING_WORLD" then
+        inWorld = true
+        mapDirty = true
+        mapTrusted = false
+        questHash = nil
     elseif ev == "UNIT_SPELLCAST_START" or ev == "UNIT_SPELLCAST_CHANNEL_START" then
         if p1 == "player" then castingByEvent = true end
     elseif ev == "UNIT_SPELLCAST_STOP" or ev == "UNIT_SPELLCAST_CHANNEL_STOP"
@@ -437,6 +443,11 @@ local function syncMap()
     -- zone the player is standing in, but SetMapToCurrentZone yanks the map out from under
     -- anyone reading it, so it waits until the map is closed. Calling this every frame
     -- would make the world map unusable for a human watching the run.
+    --
+    -- Nothing happens before PLAYER_ENTERING_WORLD: the addon is loaded and painting
+    -- during the loading screen, and asking the client about a zone it has not entered
+    -- raises rather than answering.
+    if not inWorld then return end
     if WorldMapFrame and WorldMapFrame:IsVisible() then
         mapDirty = true
         mapTrusted = false
