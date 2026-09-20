@@ -46,6 +46,7 @@ from jev.clients.choose import ChooseListLine  # noqa: E402
 from jev.clients.hid import Hid, Humaniser  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
 from jev.clients.travel import Travel  # noqa: E402
+from jev.guide import playhead  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
@@ -158,10 +159,23 @@ def main() -> int:
 
     launcher = ("wsl.exe", "-d", "Ubuntu-24.04", "-e") if win32.IS_WINDOWS else ()
     query = MmapQuery(args.jevpath, args.mmaps, launcher=launcher)
-    def playhead():
-        """Which step, according to the graph and the log. The tracker owns the rule."""
+    def next_step():
+        """Which step, according to the graph, the log, and where we got to last time.
+
+        The remembered position is a **floor**, not an answer: the scan still runs from
+        it, so anything since finished is skipped. It exists because the log cannot say
+        that a quest was turned in — a finished quest and an untaken one are both simply
+        absent — and without it the run after a hand-in walks back to the giver.
+        """
+        nonlocal memory
         st = state()
-        return None if st is None else graph.get(Tracker.resume(graph, st).step_id)
+        if st is None:
+            return None
+        memory = playhead.load(graph.graph_id)
+        start = memory.step_id if graph.get(memory.step_id or "") is not None else None
+        tracker = Tracker.resume(graph, st, start=start, completed=memory.completed)
+        playhead.save(graph.graph_id, tracker.step_id, memory.completed)
+        return graph.get(tracker.step_id)
 
     def approach(node_world) -> bool:
         """Plan from here to the NPC's world point and follow it.
@@ -206,9 +220,12 @@ def main() -> int:
     # The only difference between accepting and turning in.
     GOALS = {StepKind.QUEST_ACCEPT: Goal.HELD, StepKind.QUEST_TURNIN: Goal.CLEARED}
 
+    memory = playhead.load(graph.graph_id)
+    print(f"  completed so far: {sorted(memory.completed) or 'nothing remembered'}")
+
     rc = 0
     for step in range(args.steps):
-        node = playhead()
+        node = next_step()
         if node is None:
             print("\ncannot read the client; stopping")
             rc = 1
@@ -258,6 +275,11 @@ def main() -> int:
         if not outcome.ok:
             rc = 1
             break
+        if node.kind is StepKind.QUEST_TURNIN and node.quest_id is not None:
+            # The one fact 2.4.3 will not give back later. Written the moment it is
+            # witnessed, because the log forgets a quest the instant it is handed in.
+            memory = playhead.with_completed(memory, node.quest_id)
+            playhead.save(graph.graph_id, node.id, memory.completed)
         print(f"  log now: {quest_ids()}")
 
     query.close()

@@ -211,3 +211,79 @@ def test_resume_stops_rather_than_guessing_when_the_log_was_never_read():
     g = _graph_1_12()
     t = Tracker.resume(g, _state_with(None))
     assert t.step_id == g.entry
+
+
+def test_resume_can_start_from_a_remembered_step_instead_of_the_entry():
+    """After a hand-in the log is empty again, and a cold scan cannot tell a finished
+    quest from an untaken one — so it stops at the accept of a quest already done and
+    walks the character back to an NPC with nothing to give. The remembered step is a
+    floor: the scan still runs forward from it."""
+    g = _graph_1_12()
+    turnin = "alli_human_1_12_783_a_threat_within_turnin"
+    t = Tracker.resume(g, _state_with(()), start=turnin)
+    assert t.step_id != g.entry, "an empty log sent the playhead back to the first accept"
+    assert t.step_id != turnin, "783 is gone from the log; that turn-in is done"
+    assert g.get(t.step_id).quest_id != 783, "still somewhere in the finished quest"
+
+
+def test_only_the_start_step_is_credited_not_everything_behind_it():
+    """The seed says "we had got this far", not "assume it all worked". A turn-in the
+    scan walks *into* is judged against the live log like any other step."""
+    g = _graph_1_12()
+    t = Tracker.resume(g, _state_with(()), start=g.entry)
+    node = g.get(t.step_id)
+    assert node.kind is StepKind.QUEST_ACCEPT and node.quest_id == 783, (
+        "an empty log at the first accept must stop there, seed or no seed")
+
+
+def test_a_remembered_step_is_a_floor_not_an_answer():
+    """Anything finished since is still skipped, so the file being slightly stale costs
+    nothing."""
+    from jev.world.state_v1 import Quest
+
+    g = _graph_1_12()
+    held = _state_with((Quest(quest_id=783),))
+    assert Tracker.resume(g, held, start=g.entry).step_id == \
+        Tracker.resume(g, held).step_id
+
+
+def test_a_missing_or_corrupt_memory_is_no_memory_not_a_crash():
+    import pathlib
+
+    from jev.guide import playhead
+
+    p = pathlib.Path("/tmp/jev-playhead-test.json")
+    p.unlink(missing_ok=True)
+    assert playhead.load("alli_human_1_12", p).step_id is None
+    playhead.save("alli_human_1_12", "step_a", {783}, p)
+    assert playhead.load("alli_human_1_12", p).step_id == "step_a"
+    p.write_text("{not json", encoding="utf-8")
+    assert playhead.load("alli_human_1_12", p).completed == frozenset()
+    p.unlink(missing_ok=True)
+
+
+def test_completed_quests_outlive_a_graph_that_was_regenerated():
+    """A step id names a node and can stop existing — dropping two unplaceable quests did
+    exactly that, and the lost position sent the character back to Deputy Willem for a
+    quest handed in twenty minutes earlier. Quest ids are facts about the character, so
+    they survive a different guide."""
+    import pathlib
+
+    from jev.guide import playhead
+
+    p = pathlib.Path("/tmp/jev-playhead-graph.json")
+    playhead.save("alli_human_1_12", "a_node_that_will_be_deleted", {783, 7}, p)
+    other = playhead.load("some_other_guide", p)
+    assert other.step_id is None, "a step id from a different guide is meaningless"
+    assert other.completed == frozenset({783, 7}), "the character's quests went with it"
+    p.unlink(missing_ok=True)
+
+
+def test_a_completed_quest_is_behind_us_whatever_its_predicate_says():
+    """The log cannot express this: a quest handed in and a quest never taken are both
+    absent. Without carrying it, the scan stops at the accept of a finished quest."""
+    g = _graph_1_12()
+    t = Tracker.resume(g, _state_with(()), completed=frozenset({783}))
+    node = g.get(t.step_id)
+    assert node.quest_id != 783, "walked back into a quest that is already finished"
+    assert node.kind is StepKind.QUEST_ACCEPT and node.quest_id == 7

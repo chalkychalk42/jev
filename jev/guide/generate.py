@@ -493,6 +493,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         quests = quests[:max_quests]
 
     chain: list[str] = []
+    unplaceable: list[str] = []
     for q in quests:
         zid = q.zone_or_sort if q.zone_or_sort in zone_ids else zone_ids[0]
         zname = zone_names.get(zid, str(zid))
@@ -501,6 +502,21 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         band = (max(1, q.min_level), max(q.level, q.min_level) + 3)
 
         giver, taker = db.giver(q.quest_id), db.taker(q.quest_id)
+
+        # A quest whose giver does not spawn on this server cannot be taken, and a step
+        # that cannot be taken does not fail — it **blocks the chain behind it**, because
+        # the playhead stops at the first step the world does not satisfy and this one
+        # never will. Seasonal quests are the common case: Waskily Wabbits (7961) is
+        # Noblegarden, its giver exists only during the event, and it sat between
+        # A Threat Within and the whole rest of Northshire.
+        #
+        # Dropped at generation rather than skipped at runtime: the guide should describe
+        # what this server can actually do, and a runtime skip would have to re-derive
+        # that judgement on every pass.
+        if giver is None:
+            unplaceable.append(f"{q.quest_id} {q.title}")
+            continue
+
         needs_objective = any(c > 0 for c in q.req_counts)
 
         gfrac, gworld, gmap = place(giver, zid)
@@ -596,4 +612,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         for n in wired
     )
     entry = chain[0] if chain else (final[0].id if final else "")
+    if unplaceable:
+        print(f"  dropped {len(unplaceable)} quest(s) with no giver spawn on this server: "
+              + ", ".join(unplaceable[:6]) + ("..." if len(unplaceable) > 6 else ""))
     return Graph(graph_id=graph_id, faction=faction, nodes=final, entry=entry)

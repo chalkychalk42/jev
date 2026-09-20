@@ -632,3 +632,51 @@ NOW: 524 tests, ruff clean. Accept and turn-in are one code path over two skills
 by the playhead, with no keyboard involved.
 
 NEXT: Echo Ridge kobolds — the first step whose skill does not exist yet.
+
+---
+
+## V28 — the playhead remembers, and the loop runs on a quest nobody tuned it for
+
+    --- step 1: alli_human_1_12_7_kobold_camp_cleanup_accept ---
+      arrived, 5.0 yards left, 7 turns, 0 stuck
+      gossip
+      chose 'Kobold Camp Cleanup': chose at (219, 362)
+      held: pressed [(88, 681)] -> done
+      log now: (7,)
+
+A different quest and a different gossip from the one the skills were built against, with
+no code that knows about either.
+
+### The log cannot say a quest is finished
+
+Straight after handing in 783 the bot walked back to Deputy Willem and asked for it again.
+`Tracker.resume` scans for the first step the world does not satisfy, and a quest **handed
+in** and a quest **never taken** are both simply absent from the log. 2.4.3 cannot settle
+it either: `GetQuestsCompleted` arrived in 3.0.
+
+So the fact is carried rather than derived. `var/playhead.json` holds the completed quest
+ids, written the moment a turn-in is witnessed, because that is the only moment the
+information exists — the log forgets a quest the instant it is handed in.
+
+A step id is remembered too, but it is the weaker half and it proved it: dropping two
+unplaceable quests deleted the node it named, the position was lost, and the scan fell all
+the way back to the entry. Quest ids are facts about the *character*, so they survive
+regeneration, re-ordering, and a different guide entirely — and `load` keeps them across a
+graph mismatch for exactly that reason.
+
+### A quest with no giver blocks everything behind it
+
+Waskily Wabbits (7961) is a Noblegarden quest whose giver spawns only during the event. It
+sat between A Threat Within and the whole rest of Northshire, and the playhead stopped
+there forever — not failing, just never satisfied.
+
+The generator now drops a quest it cannot place, and says so. The guide should describe
+what this server can actually do; a runtime skip would re-derive that judgement on every
+pass and leave the dead node in the file to confuse the next reader. Two dropped, 132
+nodes to 127.
+
+NOW: 531 tests, ruff clean. Accept, walk, gossip and turn in are one path, driven by the
+playhead, with no keyboard and no per-NPC code.
+
+NEXT: Echo Ridge kobolds — `quest_objective` is the first node kind with no skill behind
+it, and it needs combat.

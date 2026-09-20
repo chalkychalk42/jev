@@ -12,3 +12,4 @@ runs/
 addons/JevRadio/Fields.lua
 !tests/fixtures/
 tools/jevpath/jevpath
+var/

@@ -359,7 +359,7 @@
       ],
       "requires": [],
       "next": [
-        "alli_human_1_12_7961_waskily_wabbits_accept"
+        "alli_human_1_12_7_kobold_camp_cleanup_accept"
       ],
       "on_fail": [
         {
@@ -386,106 +386,6 @@
       "timeout_s": 240.0,
       "skippable": false,
       "notes": "Marshal McBride",
-      "source": "generated"
-    },
-    {
-      "id": "alli_human_1_12_7961_waskily_wabbits_accept",
-      "kind": "quest_accept",
-      "zone": "Northshire",
-      "zone_id": 9,
-      "level": [
-        1,
-        4
-      ],
-      "pos": null,
-      "world": null,
-      "map_id": null,
-      "r": 0.03,
-      "quest_id": 7961,
-      "title": "Waskily Wabbits!",
-      "npc_id": null,
-      "objectives": [
-        "accept Waskily Wabbits!"
-      ],
-      "requires": [],
-      "next": [
-        "alli_human_1_12_7961_waskily_wabbits_turnin"
-      ],
-      "on_fail": [
-        {
-          "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 240.0
-        },
-        {
-          "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 3.0
-        },
-        {
-          "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": null
-        }
-      ],
-      "skills": [
-        "TRAVEL_TO",
-        "ACCEPT_QUEST"
-      ],
-      "xp_est": 90,
-      "timeout_s": 5.0,
-      "skippable": true,
-      "notes": "no giver spawn found",
-      "source": "generated"
-    },
-    {
-      "id": "alli_human_1_12_7961_waskily_wabbits_turnin",
-      "kind": "quest_turnin",
-      "zone": "Northshire",
-      "zone_id": 9,
-      "level": [
-        1,
-        4
-      ],
-      "pos": null,
-      "world": null,
-      "map_id": null,
-      "r": 0.03,
-      "quest_id": 7961,
-      "title": "Waskily Wabbits!",
-      "npc_id": null,
-      "objectives": [
-        "turn in Waskily Wabbits!"
-      ],
-      "requires": [],
-      "next": [
-        "alli_human_1_12_7_kobold_camp_cleanup_accept"
-      ],
-      "on_fail": [
-        {
-          "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 240.0
-        },
-        {
-          "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 3.0
-        },
-        {
-          "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": null
-        }
-      ],
-      "skills": [
-        "TRAVEL_TO",
-        "TURNIN_QUEST"
-      ],
-      "xp_est": 90,
-      "timeout_s": 5.0,
-      "skippable": true,
-      "notes": "no turn-in spawn found",
       "source": "generated"
     },
     {
@@ -6929,164 +6829,6 @@
       ],
       "requires": [],
       "next": [
-        "alli_human_1_12_123_the_collector_accept"
-      ],
-      "on_fail": [
-        {
-          "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 240.0
-        },
-        {
-          "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 3.0
-        },
-        {
-          "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": null
-        }
-      ],
-      "skills": [
-        "TRAVEL_TO",
-        "TURNIN_QUEST"
-      ],
-      "xp_est": 900,
-      "timeout_s": 240.0,
-      "skippable": false,
-      "notes": "Sara Timberlain",
-      "source": "generated"
-    },
-    {
-      "id": "alli_human_1_12_123_the_collector_accept",
-      "kind": "quest_accept",
-      "zone": "Elwynn",
-      "zone_id": 12,
-      "level": [
-        7,
-        13
-      ],
-      "pos": null,
-      "world": null,
-      "map_id": null,
-      "r": 0.03,
-      "quest_id": 123,
-      "title": "The Collector",
-      "npc_id": null,
-      "objectives": [
-        "accept The Collector"
-      ],
-      "requires": [],
-      "next": [
-        "alli_human_1_12_123_the_collector_do"
-      ],
-      "on_fail": [
-        {
-          "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 240.0
-        },
-        {
-          "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 3.0
-        },
-        {
-          "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": null
-        }
-      ],
-      "skills": [
-        "TRAVEL_TO",
-        "ACCEPT_QUEST"
-      ],
-      "xp_est": 900,
-      "timeout_s": 5.0,
-      "skippable": true,
-      "notes": "no giver spawn found",
-      "source": "generated"
-    },
-    {
-      "id": "alli_human_1_12_123_the_collector_do",
-      "kind": "quest_objective",
-      "zone": "Elwynn",
-      "zone_id": 12,
-      "level": [
-        7,
-        13
-      ],
-      "pos": null,
-      "world": null,
-      "map_id": null,
-      "r": 0.06,
-      "quest_id": 123,
-      "title": "The Collector",
-      "npc_id": null,
-      "objectives": [
-        "Go to Marshal Dughan in Goldshire and give him The Collector's Schedule."
-      ],
-      "requires": [],
-      "next": [
-        "alli_human_1_12_123_the_collector_turnin"
-      ],
-      "on_fail": [
-        {
-          "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 600.0
-        },
-        {
-          "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": 3.0
-        },
-        {
-          "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
-          "value": null
-        }
-      ],
-      "skills": [
-        "TRAVEL_TO",
-        "COMBAT_PROFILE",
-        "LOOT"
-      ],
-      "xp_est": 900,
-      "timeout_s": 5.0,
-      "skippable": true,
-      "notes": "no objective spawn found",
-      "source": "generated"
-    },
-    {
-      "id": "alli_human_1_12_123_the_collector_turnin",
-      "kind": "quest_turnin",
-      "zone": "Elwynn",
-      "zone_id": 12,
-      "level": [
-        7,
-        13
-      ],
-      "pos": [
-        0.4210544335950263,
-        0.6592705978947173
-      ],
-      "world": [
-        -9465.51953125,
-        74.00689697265625,
-        56.778499603271484
-      ],
-      "map_id": 0,
-      "r": 0.03,
-      "quest_id": 123,
-      "title": "The Collector",
-      "npc_id": 240,
-      "objectives": [
-        "turn in The Collector"
-      ],
-      "requires": [],
-      "next": [
         "alli_human_1_12_147_manhunt_accept"
       ],
       "on_fail": [
@@ -7113,7 +6855,7 @@
       "xp_est": 900,
       "timeout_s": 240.0,
       "skippable": false,
-      "notes": "Marshal Dughan",
+      "notes": "Sara Timberlain",
       "source": "generated"
     },
     {

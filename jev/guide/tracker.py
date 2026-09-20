@@ -96,7 +96,8 @@ class Tracker:
         )
 
     @classmethod
-    def resume(cls, graph: Graph, state: State, *, start: str | None = None) -> Tracker:
+    def resume(cls, graph: Graph, state: State, *, start: str | None = None,
+               completed: frozenset[int] = frozenset()) -> Tracker:
         """A playhead placed on the first step the world does not already satisfy.
 
         Cold start: nothing knows how far a character got, so the chain is walked from the
@@ -112,7 +113,30 @@ class Tracker:
         """
         tracker = cls(graph=graph, step_id=start or graph.entry)
         tracker.enter(tracker.step_id, state)
+        if start is not None:
+            # `start` means "the playhead had got this far", and a playhead only reaches a
+            # turn-in by passing its accept — so the quest *was* held, whatever the log
+            # says now. Without this seed a resume lands on a hand-in it completed last
+            # run, finds the quest absent, cannot confirm a turn-in it did not witness,
+            # and sits there forever.
+            #
+            # Only the start node is seeded. Nodes the scan advances into are entered
+            # against the live log and judged on it, which is what stops this from
+            # becoming "assume everything behind us is done".
+            tracker.memory.quest_was_in_log = True
         for _ in range(len(graph.nodes) + 1):
+            node = tracker._node()
+            if node is not None and node.quest_id in completed:
+                # 2.4.3 cannot be asked which quests are finished — `GetQuestsCompleted`
+                # arrived in 3.0 — and the log cannot say either, because a quest handed
+                # in and a quest never taken are both simply absent from it. So the answer
+                # is carried rather than derived, and every step of a finished quest is
+                # behind us regardless of what its own predicate makes of an empty log.
+                goto = tracker._exit_of(node)
+                if goto:
+                    tracker.enter(goto, state)
+                    continue
+                return tracker
             verdict = tracker.tick(state)
             if verdict.event is not Event.ADVANCE or not verdict.goto:
                 return tracker
