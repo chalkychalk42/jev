@@ -680,3 +680,64 @@ playhead, with no keyboard and no per-NPC code.
 
 NEXT: Echo Ridge kobolds — `quest_objective` is the first node kind with no skill behind
 it, and it needs combat.
+
+---
+
+## V29 — a ring is a colour, not a reaction
+
+Combat needs to see a mob, and the rules for that were guesses. Measuring them corrected
+the *model*, not just the numbers. (The V29 commit message says 556 tests; it is **535** —
+written before the last run.)
+
+The bot walked 160 yards to the kobold camp on its own and Tab-targeted one. The radio
+reported `target.reaction` **hostile**. The client drew a bright **yellow** ring.
+
+That is not a bug in either. WoW colours unfriendly and neutral identically, and a camera
+cannot tell them apart. What it means is that the old names were a lie: finding a ring
+never told you what a unit *was*. So the rules are named by colour — `GREEN`, `YELLOW`,
+`RED` — and answer one question, *where is the unit on screen*. Identity comes from
+`target.name_id` after the click, the same act-then-verify split that made `Interact` safe.
+A ring matched by the "wrong" colour now costs nothing, because nothing believes it.
+
+The rule *shape* was wrong too, not merely mis-thresholded: it named a single bright
+channel, so yellow — R and G both high — was unrepresentable, and the `NEUTRAL` rule
+written by symmetry demanded G >> R and would never have matched anything at all.
+
+### The numbers are the argument
+
+    friendly ring   Deputy Willem   ( 95, 200,   5)   min(G) - max(R,B) = 105
+    friendly plate  Deputy Willem   ( 72, 219,  48)                     = 147
+    yellow   ring   Kobold Vermin   (211, 173,   8)   min(R,G) - B      = 165
+    yellow   plate  Kobold Vermin   (130, 117,   3)                     = 114
+    Northshire dirt                 (104,  87,  20)                     =  67
+
+Yellow's brightness floor is 105, not 150, and that is the whole lesson of the session in
+one number: **the plate is much darker than the ring**, so a threshold set by the ring
+silently excluded every nameplate. Dirt is not separated by brightness either — 87 against
+the plate's 117 — it is separated by the gap.
+
+### Three shape corrections, each a measured false positive
+
+    minimap sun   a yellow disc passing every ring test, which outranked a real ring by
+                  area; UI exclusion covered only the top-left and now covers the minimap,
+                  our own strip and the action bars
+    ring aspect   a ceiling of 12 let a nameplate *plus its name text* in at 11.4
+    bar fill      0.8 came from Willem's flat 0.99; a kobold's bar is a gradient at 0.72
+
+`find()` still returns `None` on the hostile frame, and that is the honest answer: that
+kobold is far enough away that the client draws its name and no health bar, and without
+the bar there is nothing to bracket the model against. The nearer plates belong to other
+kobolds and are correctly not borrowed.
+
+### One extraction
+
+`jev/run/client.py` — window, readers, assembled log, and the single composed action,
+*stand on a world point*. `probe_slice` was the only thing that had this and the
+measurement probe needed it; copying ninety lines of wiring is how two clients start
+disagreeing about what "read the strip" means. `probe_slice` drops from 291 lines to 191.
+
+NOW: 535 tests, ruff clean. The bot can see a mob.
+
+NEXT: fight one. `Tab` already selects and the radio already confirms what answered, so
+the open questions are closing to melee and knowing when the thing is dead — not finding
+it.
