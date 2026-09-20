@@ -269,6 +269,67 @@ local ADVANCE_BUTTONS = {
     "QuestFrameContinueButton",
 }
 
+-- A list of things to click, and which one is which.
+--
+-- Two frames draw the same widget under different names: `GossipTitleButton` for a
+-- gossip, `QuestTitleButton` for the greeting panel an NPC shows when it has several
+-- quests and nothing else to say. Reading both here is what makes one skill above cover
+-- both, rather than a second skill that differs only in a string.
+--
+-- The text hash is `nameid`, the same function that identifies a target, so the bot
+-- compares against a title the guide already holds instead of recognising anything.
+local LIST_FRAMES = { "GossipTitleButton", "QuestTitleButton" }
+
+local function listButton(i)
+    for f = 1, table.getn(LIST_FRAMES) do
+        local btn = getglobal(LIST_FRAMES[f] .. i)
+        if btn and btn.IsVisible and btn:IsVisible() then return btn end
+    end
+    return nil
+end
+
+-- The client draws a gossip line as markup, not as a title: a quest hand-in arrives as
+-- `|cXXXXXXXXA Threat Within|r`, twenty-seven characters for a fifteen-character quest.
+--
+-- Hashing that as-is is wrong twice over. It does not match the title the guide holds,
+-- which is the immediate bug; and the colour is the quest's **difficulty relative to the
+-- character's level**, so the same quest hashes differently at level 1 and level 10. That
+-- second one would not have failed here — it would have started failing weeks later, on a
+-- quest that used to work.
+--
+-- So the escapes come off first. Textures and hyperlinks are stripped too, because a
+-- gossip option can carry either and the rule is about markup, not about quests.
+local function plain(s)
+    if s == nil then return nil end
+    s = string.gsub(s, "|c%x%x%x%x%x%x%x%x", "")
+    s = string.gsub(s, "|r", "")
+    s = string.gsub(s, "|T.-|t", "")
+    s = string.gsub(s, "|H.-|h(.-)|h", "%1")
+    s = string.gsub(s, "^%s+", "")
+    s = string.gsub(s, "%s+$", "")
+    return s
+end
+
+local function LIST_LINE(i, axis)
+    local btn = listButton(i)
+    if btn == nil then return nil end
+    if axis == "hash" then
+        local text = plain(btn.GetText and btn:GetText())
+        if text == nil or text == "" then return nil end
+        return nameid(text)
+    end
+    local x, y = btn:GetCenter()
+    if x == nil or y == nil then return nil end
+    -- Fractions of UIParent, for the reason written against ADVANCE_BUTTON: converting
+    -- to pixels here mixes the button's effective scale with the interface's and is wrong
+    -- by a hundred on the vertical.
+    local ratio = btn:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    if axis == "x" then
+        return (x * ratio) / UIParent:GetWidth()
+    end
+    return 1 - (y * ratio) / UIParent:GetHeight()
+end
+
 local function ADVANCE_BUTTON(axis)
     for i = 1, #ADVANCE_BUTTONS do
         local btn = getglobal(ADVANCE_BUTTONS[i])
@@ -571,6 +632,7 @@ JevRadioHelpers = {
     BAG_FREE = BAG_FREE,
     DURABILITY_MIN = DURABILITY_MIN,
     ADVANCE_BUTTON = ADVANCE_BUTTON,
+    LIST_LINE = LIST_LINE,
     QUEST_HASH = QUEST_HASH,
     QUEST_COUNT = QUEST_COUNT,
     QUEST_SLOT = QUEST_SLOT,

@@ -103,6 +103,7 @@ class Hid:
         self.sent = 0
         self.refused = 0
         self.unsendable: list[str] = []
+        self.detail = ""
 
     # -- guards --------------------------------------------------------------
 
@@ -213,17 +214,34 @@ class Hid:
         return self.key_up(modifier) and ok
 
     def type_text(self, text: str) -> bool:
-        """For chat commands. `/target Kobold Worker` is deterministic acquisition and
-        needs no vision, which makes typing worth having as a first-class action.
+        """Type a line. Used by tooling; the bot itself does not talk.
 
         **A character this cannot type is a failure, not something to skip.** Skipping
         silently turned `/reload` into `reload`: the slash was dropped, the addon was
         never reloaded, and the run spent its time wondering why a schema bump had not
         taken effect while the character stood in Northshire saying "reload" out loud.
         Unsendable characters are recorded and the call returns False.
+
+        **Caps Lock and stuck modifiers are checked first, and they are not paranoia.**
+        `M` is sent as shift+m; with Caps Lock on the OS delivers `m`, and every letter
+        comes out inverted. Nothing downstream can tell — the keystrokes all "succeeded" —
+        so `/target Marshal McBride` reached the server as the public sentence
+        `?target mARSHAL mCbRIDE`. The lock is machine state that outlives this process,
+        so it is cleared rather than assumed, and a modifier still held is refused because
+        this cannot know who is holding it.
         """
         ok = True
         self.unsendable = []
+        if win32.available() and self.hwnd is not None:
+            if not win32.clear_caps_lock():
+                self.refused += 1
+                self.detail = "Caps Lock is on and would not clear; every letter inverts"
+                return False
+            held = win32.modifiers_down()
+            if held:
+                self.refused += 1
+                self.detail = f"{'+'.join(held)} held down; typing now would be shifted"
+                return False
         for ch in text:
             key = ch.lower()
             if key == " ":
@@ -248,7 +266,14 @@ class Hid:
         if not self.tap("enter"):
             return False
         self._sleep(self.h.settle())
-        self.type_text(command)
+        if not self.type_text(command):
+            # Discard rather than send. Enter here is what turns a mangled command into a
+            # public sentence, and this return value was previously thrown away — which is
+            # exactly how one got said out loud. Escape is safe because the box was opened
+            # two lines ago: this is a measured screen, not a blind press.
+            self.tap("esc")
+            self._sleep(self.h.settle())
+            return False
         self._sleep(self.h.gap())
         ok = self.tap("enter")
         self._sleep(self.h.settle())

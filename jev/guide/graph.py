@@ -78,6 +78,13 @@ class Node(BaseModel):
     r: float = 0.03                    # arrival radius, in map fractions
 
     quest_id: int | None = None
+    # The quest's name as the client shows it, when this step has a quest.
+    #
+    # Carried as a fact rather than parsed back out of `objectives[0]`, because a gossip
+    # line is matched by a hash of exactly this string and "turn in A Threat Within" is
+    # not it. The guide has known the title since it was generated; it was only ever
+    # formatted into a sentence and thrown away.
+    title: str = ""
     npc_id: int | None = None
     objectives: tuple[str, ...] = ()
 

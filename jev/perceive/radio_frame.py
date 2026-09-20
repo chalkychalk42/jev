@@ -663,6 +663,43 @@ def advance_point(reading: RadioReading) -> tuple[int, int] | None:
     return None if x is None or y is None else (x, y)
 
 
+LIST_LINES = 5
+"""How many gossip / greeting lines the strip carries. `fields.py` owns the reason."""
+
+
+@dataclass(frozen=True)
+class ListLine:
+    """One clickable line of a gossip or quest-greeting frame."""
+
+    index: int                    # 0-based, in the order the frame draws them
+    name_id: int                  # fnv1a16 of the line's text, as `name_id` computes it
+    x: float                      # fraction across the interface
+    y: float                      # fraction down it
+
+
+def list_lines(reading: RadioReading) -> tuple[ListLine, ...]:
+    """Every list line the strip is painting, in frame order.
+
+    Empty when no list is up, which is not the same as a list whose lines could not be
+    read: a line with a position and no hash is dropped, because a line that cannot be
+    identified must not be clicked. That is the whole reason the hash is painted — an NPC
+    with two quests to hand in draws two lines a camera cannot tell apart.
+    """
+    if not reading.ok or not reading.values:
+        return ()
+    v = reading.values
+    x = v.get("ui.list_x")
+    if x is None:
+        return ()
+    out = []
+    for i in range(LIST_LINES):
+        y, h = v.get(f"ui.list_y{i}"), v.get(f"ui.list_hash{i}")
+        if y is None or h is None:
+            continue
+        out.append(ListLine(index=i, name_id=h, x=x, y=y))
+    return tuple(out)
+
+
 def to_state(reading: RadioReading, *, t: float, client_id: str,
              quests: tuple[Quest, ...] | None = None) -> State:
     """A decoded strip as `state_v1`.

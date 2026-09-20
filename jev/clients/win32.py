@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import time
 from ctypes import wintypes
 
 IS_WINDOWS = sys.platform == "win32"
@@ -195,6 +196,53 @@ def client_rect(hwnd: int) -> tuple[int, int, int, int]:
 def is_foreground(hwnd: int) -> bool:
     _require()                                          # pragma: no cover - platform
     return user32.GetForegroundWindow() == hwnd         # pragma: no cover - platform
+
+
+VK_CAPITAL = 0x14
+VK_SHIFT = 0x10
+VK_CONTROL = 0x11
+VK_MENU = 0x12
+
+
+def caps_lock_on() -> bool:
+    """Is Caps Lock toggled on right now."""
+    _require()                                          # pragma: no cover - platform
+    return bool(user32.GetKeyState(VK_CAPITAL) & 1)     # pragma: no cover - platform
+
+
+def modifiers_down() -> tuple[str, ...]:
+    """Which of shift/ctrl/alt are physically held, if any.
+
+    A modifier left down is not hypothetical: `chord` presses shift, types, releases it,
+    and anything that returns early in between leaves it stuck for every later keystroke.
+    """
+    _require()                                          # pragma: no cover - platform
+    names = (("shift", VK_SHIFT), ("ctrl", VK_CONTROL), ("alt", VK_MENU))  # pragma: no cover
+    return tuple(n for n, vk in names                   # pragma: no cover - platform
+                 if user32.GetKeyState(vk) & 0x8000)
+
+
+def clear_caps_lock() -> bool:
+    """Turn Caps Lock off, and say whether it is off afterwards.
+
+    Caps Lock is machine state, not window state: it survives the client, this process and
+    the operator walking away, and nothing in the bot could see it. With it on, `type_text`
+    sends shift+m for `M` and the OS hands the game `m` — every letter inverted — which is
+    how `/target Marshal McBride` reached the server as the public sentence
+    `?target mARSHAL mCbRIDE`.
+    """
+    _require()                                          # pragma: no cover - platform
+    for _ in range(3):                                  # pragma: no cover - platform
+        if not caps_lock_on():
+            return True
+        down = KEYBDINPUT(wVk=VK_CAPITAL, wScan=scan_code(VK_CAPITAL),
+                          dwFlags=0, time=0, dwExtraInfo=None)
+        up = KEYBDINPUT(wVk=VK_CAPITAL, wScan=scan_code(VK_CAPITAL),
+                        dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=None)
+        send_inputs([INPUT(type=INPUT_KEYBOARD, ki=down),
+                     INPUT(type=INPUT_KEYBOARD, ki=up)])
+        time.sleep(0.08)
+    return not caps_lock_on()                           # pragma: no cover - platform
 
 
 def focus(hwnd: int) -> bool:

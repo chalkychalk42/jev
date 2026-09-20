@@ -8,9 +8,15 @@ on the last one's symptom. These tests are mostly about what is *absent*.
 from __future__ import annotations
 
 import inspect
+import pathlib
 
 from jev.clients.hid import Hid
-from jev.clients.interact import AT_NODE_YARDS, Interact, Result
+from jev.clients.interact import (
+    AT_NODE_YARDS,
+    MAX_CANDIDATES,
+    Interact,
+    Result,
+)
 from jev.guide.coords import ZoneBounds
 
 ELWYNN = ZoneBounds(area_id=12, map_id=0, left=1535.4166, right=-1935.4166,
@@ -25,12 +31,21 @@ def _interact(values=None, frame=None):
 
 # --- the caps ---------------------------------------------------------------
 
-def test_the_command_is_typed_once():
-    """Retyping hid a focus problem behind a wall of identical chat lines, and spammed
-    the player's own screen doing it."""
-    body = inspect.getsource(Interact._target)
-    assert body.count("slash(") == 1
-    assert "for " not in body and "while " not in body
+def test_the_bot_never_types():
+    """A bot that can talk is a bot that can say the wrong thing, and it did: with Caps
+    Lock on — machine state nothing here could see — `/target Marshal McBride` left the
+    client as `?target mARSHAL mCbRIDE`, out loud in Northshire. Every keystroke
+    "succeeded", so there was nothing to detect. Right-clicking a nameplate does the same
+    job with no keyboard at all."""
+    # Everything below the module docstring: the docstring names `/target` on purpose,
+    # to say why it is gone and stop it coming back.
+    import jev.clients.interact as mod
+
+    src = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+    code = src[src.index("from __future__"):]
+    for talking in ("slash(", "type_text(", "/target"):
+        assert talking not in code, f"{talking}: this skill is typing again"
+    assert not hasattr(Interact, "_target"), "the chat-targeting method came back"
 
 
 def test_there_is_exactly_one_look():
@@ -38,13 +53,20 @@ def test_there_is_exactly_one_look():
     twenty-two steps looking for a unit and then gave up anyway."""
     body = inspect.getsource(Interact.open_on)
     assert "find_on_screen" not in body
-    assert body.count("self._look()") == 1
+    assert body.count("self._candidates()") == 1
 
 
-
-def test_exactly_one_click():
-    body = inspect.getsource(Interact.open_on)
-    assert body.count("self.hid.click(") == 1
+def test_one_click_per_candidate_and_no_more():
+    """A bounded handful, ordered by how central they are — not a sweep. Each click is
+    answered by the radio before the next one is considered."""
+    assert MAX_CANDIDATES <= 3
+    # Two per candidate: one to select, one to interact. They are different actions on
+    # different points and neither is a guess — see `_try`.
+    assert inspect.getsource(Interact._try).count("self.hid.click(") == 2
+    # open_on itself presses nothing: every click belongs to a candidate that the radio
+    # then has to confirm.
+    assert inspect.getsource(Interact.open_on).count("self.hid.click(") == 0
+    assert inspect.getsource(Interact._try_centre).count("self.hid.click(") == 1
 
 
 def test_the_dead_machinery_is_gone():
@@ -110,10 +132,18 @@ def test_nothing_visible_is_a_clean_failure():
     assert result.clicked is None, "it clicked without seeing anything"
 
 
-def test_an_unfocused_window_is_reported_not_retried():
-    inter = _interact(values=None)
-    assert inter.open_on("Deputy Willem") is Result.NO_TARGET
-    assert "focus" in inter.detail
+def test_identity_is_confirmed_from_the_radio_after_the_click():
+    """The click orders candidates; it does not identify them. Only the radio can say who
+    is actually selected, and a plate that turns out to be somebody else is a closed
+    window and the next candidate."""
+    body = inspect.getsource(Interact._try)
+    assert "target.name_id" in body
+    assert "painted != wanted" in body
+    # The identity check sits *between* the two clicks: nothing is interacted with until
+    # the radio has said who is selected, so a wrong plate costs a selection, not an
+    # action.
+    select, _, interact = body.partition('painted != wanted')
+    assert select.count("self.hid.click(") == 1 and interact.count("self.hid.click(") == 1
 
 
 def test_every_opened_window_counts_as_opened():
@@ -131,3 +161,5 @@ def test_being_underfoot_is_the_only_excuse_for_a_centre_click():
     assert AT_NODE_YARDS <= 8.0
     body = inspect.getsource(Interact.open_on)
     assert "self._at(node_map)" in body, "the centre click is not gated on being there"
+    # And it is identity-checked like every other click, not trusted because we arrived.
+    assert "painted != wanted" in inspect.getsource(Interact._try_centre)

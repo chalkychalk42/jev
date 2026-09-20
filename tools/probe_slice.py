@@ -42,8 +42,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 from jev.clients import win32  # noqa: E402
 from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
 from jev.clients.capture import Backend, WindowCapture  # noqa: E402
+from jev.clients.choose import ChooseListLine  # noqa: E402
 from jev.clients.hid import Hid, Humaniser  # noqa: E402
-from jev.clients.interact import GOSSIP_YARDS, Interact  # noqa: E402
+from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
 from jev.clients.travel import Travel  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
@@ -84,6 +85,17 @@ def main() -> int:
             if r.ok:
                 log.observe(r.values)
                 return r.values
+            time.sleep(0.05)
+        return None
+
+    def read_reading():
+        """The whole reading, not just its values: list lines are a property of the
+        frame, not of the character, so they never entered `state_v1`."""
+        for _ in range(6):
+            r = radio_frame.read(cap.grab().rgb)
+            if r.ok:
+                log.observe(r.values)
+                return r
             time.sleep(0.05)
         return None
 
@@ -188,6 +200,8 @@ def main() -> int:
                      window_origin=(ox, oy), approach=approach)
     advance = AdvanceQuestFrame(hid=hid, read=read, quest_ids=lambda: quest_ids(tries=1),
                                 window_origin=(ox, oy), window_size=(w, h))
+    chooser = ChooseListLine(hid=hid, read=read_reading,
+                             window_origin=(ox, oy), window_size=(w, h))
 
     # The only difference between accepting and turning in.
     GOALS = {StepKind.QUEST_ACCEPT: Goal.HELD, StepKind.QUEST_TURNIN: Goal.CLEARED}
@@ -226,6 +240,16 @@ def main() -> int:
         if not result.opened:
             rc = 1
             break
+
+        # A list, not a button. Pick our own quest out of it by name; the NPC may have
+        # several, and they are identical to a camera.
+        if result is Result.GOSSIP:
+            chose = chooser.run(node.title)
+            print(f"  chose {node.title!r}: {chose.value} at {chooser.clicked}"
+                  + (f" — {chooser.detail}" if chooser.detail else ""))
+            if not chose.ok:
+                rc = 1
+                break
 
         log.reset()
         outcome = advance.run(node.quest_id, goal)

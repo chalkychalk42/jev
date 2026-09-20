@@ -24,6 +24,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": null,
+      "title": "",
       "npc_id": null,
       "objectives": [
         "grind Stonetusk Boar"
@@ -61,6 +62,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": null,
+      "title": "",
       "npc_id": null,
       "objectives": [
         "grind Rockhide Boar"
@@ -98,6 +100,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": null,
+      "title": "",
       "npc_id": 54,
       "objectives": [
         "vendor at Corina Steele"
@@ -136,6 +139,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": null,
+      "title": "",
       "npc_id": 54,
       "objectives": [
         "repair at Corina Steele"
@@ -174,6 +178,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": null,
+      "title": "",
       "npc_id": 2879,
       "objectives": [
         "train at Karrina Mekenda"
@@ -212,6 +217,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": null,
+      "title": "",
       "npc_id": 295,
       "objectives": [
         "hearth at Innkeeper Farley"
@@ -250,6 +256,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": null,
+      "title": "",
       "npc_id": 352,
       "objectives": [
         "flight at Dungar Longdrink"
@@ -288,6 +295,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 783,
+      "title": "A Threat Within",
       "npc_id": 823,
       "objectives": [
         "accept A Threat Within"
@@ -344,6 +352,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 783,
+      "title": "A Threat Within",
       "npc_id": 197,
       "objectives": [
         "turn in A Threat Within"
@@ -393,6 +402,7 @@
       "map_id": null,
       "r": 0.03,
       "quest_id": 7961,
+      "title": "Waskily Wabbits!",
       "npc_id": null,
       "objectives": [
         "accept Waskily Wabbits!"
@@ -442,6 +452,7 @@
       "map_id": null,
       "r": 0.03,
       "quest_id": 7961,
+      "title": "Waskily Wabbits!",
       "npc_id": null,
       "objectives": [
         "turn in Waskily Wabbits!"
@@ -498,6 +509,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 7,
+      "title": "Kobold Camp Cleanup",
       "npc_id": 197,
       "objectives": [
         "accept Kobold Camp Cleanup"
@@ -554,6 +566,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 7,
+      "title": "Kobold Camp Cleanup",
       "npc_id": null,
       "objectives": [
         "Kill 10 Kobold Vermin, then return to Marshal McBride."
@@ -611,6 +624,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 7,
+      "title": "Kobold Camp Cleanup",
       "npc_id": 197,
       "objectives": [
         "turn in Kobold Camp Cleanup"
@@ -667,6 +681,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 5261,
+      "title": "Eagan Peltskinner",
       "npc_id": 823,
       "objectives": [
         "accept Eagan Peltskinner"
@@ -723,6 +738,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 5261,
+      "title": "Eagan Peltskinner",
       "npc_id": 196,
       "objectives": [
         "turn in Eagan Peltskinner"
@@ -779,6 +795,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 33,
+      "title": "Wolves Across the Border",
       "npc_id": 196,
       "objectives": [
         "accept Wolves Across the Border"
@@ -835,6 +852,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 33,
+      "title": "Wolves Across the Border",
       "npc_id": null,
       "objectives": [
         "Bring 8 pieces of Tough Wolf Meat to Eagan Peltskinner outside Northshire Abbey."
@@ -892,6 +910,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 33,
+      "title": "Wolves Across the Border",
       "npc_id": 196,
       "objectives": [
         "turn in Wolves Across the Border"
@@ -948,6 +967,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 15,
+      "title": "Investigate Echo Ridge",
       "npc_id": 197,
       "objectives": [
         "accept Investigate Echo Ridge"
@@ -1004,6 +1024,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 15,
+      "title": "Investigate Echo Ridge",
       "npc_id": null,
       "objectives": [
         "Kill 10 Kobold Workers, then report back to Marshal McBride."
@@ -1061,6 +1082,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 15,
+      "title": "Investigate Echo Ridge",
       "npc_id": 197,
       "objectives": [
         "turn in Investigate Echo Ridge"
@@ -1117,6 +1139,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 21,
+      "title": "Skirmish at Echo Ridge",
       "npc_id": 197,
       "objectives": [
         "accept Skirmish at Echo Ridge"
@@ -1173,6 +1196,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 21,
+      "title": "Skirmish at Echo Ridge",
       "npc_id": null,
       "objectives": [
         "Kill 12 Kobold Laborers, then return to Marshal McBride at Northshire Abbey."
@@ -1230,6 +1254,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 21,
+      "title": "Skirmish at Echo Ridge",
       "npc_id": 197,
       "objectives": [
         "turn in Skirmish at Echo Ridge"
@@ -1286,6 +1311,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 54,
+      "title": "Report to Goldshire",
       "npc_id": 197,
       "objectives": [
         "accept Report to Goldshire"
@@ -1342,6 +1368,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 54,
+      "title": "Report to Goldshire",
       "npc_id": null,
       "objectives": [
         "Take Marshal McBride's Documents to Marshal Dughan in Goldshire."
@@ -1399,6 +1426,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 54,
+      "title": "Report to Goldshire",
       "npc_id": 240,
       "objectives": [
         "turn in Report to Goldshire"
@@ -1455,6 +1483,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 18,
+      "title": "Brotherhood of Thieves",
       "npc_id": 823,
       "objectives": [
         "accept Brotherhood of Thieves"
@@ -1511,6 +1540,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 18,
+      "title": "Brotherhood of Thieves",
       "npc_id": null,
       "objectives": [
         "Bring 12 Red Burlap Bandanas to Deputy Willem outside the Northshire Abbey."
@@ -1568,6 +1598,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 18,
+      "title": "Brotherhood of Thieves",
       "npc_id": 823,
       "objectives": [
         "turn in Brotherhood of Thieves"
@@ -1624,6 +1655,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 3903,
+      "title": "Milly Osworth",
       "npc_id": 823,
       "objectives": [
         "accept Milly Osworth"
@@ -1680,6 +1712,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 3903,
+      "title": "Milly Osworth",
       "npc_id": 9296,
       "objectives": [
         "turn in Milly Osworth"
@@ -1736,6 +1769,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 3904,
+      "title": "Milly's Harvest",
       "npc_id": 9296,
       "objectives": [
         "accept Milly's Harvest"
@@ -1792,6 +1826,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 3904,
+      "title": "Milly's Harvest",
       "npc_id": null,
       "objectives": [
         "Bring 8 crates of Milly's Harvest to Milly Osworth at Northshire Abbey."
@@ -1849,6 +1884,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 3904,
+      "title": "Milly's Harvest",
       "npc_id": 9296,
       "objectives": [
         "turn in Milly's Harvest"
@@ -1905,6 +1941,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 3905,
+      "title": "Grape Manifest",
       "npc_id": 9296,
       "objectives": [
         "accept Grape Manifest"
@@ -1961,6 +1998,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 3905,
+      "title": "Grape Manifest",
       "npc_id": null,
       "objectives": [
         "Bring the Grape Manifest to Brother Neals in Northshire Abbey."
@@ -2018,6 +2056,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 3905,
+      "title": "Grape Manifest",
       "npc_id": 952,
       "objectives": [
         "turn in Grape Manifest"
@@ -2074,6 +2113,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 6,
+      "title": "Bounty on Garrick Padfoot",
       "npc_id": 823,
       "objectives": [
         "accept Bounty on Garrick Padfoot"
@@ -2130,6 +2170,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 6,
+      "title": "Bounty on Garrick Padfoot",
       "npc_id": null,
       "objectives": [
         "Kill Garrick Padfoot and bring his head to Deputy Willem at Northshire Abbey."
@@ -2187,6 +2228,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 6,
+      "title": "Bounty on Garrick Padfoot",
       "npc_id": 823,
       "objectives": [
         "turn in Bounty on Garrick Padfoot"
@@ -2243,6 +2285,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 16,
+      "title": "Give Gerard a Drink",
       "npc_id": 255,
       "objectives": [
         "accept Give Gerard a Drink"
@@ -2299,6 +2342,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 16,
+      "title": "Give Gerard a Drink",
       "npc_id": null,
       "objectives": [
         "complete objectives"
@@ -2356,6 +2400,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 16,
+      "title": "Give Gerard a Drink",
       "npc_id": 255,
       "objectives": [
         "turn in Give Gerard a Drink"
@@ -2412,6 +2457,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 2158,
+      "title": "Rest and Relaxation",
       "npc_id": 6774,
       "objectives": [
         "accept Rest and Relaxation"
@@ -2468,6 +2514,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 2158,
+      "title": "Rest and Relaxation",
       "npc_id": 295,
       "objectives": [
         "turn in Rest and Relaxation"
@@ -2524,6 +2571,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 60,
+      "title": "Kobold Candles",
       "npc_id": 253,
       "objectives": [
         "accept Kobold Candles"
@@ -2580,6 +2628,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 60,
+      "title": "Kobold Candles",
       "npc_id": null,
       "objectives": [
         "Bring 8 Large Candles to William Pestle in Goldshire."
@@ -2637,6 +2686,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 60,
+      "title": "Kobold Candles",
       "npc_id": 253,
       "objectives": [
         "turn in Kobold Candles"
@@ -2693,6 +2743,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 61,
+      "title": "Shipment to Stormwind",
       "npc_id": 253,
       "objectives": [
         "accept Shipment to Stormwind"
@@ -2749,6 +2800,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 61,
+      "title": "Shipment to Stormwind",
       "npc_id": null,
       "objectives": [
         "Bring William's Shipment to Morgan Pestle in the Stormwind Trade District."
@@ -2806,6 +2858,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 61,
+      "title": "Shipment to Stormwind",
       "npc_id": 279,
       "objectives": [
         "turn in Shipment to Stormwind"
@@ -2862,6 +2915,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 47,
+      "title": "Gold Dust Exchange",
       "npc_id": 241,
       "objectives": [
         "accept Gold Dust Exchange"
@@ -2918,6 +2972,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 47,
+      "title": "Gold Dust Exchange",
       "npc_id": null,
       "objectives": [
         "Bring 10 Gold Dust to Remy \"Two Times\" in Goldshire.  Gold Dust is gathered from Kobolds in Elwynn Forest."
@@ -2975,6 +3030,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 47,
+      "title": "Gold Dust Exchange",
       "npc_id": 241,
       "objectives": [
         "turn in Gold Dust Exchange"
@@ -3031,6 +3087,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 62,
+      "title": "The Fargodeep Mine",
       "npc_id": 240,
       "objectives": [
         "accept The Fargodeep Mine"
@@ -3087,6 +3144,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 62,
+      "title": "The Fargodeep Mine",
       "npc_id": 240,
       "objectives": [
         "turn in The Fargodeep Mine"
@@ -3143,6 +3201,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 83,
+      "title": "Red Linen Goods",
       "npc_id": 278,
       "objectives": [
         "accept Red Linen Goods"
@@ -3199,6 +3258,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 83,
+      "title": "Red Linen Goods",
       "npc_id": null,
       "objectives": [
         "Bring 6 Red Linen Bandanas to Sara Timberlain at the Eastvale Logging Camp."
@@ -3256,6 +3316,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 83,
+      "title": "Red Linen Goods",
       "npc_id": 278,
       "objectives": [
         "turn in Red Linen Goods"
@@ -3312,6 +3373,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 76,
+      "title": "The Jasperlode Mine",
       "npc_id": 240,
       "objectives": [
         "accept The Jasperlode Mine"
@@ -3368,6 +3430,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 76,
+      "title": "The Jasperlode Mine",
       "npc_id": 240,
       "objectives": [
         "turn in The Jasperlode Mine"
@@ -3424,6 +3487,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 85,
+      "title": "Lost Necklace",
       "npc_id": 246,
       "objectives": [
         "accept Lost Necklace"
@@ -3480,6 +3544,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 85,
+      "title": "Lost Necklace",
       "npc_id": 247,
       "objectives": [
         "turn in Lost Necklace"
@@ -3536,6 +3601,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 86,
+      "title": "Pie for Billy",
       "npc_id": 247,
       "objectives": [
         "accept Pie for Billy"
@@ -3592,6 +3658,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 86,
+      "title": "Pie for Billy",
       "npc_id": null,
       "objectives": [
         "Bring 4 Chunks of Boar Meat to Auntie Bernice Stonefield at the Stonefield's Farm."
@@ -3649,6 +3716,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 86,
+      "title": "Pie for Billy",
       "npc_id": 246,
       "objectives": [
         "turn in Pie for Billy"
@@ -3705,6 +3773,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 84,
+      "title": "Back to Billy",
       "npc_id": 246,
       "objectives": [
         "accept Back to Billy"
@@ -3761,6 +3830,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 84,
+      "title": "Back to Billy",
       "npc_id": null,
       "objectives": [
         "Bring the Pork Belly Pie to Billy Maclure at the Maclure Vineyards."
@@ -3818,6 +3888,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 84,
+      "title": "Back to Billy",
       "npc_id": 247,
       "objectives": [
         "turn in Back to Billy"
@@ -3874,6 +3945,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 106,
+      "title": "Young Lovers",
       "npc_id": 251,
       "objectives": [
         "accept Young Lovers"
@@ -3930,6 +4002,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 106,
+      "title": "Young Lovers",
       "npc_id": null,
       "objectives": [
         "Give Maybell's Love Letter to Tommy Joe Stonefield."
@@ -3987,6 +4060,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 106,
+      "title": "Young Lovers",
       "npc_id": 252,
       "objectives": [
         "turn in Young Lovers"
@@ -4043,6 +4117,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 111,
+      "title": "Speak with Gramma",
       "npc_id": 252,
       "objectives": [
         "accept Speak with Gramma"
@@ -4099,6 +4174,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 111,
+      "title": "Speak with Gramma",
       "npc_id": 248,
       "objectives": [
         "turn in Speak with Gramma"
@@ -4155,6 +4231,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 107,
+      "title": "Note to William",
       "npc_id": 248,
       "objectives": [
         "accept Note to William"
@@ -4211,6 +4288,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 107,
+      "title": "Note to William",
       "npc_id": null,
       "objectives": [
         "Take Gramma Stonefield's Note to William Pestle."
@@ -4268,6 +4346,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 107,
+      "title": "Note to William",
       "npc_id": 253,
       "objectives": [
         "turn in Note to William"
@@ -4324,6 +4403,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 112,
+      "title": "Collecting Kelp",
       "npc_id": 253,
       "objectives": [
         "accept Collecting Kelp"
@@ -4380,6 +4460,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 112,
+      "title": "Collecting Kelp",
       "npc_id": null,
       "objectives": [
         "Bring 4 Crystal Kelp Fronds to William Pestle in Goldshire."
@@ -4437,6 +4518,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 112,
+      "title": "Collecting Kelp",
       "npc_id": 253,
       "objectives": [
         "turn in Collecting Kelp"
@@ -4493,6 +4575,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 114,
+      "title": "The Escape",
       "npc_id": 253,
       "objectives": [
         "accept The Escape"
@@ -4549,6 +4632,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 114,
+      "title": "The Escape",
       "npc_id": null,
       "objectives": [
         "Take the Invisibility Liquor to Maybell Maclure."
@@ -4606,6 +4690,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 114,
+      "title": "The Escape",
       "npc_id": 251,
       "objectives": [
         "turn in The Escape"
@@ -4662,6 +4747,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 87,
+      "title": "Goldtooth",
       "npc_id": 247,
       "objectives": [
         "accept Goldtooth"
@@ -4718,6 +4804,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 87,
+      "title": "Goldtooth",
       "npc_id": null,
       "objectives": [
         "Bring Bernice's Necklace to \"Auntie\" Bernice Stonefield at the Stonefield Farm."
@@ -4775,6 +4862,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 87,
+      "title": "Goldtooth",
       "npc_id": 246,
       "objectives": [
         "turn in Goldtooth"
@@ -4831,6 +4919,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 5545,
+      "title": "A Bundle of Trouble",
       "npc_id": 10616,
       "objectives": [
         "accept A Bundle of Trouble"
@@ -4887,6 +4976,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 5545,
+      "title": "A Bundle of Trouble",
       "npc_id": null,
       "objectives": [
         "Bring 8 Bundles of Wood to Raelen at the Eastvale Logging Camp."
@@ -4944,6 +5034,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 5545,
+      "title": "A Bundle of Trouble",
       "npc_id": 10616,
       "objectives": [
         "turn in A Bundle of Trouble"
@@ -5000,6 +5091,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 176,
+      "title": "Wanted:  \"Hogger\"",
       "npc_id": 68,
       "objectives": [
         "accept Wanted:  \"Hogger\""
@@ -5056,6 +5148,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 176,
+      "title": "Wanted:  \"Hogger\"",
       "npc_id": null,
       "objectives": [
         "Slay the gnoll Hogger and bring his Huge Gnoll Claw to Marshal Dughan."
@@ -5113,6 +5206,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 176,
+      "title": "Wanted:  \"Hogger\"",
       "npc_id": 240,
       "objectives": [
         "turn in Wanted:  \"Hogger\""
@@ -5169,6 +5263,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 88,
+      "title": "Princess Must Die!",
       "npc_id": 244,
       "objectives": [
         "accept Princess Must Die!"
@@ -5225,6 +5320,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 88,
+      "title": "Princess Must Die!",
       "npc_id": null,
       "objectives": [
         "Kill Princess, grab her collar, then bring it back to Ma Stonefield at the Stonefield Farm."
@@ -5282,6 +5378,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 88,
+      "title": "Princess Must Die!",
       "npc_id": 244,
       "objectives": [
         "turn in Princess Must Die!"
@@ -5338,6 +5435,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 11,
+      "title": "Riverpaw Gnoll Bounty",
       "npc_id": 963,
       "objectives": [
         "accept Riverpaw Gnoll Bounty"
@@ -5394,6 +5492,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 11,
+      "title": "Riverpaw Gnoll Bounty",
       "npc_id": null,
       "objectives": [
         "Bring 8 Painted Gnoll Armbands to Deputy Rainer at the Barracks."
@@ -5451,6 +5550,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 11,
+      "title": "Riverpaw Gnoll Bounty",
       "npc_id": 963,
       "objectives": [
         "turn in Riverpaw Gnoll Bounty"
@@ -5507,6 +5607,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 239,
+      "title": "Westbrook Garrison Needs Help!",
       "npc_id": 240,
       "objectives": [
         "accept Westbrook Garrison Needs Help!"
@@ -5563,6 +5664,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 239,
+      "title": "Westbrook Garrison Needs Help!",
       "npc_id": 963,
       "objectives": [
         "turn in Westbrook Garrison Needs Help!"
@@ -5619,6 +5721,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 40,
+      "title": "A Fishy Peril",
       "npc_id": 241,
       "objectives": [
         "accept A Fishy Peril"
@@ -5675,6 +5778,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 40,
+      "title": "A Fishy Peril",
       "npc_id": 240,
       "objectives": [
         "turn in A Fishy Peril"
@@ -5731,6 +5835,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 35,
+      "title": "Further Concerns",
       "npc_id": 240,
       "objectives": [
         "accept Further Concerns"
@@ -5787,6 +5892,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 35,
+      "title": "Further Concerns",
       "npc_id": 261,
       "objectives": [
         "turn in Further Concerns"
@@ -5843,6 +5949,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 37,
+      "title": "Find the Lost Guards",
       "npc_id": 261,
       "objectives": [
         "accept Find the Lost Guards"
@@ -5899,6 +6006,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 37,
+      "title": "Find the Lost Guards",
       "npc_id": 55,
       "objectives": [
         "turn in Find the Lost Guards"
@@ -5955,6 +6063,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 45,
+      "title": "Discover Rolf's Fate",
       "npc_id": 55,
       "objectives": [
         "accept Discover Rolf's Fate"
@@ -6011,6 +6120,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 45,
+      "title": "Discover Rolf's Fate",
       "npc_id": 56,
       "objectives": [
         "turn in Discover Rolf's Fate"
@@ -6067,6 +6177,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 71,
+      "title": "Report to Thomas",
       "npc_id": 56,
       "objectives": [
         "accept Report to Thomas"
@@ -6123,6 +6234,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 71,
+      "title": "Report to Thomas",
       "npc_id": null,
       "objectives": [
         "Deliver Rolf and Malakai's Medallions to Guard Thomas at the eastern Elwynn bridge."
@@ -6180,6 +6292,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 71,
+      "title": "Report to Thomas",
       "npc_id": 261,
       "objectives": [
         "turn in Report to Thomas"
@@ -6236,6 +6349,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 39,
+      "title": "Deliver Thomas' Report",
       "npc_id": 261,
       "objectives": [
         "accept Deliver Thomas' Report"
@@ -6292,6 +6406,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 39,
+      "title": "Deliver Thomas' Report",
       "npc_id": 240,
       "objectives": [
         "turn in Deliver Thomas' Report"
@@ -6348,6 +6463,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 46,
+      "title": "Bounty on Murlocs",
       "npc_id": 261,
       "objectives": [
         "accept Bounty on Murlocs"
@@ -6404,6 +6520,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 46,
+      "title": "Bounty on Murlocs",
       "npc_id": null,
       "objectives": [
         "Bring 8 Torn Murloc Fins to Guard Thomas at the east Elwynn bridge."
@@ -6461,6 +6578,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 46,
+      "title": "Bounty on Murlocs",
       "npc_id": 261,
       "objectives": [
         "turn in Bounty on Murlocs"
@@ -6517,6 +6635,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 52,
+      "title": "Protect the Frontier",
       "npc_id": 261,
       "objectives": [
         "accept Protect the Frontier"
@@ -6573,6 +6692,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 52,
+      "title": "Protect the Frontier",
       "npc_id": null,
       "objectives": [
         "Kill 8 Prowlers and 5 Young Forest Bears, and then return to Guard Thomas at the east Elwynn bridge."
@@ -6630,6 +6750,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 52,
+      "title": "Protect the Frontier",
       "npc_id": 261,
       "objectives": [
         "turn in Protect the Frontier"
@@ -6686,6 +6807,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 59,
+      "title": "Cloth and Leather Armor",
       "npc_id": 240,
       "objectives": [
         "accept Cloth and Leather Armor"
@@ -6742,6 +6864,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 59,
+      "title": "Cloth and Leather Armor",
       "npc_id": null,
       "objectives": [
         "Give Sara Timberlain the Stormwind Armor Marker."
@@ -6799,6 +6922,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 59,
+      "title": "Cloth and Leather Armor",
       "npc_id": 278,
       "objectives": [
         "turn in Cloth and Leather Armor"
@@ -6848,6 +6972,7 @@
       "map_id": null,
       "r": 0.03,
       "quest_id": 123,
+      "title": "The Collector",
       "npc_id": null,
       "objectives": [
         "accept The Collector"
@@ -6897,6 +7022,7 @@
       "map_id": null,
       "r": 0.06,
       "quest_id": 123,
+      "title": "The Collector",
       "npc_id": null,
       "objectives": [
         "Go to Marshal Dughan in Goldshire and give him The Collector's Schedule."
@@ -6954,6 +7080,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 123,
+      "title": "The Collector",
       "npc_id": 240,
       "objectives": [
         "turn in The Collector"
@@ -7010,6 +7137,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 147,
+      "title": "Manhunt",
       "npc_id": 240,
       "objectives": [
         "accept Manhunt"
@@ -7066,6 +7194,7 @@
       "map_id": 0,
       "r": 0.06,
       "quest_id": 147,
+      "title": "Manhunt",
       "npc_id": null,
       "objectives": [
         "Find and kill \"the Collector\"  then return to Marshal Dughan with The Collector's Ring."
@@ -7123,6 +7252,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 147,
+      "title": "Manhunt",
       "npc_id": 240,
       "objectives": [
         "turn in Manhunt"
@@ -7179,6 +7309,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 109,
+      "title": "Report to Gryan Stoutmantle",
       "npc_id": 233,
       "objectives": [
         "accept Report to Gryan Stoutmantle"
@@ -7232,6 +7363,7 @@
       "map_id": 0,
       "r": 0.03,
       "quest_id": 109,
+      "title": "Report to Gryan Stoutmantle",
       "npc_id": 234,
       "objectives": [
         "turn in Report to Gryan Stoutmantle"

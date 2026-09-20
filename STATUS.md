@@ -548,3 +548,87 @@ NOW: 501 tests, ruff clean. The bot walks itself to the right NPC for the right 
 opens him. Both quest frames it can read, it can advance.
 
 NEXT: gossip line selection, then Echo Ridge kobolds.
+
+---
+
+## V27 — the bot stops talking, and the quest gets handed in
+
+    --- step 1: alli_human_1_12_783_a_threat_within_turnin ---
+      arrived, 3.4 yards left, 0 turns, 0 stuck
+      gossip
+      chose 'A Threat Within': chose at (219, 362)
+      cleared: pressed [(112, 681)] -> done
+      log now: ()
+
+Accept and turn-in both work, start to finish, unattended. And nothing types.
+
+### It said it out loud
+
+`Interact` used to acquire with `/target <name>` typed into chat. With **Caps Lock on** —
+machine state no part of the bot could see, and which outlives the client and this process
+— `M` is sent as shift+m and the OS delivers `m`. Every letter inverted, and
+`/target Marshal McBride` left the client as the public sentence
+`?target mARSHAL mCbRIDE`.
+
+Every keystroke reported success. There was nothing to detect, and `slash` compounded it
+by **discarding `type_text`'s return value** and pressing Enter regardless — so a mangled
+line was sent rather than discarded.
+
+Three changes, in increasing order of how much they matter:
+
+    type_text   clears Caps Lock, refuses on a held modifier
+    slash       Escape rather than Enter when the line did not type cleanly
+    Interact    does not type at all
+
+The third is the only one that is a guarantee rather than a mitigation. A bot that can
+talk is a bot that can say the wrong thing.
+
+### Targeting by sight, confirmed after the fact
+
+    left-click the nameplate     selects; a label is clickable at any range
+    read the radio               `target.name_id` says who actually answered
+    `units.find`                 ring and plate now bracket the model
+    right-click the torso        the measured point, not a guess from the label
+
+Identity is checked **between** the two clicks, so a wrong plate costs a selection rather
+than an action. A nameplate bar is five pixels tall and at three yards it can sit under
+the frame or off the top, so there is a fallback: right-click the middle of the screen
+when standing on the spawn — identity-checked the same way, because arriving somewhere is
+not evidence about who is there.
+
+### The line a camera cannot read
+
+A gossip is a list, and `ADVANCE_BUTTON`'s "whichever is showing" has no meaning for one.
+Two quest hand-ins draw two lines identical in every respect a pixel can see. So schema 4
+paints five lines as position **plus identity** — `fnv1a16` of the text, the same hash
+that names a target — and `ChooseListLine` matches against the title the guide carries.
+Two of the same name is `AMBIGUOUS` and refuses; a click there would be a coin toss that
+opens the wrong quest.
+
+`Node.title` is now a field. It was always known at generation time and was being
+formatted into `"turn in A Threat Within"` and thrown away.
+
+### The bug that would have waited weeks
+
+The first live match failed: the line hashed to 64617, the title to 3064. Measured off the
+strip rather than guessed — 27 characters, first byte `|`, last byte `r` — the client
+draws `|cXXXXXXXXA Threat Within|r`.
+
+The colour is the quest's **difficulty relative to the character's level**. Hashing the
+raw text would have matched nothing today, and — had the colour happened to be baked in —
+would have started failing weeks later on a quest that used to work, at whatever level the
+quest turned green. `plain()` strips colours, textures and hyperlinks before hashing.
+
+### Two smaller things
+
+`gen_addon_fields.py --install` copies the addon into the client. The Lua is generated
+from `fields.py` so the two cannot disagree, and then it was copied across by hand — which
+puts the drift straight back, silently, as a checksum failure on a client running last
+week's schema.
+
+The grid is 12x5 now: 73 fields, 554 payload bits, 48 cells, 6 spare.
+
+NOW: 524 tests, ruff clean. Accept and turn-in are one code path over two skills, driven
+by the playhead, with no keyboard involved.
+
+NEXT: Echo Ridge kobolds — the first step whose skill does not exist yet.

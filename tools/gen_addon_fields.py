@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import shutil
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -89,9 +90,31 @@ def render() -> str:
     return "\n".join(lines)
 
 
+DEFAULT_ADDONS = "/mnt/c/Games/WoW243/Interface/AddOns"
+
+
+def install(addons_dir: pathlib.Path) -> pathlib.Path:
+    """Copy the addon into a client, generated file and all.
+
+    Generating and installing are one step on purpose. The Lua is generated from
+    `fields.py` precisely so the two sides cannot disagree, and then it was copied across
+    by hand — which reintroduces the drift the generator exists to remove, silently, as a
+    checksum failure on a client running last week's schema.
+    """
+    dest = addons_dir / "JevRadio"
+    if not addons_dir.is_dir():
+        raise SystemExit(f"no such AddOns directory: {addons_dir}")
+    shutil.rmtree(dest, ignore_errors=True)
+    shutil.copytree(OUT.parent, dest)
+    return dest
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true", help="exit non-zero if the file is stale")
+    ap.add_argument("--install", metavar="ADDONS_DIR", nargs="?",
+                    const=DEFAULT_ADDONS, default=None,
+                    help="also copy the addon into a client's Interface/AddOns")
     args = ap.parse_args()
 
     want = render()
@@ -111,6 +134,9 @@ def main() -> int:
         f"{lay['payload_cells']} cells in a {lay['cols']}x{lay['rows']} grid "
         f"({lay['spare_bits']} spare bits)"
     )
+    if args.install:
+        dest = install(pathlib.Path(args.install))
+        print(f"installed to {dest} — the client needs /console reloadui to pick it up")
     return 0
 
 

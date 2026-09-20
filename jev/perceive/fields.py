@@ -51,11 +51,13 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 3                                    # bump when the field table changes shape
+SCHEMA = 4                                    # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
-rather than swept for."""
+rather than swept for.
+4: gossip and quest-greeting lines, each with its own text hash, because a list has no
+"whichever is showing" and two quest hand-ins look identical to a camera."""
 
 # Quantisation step: nibble n renders as n * STEP, so 15 -> 255 exactly.
 STEP = 255 // (LEVELS - 1)                    # 17
@@ -248,6 +250,48 @@ FIELDS: tuple[Field, ...] = (
     Field("ui.advance_x", 11, Kind.FRAC, "return ADVANCE_BUTTON('x')",
           "fraction across the interface of Accept/Complete/Continue, whichever is showing"),
     Field("ui.advance_y", 11, Kind.FRAC, "return ADVANCE_BUTTON('y')"),
+
+    # Which line of a list to click, and how to know it is the right one.
+    #
+    # A gossip is not a button. `ADVANCE_BUTTON` works because Accept, Continue and
+    # Complete Quest are the same intent wearing different names, so "whichever is
+    # showing" is an answer. A list has no "whichever": an NPC with two quests to hand in
+    # offers two lines that are identical in every respect a pixel can see, and clicking
+    # the first one is a coin toss that opens the wrong quest half the time.
+    #
+    # So each line carries its **identity** as well as its position — `fnv1a16` of the
+    # button's text, the same hash and the same function as `target.name_id`. The bot
+    # knows the title it is looking for because the guide carries it, and matching is a
+    # comparison rather than a guess. Nothing here knows what a quest is.
+    #
+    # One x for all of them: the buttons share an anchor and a width, so the column is a
+    # property of the frame, not of the line.
+    #
+    # Five lines. Not a budget — it is what the fifth grid row holds, and a sixth row is
+    # available the day a live frame needs it. Beyond five the bot fails honestly, which
+    # is the failure worth having: a list it cannot fully see is one it must not click in.
+    Field("ui.list_x", 11, Kind.FRAC, "return LIST_LINE(1, 'x')",
+          "fraction across the interface of the gossip/greeting line column"),
+    Field("ui.list_y0", 11, Kind.FRAC, "return LIST_LINE(1, 'y')",
+          "fraction down the interface of list line 1, if it is showing"),
+    Field("ui.list_hash0", 16, Kind.UINT, "return LIST_LINE(1, 'hash')",
+          "fnv1a16 of line 1's text, matched against a title the guide already knows"),
+    Field("ui.list_y1", 11, Kind.FRAC, "return LIST_LINE(2, 'y')",
+          "fraction down the interface of list line 2, if it is showing"),
+    Field("ui.list_hash1", 16, Kind.UINT, "return LIST_LINE(2, 'hash')",
+          "fnv1a16 of line 2's text, matched against a title the guide already knows"),
+    Field("ui.list_y2", 11, Kind.FRAC, "return LIST_LINE(3, 'y')",
+          "fraction down the interface of list line 3, if it is showing"),
+    Field("ui.list_hash2", 16, Kind.UINT, "return LIST_LINE(3, 'hash')",
+          "fnv1a16 of line 3's text, matched against a title the guide already knows"),
+    Field("ui.list_y3", 11, Kind.FRAC, "return LIST_LINE(4, 'y')",
+          "fraction down the interface of list line 4, if it is showing"),
+    Field("ui.list_hash3", 16, Kind.UINT, "return LIST_LINE(4, 'hash')",
+          "fnv1a16 of line 4's text, matched against a title the guide already knows"),
+    Field("ui.list_y4", 11, Kind.FRAC, "return LIST_LINE(5, 'y')",
+          "fraction down the interface of list line 5, if it is showing"),
+    Field("ui.list_hash4", 16, Kind.UINT, "return LIST_LINE(5, 'hash')",
+          "fnv1a16 of line 5's text, matched against a title the guide already knows"),
 
     # -- quests ------------------------------------------------------------------
     Field("quests.log_hash", 16, Kind.UINT, "return QUEST_HASH()",
