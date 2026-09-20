@@ -960,3 +960,34 @@ def test_a_marker_must_be_saturated_not_merely_the_right_hue():
     assert mask((0, 64, 64)).all(), "the same marker at a quarter gain"
     assert not mask((100, 140, 153)).any(), "Elwynn ground, seen as a ghost"
     assert not mask((125, 173, 188)).any(), "the median pixel that flooded the mask"
+
+
+BANNER = pathlib.Path(__file__).parent / "fixtures" / "live-abbey-banner.npz"
+
+
+def test_the_strip_reads_against_a_saturated_blue_banner():
+    """Cyan means green equals blue. The low-channel ratio does not say that, so a
+    Stormwind banner at `(30, 90, 200)` read as cyan and put **492,101 pixels** in the
+    mask while the character stood in Northshire Abbey — the same drowning as the ghost
+    world, from the opposite direction.
+
+    Measured on this frame: the banner's `|G-B|/max(G,B)` is 0.55 and the marker's is 0.
+    The fixture keeps the banner in it on purpose."""
+    frame = np.load(BANNER)["frame"]
+    left, right = radio_frame._marker_masks(frame)
+    assert right.sum() < 20000, "the banner is flooding the cyan mask"
+
+    reading = radio_frame.read(frame)
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+
+
+def test_a_marker_needs_its_two_high_channels_to_match():
+    def mask(rgb):
+        return radio_frame._marker_masks(np.full((4, 4, 3), rgb, dtype=np.uint8))[1]
+
+    from jev.perceive.fields import MARKER_R
+
+    assert mask(MARKER_R).all(), "cyan"
+    assert mask((0, 64, 64)).all(), "cyan at a quarter gain"
+    assert not mask((30, 90, 200)).any(), "a blue banner is not cyan"
+    assert not mask((0, 60, 200)).any(), "nor is saturated blue"

@@ -157,6 +157,17 @@ POWER_BY_ID: dict[int, PowerType] = {
 # A channel gap that survives the worst transform `solve_transform` will still accept.
 # The markers differ by a full 255 in two channels; at the 0.25 gain floor that lands at
 # 64, so 40 leaves headroom without admitting ordinary UI purple.
+MARKER_BALANCE = 0.35
+"""How closely a marker's two **high** channels must match, as a fraction of the larger.
+
+Cyan means green and blue are equal; blue means blue is much larger. The low-channel
+ratio below does not say that, so a saturated blue Stormwind banner — `(30, 90, 200)` —
+read as cyan and put **492,101 pixels** in the mask while the character stood in
+Northshire Abbey. Measured on that frame: the banner's imbalance is 0.55 and the marker's
+is 0. A ratio again, so a dimmed capture keeps its shape.
+
+Magenta is the same test on red and blue."""
+
 MARKER_LOW_RATIO = 0.5
 """How dark a marker's remaining channel must be, **as a fraction of its high ones**.
 
@@ -330,16 +341,23 @@ def _marker_masks(frame: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     screen pixel-exact. The bot went blind precisely when it was a ghost and needed to
     find its corpse.
 
-    The test is a **ratio**, not a brightness floor, because this file already promises to
-    decode a capture at a gain of 0.25 — where a marker arrives at (0, 64, 64) and any
-    absolute floor throws it away.
+    Two tests, and both earned their place on a live frame. The low channel must be dark
+    *relative to the high ones*, which is what a desaturated ghost world fails. The two
+    high channels must also **match each other**, which is what a saturated blue banner
+    fails — cyan means green equals blue, and blue does not.
+
+    Both are ratios rather than thresholds, because this file already promises to decode a
+    capture at a gain of 0.25 — where a marker arrives at (0, 64, 64) and any absolute
+    floor throws it away.
     """
     d = _rgb(frame).astype(np.int16)
     r, g, b = d[:, :, 0], d[:, :, 1], d[:, :, 2]
     left = ((r - g >= MARKER_MARGIN) & (b - g >= MARKER_MARGIN)      # magenta
-            & (g <= MARKER_LOW_RATIO * np.minimum(r, b)))
+            & (g <= MARKER_LOW_RATIO * np.minimum(r, b))
+            & (np.abs(r - b) <= MARKER_BALANCE * np.maximum(r, b)))
     right = ((g - r >= MARKER_MARGIN) & (b - r >= MARKER_MARGIN)     # cyan
-             & (r <= MARKER_LOW_RATIO * np.minimum(g, b)))
+             & (r <= MARKER_LOW_RATIO * np.minimum(g, b))
+             & (np.abs(g - b) <= MARKER_BALANCE * np.maximum(g, b)))
     return left, right
 
 
