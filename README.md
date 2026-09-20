@@ -56,7 +56,7 @@ data/           knowledge packs (gitignored, see data/README.md)
 
 ## The environment this targets
 
-CMaNGOS TBC 2.4.3 built from source at `/home/ash/cmangos`, a 2.4.3 build 8606 client at
-`/mnt/c/Games/WoW243`. Offline server only — no live realms, no injection, no memory
+CMaNGOS TBC 2.4.3 built from source at `~/cmangos`, a 2.4.3 build 8606 client at
+`C:\Games\WoW243`. Offline server only — no live realms, no injection, no memory
 access. Control is virtual HID; sense is screen capture plus an addon that paints state
 and never actuates.
