@@ -9,14 +9,15 @@ from jev.coach.schema import Intent
 from jev.coach.verifier import verify
 from jev.guide.graph import Graph
 from jev.skills.catalog import NAMES
-from jev.world.state_v1 import Bags, Pos, State, Target, Ui, Vitals
+from jev.world.state_v1 import Bags, Pos, Sense, State, Target, Ui, Vitals
 
 
 def _s(**kw) -> State:
     base = dict(vitals=Vitals(hp=1.0, power=1.0, dead=False, ghost=False, combat=False),
                 bags=Bags(free=10, durability_min=1.0),
                 pos=Pos(zone="Elwynn", zone_id=12, mx=0.5, my=0.5),
-                ui=Ui(loot=False, modal=False))
+                ui=Ui(loot=False, modal=False),
+                sense=Sense(addon_ok=True, vision_conf=1.0))
     return State(t=0.0, client_id="c", **{**base, **kw})
 
 
@@ -69,6 +70,22 @@ def test_a_state_where_nothing_is_known_still_gets_a_plan():
     plan = decide(State(t=0.0, client_id="c"))
     assert plan.decision.intent is Intent.GRIND_RIB
     assert not plan.confident, "guessing in the dark should be marked as guessing"
+
+
+def test_a_plan_made_blind_is_marked_as_a_guess():
+    """Claiming 0.8 confidence in a position nothing confirmed would make a perception
+    outage report as a quiet, confident run and hide the ticks worth escalating."""
+    graph = Graph.load("content/tbc/ally_human_1_12.json")
+    node = graph.get(graph.entry)
+    seeing = _s(pos=Pos(zone=node.zone, zone_id=node.zone_id,
+                        mx=node.pos[0], my=node.pos[1]))
+    blind = seeing.model_copy(update={"sense": Sense(addon_ok=False, vision_conf=0.0)})
+
+    assert decide(seeing, node).confident
+    guess = decide(blind, node)
+    assert not guess.confident
+    assert guess.decision.confidence <= 0.4
+    assert guess.rule.endswith("+blind")
 
 
 # --- preempts ---------------------------------------------------------------

@@ -191,6 +191,24 @@ def _fallback(state: State) -> Plan:
 # --------------------------------------------------------------------------- entry point
 
 
+def _blind(state: State) -> bool:
+    """Nothing trustworthy is being read right now."""
+    return not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5
+
+
+def _derate(plan: Plan) -> Plan:
+    """Mark a plan made without working senses as the guess it is.
+
+    A step can still be attempted blind — the scripted tier has to return *something* —
+    but claiming 0.8 confidence in a position nothing confirmed would hide the exact
+    ticks worth spending a teacher call on, and would make `unresolved/h` report a
+    perception outage as a quiet, confident run.
+    """
+    d = plan.decision
+    return Plan(d.model_copy(update={"confidence": min(d.confidence, 0.4)}),
+                False, plan.rule + "+blind")
+
+
 def decide(state: State, node: Node | None = None) -> Plan:
     """Always returns a usable plan. Never raises, never returns None.
 
@@ -198,16 +216,15 @@ def decide(state: State, node: Node | None = None) -> Plan:
     not mark a tick that needs one — the decision handed back is valid either way, and
     that distinction is the difference between an improvement engine and a dependency.
     """
+    # Safety first, and safety is not derated: a preempt fires on a positive observation
+    # (`is True`), so if one matched, something was read.
     for tier in (preempt, _service, _recover, _fight):
         plan = tier(state)
         if plan is not None:
             return plan
 
-    plan = _guide(state, node)
-    if plan is not None:
-        return plan
-
-    return _fallback(state)
+    plan = _guide(state, node) or _fallback(state)
+    return _derate(plan) if _blind(state) else plan
 
 
 def wants_teacher(plan: Plan) -> bool:

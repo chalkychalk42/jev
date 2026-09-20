@@ -562,11 +562,22 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             rib = rib_for_zone.get(n.zone_id) or next(iter(rib_for_zone.values()), None)
             escape = rib or (nxt[0] if nxt else None)
             if escape:
+                # `QUEST_MISSING` means "the quest should be in the log and is not", so it
+                # belongs on objectives and turn-ins only. On an *accept* node the quest
+                # being absent is the entire reason the character is standing there, and
+                # attaching it fires on the first tick after arrival, skipping every
+                # quest in the graph before any of them can be taken. The accept-side
+                # equivalent is `QUEST_NOT_OFFERED`, which needs attempts, not absence.
+                wants_missing = n.quest_id and n.kind in (
+                    StepKind.QUEST_OBJECTIVE, StepKind.QUEST_TURNIN)
+                wants_not_offered = n.quest_id and n.kind is StepKind.QUEST_ACCEPT
                 fails = (
                     FailEdge(when=FailWhen.TIMEOUT, value=n.timeout_s, goto=escape),
                     FailEdge(when=FailWhen.DEATHS, value=3, goto=escape),
                     *((FailEdge(when=FailWhen.QUEST_MISSING, goto=escape),)
-                      if n.quest_id else ()),
+                      if wants_missing else ()),
+                    *((FailEdge(when=FailWhen.QUEST_NOT_OFFERED, goto=escape),)
+                      if wants_not_offered else ()),
                 )
         wired.append(n.model_copy(update={"next": nxt, "on_fail": fails}))
 

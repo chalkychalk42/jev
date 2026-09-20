@@ -308,7 +308,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -413,7 +413,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -518,7 +518,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -687,7 +687,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -799,7 +799,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -968,7 +968,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -1137,7 +1137,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -1306,7 +1306,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -1475,7 +1475,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -1644,7 +1644,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -1756,7 +1756,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -1925,7 +1925,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -2094,7 +2094,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -2263,7 +2263,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -2432,7 +2432,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -2544,7 +2544,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -2713,7 +2713,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -2882,7 +2882,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -3051,7 +3051,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -3163,7 +3163,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -3332,7 +3332,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -3444,7 +3444,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -3556,7 +3556,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -3725,7 +3725,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -3894,7 +3894,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -4063,7 +4063,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -4175,7 +4175,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -4344,7 +4344,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -4513,7 +4513,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -4682,7 +4682,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -4851,7 +4851,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -5020,7 +5020,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -5189,7 +5189,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -5358,7 +5358,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -5527,7 +5527,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -5639,7 +5639,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -5751,7 +5751,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -5863,7 +5863,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -5975,7 +5975,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -6087,7 +6087,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -6256,7 +6256,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -6368,7 +6368,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -6537,7 +6537,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -6706,7 +6706,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -6868,7 +6868,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -7030,7 +7030,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
@@ -7199,7 +7199,7 @@
           "value": 3.0
         },
         {
-          "when": "quest_missing",
+          "when": "quest_not_offered",
           "goto": "alli_human_1_12_grind_elwynn_0",
           "value": null
         }
