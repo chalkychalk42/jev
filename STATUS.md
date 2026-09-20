@@ -675,7 +675,7 @@ what this server can actually do; a runtime skip would re-derive that judgement 
 pass and leave the dead node in the file to confuse the next reader. Two dropped, 132
 nodes to 127.
 
-NOW: 531 tests, ruff clean. Accept, walk, gossip and turn in are one path, driven by the
+NOW: 530 tests, ruff clean. Accept, walk, gossip and turn in are one path, driven by the
 playhead, with no keyboard and no per-NPC code.
 
 NEXT: Echo Ridge kobolds — `quest_objective` is the first node kind with no skill behind
