@@ -151,3 +151,20 @@ def test_follow_asks_the_planner_again_rather_than_improvising():
     from jev.clients.travel import Travel as T
 
     assert "replan" in inspect.signature(T.follow).parameters
+
+
+def test_remaining_yards_is_measured_against_the_destination_not_the_leg():
+    """A run that gave up 46 yards from Marshal McBride reported "3.1 yards left",
+    because 3.1 yards was all that remained of a waypoint in the middle of the courtyard.
+    Every caller of `follow` reads this number as "how far short did we stop"."""
+    legs = [(0.0, 0.0), (0.5, 0.0), (1.0, 0.0)]
+
+    class _T(Travel):
+        def distance(self, a, b):  # yards, made linear so the arithmetic is readable
+            return abs(a[0] - b[0]) * 100.0
+
+    t = _T(hid=None, bounds=None, read_pos=lambda: None)
+    # Stopped at the first waypoint: nothing left of leg 0, half the journey left overall.
+    assert t._short_by((0.5, 0.0), legs) == 50.0
+    assert t._short_by(legs[-1], legs) == 0.0
+    assert t._short_by(None, legs) is None

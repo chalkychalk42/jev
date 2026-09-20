@@ -36,6 +36,16 @@ from jev.perceive.units import Sighting, find
 # hidden because the character is on top of the unit.
 AT_NODE_YARDS = 6.0
 
+# How close the character has to be for an NPC to talk, and therefore what "arrived" means
+# for a node holding a unit.
+#
+# It is not the node radius. A node is a **spawn point**, which is the middle of the unit,
+# and a unit is solid — so a path planned to it ends inside a collision capsule and the
+# last couple of yards are unwalkable by construction. Asking the follower for 3 yards got
+# 3.1 and four stuck events against McBride himself, which is arrival being reported as
+# failure. Every NPC in the game has this shape.
+GOSSIP_YARDS = 5.0
+
 
 class Result(StrEnum):
     GOSSIP = "gossip"

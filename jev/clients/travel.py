@@ -389,7 +389,7 @@ class Travel:
                     )
                     return TravelResult(
                         outcome=rest.outcome, start=legs[0], end=rest.end,
-                        remaining_yards=rest.remaining_yards,
+                        remaining_yards=self._short_by(rest.end, legs),
                         elapsed_s=time.perf_counter() - t0, turns=self.turns,
                         stuck_events=self.stuck_events, detours=self.detours,
                         turn_rate_deg_s=rest.turn_rate_deg_s,
@@ -400,7 +400,7 @@ class Travel:
                 self.arrival_yards = exact
                 return TravelResult(
                     outcome=last.outcome, start=legs[0], end=last.end,
-                    remaining_yards=last.remaining_yards,
+                    remaining_yards=self._short_by(last.end, legs),
                     elapsed_s=time.perf_counter() - t0, turns=self.turns,
                     stuck_events=self.stuck_events, detours=self.detours,
                     turn_rate_deg_s=last.turn_rate_deg_s,
@@ -413,7 +413,7 @@ class Travel:
                                 time.perf_counter() - t0, "already at the destination")
         return TravelResult(
             outcome=Outcome.ARRIVED, start=legs[0], end=last.end,
-            remaining_yards=last.remaining_yards,
+            remaining_yards=self._short_by(last.end, legs),
             elapsed_s=time.perf_counter() - t0, turns=self.turns,
             stuck_events=self.stuck_events, detours=self.detours,
             turn_rate_deg_s=last.turn_rate_deg_s, detail="",
@@ -500,6 +500,18 @@ class Travel:
         if unreadable == len(attempts):
             self.last_unstick = "unreadable"
         return False
+
+    def _short_by(self, end, legs) -> float | None:
+        """How far the character stopped from where it was going.
+
+        Against `legs[-1]`, never against the leg it happened to be on. `to()` measures
+        the leg because that is what it is steering at, but a caller of `follow()` asks
+        one question — did we get there — and a leg-relative answer lies in the most
+        convincing way available: a run that gave up 46 yards from Marshal McBride
+        reported "3.1 yards left", because 3.1 yards was all that remained of a waypoint
+        in the middle of the courtyard.
+        """
+        return None if end is None else self.distance(end, legs[-1])
 
     def _result(self, outcome: Outcome, start, end, target, elapsed: float,
                 detail: str) -> TravelResult:

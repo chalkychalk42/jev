@@ -43,7 +43,7 @@ from jev.clients import win32  # noqa: E402
 from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
 from jev.clients.capture import Backend, WindowCapture  # noqa: E402
 from jev.clients.hid import Hid, Humaniser  # noqa: E402
-from jev.clients.interact import Interact  # noqa: E402
+from jev.clients.interact import GOSSIP_YARDS, Interact  # noqa: E402
 from jev.clients.travel import Travel  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
@@ -177,10 +177,12 @@ def main() -> int:
         remaining = ("unknown" if result.remaining_yards is None
                      else f"{result.remaining_yards:.1f} yards")
         print(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "
-              f"{result.stuck_events} stuck")
+              f"{result.stuck_events} stuck"
+              + (f" — {result.detail}" if result.detail else ""))
         return result.outcome.value == "arrived"
 
-    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos, arrival_yards=3.0)
+    travel = Travel(hid=hid, bounds=bounds, read_pos=read_pos,
+                    arrival_yards=GOSSIP_YARDS)
     inter = Interact(hid=hid, bounds=bounds, read=read, read_frame=read_frame,
                      read_pos=read_pos, window_centre=(ox + w // 2, oy + h // 2),
                      window_origin=(ox, oy), approach=approach)

@@ -481,8 +481,70 @@ multi-option gossip is the same shape — a list.
 Four ruff findings that predated this went with it, including an `objectives` tuple in
 `radio_frame` orphaned when the log moved to `QuestLog`.
 
-NOW: 494 tests, ruff clean. Willem gives 783 unattended, start to finish: login, plan,
-walk, click, accept. The turn-in path is built and covered by tests; it has not yet met
-the live client.
+NOW: 501 tests, ruff clean. Willem gives 783 unattended, start to finish: login, plan,
+walk, click, accept.
 
 NEXT: McBride turn-in on the same two skills, then Echo Ridge.
+
+---
+
+## V26 — the playhead drives, and the distance was lying
+
+`probe_slice` named the NPC and the quest on the command line. That was scaffolding for
+the first accept, and it hid the fact that nothing was reading the chain — the graph had
+Willem-accept -> McBride-turnin in it the whole time.
+
+`Tracker.resume(graph, state)` walks from the entry and stops at the first step the world
+does not already satisfy, reusing `enter`/`tick` rather than comparing afresh. That reuse
+is the point: a turn-in is only complete if the quest was *seen* in the log first, and a
+second rule written at the call site forgets that and walks past every turn-in in the
+guide. Two seams it needed — `QuestLog.complete` made public, and `to_state(quests=)`, so
+the assembled log reaches the tracker that `to_state` is right to refuse to invent.
+
+### "3.1 yards left" was 46 yards
+
+The first live turn-in attempt reported `stuck, 3.1 yards left`. It was 46 yards from
+Marshal McBride. `follow()` was returning `remaining_yards` measured against the **leg it
+happened to be on**, and 3.1 yards was all that remained of a waypoint in the middle of
+the courtyard.
+
+`to()` measures the leg because that is what it is steering at. A caller of `follow()`
+asks one question — did we get there — so `_short_by` measures `legs[-1]`. A wrong
+distance is worse than no distance: it is the number you use to decide whether the
+approach or the click is at fault, and it sent an hour at the wrong one.
+
+### A node is a spawn point, and a unit is solid
+
+`arrival_yards=3.0` encoded "stand on the point". A path planned to a unit ends *inside*
+its collision capsule, so the last couple of yards are unwalkable by construction — and
+asking for 3 got four stuck events against McBride himself, which is arrival reported as
+failure. `GOSSIP_YARDS = 5.0` is what the requirement actually was: close enough to talk.
+Every NPC in the game has this shape.
+
+With both fixed, live:
+
+    --- step 1: alli_human_1_12_783_a_threat_within_turnin ---
+      quest_turnin quest 783 at Marshal McBride
+      complete: 4 waypoints, 65.5 yards
+      arrived, 4.6 yards left, 5 turns, 1 stuck — re-planned at leg 1
+      gossip
+      cleared: pressed [] -> no_button — frame open but no advance button painted
+
+### The gap this leaves, named rather than patched
+
+McBride opens **gossip**, not a quest frame: a list with one line, `A Threat Within`.
+There is no Accept/Continue/Complete button to paint, so `AdvanceQuestFrame` correctly
+refuses. Clicking the line needs the line's position *and its identity*, because a gossip
+with two active quests has no "the" line.
+
+The shape is already in the codebase twice: paint it, hash it, match it. The addon paints
+each `GossipTitleButton`'s y-fraction and a 16-bit hash of its text, and the bot matches
+against the quest title the graph already carries (`objectives: ["turn in A Threat
+Within"]`). Identical to `target.name_id`, and global for every gossip, quest and vendor
+in the game. It costs a fifth grid row — the 12x4 is exactly full — which is what rows
+are for.
+
+NOW: 501 tests, ruff clean. The bot walks itself to the right NPC for the right step and
+opens him. Both quest frames it can read, it can advance.
+
+NEXT: gossip line selection, then Echo Ridge kobolds.
