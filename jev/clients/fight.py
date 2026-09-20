@@ -56,12 +56,31 @@ LOST_HP = 0.5
 # of the screen is the thing in front of it.
 MAX_CANDIDATES = 3
 
+# How far another nameplate has to be before a target counts as **alone**.
+#
+# A level 1 paladin beats a level 1 kobold and loses to three, and it lost to three twice:
+# both live deaths were a pull in the middle of a camp, not a fight it could not win. So
+# an isolated plate is preferred over a central one.
+#
+# Pixels are a proxy for yards and an imperfect one — two mobs thirty yards away look
+# close together — so this is a *preference*, not a filter. When nothing is isolated the
+# most central plate is still tried, because refusing to fight at all is worse than
+# fighting carefully.
+CROWD_PX = 260
+
+# Health to start a fight at, and health to break one off at. Below the first, rest; below
+# the second, the fight is lost and pressing on is how a character ends up running back
+# from the graveyard.
+MIN_START_HP = 0.55
+FLEE_HP = 0.30
+
 # Tab presses before giving up on finding something attackable.
 MAX_SELECTS = 4
 
 # Closing to melee. Held in bursts rather than one long press so the loop can stop the
 # moment damage starts, and bounded because walking at something that is not getting
 # closer is walking into a fence.
+ENGAGE_LOOKS = 5
 CLOSE_BURST_S = 0.45
 MAX_CLOSE_BURSTS = 8
 
@@ -78,6 +97,9 @@ class Fought(StrEnum):
     NO_TARGET = "no_target"          # Tab found nothing attackable
     NOT_VISIBLE = "not_visible"      # selected, but not clickable, so not faceable
     LOST = "lost"                    # target gone while still healthy: fled, or evaded
+    UNREACHABLE = "unreachable"      # engaged, but never got close enough to land a hit
+    TOO_HURT = "too_hurt"            # not healthy enough to start
+    LOSING = "losing"                # broke off; the caller decides what to do about it
     DIED = "died"                    # we did
     TIMEOUT = "timeout"
     BLIND = "blind"
@@ -98,13 +120,15 @@ class Fight:
 
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
+    # The plate that produced the current selection, if a plate did.
+    selected_plate: Plate | None = field(default=None, init=False)
     last_hp: float | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
     _last_use: dict[int, float] = field(default_factory=dict, init=False)
 
     # -- the skill -----------------------------------------------------------
 
-    def run(self, name_id: int | None = None, *, timeout_s: float = 90.0) -> Fought:
+    def run(self, name_id: int | None = None, *, timeout_s: float = 45.0) -> Fought:
         """Select, engage, and hold the rotation until something settles it."""
         self.pressed = []
         self.closed = 0
@@ -112,12 +136,42 @@ class Fight:
         self.detail = ""
         self._last_use = {}
 
-        acquired = self.acquire(name_id)
-        if acquired is not None:
-            return acquired
+        v = self.read()
+        if v is None:
+            return Fought.BLIND
+        # The health guard is about **picking** fights, not about surviving one already
+        # under way. Refusing to swing back because health is low is how a character
+        # stands there being hit at 49%, declines to eat because it is in combat, and
+        # does nothing at all until it falls over.
+        in_combat = v.get("vitals.combat") is True
+        hp = v.get("vitals.hp")
+        if not in_combat and hp is not None and hp < MIN_START_HP:
+            self.detail = f"{hp:.0%} health; not starting a fight on that"
+            return Fought.TOO_HURT
+
+        # Already engaged with something alive: that is the fight, and shopping for a
+        # better one just adds a second attacker.
+        engaged = (in_combat and v.get("target.has") is True
+                   and (v.get("target.hp") or 1.0) > DEAD_HP)
+        if not engaged:
+            # In combat, the name filter comes off. Something is already hitting us and
+            # it does not have to be the quest mob — a Kobold Worker beat this character
+            # to 27% health while every attempt refused to fight anything but a Kobold
+            # Vermin, selected nothing, and reported "not visible" twenty times in a row.
+            acquired = self.acquire(None if in_combat else name_id)
+            if acquired is not None:
+                return acquired
         if not self.engage():
             return Fought.NOT_VISIBLE
-        self.close_in()
+        if not self.close_in():
+            # Eight bursts of walking and the target has taken nothing. Standing in the
+            # rotation for another ninety seconds does not change that, and a live run
+            # spent exactly that pressing abilities at a full-health kobold it never
+            # reached. Give the attempt up and let the caller pick something else.
+            self.detail = (f"closed {self.closed} times and landed nothing; "
+                           "cannot reach it")
+            return Fought.UNREACHABLE
+
 
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
@@ -127,6 +181,12 @@ class Fight:
             if v.get("vitals.dead") is True or v.get("vitals.ghost") is True:
                 self.detail = "the character died"
                 return Fought.DIED
+            mine = v.get("vitals.hp")
+            if mine is not None and mine < FLEE_HP:
+                # Break off rather than finish the fight standing up. Both live deaths
+                # were fights that were already lost several seconds earlier.
+                self.detail = f"broke off at {mine:.0%} health"
+                return Fought.LOSING
 
             hp = v.get("target.hp")
             if hp is not None:
@@ -148,6 +208,7 @@ class Fight:
         Nameplates first, because a plate means the client is drawing the unit near enough
         to fight, and `Tab` does not care how far away or how occluded its pick is.
         """
+        self.selected_plate = None
         frame = self.read_frame()
         if frame is not None:
             for plate in self._candidates(frame):
@@ -155,14 +216,29 @@ class Fight:
                                self.window_origin[1] + round(plate.cy))
                 time.sleep(0.35)
                 if self._acceptable(name_id) is True:
+                    self.selected_plate = plate
                     return None
         return self.select(name_id)
 
     def _candidates(self, frame) -> list[Plate]:
-        """Plates worth clicking, most central first. An ordering, not an identification."""
+        """Plates worth clicking: alone first, then central. An ordering, not an ID.
+
+        Isolation leads because a pull in the middle of a camp is what killed this
+        character twice, and a plate with no neighbour is the best available evidence that
+        a mob has none either.
+        """
         plates = find_plates(frame)
         centre = self.window_centre_x
-        plates.sort(key=lambda p: abs(p.cx - centre))
+        # A snapshot, because `list.sort` empties the list while it computes keys — so a
+        # key function that reads `plates` sees nothing, every plate looks isolated, and
+        # the ordering silently collapses back to plain centrality.
+        others = list(plates)
+
+        def crowding(plate: Plate) -> float:
+            near = [abs(p.cx - plate.cx) for p in others if p is not plate]
+            return min(near) if near else float("inf")
+
+        plates.sort(key=lambda p: (crowding(p) < CROWD_PX, abs(p.cx - centre)))
         return plates[:MAX_CANDIDATES]
 
     def _acceptable(self, name_id: int | None) -> bool | None:
@@ -231,15 +307,31 @@ class Fight:
         visible — ring **and** nameplate — this refuses, because the alternative is
         swinging at whatever the camera happens to be pointed at.
         """
-        frame = self.read_frame()
-        sighting = None if frame is None else find(frame)
-        if sighting is None:
-            self.detail = "selected, but no ring and nameplate to click, so no way to face it"
-            return False
         ox, oy = self.window_origin
-        self.hid.click(ox + sighting.torso[0], oy + sighting.torso[1], right=True)
-        time.sleep(0.5)
-        return True
+        # The ring is drawn a moment after the selection, so looking once loses races the
+        # client was always going to win eventually.
+        for _ in range(ENGAGE_LOOKS):
+            frame = self.read_frame()
+            sighting = None if frame is None else find(frame)
+            if sighting is not None:
+                self.hid.click(ox + sighting.torso[0], oy + sighting.torso[1], right=True)
+                time.sleep(0.5)
+                return True
+            time.sleep(0.25)
+
+        if self.selected_plate is not None:
+            # No ring — the unit's feet are behind a rise, or grass, or the model itself.
+            # Its plate is still on screen and **the radio has already confirmed who is
+            # selected**, so the approximation below the plate is aimed at a known unit
+            # rather than a hopeful pixel. Missing costs a click that opens nothing.
+            point = self.selected_plate.unit_below()
+            self.hid.click(ox + point[0], oy + point[1], right=True)
+            time.sleep(0.5)
+            self.detail = "no ring; aimed below the nameplate instead"
+            return True
+
+        self.detail = "selected, but no ring and nameplate to click, so no way to face it"
+        return False
 
     def _rotate(self, values: dict) -> None:
         """Press the highest-priority slot the client says is ready."""

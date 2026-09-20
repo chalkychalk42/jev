@@ -43,6 +43,7 @@ from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
 from jev.clients.choose import ChooseListLine  # noqa: E402
 from jev.clients.fight import Fight, Fought  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
+from jev.clients.rest import Rest, Rested  # noqa: E402
 from jev.guide import playhead  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
@@ -129,6 +130,7 @@ def main() -> int:
     fight = Fight(hid=client.hid, read=client.read, read_frame=client.frame,
                   window_origin=client.origin,
                   window_centre_x=client.size[0] // 2)
+    rest = Rest(hid=client.hid, read=client.read)
 
     def progress(quest_id):
         """Objective counts for one quest, from the **assembled** log.
@@ -166,10 +168,22 @@ def main() -> int:
                   + (f" — {fight.detail}" if fight.detail else ""))
             if outcome is Fought.DIED:
                 return 1
-            if outcome in (Fought.NO_TARGET, Fought.NOT_VISIBLE):
-                # Nothing in reach. Standing still and Tabbing harder will not change that.
-                print("  nothing attackable from here")
-                return 1
+            if outcome in (Fought.TOO_HURT, Fought.LOSING):
+                # Twenty seconds sitting down against a two-hundred-yard corpse run.
+                ate = rest.until()
+                print(f"    rest: {ate.value}" + (f" — {rest.detail}" if rest.detail else ""))
+                if ate is Rested.NO_FOOD:
+                    print("  out of food; stopping rather than dying tired")
+                    return 1
+                # Interrupted means something is already hitting us. There is nothing to
+                # decide: the next pass fights it.
+                continue
+            if outcome in (Fought.NO_TARGET, Fought.NOT_VISIBLE, Fought.UNREACHABLE,
+                           Fought.LOST, Fought.TIMEOUT):
+                # A bad pick, not a dead end: a camp is a moving crowd and the next look
+                # sees a different one. The attempt budget is what stops this being a
+                # loop with no exit.
+                continue
 
         have, need = progress(node.quest_id)
         print(f"  progress: {have}/{need} after {args.kills} attempts")

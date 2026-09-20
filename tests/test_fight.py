@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import inspect
 
-from jev.clients.fight import DEAD_HP, LOST_HP, MAX_SELECTS, SLOT_KEYS, Fight, Fought
+from jev.clients.fight import (
+    DEAD_HP,
+    FLEE_HP,
+    LOST_HP,
+    MAX_SELECTS,
+    MIN_START_HP,
+    SLOT_KEYS,
+    Fight,
+    Fought,
+)
 from jev.world.combat import GENERIC, PROFILES, Ability, for_class
 
 
@@ -133,3 +142,85 @@ def test_a_class_with_no_profile_still_fights():
     assert for_class(None) is GENERIC
     assert for_class(2).name == "paladin"
     assert all(isinstance(a, Ability) for a in for_class(7).abilities)
+
+
+# -- not dying ----------------------------------------------------------------------
+
+def test_a_fight_is_not_started_on_low_health():
+    """Both live deaths were pulls taken at health that could not absorb a mistake."""
+    hurt = {**ALIVE, "vitals.hp": 0.2}
+    f = _fight([hurt])
+    assert f.run(timeout_s=1) is Fought.TOO_HURT
+    assert MIN_START_HP > FLEE_HP
+
+
+def test_a_losing_fight_is_broken_off_rather_than_finished():
+    """A fight is usually lost several seconds before the character falls over, and
+    finishing it standing up costs a two-hundred-yard corpse run."""
+    sinking = {**ALIVE, "vitals.hp": 0.1}
+    f = _fight([ALIVE, sinking])
+    f.acquire = lambda name_id: None
+    f.engage = lambda: True
+    f.close_in = lambda: True
+    assert f.run(timeout_s=5) is Fought.LOSING
+    assert "broke off" in f.detail
+
+
+def test_an_isolated_nameplate_is_preferred_over_a_central_one():
+    """A pull in the middle of a camp is what killed this character twice, and a plate
+    with no neighbour is the best evidence available that a mob has none either."""
+    from jev.perceive.units import Plate, RingColour
+
+    def plate(cx):
+        return Plate(cx=cx, cy=300.0, w=140, colour=RingColour.YELLOW)
+
+    crowd_a, crowd_b, alone = plate(790.0), plate(830.0), plate(1400.0)
+    f = Fight(hid=_Hid(), read=lambda: ALIVE,
+              read_frame=lambda: None, window_centre_x=800)
+    import jev.clients.fight as mod
+
+    real, mod.find_plates = mod.find_plates, lambda _f: [crowd_a, crowd_b, alone]
+    try:
+        assert f._candidates(object())[0] is alone, "picked the one with company"
+    finally:
+        mod.find_plates = real
+
+
+def test_resting_stops_for_combat_and_says_when_there_is_no_food():
+    from jev.clients.rest import Rest, Rested
+
+    hid = _Hid()
+    assert Rest(hid=hid, read=lambda: {"vitals.hp": 0.4, "vitals.combat": True}).until() \
+        is Rested.INTERRUPTED
+    assert Rest(hid=hid, read=lambda: {"vitals.hp": 0.4, "vitals.combat": False,
+                                       "bars.usable": 0b111}).until() is Rested.NO_FOOD
+    assert Rest(hid=hid, read=lambda: {"vitals.hp": 1.0}).until() is Rested.HEALTHY
+
+
+def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
+    """A live run spent ninety seconds pressing abilities at a full-health kobold it had
+    engaged and never reached. Eight bursts of walking with nothing landing is the
+    answer already; the rotation cannot improve on it."""
+    f = _fight([ALIVE])
+    f.acquire = lambda name_id: None
+    f.engage = lambda: True
+    f.close_in = lambda: False
+    assert f.run(timeout_s=5) is Fought.UNREACHABLE
+    assert "cannot reach" in f.detail
+
+
+def test_in_combat_the_name_filter_comes_off():
+    """Something already hitting us does not have to be the quest mob. A Kobold Worker
+    beat this character to 27% while every attempt refused to fight anything but a Kobold
+    Vermin, selected nothing, and reported "not visible" twenty times running."""
+    seen = []
+    f = _fight([{**ALIVE, "vitals.combat": True, "target.has": False}])
+    f.acquire = lambda name_id: seen.append(name_id) or Fought.NO_TARGET
+    f.run(1161, timeout_s=1)
+    assert seen == [None], "refused to defend itself against the wrong species"
+
+    seen.clear()
+    f2 = _fight([{**ALIVE, "vitals.combat": False, "target.has": False}])
+    f2.acquire = lambda name_id: seen.append(name_id) or Fought.NO_TARGET
+    f2.run(1161, timeout_s=1)
+    assert seen == [1161], "picked a fight with something that was not the objective"

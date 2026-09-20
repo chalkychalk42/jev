@@ -741,3 +741,90 @@ NOW: 535 tests, ruff clean. The bot can see a mob.
 NEXT: fight one. `Tab` already selects and the radio already confirms what answered, so
 the open questions are closing to melee and knowing when the thing is dead — not finding
 it.
+
+---
+
+## V30 — it kills one, and then the trouble starts
+
+    progress: 0/10
+      kill 1: killed (pressed [1, 2, 2, 2, 2, 2, 2, 1, 2], closed 4, last hp 0.17)
+    progress: 1/10
+
+The objective counter moved. That number is the server's own tally, not an inference from
+swings the bot thinks it landed, which is why it is the thing worth reporting.
+
+Getting there corrected four guesses, and one of them cost an hour.
+
+### Tab selects things you cannot fight
+
+`Tab` was the obvious way to find a mob and it is the wrong one: it selects by distance in
+the *world*, so it picks a kobold thirty yards off through a tent. The first live fight
+spent ninety seconds pressing abilities at a unit with `in_melee` false, no sighting, and
+full health throughout.
+
+Nameplates instead, exactly as `Interact` does it — a plate on screen is by construction a
+unit the client is drawing near enough to fight. `Tab` stays as the fallback for an
+occluded plate. Identity still comes from `target.name_id` after the click.
+
+### There is no facing API, so clicking is how you aim
+
+`GetPlayerFacing` arrived in 3.0 and `pos.facing` reads `None` on every live frame. A
+right-click on the model targets, **turns the character**, and starts auto-attack in one
+action, and `W` then walks along that heading. So closing to melee is a right-click
+followed by bursts of `W`, watching the target's **health** rather than `target.in_melee`
+— which is `CheckInteractDistance` index 3, about eleven yards, while a paladin swings at
+five.
+
+### A frozen addon is indistinguishable from a pinned character
+
+Both look like a position that never changes. A Lua error stopped the strip painting,
+every read after that was the same stale image, and the follower duly concluded the
+character was stuck — four times, on a character that was fine. An hour went into terrain
+that was never the problem.
+
+`radio_frame.read` has taken `prev_seq` and returned `SenseFault.STALE` since the
+beginning. `jev/run/client.py`, which every probe actually goes through, never passed it.
+It does now, and returns `None` once the sequence has held for four seconds, because every
+caller already treats `None` as "cannot see".
+
+### A wedged character can only leave along one heading
+
+Every unstick attempt — jump-forward, back, both strafes — acts along the current facing,
+and the recovery only ever tried one. A ghost pinned against a tree survived two full
+corpse runs, a relog, and every attempt at its original heading; it came free on the
+**third** heading, on jump-forward. The same run then completed 207 yards to the corpse
+with **0 stuck events**.
+
+### Dying is a Tuesday
+
+    dead=True ghost=False hp=0.0
+    complete: 13 waypoints, 193.7 yards
+    arrived, 5.9 yards left, 16 turns, 0 stuck
+    alive
+
+Read the corpse position *before* releasing — afterwards the ghost is at the graveyard and
+2.4.3 cannot say where the body is, and a character left dead long enough auto-releases
+and loses it for good. The popup button is the existing `ui.advance_x/y`: "Release Spirit"
+and "Accept" are the same intent, so there is no second mechanism to keep working.
+
+### Three ways to stop dying, all measured
+
+    isolated plates   a pull in the middle of a camp killed it twice; a plate with no
+                      neighbour is the best evidence available that a mob has none either
+    health guards     do not *start* a fight below 55%, break one off below 30% — but the
+                      guard is about picking fights, not surviving one already under way,
+                      or the character stands at 49% declining to swing back
+    self-defence      in combat the name filter comes off; a Kobold **Worker** beat this
+                      character to 27% while every attempt refused to fight anything but a
+                      Kobold Vermin and reported "not visible" twenty times running
+
+One bug worth naming: the isolated-plate ordering silently did nothing, because
+`list.sort` empties the list while computing keys — so the key function read an empty list,
+every plate looked isolated, and the ordering collapsed back to plain centrality.
+
+NOW: 553 tests, ruff clean. One kobold down, nine to go, and the character is alive.
+
+NEXT: it cannot finish the objective yet. When nothing is in reach it stands still, so a
+`quest_objective` needs to **search its own radius** rather than treat the spawn point as
+a spot. And it is out of food — `Rest` says so honestly instead of pressing a blank
+button, which makes the `vendor` node kinds the graph already carries the next real step.
