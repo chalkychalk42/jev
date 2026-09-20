@@ -293,15 +293,21 @@ def test_walking_at_it_and_swinging_at_it_are_the_same_loop():
 
 
 def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
-    """Out of bursts, nothing pressed and nothing landed is the answer already; more
-    seconds cannot improve on it. A live run spent ninety on exactly that."""
+    """Out of bursts with the target still at full health is the answer already; more
+    seconds cannot improve on it.
+
+    Whether anything was *pressed* says nothing about whether it was reached — a seal
+    lands on the character, not on the kobold. Requiring "pressed nothing" here let two
+    live fights walk eight bursts and then stand in the rotation for the full forty-five
+    seconds: `pressed [2, 1, 2] closed 8`, twice."""
     hid = _Hid()
-    f = _fight([{**ALIVE, "bars.ready": 0, "bars.usable": 0}], hid=hid)
+    f = _fight([ALIVE], hid=hid)          # rotation is live; it will press the seal
     f.acquire = lambda name_id: None
     f.engage = lambda: True
     f.closed = MAX_CLOSE_BURSTS
     assert f.run(timeout_s=5) is Fought.UNREACHABLE
     assert "cannot reach" in f.detail
+    assert f.pressed, "this is the case where it presses and still cannot reach"
 
 
 def test_in_combat_the_name_filter_comes_off():

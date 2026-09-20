@@ -220,9 +220,14 @@ class Fight:
                 if v.get("bars.casting") is not True:
                     self.hid.hold("w", CLOSE_BURST_S)
                     self.closed += 1
-            elif not landing and not self.pressed:
-                self.detail = (f"closed {self.closed} times, pressed nothing, and landed "
-                               "nothing; cannot reach it")
+            elif not landing:
+                # Out of bursts with the target still at full health. Whether anything was
+                # *pressed* says nothing about whether it was reached — a seal lands on
+                # the character, not on the kobold — and requiring "pressed nothing" here
+                # let two live fights walk eight bursts and then stand in the rotation for
+                # the full forty-five seconds: `pressed [2, 1, 2] closed 8`, twice.
+                self.detail = (f"closed {self.closed} times and landed nothing; "
+                               "cannot reach it")
                 return Fought.UNREACHABLE
 
             self._rotate(v)
