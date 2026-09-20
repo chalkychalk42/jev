@@ -138,14 +138,23 @@ end
 -- Index 0 is left unused in all three: an unrecognised token yields nil from the lookup,
 -- the packer paints not-available, and the decoder says None rather than guessing class 0.
 
+-- The **game's own** class and race ids, not a compact 1-N table of our own.
+--
+-- There was one, and it was 1-9 with SHAMAN = 6. The game numbers shaman 7, mage 8,
+-- warlock 9 and druid 11, and `world_playercreateinfo_action` — where the combat
+-- profiles come from — is keyed by the game's numbers. Human is 1 and paladin is 2 in
+-- both, which is exactly why nothing looked wrong: the character this was built against
+-- matched by luck, and a warlock would have been handed a druid's action bar.
+--
+-- Races had the same problem, worse: our Dwarf was 2 and the game's Orc is.
 local CLASS_ID = {
     WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5,
-    SHAMAN = 6, MAGE = 7, WARLOCK = 8, DRUID = 9,
+    SHAMAN = 7, MAGE = 8, WARLOCK = 9, DRUID = 11,
 }
 
 local RACE_ID = {
-    Human = 1, Dwarf = 2, NightElf = 3, Gnome = 4, Draenei = 5,
-    Orc = 6, Scourge = 7, Tauren = 8, Troll = 9, BloodElf = 10,
+    Human = 1, Orc = 2, Dwarf = 3, NightElf = 4, Scourge = 5,
+    Tauren = 6, Gnome = 7, Troll = 8, BloodElf = 10, Draenei = 11,
 }
 
 local CLASSIFICATION_ID = {

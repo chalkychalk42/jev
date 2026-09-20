@@ -227,7 +227,7 @@
  },
  "10:8": {
   "class": 8,
-  "name": "warlock",
+  "name": "mage",
   "race": 10,
   "rows": [
    {
@@ -284,7 +284,7 @@
  },
  "10:9": {
   "class": 9,
-  "name": "druid",
+  "name": "warlock",
   "race": 10,
   "rows": [
    {
@@ -603,7 +603,7 @@
  },
  "11:7": {
   "class": 7,
-  "name": "mage",
+  "name": "shaman",
   "race": 11,
   "rows": [
    {
@@ -652,7 +652,7 @@
  },
  "11:8": {
   "class": 8,
-  "name": "warlock",
+  "name": "mage",
   "race": 11,
   "rows": [
    {
@@ -861,7 +861,7 @@
  },
  "1:8": {
   "class": 8,
-  "name": "warlock",
+  "name": "mage",
   "race": 1,
   "rows": [
    {
@@ -903,7 +903,7 @@
  },
  "1:9": {
   "class": 9,
-  "name": "druid",
+  "name": "warlock",
   "race": 1,
   "rows": [
    {
@@ -1049,7 +1049,7 @@
  },
  "2:7": {
   "class": 7,
-  "name": "mage",
+  "name": "shaman",
   "race": 2,
   "rows": [
    {
@@ -1090,7 +1090,7 @@
  },
  "2:9": {
   "class": 9,
-  "name": "druid",
+  "name": "warlock",
   "race": 2,
   "rows": [
    {
@@ -1362,7 +1362,7 @@
  },
  "4:11": {
   "class": 11,
-  "name": "11",
+  "name": "druid",
   "race": 4,
   "rows": [
    {
@@ -1670,7 +1670,7 @@
  },
  "5:8": {
   "class": 8,
-  "name": "warlock",
+  "name": "mage",
   "race": 5,
   "rows": [
    {
@@ -1712,7 +1712,7 @@
  },
  "5:9": {
   "class": 9,
-  "name": "druid",
+  "name": "warlock",
   "race": 5,
   "rows": [
    {
@@ -1790,7 +1790,7 @@
  },
  "6:11": {
   "class": 11,
-  "name": "11",
+  "name": "druid",
   "race": 6,
   "rows": [
    {
@@ -1888,7 +1888,7 @@
  },
  "6:7": {
   "class": 7,
-  "name": "mage",
+  "name": "shaman",
   "race": 6,
   "rows": [
    {
@@ -2007,7 +2007,7 @@
  },
  "7:8": {
   "class": 8,
-  "name": "warlock",
+  "name": "mage",
   "race": 7,
   "rows": [
    {
@@ -2049,7 +2049,7 @@
  },
  "7:9": {
   "class": 9,
-  "name": "druid",
+  "name": "warlock",
   "race": 7,
   "rows": [
    {
@@ -2250,7 +2250,7 @@
  },
  "8:7": {
   "class": 7,
-  "name": "mage",
+  "name": "shaman",
   "race": 8,
   "rows": [
    {
@@ -2291,7 +2291,7 @@
  },
  "8:8": {
   "class": 8,
-  "name": "warlock",
+  "name": "mage",
   "race": 8,
   "rows": [
    {

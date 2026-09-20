@@ -107,14 +107,17 @@ def zone_id(map_file: str) -> int:
 # silently (DECISIONS.md V13), so the tests parse the Lua and compare. They should be
 # generated; see the report note.
 
+# The game's own ids, which is what `world_playercreateinfo_action` is keyed by. An
+# earlier compact 1-N table of our own made human 1 and paladin 2 by coincidence and
+# would have handed a warlock a druid's action bar.
 CLASS_BY_ID: dict[int, str] = {
     1: "warrior", 2: "paladin", 3: "hunter", 4: "rogue", 5: "priest",
-    6: "shaman", 7: "mage", 8: "warlock", 9: "druid",
+    7: "shaman", 8: "mage", 9: "warlock", 11: "druid",
 }
 
 RACE_BY_ID: dict[int, str] = {
-    1: "human", 2: "dwarf", 3: "nightelf", 4: "gnome", 5: "draenei",
-    6: "orc", 7: "scourge", 8: "tauren", 9: "troll", 10: "bloodelf",
+    1: "human", 2: "orc", 3: "dwarf", 4: "nightelf", 5: "scourge",
+    6: "tauren", 7: "gnome", 8: "troll", 10: "bloodelf", 11: "draenei",
 }
 
 CLASSIFICATION_BY_ID: dict[int, Classification] = {

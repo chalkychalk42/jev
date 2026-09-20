@@ -51,13 +51,16 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 4                                    # bump when the field table changes shape
+SCHEMA = 5                                    # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
 rather than swept for.
 4: gossip and quest-greeting lines, each with its own text hash, because a list has no
-"whichever is showing" and two quest hand-ins look identical to a camera."""
+"whichever is showing" and two quest hand-ins look identical to a camera.
+5: `char.class_id` and `char.race_id` carry the **game's** ids rather than a compact table
+of our own, because the combat profiles are keyed by the game's numbering and ours agreed
+with it only for human paladins."""
 
 # Quantisation step: nibble n renders as n * STEP, so 15 -> 255 exactly.
 STEP = 255 // (LEVELS - 1)                    # 17

@@ -59,6 +59,7 @@ class Outcome(StrEnum):
     STUCK = "stuck"
     TIMEOUT = "timeout"
     LOST = "lost"          # position stopped being readable
+    REFUSED = "refused"    # the window was not focused; nothing was ever pressed
     ABORTED = "aborted"    # a caller-supplied abort fired
 
 
@@ -218,6 +219,7 @@ class Travel:
         band-aid it replaced.
         """
         t0 = time.perf_counter()
+        refused_at_start = getattr(self.hid, "refused", 0)
         start = self.position()
         here = start
         self._track.clear()
@@ -269,6 +271,17 @@ class Travel:
 
                 moved = self._moved_since(self.stuck_after_s)
                 if moved is not None and moved < self.stuck_step_yards:
+                    # Not moving and not pressing are different problems with the same
+                    # symptom. `Hid` refuses whenever the game window is not focused, so
+                    # a character that was never sent a keystroke looks exactly like one
+                    # wedged against a tree — and a whole live run was spent unsticking a
+                    # character that was standing still because a console window had
+                    # stolen the foreground.
+                    if getattr(self.hid, "refused", 0) > refused_at_start:
+                        return self._result(
+                            Outcome.REFUSED, start, here, target,
+                            time.perf_counter() - t0,
+                            "the game window lost focus; nothing was pressed")
                     self.stuck_events += 1
                     if pulse_key is not None:
                         self.hid.key_up(pulse_key)

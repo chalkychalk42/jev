@@ -54,7 +54,7 @@ AURA_MOD_POWER_REGEN = 85    # mana   -> drink
 BUFF_MARGIN_S = 5.0
 
 CLASS_NAMES = {1: "warrior", 2: "paladin", 3: "hunter", 4: "rogue", 5: "priest",
-               6: "shaman", 7: "mage", 8: "warlock", 9: "druid"}
+               7: "shaman", 8: "mage", 9: "warlock", 11: "druid"}
 
 
 def spell_row(db, slot: int, action: int) -> dict | None:

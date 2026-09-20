@@ -824,6 +824,44 @@ every plate looked isolated, and the ordering collapsed back to plain centrality
 
 NOW: 555 tests, ruff clean. One kobold down, nine to go, and the character is alive.
 
+### V31 — three engines, and the profiles stop being hand-written
+
+The review's brief: hunt the radius, food is a vendor node, healing is a role. Two of the
+three are in.
+
+**Profiles are generated from the world database.** `world_playercreateinfo_action` is
+what the game itself puts on a fresh bar, and each button's role is derived from what it
+*does* — first effect 10 is a heal, 6 applies an aura, 78 is melee auto-attack — while a
+consumable's aura says what it restores.
+
+    Darnassian Bleu          aura 84   food    slot 12
+    Refreshing Spring Water  aura 85   drink   slot 11
+
+Both are item class 0, subclass 5, and neither says which it is in its name. `Rest` had a
+constant saying food was slot 11, so it pressed the water and reported the character was
+out of food with a wheel of cheese in the bar.
+
+`every_s` is the spell's own duration less a margin: Seal of Righteousness is
+`DurationIndex` 9, thirty seconds. 52 race/class profiles, none of them typed in.
+
+**Healing is a role.** No `if paladin`, no `PaladinHeal.py`: the engine asks for a row with
+`role=heal` and presses it if the bars say it is ready. A warrior is the same list with one
+fewer row. Mana is checked against the spell's own cost through `vitals.power_max`, and
+out of mana falls through to swinging — there is no drinking inside a fight. A heal is
+confirmed by **health rising or the slot going unready**, never by having tapped the key,
+because a press the client ignored is indistinguishable from one that worked and what it
+hides is a picker predicate that never fires.
+
+The data also caught a live bug: slot 1 is spell 6603, which is a **toggle**. Pressing it
+while already swinging *stops* the swing, and the first rotation pressed
+`[1, 2, 2, ..., 1, 2, ...]` — turning the character's attack on and off all fight.
+
+**Hunt is the disk, not the pin.** `jev/run/hunt.py` walks stations on the radius the node
+already carries, looks, fights, and moves on after two empty looks. Every kill quest in
+the game is that loop; there is no camp-shaped special case and no second pathfinder. A
+station it cannot stand on is not a dead end, which is already earning its keep — the
+first live run could not reach the centre and moved out to the ring by itself.
+
 NEXT: it cannot finish the objective yet. When nothing is in reach it stands still, so a
 `quest_objective` needs to **search its own radius** rather than treat the spawn point as
 a spot. And it is out of food — `Rest` says so honestly instead of pressing a blank

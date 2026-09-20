@@ -182,3 +182,37 @@ def test_unstick_tries_more_than_one_heading():
     assert 'self.hid.hold("d", self.unstick_turn_s)' in body, "it never turns"
     t = Travel(hid=None, bounds=None, read_pos=lambda: None)
     assert t.unstick_headings >= 3, "one quarter-turn is not a sweep"
+
+
+def test_input_refused_is_reported_as_refused_not_as_stuck():
+    """`Hid` refuses whenever the game window is not focused, so a character that was
+    never sent a keystroke looks exactly like one wedged against a tree. A whole live run
+    went into unsticking a character standing still because a console window had stolen
+    the foreground."""
+    class _Hid:
+        refused = 0
+        hwnd = 1
+
+        def key_down(self, _k):
+            _Hid.refused += 1
+            return False
+
+        def key_up(self, _k):
+            return False
+
+        def release_all(self):
+            pass
+
+        def hold(self, *_a, **_k):
+            _Hid.refused += 1
+            return False
+
+        def tap(self, *_a, **_k):
+            return False
+
+    here = (0.5, 0.5)
+    t = Travel(hid=_Hid(), bounds=ELWYNN, read_pos=lambda: here,
+               arrival_yards=1.0, stuck_after_s=0.4)
+    result = t.to((0.9, 0.9), timeout_s=12.0, allow_detour=False)
+    assert result.outcome is Outcome.REFUSED
+    assert "focus" in result.detail

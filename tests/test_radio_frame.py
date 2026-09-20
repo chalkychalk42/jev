@@ -202,8 +202,10 @@ def _values() -> dict:
     return {
         "schema": layout()["schema"],
         "seq": 42,
+        # The game's own ids: 3 is hunter, 4 is night elf. An earlier compact table of
+        # our own made 3 a night elf, which agreed with the game only for human paladins.
         "char.class_id": 3,
-        "char.race_id": 3,
+        "char.race_id": 4,
         "char.level": 23,
         "char.xp_pct": 0.5,
         "pos.zone_id": radio_frame.zone_id("Elwynn"),
