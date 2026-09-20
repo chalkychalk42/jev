@@ -1,0 +1,32 @@
+# Decision log
+
+Every architectural decision, with what triggered it and when to revisit. **Superseded
+rows are kept deliberately so we do not re-litigate them.** Read this before proposing an
+alternative — it may already have been rejected, with a reason.
+
+---
+
+| # | Date | Decision | Why | Status / revisit when |
+|---|---|---|---|---|
+| **V1** | 20 Sep 2026 | **New codebase.** No code is carried in from anywhere | The factory architecture — GuideGraph, arm-don't-press, distillation — wants its own seams. Grafting it onto an existing shape costs more than laying them fresh | **Firm** |
+| **V2** | 20 Sep 2026 | **Data and knowledge packs may be imported; nothing else may.** `data/knowledge`, `data/sources`, `data/guides`, the zone and name tables | Facts about TBC are expensive to assemble and cheap to verify. Code is the opposite | **Firm** — provenance in `data/README.md` |
+| **V3** | 20 Sep 2026 | **JevRadio is pixel-encoded** — RGB grid, 4 bits/channel, calibration row, checksum plus sequence counter | Density and decode speed, at a robustness level that survives gamma and capture transforms | **Current** — revisit if organisers object to opaque addons; the fallback is legible digits read by a glyph atlas, which costs cells not correctness |
+| **V4** | 20 Sep 2026 | **Claude is everything above System 1, over the subscription** (`claude -p`), **not the Anthropic API.** GLM is the cheap bulk rung | Owner has a subscription and no Anthropic key, and wants the ML takeover to be real rather than aspirational. Forces the wean onto the critical path, which is the correct place for it | **Current** — revisit if a hosted key appears, or if subscription limits block a gate |
+| **V5** | 20 Sep 2026 | **The GuideGraph is generated from this server's world DB, then verified by walking** | 6,599 quests and 109,358 spawns with exact coordinates are already on disk. Generated *from* this server beats recorded *on* it. The recorder pass shrinks to routes, hazards and grind boxes — what only walking can answer | **Current** — `ARCHITECTURE.md` §8. Supersedes the hand-authoring mechanism in PLAN §7.6, not its intent |
+| **V6** | 20 Sep 2026 | **Retail guide packs are a cross-check, never a source** | Custom servers delete, rename and relevel quests. Diffing pfQuest/RestedXP against the world DB is how those changes announce themselves | **Firm** |
+| **V7** | 20 Sep 2026 | **Multi-client input path is deferred**; the architecture keeps it a deployment question | One cursor per Windows session is an OS constraint. Separate sessions, VMs, background input and dongles each cost differently, and one clean client beats ten bad ones for the learning goal | **Deferred** — decide before Gate B. Until then: no shared client state, `hid` backends swappable |
+| **V8** | 20 Sep 2026 | **Rungs are named for their job, never their supplier** — `coach/`, `teacher/`, not `jev/jev/` or `claude/` | A vendor-named module forces a rename the moment the vendor moves, and that rename touches contracts | **Firm** |
+| **V9** | 20 Sep 2026 | **Label by outcome, not by authorship.** Train only on choices graded good at +60 s | Cloning a teacher caps the student at the teacher's error rate, and we have ground truth. Promotes PLAN §12.1's optional bandit to load-bearing | **Firm** — `ARCHITECTURE.md` §2 |
+| **V10** | 20 Sep 2026 | **`situation_key` in the schema from commit one** | It is simultaneously the teacher-dedup key, the counterfactual join, the agreement bucket and the answer cache. Unrecoverable if added late | **Firm** — bin widths versioned separately |
+| **V11** | 20 Sep 2026 | **The teacher's preferred output is a durable artifact** — skill draft, graph patch, `on_fail` edge — not an immediate action | A decision helps one client once; a skill helps forever. On a rate-limited teacher that compounds. Inverts PLAN §9.2 | **Firm** |
+| **V12** | 20 Sep 2026 | **The radio labels the vision heads.** Every `addon_ok` tick logs `(vision_estimate, radio_truth)` for every shared field | Makes fusion confidence measured rather than guessed, and makes addon-off a continuously validated mode rather than a hoped-for one | **Firm** — `ARCHITECTURE.md` §5 |
+| **V13** | 20 Sep 2026 | **One source of truth for anything two components must agree on.** Python defines, Lua is generated | Agreement by convention decays silently; agreement by construction cannot | **Firm** — hand-editing `Fields.lua` is a build error |
+
+### Standing constraint
+**Windows has one system cursor per session.** No input method — `SendInput`, a dongle,
+anything — lets the bot play while you use the same desktop. See V7.
+
+### Carried over from the plan, unchanged
+No DLL injection, no memory read/write, no packet forge, no speed or teleport. Control is
+virtual HID; sense is screen capture plus an addon that paints and never actuates. Offline
+server only. (PLAN §2.)
