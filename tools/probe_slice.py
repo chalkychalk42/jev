@@ -221,6 +221,7 @@ def main() -> int:
     rc = 0
     step = 0
     last_id: str | None = None
+    last_node = None
     repeats = 0
     deadline = time.monotonic() + args.run_for
 
@@ -250,7 +251,14 @@ def main() -> int:
         if state is not None and (state.vitals.dead is True or state.vitals.ghost is True):
             print("\n--- dead; recovering ---")
             died_at = time.monotonic()
-            corpse = (state.pos.mx, state.pos.my) if state.vitals.dead else None
+            # A ghost has already released and the body's position is gone for good.
+            # But the loop knows which node it was working when it died, and that is
+            # where the body is - the same guess a person makes, from data the runtime
+            # already has. Without it an unattended loop stops at the first death.
+            corpse = (state.pos.mx, state.pos.my) if state.vitals.dead else (
+                last_node.pos if last_node is not None and last_node.pos else None)
+            if corpse is not None and not state.vitals.dead:
+                print(f"  auto-released; guessing the corpse is at {last_node.id}")
             got_up = recover.run(corpse)
             print(f"  {got_up.value}" + (f" - {recover.detail}" if recover.detail else ""))
             journal.skill("RECOVER", outcome_of(got_up.ok), started_at=died_at,
@@ -268,6 +276,7 @@ def main() -> int:
             rc = 1
             break
 
+        last_node = node
         print(f"\n--- step {step}: {node.id} ---")
         print(f"  {node.kind.value} quest {node.quest_id} at {node.notes} {node.pos}")
         journal.tick(state, skill=node.kind.value.upper(), intent=node.title or node.id)
