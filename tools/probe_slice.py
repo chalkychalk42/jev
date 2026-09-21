@@ -45,7 +45,7 @@ from jev.clients.choose import ChooseListLine  # noqa: E402
 from jev.clients.fight import Fight  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
 from jev.clients.loot import Loot  # noqa: E402
-from jev.clients.recover import Recover  # noqa: E402
+from jev.clients.recover import Recover, Recovered  # noqa: E402
 from jev.clients.rest import Rest  # noqa: E402
 from jev.guide import playhead  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
@@ -255,12 +255,20 @@ def main() -> int:
             # But the loop knows which node it was working when it died, and that is
             # where the body is - the same guess a person makes, from data the runtime
             # already has. Without it an unattended loop stops at the first death.
+            where = last_node or next_step()      # already a ghost before the first step
             corpse = (state.pos.mx, state.pos.my) if state.vitals.dead else (
-                last_node.pos if last_node is not None and last_node.pos else None)
+                where.pos if where is not None and where.pos else None)
             if corpse is not None and not state.vitals.dead:
-                print(f"  auto-released; guessing the corpse is at {last_node.id}")
-            got_up = recover.run(corpse)
-            print(f"  {got_up.value}" + (f" - {recover.detail}" if recover.detail else ""))
+                print(f"  auto-released; guessing the corpse is at {where.id}")
+            # More than one pass, because one is rarely enough: a corpse run wedges on
+            # the way and the planner replans from wherever it stopped. Every recovery
+            # done by hand tonight took two to four passes for exactly this reason.
+            for attempt in range(args.retries):
+                got_up = recover.run(corpse)
+                print(f"  recover {attempt + 1}: {got_up.value}"
+                      + (f" - {recover.detail}" if recover.detail else ""))
+                if got_up.ok or got_up is Recovered.NO_CORPSE:
+                    break
             journal.skill("RECOVER", outcome_of(got_up.ok), started_at=died_at,
                           state=state, detail=f"{got_up.value}: {recover.detail}"
                           if recover.detail else got_up.value)
