@@ -7,6 +7,8 @@ structural read of the frame or an honest "somewhere else".
 
 from __future__ import annotations
 
+import pathlib
+
 import numpy as np
 import pytest
 
@@ -160,3 +162,83 @@ def test_entering_the_world_is_a_click_not_a_keypress():
     body = inspect.getsource(Session.sign_in)
     assert "ENTER_WORLD" in body and "click(" in body
     assert 'tap("enter")' not in body
+
+
+# --- the login that never typed anything ------------------------------------
+
+LOGIN_EMPTY = pathlib.Path(__file__).parent / "fixtures" / "login-empty.npz"
+
+
+def test_the_account_click_lands_on_the_box_and_not_its_label():
+    """A real TBC login screen, kept from a run that reported success at typing and left
+    both fields empty. `ACCOUNT_FIELD` was 0.489, which is the "Account Name" *label*:
+    the input sits at y 458-486 and the label 32 pixels above it. Every login clicked the
+    label, focused nothing, and typed into no field at all."""
+    frame = np.load(LOGIN_EMPTY)["frame"]
+    h, _w, _ = frame.shape
+
+    def darkness(at):
+        y = int(at[1] * h)
+        patch = frame[y - 8:y + 8, 700:900].astype(np.int16)
+        return patch.max(axis=2).mean()
+
+    assert darkness(ACCOUNT_FIELD) < 90, "the account coordinate is not on a dark box"
+    assert darkness(PASSWORD_FIELD) < 90
+    assert darkness((0.510, 0.489)) > 90, "0.489 was the label, and it is still the label"
+
+
+def test_an_empty_field_after_typing_is_not_submitted():
+    """`type_text` can report every keystroke sent and still leave a field empty, because
+    sending a key is not the same as a widget having focus. Nothing looked, so the form
+    was submitted empty and the failure was reported as an unreadable screen."""
+    frame = np.load(LOGIN_EMPTY)["frame"]
+    hid = _CountingHid()
+    s = Session(hid=hid, read_frame=lambda: frame, radio_ok=lambda: False,
+                window_size=(1600, 900))
+    assert s._enter_credentials("ash", "secret") is False
+    assert "still empty" in s.detail
+    assert hid.taps.count("enter") == 0, "submitted a form it could not fill"
+
+
+def test_a_character_that_cannot_be_typed_stops_before_the_password():
+    hid = _CountingHid(unsendable=["é"])
+    s = Session(hid=hid, read_frame=lambda: None, radio_ok=lambda: False)
+    assert s._enter_credentials("café", "secret") is False
+    assert hid.taps.count("enter") == 0
+    assert hid.typed == ["café"], "typed the password after failing the account"
+
+
+def test_a_login_screen_it_recognises_is_never_reported_as_unreadable():
+    """The old loop guarded on `not typed_credentials`, so the second look at a login
+    screen fell through to "reached a screen this cannot read" - about the one screen it
+    had just classified. That sends you looking for a stage that does not exist."""
+    frame = np.load(LOGIN_EMPTY)["frame"]
+    hid = _CountingHid()
+    s = Session(hid=hid, read_frame=lambda: frame, radio_ok=lambda: False,
+                window_size=(1600, 900))
+    assert s.sign_in("ash", "secret", timeout_s=2.0) is False
+    assert "cannot read" not in s.detail, s.detail
+    assert "login screen" in s.detail or "still empty" in s.detail, s.detail
+
+
+class _CountingHid(Hid):
+    def __init__(self, unsendable: list[str] | None = None):
+        super().__init__(hwnd=1)
+        self.taps: list[str] = []
+        self.typed: list[str] = []
+        self._cannot = set(unsendable or ())
+
+    def click(self, x=None, y=None, right=False):
+        return True
+
+    def chord(self, modifier, key):
+        return True
+
+    def tap(self, key):
+        self.taps.append(key)
+        return True
+
+    def type_text(self, text):
+        self.typed.append(text)
+        self.unsendable = [c for c in text if c in self._cannot]
+        return not self.unsendable

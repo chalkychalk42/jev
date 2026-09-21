@@ -39,9 +39,34 @@ class Stage(StrEnum):
 
 
 # Fractions of the client area, measured on a 1600x900 client at the TBC login screen.
-ACCOUNT_FIELD = (0.510, 0.489)
+#
+# `ACCOUNT_FIELD` was 0.489 and that is the **label**, not the box. The input is at
+# y 458-486 and the label sits 32 pixels above it, so every login clicked "Account Name",
+# focused nothing, typed the account into no field, tabbed, typed the password into
+# whatever Tab reached, and submitted. The fields in the kept frame are empty because
+# nothing was ever entered into them.
+#
+# Re-measured off `tests/fixtures/login-empty.npz` by finding the dark input bars in the
+# centre column: account 458-486, password 546-573.
+#
+# `LOGIN_BUTTON` stays at 0.698 and is *not* re-measured from those bars. The same sweep
+# reports a dark bar at 637-644, which is the button's border rather than its plate: the
+# plate is red, and red is not dark. Moving it there measured (79, 64, 53) instead of
+# (91, 25, 9) and the login screen stopped being recognisable at all.
+ACCOUNT_FIELD = (0.510, 0.524)
 PASSWORD_FIELD = (0.510, 0.622)
 LOGIN_BUTTON = (0.510, 0.698)
+
+# A field with something in it. The glyphs are light on a dark plate, so a handful of
+# bright pixels inside the box is the difference between "typed" and "typed at".
+_TEXT_MIN = 140
+_TEXT_PIXELS = 12
+
+# Login tries before giving up. Two, because the honest failure modes here are "the click
+# missed" and "the password is wrong", and neither improves with a third go. An idle
+# disconnect during an unattended run is the case this exists for, and that one succeeds
+# on the first.
+MAX_ATTEMPTS = 2
 # The "Okay" plate on the *Disconnected from server* dialog, which overlays the form.
 OKAY_BUTTON = (0.510, 0.513)
 # Character select. Measured on a live screen: (98, 23, 1) against (80, 73, 66) at the
@@ -62,6 +87,21 @@ def _is_red_button(frame: np.ndarray, at: tuple[float, float], radius: int = 60)
         return False
     r, g, b = patch[:, :, 0].mean(), patch[:, :, 1].mean(), patch[:, :, 2].mean()
     return r > _RED_MIN and (r - g) > _RED_MARGIN and (r - b) > _RED_MARGIN
+
+
+def _has_text(frame: np.ndarray, at: tuple[float, float], radius: int = 70) -> bool:
+    """Is there anything in this field? Confirmation, not assumption.
+
+    `type_text` can report every keystroke sent and still leave a field empty, because
+    sending a key is not the same as some widget having focus. That is exactly what
+    happened, and nothing looked.
+    """
+    h, w, _ = frame.shape
+    x, y = int(at[0] * w), int(at[1] * h)
+    patch = frame[max(0, y - 9):y + 9, max(0, x - radius):x + radius]
+    if patch.size == 0:
+        return False
+    return int((patch.max(axis=2) > _TEXT_MIN).sum()) >= _TEXT_PIXELS
 
 
 def stage(frame: np.ndarray | None, radio_ok: bool) -> Stage:
@@ -89,6 +129,8 @@ class Session:
 
     typed_credentials: bool = field(default=False, init=False)
     enters: int = field(default=0, init=False)
+    attempts: int = field(default=0, init=False)
+    unsendable: list[str] = field(default_factory=list, init=False)
     detail: str = field(default="", init=False)
     # The frame that stopped it, so the next screen can be measured rather than guessed.
     unknown_frame: object | None = field(default=None, init=False)
@@ -120,10 +162,18 @@ class Session:
             if current is Stage.IN_WORLD:
                 return True
 
-            if current is Stage.LOGIN and not self.typed_credentials:
-                self._enter_credentials(account, password)
+            if current is Stage.LOGIN:
+                if self.attempts >= MAX_ATTEMPTS:
+                    self.detail = (
+                        f"still at the login screen after {self.attempts} attempts"
+                        + (f"; could not type {self.unsendable!r}" if self.unsendable
+                           else "; the credentials were typed and not accepted"))
+                    return False
+                self.attempts += 1
+                if not self._enter_credentials(account, password):
+                    return False
                 self.typed_credentials = True
-                time.sleep(4.0)
+                time.sleep(6.0)
                 continue
 
             if current is Stage.CHARACTER:
@@ -154,12 +204,19 @@ class Session:
                        f"{'sent' if self.typed_credentials else 'not sent'})")
         return False
 
-    def _enter_credentials(self, account: str, password: str) -> None:
+    def _enter_credentials(self, account: str, password: str) -> bool:
         """Click the account field, clear it, type, tab, type, submit.
 
         Clicking first rather than trusting focus: a disconnect dialog takes focus when it
         appears, and typing an account name into a dismissed dialog's shadow puts it
         nowhere. Clearing first because the client remembers the last account.
+
+        **Every step is confirmed and nothing is submitted on a guess.** `type_text`
+        returning False means a character could not be sent, and this used to throw that
+        away and press Enter anyway. Worse, it pressed Enter on an *empty* field for days:
+        the click landed on the "Account Name" label rather than the box below it, so the
+        keystrokes went nowhere, and the only report was "reached a screen this cannot
+        read" about a login screen it had just classified as a login screen.
         """
         # Dismiss the disconnect dialog **only if it is there**, by clicking its button.
         #
@@ -181,13 +238,34 @@ class Session:
         self.hid.click(*self._screen(ACCOUNT_FIELD))
         time.sleep(0.3)
         self.hid.chord("ctrl", "a")
-        self.hid.type_text(account)
-        time.sleep(0.2)
+        if not self.hid.type_text(account):
+            self.unsendable = list(self.hid.unsendable)
+            self.detail = (f"could not type the account name: {self.unsendable!r}"
+                           if self.unsendable else self.hid.detail)
+            return False
+        time.sleep(0.4)
+
+        # Look before tabbing. An empty box here means the click missed and the rest of
+        # the sequence would type a password into whatever Tab happens to reach.
+        frame = self.read_frame()
+        if frame is not None and not _has_text(frame, ACCOUNT_FIELD):
+            self.detail = ("clicked the account field and typed, and the field is still "
+                           "empty; the click is not landing on the box")
+            self.unknown_frame = frame
+            return False
+
         self.hid.tap("tab")
         time.sleep(0.2)
-        self.hid.type_text(password)
+        if not self.hid.type_text(password):
+            self.unsendable = list(self.hid.unsendable)
+            self.detail = "could not type the password"
+            # Leave the form rather than submitting half a password.
+            self.hid.chord("ctrl", "a")
+            return False
         time.sleep(0.2)
         self.hid.tap("enter")
+        self.enters += 1
+        return True
 
 
 def credentials(env: dict[str, str] | None = None) -> tuple[str, str] | None:
