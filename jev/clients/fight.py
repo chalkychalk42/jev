@@ -103,6 +103,17 @@ MAX_CLOSE_BURSTS = 8
 # the one action available that re-establishes facing.
 REAIM_EVERY = 3
 
+# Ignored heals before the heal row is dropped for the rest of this fight.
+#
+# The confirmation exists to be acted on. Three live runs reported `heals 0/4`, `0/5` and
+# `0/5`: Holy Light is a two and a half second cast on a level 1 paladin being hit in a
+# camp, and it does not complete. Every attempt costs a global cooldown not spent
+# swinging, so a heal that has already failed twice in this fight is worse than no heal.
+#
+# Per fight, not forever. At a level where the cast finishes, it lands, and nothing here
+# has to know which level that is - or that it is a paladin.
+HEAL_GIVE_UP = 2
+
 # Which key an action slot is. The default bindings run 1-9, then 0, then the two keys
 # left of Backspace — which is where a fresh character's food and water sit, so getting
 # 10-12 wrong is not academic.
@@ -155,6 +166,7 @@ class Fight:
         """Select, engage, and hold the rotation until something settles it."""
         self.pressed = []
         self.closed = 0
+        self.heals_landed = self.heals_ignored = 0
         self._toggled = False
         self._pending_heal = None
         self.last_hp = None
@@ -387,7 +399,8 @@ class Fight:
         #    a character ends up running back from the graveyard.
         heal = profile.first(Role.HEAL)
         hp = values.get("vitals.hp")
-        if (heal is not None and pressable(heal)
+        giving_up = self.heals_ignored >= HEAL_GIVE_UP and self.heals_landed == 0
+        if (heal is not None and pressable(heal) and not giving_up
                 # One at a time. `_watch_heal` is what decides whether the last one
                 # landed, and pressing again before it answers is how a live fight got
                 # `pressed [2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]` - fifteen

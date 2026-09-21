@@ -8,6 +8,7 @@ import time
 from jev.clients.fight import (
     DEAD_HP,
     FLEE_HP,
+    HEAL_GIVE_UP,
     LOST_HP,
     MAX_CLOSE_BURSTS,
     MAX_SELECTS,
@@ -382,3 +383,38 @@ def test_closing_re_aims_because_only_a_click_turns_the_character():
     f.run(timeout_s=6)
     assert f.closed >= REAIM_EVERY, "did not close far enough to need re-aiming"
     assert len(engages) > 1, "walked the whole way without ever re-aiming"
+
+
+def test_a_heal_that_never_lands_is_dropped_for_the_rest_of_the_fight():
+    """The confirmation exists to be acted on. Three live runs reported heals 0/4, 0/5
+    and 0/5 - a two and a half second cast on a level 1 paladin being hit in a camp does
+    not complete, and every attempt costs a global cooldown not spent swinging.
+
+    Per fight, not forever: at a level where the cast finishes it lands, and nothing here
+    has to know which level that is."""
+    hid = _Hid()
+    hurt = {**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    f = _fight([hurt], hid=hid)
+    for _ in range(HEAL_GIVE_UP):
+        f._rotate(hurt)
+        f._pending_heal = (0.2, time.monotonic() - 5.0)
+        f._watch_heal(hurt, hurt["bars.ready"])
+    assert f.heals_ignored == HEAL_GIVE_UP and f.heals_landed == 0
+
+    before = list(hid.taps)
+    f._rotate(hurt)
+    assert hid.taps.count("3") == before.count("3"), "kept casting a heal that never lands"
+    assert hid.taps != before, "gave up on the heal and then did nothing at all"
+
+
+def test_a_heal_that_does_land_is_not_dropped():
+    hid = _Hid()
+    hurt = {**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    f = _fight([hurt], hid=hid)
+    f._rotate(hurt)
+    f._watch_heal({**hurt, "vitals.hp": 0.6}, hurt["bars.ready"])
+    f.heals_ignored = HEAL_GIVE_UP          # some missed, but one landed
+    f._rotate(hurt)
+    assert hid.taps.count("3") == 2
