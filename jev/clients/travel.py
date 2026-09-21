@@ -397,6 +397,30 @@ class Travel:
                 # whole file stopped doing.
                 replans += 1
                 position = self.position()
+
+                # ...unless the leg never went anywhere. A re-plan is only worth
+                # anything if its input changed, and a character wedged on the spot is
+                # asking the identical question: a ghost against a Northshire fence got
+                # the same 199.0-yard path back every time, four waypoints and all, then
+                # re-planned into it three more times per pass. The mesh is simply wrong
+                # about that fence. So hand the leg to the wall heuristic **once** - the
+                # only thing here that learns from the world rather than from the mesh -
+                # and the planner has the route back as soon as it clears.
+                #
+                # Against the leg's own start, not a remembered stall: each re-plan
+                # recurses into a fresh `follow`, so anything kept in a local here is
+                # `None` again exactly when it is needed.
+                if (position is not None
+                        and self.distance(position, last.start) <= self.stuck_step_yards):
+                    self.detours = 0       # a fresh obstacle, not the last one continued
+                    last = self.to(leg, abort=abort, allow_detour=True,
+                                   timeout_s=timeout_s - (time.perf_counter() - t0))
+                    if last.outcome is Outcome.ARRIVED:
+                        continue           # past it; the planner has the route back
+                    self.arrival_yards = exact
+                    return self._result(last.outcome, legs[0], last.end, leg,
+                                        time.perf_counter() - t0,
+                                        f"leg {i} of {len(legs) - 1}: {last.detail}")
                 fresh = replan(position) if position is not None else None
                 if fresh is not None and getattr(fresh, "usable", False):
                     self.arrival_yards = exact
