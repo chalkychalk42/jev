@@ -33,9 +33,16 @@ from jev.perceive.units import _find_ring
 # How long to wait for the bags or the loot frame to admit something happened.
 SETTLE_S = 2.0
 
-# How far above the ring to aim. The same rule the fight uses to face a unit: the model
-# stands on its ring, so just above the ring centre is on the body.
-ABOVE_RING_PX = 8
+# Where to aim on a corpse: the ring itself.
+#
+# A living unit stands on its ring, so the fight aims above it to hit the body. A dead one
+# **lies on** it, and aiming above a corpse clicks the empty air it used to occupy. First
+# live attempt: `killed` then `loot: nothing`, on a wolf with an eighty percent quest drop
+# and a counter that did not move.
+#
+# A small lift, because the carcass has some height and the ring's lower arc is ground.
+ABOVE_RING_PX = 0
+CORPSE_LIFT_FRACTION = 0.25
 
 
 class Looted(StrEnum):
@@ -80,7 +87,8 @@ class Loot:
             return Looted.NO_CORPSE
 
         ox, oy = self.window_origin
-        self.clicked = (ox + round(ring.cx), oy + round(ring.cy - max(ABOVE_RING_PX, ring.h)))
+        lift = max(ABOVE_RING_PX, round(ring.h * CORPSE_LIFT_FRACTION))
+        self.clicked = (ox + round(ring.cx), oy + round(ring.cy - lift))
         self.hid.click(*self.clicked, right=True)
 
         deadline = time.monotonic() + settle_s

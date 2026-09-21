@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from jev.clients.loot import ABOVE_RING_PX, Loot, Looted
+from jev.clients.loot import Loot, Looted
 from jev.perceive.units import Ring, RingColour
 
 A_FRAME = object()
@@ -57,16 +57,19 @@ def test_nothing_selected_is_not_a_corpse():
     assert hid.clicks == []
 
 
-def test_it_aims_just_above_the_ring_because_a_unit_stands_on_its_own():
-    """The same primitive the fight uses to face something, reused. A unit stays selected
-    after it dies, so the ring is still drawn under the corpse."""
+def test_it_aims_at_the_ring_because_a_corpse_lies_on_it():
+    """A living unit stands on its ring, so the fight aims above it to hit the body. A
+    dead one lies on it, and aiming above a corpse clicks the empty air it used to
+    occupy - first live attempt was `killed` then `loot: nothing`, on a wolf with an
+    eighty percent quest drop and a counter that did not move."""
     hid = _Hid()
     skill = _loot([HAVE, {**HAVE, "bags.free": 7}], hid=hid)
     skill.run(settle_s=1.0)
     x, y, right = hid.clicks[0]
     assert right is True
     assert x == 10 + 700
-    assert y == 38 + 500 - max(ABOVE_RING_PX, RING.h)
+    lift = 38 + 500 - y
+    assert 0 <= lift < RING.h, f"aimed {lift}px up; a corpse is not standing"
 
 
 def test_bags_falling_is_what_counts_as_having_looted():
