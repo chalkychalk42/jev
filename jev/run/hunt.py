@@ -121,6 +121,17 @@ class Hunt:
         stood = False
 
         while time.monotonic() < deadline:
+            # A ghost cannot fight, heal or eat, and every skill below reports something
+            # that sounds like a camp problem instead. A live run died to the wolves and
+            # then spent the rest of its window saying `no_target` ten times over,
+            # because the death check lived inside the fight loop - which a ghost never
+            # reaches, since acquiring a target fails first.
+            v = self.read()
+            if v is not None and (v.get("vitals.dead") is True
+                                  or v.get("vitals.ghost") is True):
+                self.detail = "dead; nothing here can be done until that is fixed"
+                return Hunted.DIED
+
             have, need = self.progress()
             if need is not None and have is not None and have >= need:
                 self.say(f"  objective complete: {have}/{need}")

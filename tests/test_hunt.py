@@ -262,3 +262,18 @@ def test_a_drop_source_outside_the_zones_in_scope_is_not_used():
     for n in g.nodes:
         if n.kind is StepKind.QUEST_OBJECTIVE and n.pos is not None:
             assert on_map(*n.pos, slack=0.0), f"{n.id} is off the map at {n.pos}"
+
+
+def test_a_ghost_stops_the_hunt_instead_of_reporting_a_camp_problem():
+    """A ghost cannot fight, heal or eat, and every skill below reports something that
+    sounds like a camp problem instead. A live run died to the wolves and then spent the
+    rest of its window saying `no_target` ten times over, because the death check lived
+    inside the fight loop - which a ghost never reaches, since acquiring fails first."""
+    h, _ = _hunt([Fought.KILLED], [(1, 10)])
+    h.read = lambda: {"vitals.ghost": True, "vitals.combat": False, "vitals.hp": 0.01}
+    assert h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5) is Hunted.DIED
+    assert h.fight.calls == 0, "sent a ghost to fight something"
+
+    h2, _ = _hunt([Fought.KILLED], [(1, 10)])
+    h2.read = lambda: {"vitals.dead": True, "vitals.combat": False, "vitals.hp": 0.0}
+    assert h2.run((0.0, 0.0, 0.0), 30.0, timeout_s=5) is Hunted.DIED

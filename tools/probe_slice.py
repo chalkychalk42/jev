@@ -45,9 +45,10 @@ from jev.clients.choose import ChooseListLine  # noqa: E402
 from jev.clients.fight import Fight  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
 from jev.clients.loot import Loot  # noqa: E402
+from jev.clients.recover import Recover  # noqa: E402
 from jev.clients.rest import Rest  # noqa: E402
 from jev.guide import playhead  # noqa: E402
-from jev.guide.coords import bounds_by_radio_id  # noqa: E402
+from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
 from jev.guide.tracker import Tracker  # noqa: E402
@@ -150,6 +151,18 @@ def main() -> int:
     loot = Loot(hid=client.hid, read=client.read, read_frame=client.frame,
                 window_origin=client.origin)
 
+    def walk_to(map_point) -> bool:
+        """For the corpse run. The planner needs a height and a map fraction has none, so
+        the nearest placed node's world z is used - the guide knows the terrain."""
+        wx, wy = map_to_world(map_point[0], map_point[1], bounds)
+        placed = [n for n in graph.nodes if n.world is not None and n.map_id == bounds.map_id]
+        z = min(placed, key=lambda n: (n.world[0] - wx) ** 2 + (n.world[1] - wy) ** 2
+                ).world[2] if placed else 0.0
+        return client.approach((wx, wy, z), timeout_s=args.timeout)
+
+    recover = Recover(hid=client.hid, read=client.read, window_origin=client.origin,
+                      window_size=client.size, walk_to=walk_to)
+
     def progress(quest_id):
         """Objective counts for one quest, from the **assembled** log.
 
@@ -230,6 +243,24 @@ def main() -> int:
         started = time.monotonic()
         state = client.state()
         journal.tick(state)
+
+        # Dead is not a step problem, and every skill reports it as one. Recovery is a
+        # skill that already exists, so the loop uses it rather than stopping and waiting
+        # for a person - which is the whole difference between a probe and a runtime.
+        if state is not None and (state.vitals.dead is True or state.vitals.ghost is True):
+            print("\n--- dead; recovering ---")
+            died_at = time.monotonic()
+            corpse = (state.pos.mx, state.pos.my) if state.vitals.dead else None
+            got_up = recover.run(corpse)
+            print(f"  {got_up.value}" + (f" - {recover.detail}" if recover.detail else ""))
+            journal.skill("RECOVER", outcome_of(got_up.ok), started_at=died_at,
+                          state=state, detail=f"{got_up.value}: {recover.detail}"
+                          if recover.detail else got_up.value)
+            if not got_up.ok:
+                print("  could not get back up; stopping")
+                rc = 1
+                break
+            continue
 
         node = next_step()
         if node is None:
