@@ -16,6 +16,7 @@ already take, and it keeps them testable with a lambda.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -71,6 +72,12 @@ class Client:
     query: PathQuery | None = field(default=None, init=False)
     bounds: ZoneBounds | None = field(default=None, init=False)
     on_path: Callable[[str], None] | None = field(default=None, init=False)
+    # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
+    # context and bitmap once and reuses them, so two threads grabbing at the same time
+    # tear each other's frame in half. The heartbeat samples on its own thread, so every
+    # path that touches the capture takes this first.
+    _capturing: threading.RLock = field(default_factory=threading.RLock, init=False,
+                                        repr=False)
 
     # -- readers -------------------------------------------------------------
 
@@ -83,7 +90,8 @@ class Client:
         a follower conclude the character is stuck when the addon is what stopped.
         """
         for _ in range(tries):
-            r = radio_frame.read(self.cap.grab().rgb)
+            with self._capturing:
+                r = radio_frame.read(self.cap.grab().rgb)
             if r.ok:
                 self._note_seq(r.values.get("seq"))
                 if self.frozen_for() > STALE_AFTER_S:
@@ -108,7 +116,8 @@ class Client:
 
     def frame(self):
         try:
-            return self.cap.grab().rgb
+            with self._capturing:
+                return self.cap.grab().rgb
         except Exception:
             return None
 

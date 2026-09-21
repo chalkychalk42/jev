@@ -104,6 +104,7 @@ class Hid:
         self.refused = 0
         self.unsendable: list[str] = []
         self.detail = ""
+        self.held: set[str] = set()
 
     # -- guards --------------------------------------------------------------
 
@@ -141,6 +142,8 @@ class Hid:
             return False
         ok = win32.send_inputs([self._key_event(key, up=False)]) == 1
         self.sent += int(ok)
+        if ok:
+            self.held.add(key)
         return ok
 
     def key_up(self, key: str) -> bool:
@@ -148,7 +151,17 @@ class Hid:
             return False
         ok = win32.send_inputs([self._key_event(key, up=True)]) == 1
         self.sent += int(ok)
+        self.held.discard(key)     # discarded either way; a failed release is not a hold
         return ok
+
+    def keys_down(self) -> list[str]:
+        """What is being held right now, for the recorder.
+
+        A tick that says the character did not move is worth very little; a tick that says
+        `w` was held and the character did not move is a wedge. ARCH SS4 asks for keys on
+        every tick and nothing was supplying them.
+        """
+        return sorted(self.held)
 
     def tap(self, key: str) -> bool:
         """Press and release, with a drawn hold in between.

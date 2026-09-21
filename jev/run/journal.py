@@ -19,15 +19,25 @@ possible to tell later which rows came from a policy instead.
 
 Rate
 ----
-Ticks land at the runtime's own decision points - before a pull, at a station, either side
-of a skill - not at a fixed 2 Hz. That is roughly one to five a second and it is uneven.
-The store does not care, and claiming a clean 2 Hz by resampling would be inventing rows
-that were never observed.
+2 Hz, plus the runtime's own decision points. `Heartbeat` does the 2 Hz half on its own
+thread; this file is what both of them write through.
+
+An earlier version of this note argued against a fixed rate, on the grounds that "claiming
+a clean 2 Hz by resampling would be inventing rows that were never observed". That is a
+good argument against resampling and not one against sampling: a thread that genuinely
+reads the strip twice a second observes every row it writes. The distinction mattered,
+because event-only ticks record the moments the runtime *decided* something and a wedge is
+precisely the period in which it decides nothing. Three minutes of a ghost turning 180
+times against a fence produced no rows at all.
+
+Both threads write here, so the recorder is taken under a lock. It is not thread-safe and
+a torn parquet row is unrecoverable in the same way the missing ones were.
 """
 
 from __future__ import annotations
 
 import contextlib
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -49,6 +59,8 @@ class Journal:
     ticks: int = field(default=0, init=False)
     skills: int = field(default=0, init=False)
     dropped: int = field(default=0, init=False)
+    _writing: threading.RLock = field(default_factory=threading.RLock, init=False,
+                                      repr=False)
 
     @property
     def run_id(self) -> str:
@@ -66,15 +78,16 @@ class Journal:
         if state is None:
             return None
         try:
-            tick_id = self.recorder.next_tick_id()
-            self.recorder.tick(TickRow(
-                run_id=self.run_id, tick_id=tick_id, t=state.t,
-                client_id=self.client_id, state=state.model_dump(mode="json"),
-                situation_key=situation_key(state),
-                armed_skill=skill, armed_intent=intent, armed_by=armed_by,
-                keys=list(keys or ()),
-            ))
-            self.ticks += 1
+            with self._writing:
+                tick_id = self.recorder.next_tick_id()
+                self.recorder.tick(TickRow(
+                    run_id=self.run_id, tick_id=tick_id, t=state.t,
+                    client_id=self.client_id, state=state.model_dump(mode="json"),
+                    situation_key=situation_key(state),
+                    armed_skill=skill, armed_intent=intent, armed_by=armed_by,
+                    keys=list(keys or ()),
+                ))
+                self.ticks += 1
             return tick_id
         except Exception:
             self.dropped += 1
@@ -92,14 +105,15 @@ class Journal:
         The row's `t` stays wall-clock, because that is what joins to everything else.
         """
         try:
-            self.recorder.skill_result(SkillResultRow(
-                run_id=self.run_id, client_id=self.client_id, t=time.time(),
-                tick_id=self.recorder._tick_id, skill=name, armed_by=armed_by,
-                outcome=outcome, duration_s=max(0.0, time.monotonic() - started_at),
-                situation_key=situation_key(state) if state is not None else "",
-                step_id=step_id, detail=detail,
-            ))
-            self.skills += 1
+            with self._writing:
+                self.recorder.skill_result(SkillResultRow(
+                    run_id=self.run_id, client_id=self.client_id, t=time.time(),
+                    tick_id=self.recorder._tick_id, skill=name, armed_by=armed_by,
+                    outcome=outcome, duration_s=max(0.0, time.monotonic() - started_at),
+                    situation_key=situation_key(state) if state is not None else "",
+                    step_id=step_id, detail=detail,
+                ))
+                self.skills += 1
         except Exception:
             self.dropped += 1
 

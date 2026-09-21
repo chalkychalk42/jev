@@ -58,6 +58,7 @@ from jev.guide.tracker import Tracker  # noqa: E402
 from jev.learn.episode import Recorder, SkillOutcome  # noqa: E402
 from jev.perceive.radio_frame import list_lines, name_id  # noqa: E402
 from jev.run.client import NotRunning, attach, with_travel  # noqa: E402
+from jev.run.heartbeat import Heartbeat  # noqa: E402
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt  # noqa: E402
 from jev.run.journal import Journal, outcome_of  # noqa: E402
 from jev.world.combat import HEAL_OUT_OF_COMBAT  # noqa: E402
@@ -144,6 +145,11 @@ def main() -> int:
     # afterwards, so recording is not optional and not conditional.
     journal = Journal(Recorder(root=args.runs_dir), client_id="slice")
     print(f"  recording to {journal.recorder.dir}")
+    # 2 Hz on its own thread, per ARCH SS4. The loop only ever ticked where it decided
+    # something, and a wedge is the stretch where it decides nothing - so the corpus had
+    # every decision the bot has made and almost nothing about the thing it is worst at.
+    heartbeat = Heartbeat(journal=journal, observe=client.state,
+                          keys_down=client.hid.keys_down)
 
     # The only difference between accepting and turning in.
     GOALS = {StepKind.QUEST_ACCEPT: Goal.HELD, StepKind.QUEST_TURNIN: Goal.CLEARED}
@@ -286,6 +292,7 @@ def main() -> int:
         hp = state.vitals.hp
         if hp is None or float(hp) >= HEAL_OUT_OF_COMBAT:
             return True
+        heartbeat.arm("REST", "top up before travelling")
         print(f"\n--- {float(hp):.0%} health; not starting a step on that ---")
         if fight.top_up():
             print(f"  topped up: {fight.top_ups_landed}/{fight.top_ups} landed")
@@ -323,187 +330,196 @@ def main() -> int:
         print(f"  {why} - trying again ({repeats}/{args.retries})")
         return False
 
-    while time.monotonic() < deadline and (args.steps == 0 or step < args.steps):
-        step += 1
-        started = time.monotonic()
-        state = client.state()
-        journal.tick(state)
-
-        # Dead is not a step problem, and every skill reports it as one. Recovery is a
-        # skill that already exists, so the loop uses it rather than stopping and waiting
-        # for a person - which is the whole difference between a probe and a runtime.
-        if state is not None and (state.vitals.dead is True or state.vitals.ghost is True):
-            print("\n--- dead; recovering ---")
-            died_at = time.monotonic()
-            # A ghost has already released and the body's position is gone for good.
-            # But the loop knows which node it was working when it died, and that is
-            # where the body is - the same guess a person makes, from data the runtime
-            # already has. Without it an unattended loop stops at the first death.
-            where = last_node or next_step()      # already a ghost before the first step
-            corpse = (state.pos.mx, state.pos.my) if state.vitals.dead else (
-                where.pos if where is not None and where.pos else None)
-            if corpse is not None and not state.vitals.dead:
-                print(f"  auto-released; guessing the corpse is at {where.id}")
-            # More than one pass, because one is rarely enough: a corpse run wedges on
-            # the way and the planner replans from wherever it stopped. Every recovery
-            # done by hand tonight took two to four passes for exactly this reason.
-            # The guess is only a fallback now. `Recover` reads the body's real position
-            # off the strip and will ignore this the moment the game offers one - which
-            # matters, because the last death was **240 yards** from the node the run was
-            # working, and thirteen passes at the node found nothing to get up from.
-            for attempt in range(args.retries):
-                got_up = recover.run(corpse)
-                went = recover.corpse
-                where_txt = "nowhere" if went is None else f"({went[0]:.4f}, {went[1]:.4f})"
-                print(f"  recover {attempt + 1} at {where_txt}: {got_up.value}"
-                      + (f" - {recover.detail}" if recover.detail else ""))
-                if got_up.ok or got_up is Recovered.NO_CORPSE:
-                    break
-            journal.skill("RECOVER", outcome_of(got_up.ok), started_at=died_at,
-                          state=state, detail=f"{got_up.value}: {recover.detail}"
-                          if recover.detail else got_up.value)
-            if not got_up.ok:
-                print("  could not get back up; stopping")
-                rc = 1
-                break
-            continue
-
-        # Before anything that looks. A camera pitched at the ground makes every skill
-        # report the truth about an empty screen - `not_visible`, "no ring and nameplate
-        # to click" - while the character stands 4.6 yards from a targeted merchant whose
-        # nameplate is on screen. A second a pass, and it cannot make a good camera worse.
-        camera.level()
-
-        if not _settle_combat(state):
-            continue          # something is hitting us; that is the whole pass
-
-        purse = state.bags.money_copper if state is not None else None
-        richer = broke_at is None or (purse is not None and purse > broke_at)
-        if repair.needed() and richer:
-            # Ahead of health, because a broken weapon loses the fight the health was
-            # being saved for. This is the other half of dying: every death costs 10%
-            # durability, and a character that never repairs eventually punches wolves.
-            worst = repair.before
-            print("\n--- gear is worn; repairing before anything else ---")
+    heartbeat.start()
+    try:
+        while time.monotonic() < deadline and (args.steps == 0 or step < args.steps):
+            step += 1
             started = time.monotonic()
-            outcome = repair.run()
-            print(f"  repair: {outcome.value}"
-                  + (f" - {repair.detail}" if repair.detail else "")
-                  + (f" ({worst:.0%} -> {repair.after:.0%})"
-                     if repair.after is not None and worst is not None else ""))
-            journal.skill("REPAIR", outcome_of(outcome.ok), started_at=started,
-                          state=state, detail=f"{outcome.value}: {repair.detail}"
-                          if repair.detail else outcome.value)
-            if outcome is Repaired.TOO_POOR:
-                broke_at = purse if purse is not None else 0
-                print(f"  not going back to a merchant until there is more than "
-                      f"{broke_at} copper")
-            continue
+            state = client.state()
+            journal.tick(state, keys=client.hid.keys_down())
 
-        if not _fit_to_travel(state):
-            continue          # spent the pass getting well; re-read before deciding
-
-        node = next_step()
-        if node is None:
-            print("\ncannot read the client; stopping")
-            rc = 1
-            break
-
-        last_node = node
-        print(f"\n--- step {step}: {node.id} ---")
-        print(f"  {node.kind.value} quest {node.quest_id} at {node.notes} {node.pos}")
-        journal.tick(state, skill=node.kind.value.upper(), intent=node.title or node.id)
-
-        if node.world is None:
-            print(f"  no spawn for this node ({node.notes}); the graph cannot place it")
-            rc = 1
-            break
-
-        client.focused()
-
-        if node.kind is StepKind.QUEST_OBJECTIVE:
-            if do_objective(node) == 0:
-                repeats, last_id = 0, node.id
-                continue
-            if failed(node, "the objective did not finish"):
-                rc = 1
-                break
-            continue
-
-        goal = GOALS.get(node.kind)
-        if goal is None:
-            print(f"  {node.kind.value} is not built yet; stopping rather than "
-                  f"pretending the step is done")
-            rc = 1
-            break
-        if node.npc_id is None:
-            print(f"  no NPC for this node ({node.notes})")
-            rc = 1
-            break
-
-        result = inter.open_on(node.notes, node_world=node.world, node_map=node.pos)
-        if inter.sighting is not None:
-            sg = inter.sighting
-            print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) torso {sg.torso}")
-        print(f"  {result.value}" + (f" - {inter.detail}" if inter.detail else ""))
-        journal.skill("INTERACT", outcome_of(result.opened), started_at=started,
-                      state=state, step_id=node.id,
-                      detail=f"{result.value}: {inter.detail}" if inter.detail
-                      else result.value)
-        if not result.opened:
-            if failed(node, f"could not open {node.notes}"):
-                rc = 1
-                break
-            continue
-
-        # A list, not a button. Pick our own quest out of it by name; the NPC may have
-        # several, and they are identical to a camera.
-        #
-        # Gossip is not the only list. An NPC with two or more quests and nothing else to
-        # say opens the **quest greeting panel** instead - `ui.quest_frame` true,
-        # `ui.gossip` false, no Accept button painted, and the same `ui.list_*` lines
-        # underneath. Deputy Willem with two quests reported
-        # `no_button - frame open but no advance button painted` while line 1 was
-        # `Eagan Peltskinner` all along.
-        if result is Result.GOSSIP or _is_a_list(client):
-            chose_at = time.monotonic()
-            chose = chooser.run(node.title)
-            print(f"  chose {node.title!r}: {chose.value} at {chooser.clicked}"
-                  + (f" - {chooser.detail}" if chooser.detail else ""))
-            journal.skill("CHOOSE_LINE", outcome_of(chose.ok), started_at=chose_at,
-                          state=state, step_id=node.id,
-                          detail=f"{chose.value}: {chooser.detail}" if chooser.detail
-                          else chose.value)
-            if not chose.ok:
-                if failed(node, f"could not pick {node.title!r} out of the list"):
+            # Dead is not a step problem, and every skill reports it as one. Recovery is a
+            # skill that already exists, so the loop uses it rather than stopping and waiting
+            # for a person - which is the whole difference between a probe and a runtime.
+            if state is not None and (state.vitals.dead is True or state.vitals.ghost is True):
+                print("\n--- dead; recovering ---")
+                heartbeat.arm("RECOVER", "get back up")
+                died_at = time.monotonic()
+                # A ghost has already released and the body's position is gone for good.
+                # But the loop knows which node it was working when it died, and that is
+                # where the body is - the same guess a person makes, from data the runtime
+                # already has. Without it an unattended loop stops at the first death.
+                where = last_node or next_step()      # already a ghost before the first step
+                corpse = (state.pos.mx, state.pos.my) if state.vitals.dead else (
+                    where.pos if where is not None and where.pos else None)
+                if corpse is not None and not state.vitals.dead:
+                    print(f"  auto-released; guessing the corpse is at {where.id}")
+                # More than one pass, because one is rarely enough: a corpse run wedges on
+                # the way and the planner replans from wherever it stopped. Every recovery
+                # done by hand tonight took two to four passes for exactly this reason.
+                # The guess is only a fallback now. `Recover` reads the body's real position
+                # off the strip and will ignore this the moment the game offers one - which
+                # matters, because the last death was **240 yards** from the node the run was
+                # working, and thirteen passes at the node found nothing to get up from.
+                for attempt in range(args.retries):
+                    got_up = recover.run(corpse)
+                    went = recover.corpse
+                    where_txt = "nowhere" if went is None else f"({went[0]:.4f}, {went[1]:.4f})"
+                    print(f"  recover {attempt + 1} at {where_txt}: {got_up.value}"
+                          + (f" - {recover.detail}" if recover.detail else ""))
+                    if got_up.ok or got_up is Recovered.NO_CORPSE:
+                        break
+                journal.skill("RECOVER", outcome_of(got_up.ok), started_at=died_at,
+                              state=state, detail=f"{got_up.value}: {recover.detail}"
+                              if recover.detail else got_up.value)
+                if not got_up.ok:
+                    print("  could not get back up; stopping")
                     rc = 1
                     break
                 continue
 
-        client.log.reset()
-        advanced_at = time.monotonic()
-        outcome = advance.run(node.quest_id, goal)
-        print(f"  {goal.value}: pressed {advance.clicked} -> {outcome.value}"
-              + (f" - {advance.detail}" if advance.detail else ""))
-        journal.skill(f"ADVANCE_{goal.value.upper()}", outcome_of(outcome.ok),
-                      started_at=advanced_at, state=state, step_id=node.id,
-                      detail=f"{outcome.value}: {advance.detail}" if advance.detail
-                      else outcome.value)
-        if not outcome.ok:
-            if failed(node, f"could not {goal.value} quest {node.quest_id}"):
+            # Before anything that looks. A camera pitched at the ground makes every skill
+            # report the truth about an empty screen - `not_visible`, "no ring and nameplate
+            # to click" - while the character stands 4.6 yards from a targeted merchant whose
+            # nameplate is on screen. A second a pass, and it cannot make a good camera worse.
+            camera.level()
+
+            if not _settle_combat(state):
+                continue          # something is hitting us; that is the whole pass
+
+            purse = state.bags.money_copper if state is not None else None
+            richer = broke_at is None or (purse is not None and purse > broke_at)
+            if repair.needed() and richer:
+                # Ahead of health, because a broken weapon loses the fight the health was
+                # being saved for. This is the other half of dying: every death costs 10%
+                # durability, and a character that never repairs eventually punches wolves.
+                worst = repair.before
+                heartbeat.arm("REPAIR", "worn gear")
+                print("\n--- gear is worn; repairing before anything else ---")
+                started = time.monotonic()
+                outcome = repair.run()
+                print(f"  repair: {outcome.value}"
+                      + (f" - {repair.detail}" if repair.detail else "")
+                      + (f" ({worst:.0%} -> {repair.after:.0%})"
+                         if repair.after is not None and worst is not None else ""))
+                journal.skill("REPAIR", outcome_of(outcome.ok), started_at=started,
+                              state=state, detail=f"{outcome.value}: {repair.detail}"
+                              if repair.detail else outcome.value)
+                if outcome is Repaired.TOO_POOR:
+                    broke_at = purse if purse is not None else 0
+                    print(f"  not going back to a merchant until there is more than "
+                          f"{broke_at} copper")
+                continue
+
+            if not _fit_to_travel(state):
+                continue          # spent the pass getting well; re-read before deciding
+
+            node = next_step()
+            if node is None:
+                print("\ncannot read the client; stopping")
                 rc = 1
                 break
-            continue
 
-        if node.kind is StepKind.QUEST_TURNIN and node.quest_id is not None:
-            # The one fact 2.4.3 will not give back later. Written the moment it is
-            # witnessed, because the log forgets a quest the instant it is handed in.
-            memory = playhead.with_completed(memory, node.quest_id)
-            playhead.save(graph.graph_id, node.id, memory.completed)
-        print(f"  log now: {client.quest_ids()}")
-        repeats, last_id = 0, node.id
+            last_node = node
+            heartbeat.arm(node.kind.value.upper(), node.title or node.id)
+            print(f"\n--- step {step}: {node.id} ---")
+            print(f"  {node.kind.value} quest {node.quest_id} at {node.notes} {node.pos}")
+            journal.tick(state, skill=node.kind.value.upper(), intent=node.title or node.id)
 
-    print(f"\nrecorded: {journal.summary()}")
+            if node.world is None:
+                print(f"  no spawn for this node ({node.notes}); the graph cannot place it")
+                rc = 1
+                break
+
+            client.focused()
+
+            if node.kind is StepKind.QUEST_OBJECTIVE:
+                if do_objective(node) == 0:
+                    repeats, last_id = 0, node.id
+                    continue
+                if failed(node, "the objective did not finish"):
+                    rc = 1
+                    break
+                continue
+
+            goal = GOALS.get(node.kind)
+            if goal is None:
+                print(f"  {node.kind.value} is not built yet; stopping rather than "
+                      f"pretending the step is done")
+                rc = 1
+                break
+            if node.npc_id is None:
+                print(f"  no NPC for this node ({node.notes})")
+                rc = 1
+                break
+
+            result = inter.open_on(node.notes, node_world=node.world, node_map=node.pos)
+            if inter.sighting is not None:
+                sg = inter.sighting
+                print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) torso {sg.torso}")
+            print(f"  {result.value}" + (f" - {inter.detail}" if inter.detail else ""))
+            journal.skill("INTERACT", outcome_of(result.opened), started_at=started,
+                          state=state, step_id=node.id,
+                          detail=f"{result.value}: {inter.detail}" if inter.detail
+                          else result.value)
+            if not result.opened:
+                if failed(node, f"could not open {node.notes}"):
+                    rc = 1
+                    break
+                continue
+
+            # A list, not a button. Pick our own quest out of it by name; the NPC may have
+            # several, and they are identical to a camera.
+            #
+            # Gossip is not the only list. An NPC with two or more quests and nothing else to
+            # say opens the **quest greeting panel** instead - `ui.quest_frame` true,
+            # `ui.gossip` false, no Accept button painted, and the same `ui.list_*` lines
+            # underneath. Deputy Willem with two quests reported
+            # `no_button - frame open but no advance button painted` while line 1 was
+            # `Eagan Peltskinner` all along.
+            if result is Result.GOSSIP or _is_a_list(client):
+                chose_at = time.monotonic()
+                chose = chooser.run(node.title)
+                print(f"  chose {node.title!r}: {chose.value} at {chooser.clicked}"
+                      + (f" - {chooser.detail}" if chooser.detail else ""))
+                journal.skill("CHOOSE_LINE", outcome_of(chose.ok), started_at=chose_at,
+                              state=state, step_id=node.id,
+                              detail=f"{chose.value}: {chooser.detail}" if chooser.detail
+                              else chose.value)
+                if not chose.ok:
+                    if failed(node, f"could not pick {node.title!r} out of the list"):
+                        rc = 1
+                        break
+                    continue
+
+            client.log.reset()
+            advanced_at = time.monotonic()
+            outcome = advance.run(node.quest_id, goal)
+            print(f"  {goal.value}: pressed {advance.clicked} -> {outcome.value}"
+                  + (f" - {advance.detail}" if advance.detail else ""))
+            journal.skill(f"ADVANCE_{goal.value.upper()}", outcome_of(outcome.ok),
+                          started_at=advanced_at, state=state, step_id=node.id,
+                          detail=f"{outcome.value}: {advance.detail}" if advance.detail
+                          else outcome.value)
+            if not outcome.ok:
+                if failed(node, f"could not {goal.value} quest {node.quest_id}"):
+                    rc = 1
+                    break
+                continue
+
+            if node.kind is StepKind.QUEST_TURNIN and node.quest_id is not None:
+                # The one fact 2.4.3 will not give back later. Written the moment it is
+                # witnessed, because the log forgets a quest the instant it is handed in.
+                memory = playhead.with_completed(memory, node.quest_id)
+                playhead.save(graph.graph_id, node.id, memory.completed)
+            print(f"  log now: {client.quest_ids()}")
+            repeats, last_id = 0, node.id
+
+    finally:
+        heartbeat.stop()
+
+    print(f"\nrecorded: {journal.summary()}"
+          + (f" ({heartbeat.ticks} from the heartbeat)" if heartbeat.ticks else ""))
     journal.close()
     client.close()
     return rc
