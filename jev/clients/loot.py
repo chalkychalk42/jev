@@ -12,10 +12,29 @@ in one action.
 
 What counts as having looted
 ----------------------------
-Not "we clicked". `bags.free` falling is the honest signal, and the loot frame appearing
-is the other one. An empty corpse is a real and common outcome, so it is reported as
-`NOTHING` rather than as a failure - a skill that treats an empty wolf as an error will
-retire itself on a perfectly good camp.
+Not "we clicked", and three signals in a deliberate order:
+
+    1. the objective counter    the server's tally, the same rule kills already follow
+    2. money                    a copper or two comes off almost everything
+    3. `bags.free`              a slot filled
+
+The counter first because it is the only one that answers the question actually being
+asked - *did this corpse move the quest on* - and because it is the server's own count
+rather than an inference from the bags.
+
+`bags.free` is last because it **misses stacks**. Tough Wolf Meat 2 through 8 land on the
+stack meat 1 made, so seven of the eight take no new slot: a bot that believes free slots
+reports `nothing` for most of a collect quest while the counter climbs behind it.
+
+The loot frame is **not** evidence and is not consulted. A frame appearing means a corpse
+was opened, not that anything was taken, and it is only auto loot that makes the two
+coincide - which is a client setting this code cannot see. `autoLootCorpse "1"` is set in
+`WTF/Config.wtf`; if it is ever off, the frame would stand open and nothing would be in
+the bags, and believing the frame would report a take on every empty wolf in the zone.
+
+An empty corpse is a real and common outcome, so it is reported as `NOTHING` rather than
+as a failure - a skill that treats an empty wolf as an error will retire itself on a
+perfectly good camp.
 
 Bags are checked **before** the click. A full bag makes looting silently do nothing, and
 the fix for that is a vendor, not another click.
@@ -63,22 +82,29 @@ class Loot:
     read: Callable[[], dict | None]
     read_frame: Callable[[], object | None]
     window_origin: tuple[int, int] = (0, 0)
-
+    _progress: Callable[[], tuple[int | None, int | None]] | None = field(
+        default=None, init=False)
     clicked: tuple[int, int] | None = field(default=None, init=False)
     took: int = field(default=0, init=False)
     detail: str = field(default="", init=False)
 
-    def run(self, *, settle_s: float = SETTLE_S) -> Looted:
+    def run(self, *, settle_s: float = SETTLE_S,
+            progress: Callable[[], tuple[int | None, int | None]] | None = None
+            ) -> Looted:
+        """`progress` is the objective counter, passed by whoever knows which quest is
+        being worked. `Loot` has no idea and should not: it is handed a way to ask what
+        the server thinks, exactly as `Hunt` is."""
         self.clicked = None
         self.detail = ""
+        self._progress = progress
 
         v = self.read()
         if v is None:
             return Looted.BLIND
-        free_before = v.get("bags.free")
-        if free_before == 0:
+        if v.get("bags.free") == 0:
             self.detail = "bags are full; looting would take nothing"
             return Looted.BAGS_FULL
+        before = {**v, "objective": self._counter()}
 
         frame = self.read_frame()
         ring = None if frame is None else _find_ring(frame)
@@ -97,18 +123,42 @@ class Loot:
             after = self.read()
             if after is None:
                 continue
-            free_now = after.get("bags.free")
-            if free_before is not None and free_now is not None and free_now < free_before:
+            why = self._what_changed(before, after)
+            if why:
                 self.took += 1
-                self._close_if_open(after)
-                return Looted.TOOK
-            if after.get("ui.loot") is True:
-                self.took += 1
+                self.detail = why
                 self._close_if_open(after)
                 return Looted.TOOK
 
+        self._close_if_open(self.read() or {})
         self.detail = "clicked the corpse and nothing came off it"
         return Looted.NOTHING
+
+    def _counter(self) -> int | None:
+        if self._progress is None:
+            return None
+        try:
+            have, _need = self._progress()
+        except Exception:                    # a reader that fails is not a loot failure
+            return None
+        return have
+
+    def _what_changed(self, before: dict, after: dict) -> str:
+        """Which signal moved, in the order that they are worth believing."""
+        have_before, have_now = before.get("objective"), self._counter()
+        if (have_before is not None and have_now is not None
+                and have_now > have_before):
+            return f"objective {have_before} -> {have_now}"
+
+        for key, unit in (("bags.money_silver", "silver"),):
+            was, now = before.get(key), after.get(key)
+            if was is not None and now is not None and now > was:
+                return f"{now - was} {unit}"
+
+        was, now = before.get("bags.free"), after.get("bags.free")
+        if was is not None and now is not None and now < was:
+            return f"{was - now} bag slot{'s' if was - now > 1 else ''}"
+        return ""
 
     def _close_if_open(self, values: dict) -> None:
         """Auto-loot usually closes itself. When it does not, a left-open loot window
