@@ -1,9 +1,10 @@
 """Where units are on screen — one solver, every NPC and every mob.
 
-This exists because there is no way to ask 2.4.3 where a unit is. `GetPlayerFacing`,
-`INTERACTTARGET` and `InteractUnit` all arrived in 3.0; `/follow` refuses NPCs; and aiming
-the character at a node's coordinates fails because a node is a *spawn point* and units
-wander — at five yards, a few yards of drift is forty degrees of error.
+This exists because there is no way to ask 2.4.3 where a unit is. `INTERACTTARGET` and
+`InteractUnit` both arrived in 3.0; `/follow` refuses NPCs; and aiming the character at a
+node's coordinates fails because a node is a *spawn point* and units wander — at five
+yards, a few yards of drift is forty degrees of error. Own facing is readable (V29) and
+does not help: it says which way the character points, not where anything else is.
 
 So the unit's position is read off the screen. Not by recognising models, which would need
 a class per creature and would still lose to armour, mounts and camera angle, but from the

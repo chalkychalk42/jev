@@ -149,7 +149,7 @@ raises, and then: `tap("space")` → `flags.falling` true across seven consecuti
 Input reached the game, the game changed, the addon painted it, the decoder read it back.
 No vision involved anywhere in that loop.
 
-**There is no facing API in this client** (V17). `GetPlayerFacing` is 3.0+, so heading has
+**There is no facing API in this client** (V17, superseded by V29 — the minimap arrow is a `Model` and `Model:GetFacing()` reads it). `GetPlayerFacing` is 3.0+, so at the time heading had
 to be measured from movement rather than read. Closed-loop turning needs no absolute
 facing at all, which is the better shape anyway.
 
@@ -768,7 +768,7 @@ occluded plate. Identity still comes from `target.name_id` after the click.
 
 ### There is no facing API, so clicking is how you aim
 
-`GetPlayerFacing` arrived in 3.0 and `pos.facing` reads `None` on every live frame. A
+`GetPlayerFacing` arrived in 3.0 and `pos.facing` read `None` on every live frame (superseded by V29: it paints off the minimap arrow). A
 right-click on the model targets, **turns the character**, and starts auto-attack in one
 action, and `W` then walks along that heading. So closing to melee is a right-click
 followed by bursts of `W`, watching the target's **health** rather than `target.in_melee`
@@ -1096,3 +1096,45 @@ the evening: **27 copper**.
                        ~12 yards. The second arrives. Nothing here explains why yet.
     money in copper    `bags.money_silver` cannot see 27 copper, which is exactly the
                        range a repair decision at level 2 lives in.
+
+## Audit: capability claims, and fields nothing reads
+
+Two sweeps asked for after corpse position and facing both turned out to be wrong in the
+same direction — a real API written off as absent.
+
+**Claims of the form "2.4.3 has no X".** Five distinct ones, in DECISIONS, STATUS and
+docstrings.
+
+    GetPlayerFacing is 3.0         TRUE about the API, FALSE as written. The conclusion
+                                   drawn from it - "there is no facing" - was wrong for
+                                   four days. Superseded by V29; the five docstrings
+                                   that repeated it are corrected.
+    InteractUnit is 3.0            unverified in-game. Believed true.
+    INTERACTTARGET is 3.0          unverified in-game. `GetBindingKey("INTERACTTARGET")`
+                                   settles it in one line and has never been run.
+    GetQuestsCompleted is 3.0      unverified in-game. Load-bearing: the playhead cannot
+                                   tell a finished quest from an untaken one, and a
+                                   restart re-offers a handed-in quest because of it.
+    GetQuestLogQuestID absent      unverified in-game. Worked around via the hyperlink,
+                                   which does work, so the cost of being wrong is low.
+    /follow refuses NPCs           unverified in-game.
+
+Every "unverified" above is one `/script` away and none has been run. That is the same
+posture that produced the facing error, so they are listed rather than trusted.
+
+**Radio fields with no reader.** 75 fields; 13 are read nowhere outside `perceive/` and
+16 only by tests. Most are benign — `ui.list_*` is consumed through `list_lines()`, which
+lives in `perceive/` by design. Three are not:
+
+    quests.o1_*, quests.o2_*   painted, assembled into `QuestLogEntry.objectives`, and
+                               then dropped: `progress()` reads `objectives[0]` and
+                               nothing else. A quest with two counters - kill eight of
+                               these *and* six of those - can never be seen to finish.
+    ui.error_id                the client's own reason for a failure: out of range, not
+                               facing, can't do that yet. Painted since schema 1, read
+                               by nothing. Several of this week's mysteries would have
+                               announced themselves.
+    flags.swimming             nothing reacts to being in water.
+
+`bags.durability_min` was on this list until tonight and cost an evening, which is the
+argument for keeping the sweep rather than the finding.

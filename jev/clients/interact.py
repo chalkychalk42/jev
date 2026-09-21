@@ -1,7 +1,10 @@
 """Open an NPC's window. One target, one look, one walk, one click.
 
-2.4.3 has no `INTERACTTARGET`, no `InteractUnit` and no facing API — all arrived in 3.0 —
-so interacting means right-clicking the model, which means knowing where it is.
+2.4.3 has no `INTERACTTARGET` and no `InteractUnit` — both arrived in 3.0 — so
+interacting means right-clicking the model, which means knowing where it is. (It does
+have facing, off the minimap arrow; see V29. That was wrong here for a while, and it
+would not have helped: knowing which way the character points is not knowing where the
+merchant stands.)
 `jev.perceive.units` answers that from the nameplate and ring the client draws around
 every unit, so this file does not guess, sweep, or aim with coordinates.
 

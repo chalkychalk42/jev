@@ -11,9 +11,10 @@ by construction one the client is drawing near enough to fight. Identity still c
 `target.name_id` after the click, never from the plate.
 
 **Engaging it** is a right-click on the model, which targets, *turns the character to
-face*, and starts auto-attack in one action. That matters because 2.4.3 has no facing API
-at all — `GetPlayerFacing` arrived in 3.0 and `pos.facing` reads `None` on every live
-frame — so the only way this bot can aim its character at anything is to click it. If the
+face*, and starts auto-attack in one action. That matters because there is no API that
+turns the character: `GetPlayerFacing` (3.0) would only ever have *read* a heading, and
+`pos.facing` now paints one off the minimap arrow (V29), which still turns nothing. The
+only way this bot aims its character at something is to click it. If the
 unit cannot be seen properly, this skill refuses rather than swinging at the air, and
 `not_facing` in the radio's error field is what that failure looks like when it is not
 refused.
