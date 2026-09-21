@@ -41,7 +41,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from jev.perceive.units import Plate, find, find_plates
+from jev.perceive.units import Plate, _find_ring, find, find_plates
 from jev.world.combat import (
     HEAL_IN_COMBAT,
     HEAL_OUT_OF_COMBAT,
@@ -90,6 +90,10 @@ MAX_SELECTS = 4
 # closer is walking into a fence.
 ENGAGE_LOOKS = 5
 CLOSE_BURST_S = 0.45
+
+# The stride once inside interact distance. Short, because eleven yards of running at
+# something five yards away is how the character went straight through it.
+CLOSE_NUDGE_S = 0.12
 MAX_CLOSE_BURSTS = 8
 
 # Re-aim every this many bursts while closing.
@@ -281,24 +285,31 @@ class Fight:
             # `target.in_melee` is CheckInteractDistance index 3, about eleven yards. Too
             # loose to prove we can hit something, which is why it never gated the
             # rotation - but exact enough to prove we should stop running at it.
-            in_reach = v.get("target.in_melee") is True
-            if in_reach and not landing:
+            # `target.in_melee` is CheckInteractDistance index 3 - about **eleven**
+            # yards - and a melee swing needs five. Using it to stop walking parked the
+            # character three quarters of the way there and left it standing: "we do
+            # nothing to actually walk towards the target".
+            #
+            # So it shortens the stride instead of ending it. Far away, run; close,
+            # creep, so the last few yards are covered without running straight through
+            # and out the other side.
+            near = v.get("target.in_melee") is True
+            if near and not landing:
                 self.engage()
-                self._damage_at = time.monotonic()
 
             if landing and time.monotonic() - self._damage_at > REAIM_AFTER_S:
                 # Nothing has come off it for a while. Either it moved or we did.
                 self.engage()
                 self._damage_at = time.monotonic()
-            if not landing and not in_reach and self.closed < MAX_CLOSE_BURSTS:
+            if not landing and self.closed < MAX_CLOSE_BURSTS:
                 # Not while casting: movement cancels a cast, and the only thing being
                 # cast here is a heal that is keeping us alive.
                 if v.get("bars.casting") is not True:
                     if self.closed and self.closed % REAIM_EVERY == 0:
                         self.engage()          # walking blind is walking the old heading
-                    self.hid.hold("w", CLOSE_BURST_S)
+                    self.hid.hold("w", CLOSE_NUDGE_S if near else CLOSE_BURST_S)
                     self.closed += 1
-            elif not landing and not in_reach:
+            elif not landing:
                 # Out of bursts with the target still at full health. Whether anything was
                 # *pressed* says nothing about whether it was reached — a seal lands on
                 # the character, not on the kobold — and requiring "pressed nothing" here
@@ -411,6 +422,22 @@ class Fight:
                 time.sleep(0.5)
                 return True
             time.sleep(0.25)
+
+        # A ring with no nameplate above it still tells us where the unit is standing.
+        # `find` is right to refuse - it brackets feet and head to get a torso, and one
+        # of those is missing - but refusing to *turn* because of that leaves the
+        # character facing the wrong way with the target in plain sight, which is what
+        # the operator watched happen. A click just above the ring lands on the model:
+        # a unit stands on its own ring.
+        #
+        # This is for facing, not for a torso. Missing costs a click that opens nothing.
+        ring = None if frame is None else _find_ring(frame)
+        if ring is not None:
+            point = (round(ring.cx), round(ring.cy - max(8, ring.h)))
+            self.hid.click(ox + point[0], oy + point[1], right=True)
+            time.sleep(0.5)
+            self.detail = "no nameplate; aimed just above the ring to face it"
+            return True
 
         if self.selected_plate is not None:
             # No ring — the unit's feet are behind a rise, or grass, or the model itself.

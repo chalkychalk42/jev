@@ -6,6 +6,8 @@ import inspect
 import time
 
 from jev.clients.fight import (
+    CLOSE_BURST_S,
+    CLOSE_NUDGE_S,
     DEAD_HP,
     FLEE_HP,
     HEAL_GIVE_UP,
@@ -537,25 +539,55 @@ def test_it_re_aims_when_the_target_stops_taking_damage():
     assert len(engages) > 1, "never turned back towards a target it had stopped hitting"
 
 
-def test_it_stops_walking_once_the_target_is_within_reach():
-    """Watched live: "we target and try to attack but then just keep running forwards and
-    passed them". Closing ended only when the target lost health, so a character facing
-    slightly wrong walked through the kobold and out the other side, still holding W, for
-    all eight bursts.
+def test_it_creeps_the_last_yards_rather_than_stopping_or_charging_through():
+    """Two live failures, opposite directions. Running until the target lost health went
+    straight through the kobold and out the other side. Then stopping at
+    `target.in_melee` parked the character three quarters of the way there and left it
+    standing - that flag is CheckInteractDistance index 3, about eleven yards, and a
+    melee swing needs five.
 
-    `target.in_melee` is too loose to prove we can hit something - it is about eleven
-    yards - but exact enough to prove we should stop running at it."""
+    So the stride shortens instead of ending."""
     hid = _Hid()
     near = {**ALIVE, "target.in_melee": True}
     f = _fight([near], hid=hid)
     f.acquire = lambda name_id, **_: None
     f.engage = lambda: True
     f.run(timeout_s=1.5)
-    assert not hid.holds, "kept running at something it was already standing next to"
+    assert hid.holds, "stood still eleven yards from something it needed to be five from"
+    assert all(secs == CLOSE_NUDGE_S for _k, secs in hid.holds), "charged through it"
 
     far = {**ALIVE, "target.in_melee": False}
     g = _fight([far], hid=hid)
     g.acquire = lambda name_id, **_: None
     g.engage = lambda: True
     g.run(timeout_s=1.5)
-    assert hid.holds, "never closed on something out of reach"
+    assert any(secs == CLOSE_BURST_S for _k, secs in g.hid.holds), "crept from far away"
+
+
+def test_a_ring_with_no_nameplate_is_still_enough_to_turn_towards():
+    """Watched live: "do not turn to face". `find` refuses when it has a ring and no
+    plate - correctly, because it brackets feet and head to get a torso - but refusing to
+    *turn* because of that leaves the character facing the wrong way with the target in
+    plain sight.
+
+    A unit stands on its own ring, so a click just above it lands on the model. This is
+    for facing, not for a torso; missing costs a click that opens nothing."""
+    import numpy as np
+
+    import jev.clients.fight as mod
+    from jev.perceive.units import Ring, RingColour
+
+    hid = _Hid()
+    f = Fight(hid=hid, read=lambda: ALIVE, read_frame=lambda: np.zeros((4, 4, 3)),
+              window_origin=(10, 38))
+    ring = Ring(cx=700.0, cy=500.0, w=60, h=20, colour=RingColour.YELLOW, area=300)
+    real_find, real_ring = mod.find, mod._find_ring
+    mod.find, mod._find_ring = (lambda _f: None), (lambda _f: ring)
+    try:
+        assert f.engage() is True, "had a ring on screen and refused to turn"
+        x, y, right = hid.clicks[-1]
+        assert right is True
+        assert x == 10 + 700
+        assert y < 38 + 500, "aimed at or below the ring instead of at the model above it"
+    finally:
+        mod.find, mod._find_ring = real_find, real_ring
