@@ -78,3 +78,17 @@ def test_a_sequence_that_advances_clears_the_clock():
         assert c.frozen_for() < 1.0
     finally:
         c._restore()
+
+
+def test_a_refused_walk_takes_the_window_back_and_retries():
+    """`Hid` refuses when the window is not focused and `Travel` reports REFUSED rather
+    than calling it stuck - but somebody has to take the window back. A live run made
+    three kills and then spent twelve stations refused, walking nowhere."""
+    import inspect
+
+    from jev.run.client import Client as _C
+
+    body = inspect.getsource(_C.approach)
+    assert "Outcome.REFUSED" in body
+    assert body.index("Outcome.REFUSED") < body.rindex("self.focused()")
+    assert body.count("self.travel.follow(") == 2, "it reports the refusal and gives up"

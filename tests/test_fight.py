@@ -13,6 +13,7 @@ from jev.clients.fight import (
     MAX_CLOSE_BURSTS,
     MAX_SELECTS,
     MIN_START_HP,
+    REAIM_AFTER_S,
     REAIM_EVERY,
     SLOT_KEYS,
     Fight,
@@ -243,7 +244,7 @@ def test_a_losing_fight_is_broken_off_rather_than_finished():
     finishing it standing up costs a two-hundred-yard corpse run."""
     sinking = {**ALIVE, "vitals.hp": 0.1}
     f = _fight([ALIVE, sinking])
-    f.acquire = lambda name_id: None
+    f.acquire = lambda name_id, **_: None
     f.engage = lambda: True
     assert f.run(timeout_s=5) is Fought.LOSING
     assert "broke off" in f.detail
@@ -287,7 +288,7 @@ def test_walking_at_it_and_swinging_at_it_are_the_same_loop():
     times over, having walked at a kobold without once pressing anything at it."""
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
-    f.acquire = lambda name_id: None
+    f.acquire = lambda name_id, **_: None
     f.engage = lambda: True
     f.run(timeout_s=2)
     assert f.pressed, "walked at it and never swung"
@@ -304,7 +305,7 @@ def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
     seconds: `pressed [2, 1, 2] closed 8`, twice."""
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)          # rotation is live; it will press the seal
-    f.acquire = lambda name_id: None
+    f.acquire = lambda name_id, **_: None
     f.engage = lambda: True
     f.closed = MAX_CLOSE_BURSTS
     assert f.run(timeout_s=5) is Fought.UNREACHABLE
@@ -312,21 +313,25 @@ def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
     assert f.pressed, "this is the case where it presses and still cannot reach"
 
 
-def test_in_combat_the_name_filter_comes_off():
-    """Something already hitting us does not have to be the quest mob. A Kobold Worker
+def test_in_combat_the_name_filter_loosens_but_does_not_come_off():
+    """Something already hitting us does not have to be the quest mob - a Kobold Worker
     beat this character to 27% while every attempt refused to fight anything but a Kobold
-    Vermin, selected nothing, and reported "not visible" twenty times running."""
+    Vermin. But dropping the name entirely made it attack a Timber Wolf that was minding
+    its own business, so the wanted name is still passed and `defend` is what loosens
+    it."""
     seen = []
     f = _fight([{**ALIVE, "vitals.combat": True, "target.has": False}])
-    f.acquire = lambda name_id: seen.append(name_id) or Fought.NO_TARGET
+    f.acquire = lambda name_id, **kw: seen.append((name_id, kw.get("defend"))) \
+        or Fought.NO_TARGET
     f.run(1161, timeout_s=1)
-    assert seen == [None], "refused to defend itself against the wrong species"
+    assert seen == [(1161, True)], "forgot what it came for, or refused to defend itself"
 
     seen.clear()
     f2 = _fight([{**ALIVE, "vitals.combat": False, "target.has": False}])
-    f2.acquire = lambda name_id: seen.append(name_id) or Fought.NO_TARGET
+    f2.acquire = lambda name_id, **kw: seen.append((name_id, kw.get("defend"))) \
+        or Fought.NO_TARGET
     f2.run(1161, timeout_s=1)
-    assert seen == [1161], "picked a fight with something that was not the objective"
+    assert seen == [(1161, False)], "picked a fight with something that was not the mob"
 
 
 def test_a_guard_does_not_freeze_a_fight_already_started():
@@ -338,7 +343,7 @@ def test_a_guard_does_not_freeze_a_fight_already_started():
     hid = _Hid()
     sinking = {**ALIVE, "vitals.hp": 0.1, "vitals.combat": True}
     f = _fight([sinking], hid=hid)
-    f.acquire = lambda name_id: None
+    f.acquire = lambda name_id, **_: None
     f.engage = lambda: True
     f.run(timeout_s=1)
     assert f.pressed, "stood at 10% health in combat and pressed nothing"
@@ -346,7 +351,7 @@ def test_a_guard_does_not_freeze_a_fight_already_started():
     # Out of combat it is a real choice, and still taken.
     free = {**ALIVE, "vitals.hp": 0.1, "vitals.combat": False}
     g = _fight([ALIVE, free])
-    g.acquire = lambda name_id: None
+    g.acquire = lambda name_id, **_: None
     g.engage = lambda: True
     assert g.run(timeout_s=5) is Fought.LOSING
 
@@ -378,7 +383,7 @@ def test_closing_re_aims_because_only_a_click_turns_the_character():
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
     engages = []
-    f.acquire = lambda name_id: None
+    f.acquire = lambda name_id, **_: None
     f.engage = lambda: engages.append(1) or True
     f.run(timeout_s=6)
     assert f.closed >= REAIM_EVERY, "did not close far enough to need re-aiming"
@@ -429,7 +434,7 @@ def test_giving_up_on_a_heal_outlives_the_fight_it_was_learned_in():
             "vitals.power": 0.9, "vitals.power_max": 100}
     f = _fight([hurt], hid=hid)
     f.heals_ignored, f.heals_landed = HEAL_GIVE_UP, 0
-    f.acquire = lambda name_id: None
+    f.acquire = lambda name_id, **_: None
     f.engage = lambda: True
 
     f.run(timeout_s=1)
@@ -484,3 +489,49 @@ def test_the_out_of_combat_band_is_much_higher_than_the_in_combat_one():
 
     assert HEAL_OUT_OF_COMBAT >= 0.75
     assert HEAL_OUT_OF_COMBAT > HEAL_IN_COMBAT * 1.5
+
+
+# -- watched live ------------------------------------------------------------------
+
+def test_a_bystander_is_not_attacked_just_because_we_are_in_combat():
+    """Watched live: after killing a kobold the character attacked a Timber Wolf that was
+    minding its own business. Dropping the name filter entirely in combat was too much -
+    what it is for is self-defence, and `target.attacking_me` says outright whether
+    something is hitting us."""
+    wolf = {**ALIVE, "target.name_id": 999, "target.attacking_me": False,
+            "vitals.combat": True}
+    f = _fight([wolf])
+    assert f._acceptable(1161, defend=True) is False, "attacked a bystander"
+
+    biting = {**wolf, "target.attacking_me": True}
+    g = _fight([biting])
+    assert g._acceptable(1161, defend=True) is True, "refused to defend itself"
+
+    # Out of combat the filter is absolute: nothing gets attacked for being nearby.
+    h = _fight([biting])
+    assert h._acceptable(1161, defend=False) is False
+
+
+def test_the_quest_mob_is_still_preferred_while_defending():
+    kobold = {**ALIVE, "target.name_id": 1161, "target.attacking_me": False}
+    f = _fight([kobold])
+    assert f._acceptable(1161, defend=True) is True
+
+
+def test_it_re_aims_when_the_target_stops_taking_damage():
+    """Watched live: getting attacked and not retaliating. Re-aiming stopped the moment
+    the first hit landed, so a fight that went wrong - the kobold walked round us,
+    something pulled us sideways - left the character swinging at empty air.
+
+    Health coming off the target is the only evidence it is still pointed at, so the
+    absence of that is what triggers a re-aim."""
+    hid = _Hid()
+    engages = []
+    f = _fight([{**ALIVE, "target.hp": 0.6}], hid=hid)
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda: engages.append(1) or True
+    f.last_hp = 0.6                       # damage has landed; closing is over
+    # Real time, because `run` starts the damage clock itself. The target's health never
+    # moves in this frame, which is the whole point.
+    f.run(timeout_s=REAIM_AFTER_S + 1.5)
+    assert len(engages) > 1, "never turned back towards a target it had stopped hitting"

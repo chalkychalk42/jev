@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from jev.clients import win32
 from jev.clients.capture import Backend, WindowCapture
 from jev.clients.hid import Hid, Humaniser
-from jev.clients.travel import Travel
+from jev.clients.travel import Outcome, Travel
 from jev.guide.coords import ZoneBounds, map_to_world
 from jev.guide.path import PathQuery
 from jev.perceive import radio_frame
@@ -163,6 +163,15 @@ class Client:
             return self.query.path(self.bounds.map_id, (w[0], w[1], world[2]), world)
 
         result = self.travel.follow(path, timeout_s=timeout_s, replan=replan)
+        if result.outcome is Outcome.REFUSED:
+            # Nothing was pressed because the window was not focused - a notification
+            # panel, or anything else that takes the foreground. `Hid` is right to refuse,
+            # and `Travel` is right to say so rather than call it stuck, but somebody has
+            # to take the window back. A live run made three kills and then spent twelve
+            # stations refused, walking nowhere.
+            self._say("  the window lost focus; taking it back")
+            if self.focused():
+                result = self.travel.follow(path, timeout_s=timeout_s, replan=replan)
         remaining = ("unknown" if result.remaining_yards is None
                      else f"{result.remaining_yards:.1f} yards")
         self._say(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "

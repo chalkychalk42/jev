@@ -104,6 +104,17 @@ MAX_CLOSE_BURSTS = 8
 # the one action available that re-establishes facing.
 REAIM_EVERY = 3
 
+# Re-aim after this long without the target losing any health.
+#
+# Re-aiming used to stop the moment the first hit landed, so a fight that started well and
+# then went wrong - the kobold walked round us, something else pulled us sideways, a knock
+# back - left the character swinging at empty air and never turning. Watched live: getting
+# attacked and not retaliating.
+#
+# Health coming off the target is the only evidence that the character is still pointed at
+# it, so the absence of that is what triggers a re-aim. Same one mechanism as closing.
+REAIM_AFTER_S = 3.5
+
 # Ignored heals before the heal row is dropped for the rest of this fight.
 #
 # The confirmation exists to be acted on. Three live runs reported `heals 0/4`, `0/5` and
@@ -167,6 +178,8 @@ class Fight:
     top_ups_landed: int = field(default=0, init=False)
     _toggled: bool = field(default=False, init=False)
     _pending_heal: tuple[float, float] | None = field(default=None, init=False)
+    _damage_mark: float = field(default=1.0, init=False)
+    _damage_at: float = field(default=0.0, init=False)
     last_hp: float | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
     _last_use: dict[int, float] = field(default_factory=dict, init=False)
@@ -179,6 +192,8 @@ class Fight:
         self.closed = 0
         self._toggled = False
         self._pending_heal = None
+        self._damage_mark = 1.0
+        self._damage_at = time.monotonic()
         self.last_hp = None
         self.detail = ""
         self._last_use = {}
@@ -201,11 +216,15 @@ class Fight:
         engaged = (in_combat and v.get("target.has") is True
                    and (v.get("target.hp") or 1.0) > DEAD_HP)
         if not engaged:
-            # In combat, the name filter comes off. Something is already hitting us and
-            # it does not have to be the quest mob — a Kobold Worker beat this character
+            # In combat the name filter loosens, but it does not come off. Dropping it
+            # entirely meant that after killing a kobold the next plate could be a Timber
+            # Wolf minding its own business, and the character attacked it for no reason.
+            #
+            # What the filter is for is self-defence: a Kobold Worker beat this character
             # to 27% health while every attempt refused to fight anything but a Kobold
-            # Vermin, selected nothing, and reported "not visible" twenty times in a row.
-            acquired = self.acquire(None if in_combat else name_id)
+            # Vermin. So a different name is accepted only when it is **attacking us**,
+            # which `target.attacking_me` says outright.
+            acquired = self.acquire(name_id, defend=in_combat)
             if acquired is not None:
                 return acquired
         if not self.engage():
@@ -247,7 +266,15 @@ class Fight:
             # rotation was behind the gate — so a live run reported
             # `unreachable pressed [] closed 8` eight times over. It had walked at the
             # kobold and never once pressed anything at it.
+            if hp is not None and hp < self._damage_mark:
+                self._damage_mark = hp
+                self._damage_at = time.monotonic()
+
             landing = self.last_hp is not None and self.last_hp < 1.0
+            if landing and time.monotonic() - self._damage_at > REAIM_AFTER_S:
+                # Nothing has come off it for a while. Either it moved or we did.
+                self.engage()
+                self._damage_at = time.monotonic()
             if not landing and self.closed < MAX_CLOSE_BURSTS:
                 # Not while casting: movement cancels a cast, and the only thing being
                 # cast here is a heal that is keeping us alive.
@@ -274,7 +301,7 @@ class Fight:
 
     # -- pieces --------------------------------------------------------------
 
-    def acquire(self, name_id: int | None) -> Fought | None:
+    def acquire(self, name_id: int | None, *, defend: bool = False) -> Fought | None:
         """Select something worth fighting. `None` means it worked.
 
         Nameplates first, because a plate means the client is drawing the unit near enough
@@ -287,10 +314,10 @@ class Fight:
                 self.hid.click(self.window_origin[0] + round(plate.cx),
                                self.window_origin[1] + round(plate.cy))
                 time.sleep(0.35)
-                if self._acceptable(name_id) is True:
+                if self._acceptable(name_id, defend=defend) is True:
                     self.selected_plate = plate
                     return None
-        return self.select(name_id)
+        return self.select(name_id, defend=defend)
 
     def _candidates(self, frame) -> list[Plate]:
         """Plates worth clicking: alone first, then central. An ordering, not an ID.
@@ -313,7 +340,7 @@ class Fight:
         plates.sort(key=lambda p: (crowding(p) < CROWD_PX, abs(p.cx - centre)))
         return plates[:MAX_CANDIDATES]
 
-    def _acceptable(self, name_id: int | None) -> bool | None:
+    def _acceptable(self, name_id: int | None, *, defend: bool = False) -> bool | None:
         """Is what we just selected worth fighting? `None` if nothing is readable."""
         v = self.read()
         if v is None:
@@ -323,9 +350,12 @@ class Fight:
         hp = v.get("target.hp")
         if hp is not None and hp <= DEAD_HP:
             return False                       # a corpse is selectable and not a fight
-        return name_id is None or v.get("target.name_id") == name_id
+        if name_id is None or v.get("target.name_id") == name_id:
+            return True
+        # Not what we came for. Worth fighting only if it is already hitting us.
+        return defend and v.get("target.attacking_me") is True
 
-    def select(self, name_id: int | None) -> Fought | None:
+    def select(self, name_id: int | None, *, defend: bool = False) -> Fought | None:
         """`Tab`, as a fallback when no nameplate was clickable.
 
         The client picks; the radio says what it picked. Kept because a plate can be
@@ -341,7 +371,8 @@ class Fight:
                 continue
             if v.get("target.hp") is not None and v["target.hp"] <= DEAD_HP:
                 continue                       # a corpse is selectable and not a fight
-            if name_id is not None and v.get("target.name_id") != name_id:
+            if (name_id is not None and v.get("target.name_id") != name_id
+                    and not (defend and v.get("target.attacking_me") is True)):
                 continue
             return None
         self.detail = "no nameplate and no Tab target worth fighting"
