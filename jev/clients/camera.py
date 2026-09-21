@@ -34,8 +34,15 @@ from dataclasses import dataclass
 # into a clamp costs nothing - that is the entire point of using one as a reference.
 TO_THE_STOP_PX = 900
 
-# From the bottom stop, how far up is level. Measured, not derived: it is mouse
-# sensitivity times the client's pitch range, and both are the machine's business.
+# From the bottom stop, how far up is level. Measured, not derived: it is the client's
+# pitch range times whatever the operating system did to the deltas on the way.
+#
+# **This number is only meaningful with the pointer pinned** - see `tools/env_lock.py`.
+# It was first measured at Windows pointer speed 11, which scales every relative delta by
+# 1.25, and the machine has since been pinned to the neutral 10. Whether that makes the
+# true value 500 depends on whether the client reads the scaled cursor or the raw device,
+# and that is not something to reason about: `tools/calibrate_camera.py` drags a given
+# number of pixels and shows the result, which settles it in one run.
 LEVEL_PX = 400
 
 # Mouse-look has to be held across the movement, and the client needs a moment either side

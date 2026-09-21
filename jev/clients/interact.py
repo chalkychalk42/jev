@@ -90,6 +90,10 @@ class Interact:
     window_origin: tuple[int, int] = (0, 0)
     # World point -> did we get there. Injected: the planner is the guide layer's.
     approach: Callable[[tuple[float, float, float]], bool] | None = None
+    # An NPC has a nameplate only if the camera is pointing at him. The bot once stood
+    # 4.6 yards from a targeted merchant, with his nameplate on screen, and reported
+    # `not_visible` - correctly, because the camera was aimed at the character's feet.
+    level: Callable[[], object] | None = None
 
     sighting: Sighting | None = field(default=None, init=False)
     clicked: tuple[int, int] | None = field(default=None, init=False)
@@ -115,6 +119,8 @@ class Interact:
         self.used_centre = False
         self.tried = []
         self.detail = ""
+        if self.level is not None:
+            self.level()
 
         self._close_open_window()
         if self.approach is not None and node_world is not None and not self.approach(node_world):

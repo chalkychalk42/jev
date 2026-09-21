@@ -169,6 +169,12 @@ class Fight:
     window_centre_x: int = 800
     profile: CombatProfile | None = None
 
+    # Point the camera at the world before looking at it. Injected rather than built
+    # here for the same reason `approach` is: this skill actuates and perceives, and
+    # where the camera points is neither. `None` means whoever wired it up is confident
+    # the camera is already level, which nothing was, for an evening.
+    level: Callable[[], object] | None = None
+
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
     # Something equipped is at zero durability. Advisory: reported so the caller can
@@ -198,6 +204,8 @@ class Fight:
         self.pressed = []
         self.closed = 0
         self.broken = False
+        if self.level is not None:
+            self.level()
         self._toggled = False
         self._pending_heal = None
         self._damage_mark = 1.0

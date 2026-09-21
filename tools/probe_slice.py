@@ -163,6 +163,9 @@ def main() -> int:
     repair = Repair(hid=client.hid, read=client.read, visit=lambda: _visit_repairer(),
                     window_origin=(ox, oy), window_size=(w, h))
     camera = Camera(hid=client.hid, window_origin=(ox, oy), window_size=(w, h))
+    # Every skill that looks levels first, rather than the loop levelling once a pass and
+    # hoping it holds: a fight turns the camera, and the next thing to look is the loot.
+    inter.level = fight.level = loot.level = camera.level
 
     def walk_to(map_point) -> bool:
         """For the corpse run. The planner needs a height and a map fraction has none, so

@@ -82,6 +82,8 @@ class Loot:
     read: Callable[[], dict | None]
     read_frame: Callable[[], object | None]
     window_origin: tuple[int, int] = (0, 0)
+    # A corpse has a ring only if the camera is pointing at it. See `Fight.level`.
+    level: Callable[[], object] | None = None
     _progress: Callable[[], tuple[int | None, int | None]] | None = field(
         default=None, init=False)
     clicked: tuple[int, int] | None = field(default=None, init=False)
@@ -97,6 +99,8 @@ class Loot:
         self.clicked = None
         self.detail = ""
         self._progress = progress
+        if self.level is not None:
+            self.level()
 
         v = self.read()
         if v is None:
