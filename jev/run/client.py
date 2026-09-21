@@ -29,8 +29,16 @@ from jev.guide.path import PathQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
 
-FOCUS_TRIES = 20
-FOCUS_WAIT_S = 2.0
+# Taking the window back: short waits first, doubling, capped.
+#
+# A flat twenty attempts two seconds apart is forty seconds of standing still inside a
+# run, and most focus losses clear on the first try. The long patience is still available
+# to whoever is starting up, where a Windows notification panel can genuinely hold the
+# foreground for half a minute.
+FOCUS_FIRST_WAIT_S = 0.25
+FOCUS_MAX_WAIT_S = 4.0
+FOCUS_PATIENCE_S = 40.0        # starting up
+FOCUS_QUICK_S = 6.0            # mid-run, where standing still costs stations
 
 # How long the strip may repeat a sequence number before it counts as frozen.
 #
@@ -170,7 +178,7 @@ class Client:
             # to take the window back. A live run made three kills and then spent twelve
             # stations refused, walking nowhere.
             self._say("  the window lost focus; taking it back")
-            if self.focused():
+            if self.focused(FOCUS_QUICK_S):
                 result = self.travel.follow(path, timeout_s=timeout_s, replan=replan)
         remaining = ("unknown" if result.remaining_yards is None
                      else f"{result.remaining_yards:.1f} yards")
@@ -179,18 +187,22 @@ class Client:
                   + (f" - {result.detail}" if result.detail else ""))
         return result.outcome.value == "arrived"
 
-    def focused(self) -> bool:
+    def focused(self, patience_s: float = FOCUS_PATIENCE_S) -> bool:
         """Bring the window forward, and say whether it actually came.
 
         Not assumed. A Windows notification panel holds the foreground and refuses to give
         it up, and `Hid` correctly declines to type into whatever is focused instead — so
         the caller needs to know the difference between "slow" and "blocked".
         """
-        for _ in range(FOCUS_TRIES):
+        deadline = time.monotonic() + patience_s
+        wait = FOCUS_FIRST_WAIT_S
+        while True:
             if win32.focus(self.hwnd) and win32.is_foreground(self.hwnd):
                 return True
-            time.sleep(FOCUS_WAIT_S)
-        return win32.is_foreground(self.hwnd)
+            if time.monotonic() + wait >= deadline:
+                return win32.is_foreground(self.hwnd)
+            time.sleep(wait)
+            wait = min(FOCUS_MAX_WAIT_S, wait * 2)
 
     def close(self) -> None:
         if self.query is not None:

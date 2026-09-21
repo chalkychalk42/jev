@@ -26,6 +26,7 @@ from enum import StrEnum
 
 from jev.clients.fight import Fight, Fought
 from jev.clients.rest import Rest, Rested
+from jev.run.journal import Journal, outcome_of
 from jev.world.combat import EAT_BELOW, HEAL_OUT_OF_COMBAT
 
 # Fractions of the radius to ring, nearest first, and how many points on each ring.
@@ -95,6 +96,11 @@ class Hunt:
     approach: Callable[[tuple[float, float, float]], bool]
     progress: Callable[[], tuple[int | None, int | None]]
     say: Callable[[str], None] = print
+    # Optional flight recorder. A hunt is where most of a run's time goes, so a corpus
+    # that skips it is a corpus of walking.
+    journal: Journal | None = None
+    observe: Callable[[], object | None] | None = None
+    step_id: str | None = None
 
     kills: int = field(default=0, init=False)
     _outdoors: bool | None = field(default=None, init=False)
@@ -140,7 +146,19 @@ class Hunt:
                 self.detail = "too hurt to pull, and nothing left to fix it with"
                 return Hunted.NO_FOOD
 
+            state = self.observe() if self.observe is not None else None
+            if self.journal is not None:
+                self.journal.tick(state, skill="FIGHT", intent="kill")
+            started = time.monotonic()
             outcome = self.fight.run(name_id)
+            if self.journal is not None:
+                self.journal.skill(
+                    "FIGHT",
+                    outcome_of(outcome is Fought.KILLED,
+                               timed_out=outcome is Fought.TIMEOUT),
+                    started_at=started, state=state, step_id=self.step_id,
+                    detail=f"{outcome.value}: {self.fight.detail}" if self.fight.detail
+                    else outcome.value)
             self.say(f"    {outcome.value} ({have}/{need}) "
                      f"pressed {self.fight.pressed} closed {self.fight.closed} "
                      f"heals {self.fight.heals_landed}/{self.fight.heals_ignored}"

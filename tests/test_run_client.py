@@ -90,5 +90,28 @@ def test_a_refused_walk_takes_the_window_back_and_retries():
 
     body = inspect.getsource(_C.approach)
     assert "Outcome.REFUSED" in body
-    assert body.index("Outcome.REFUSED") < body.rindex("self.focused()")
+    assert body.index("Outcome.REFUSED") < body.rindex("self.focused(")
     assert body.count("self.travel.follow(") == 2, "it reports the refusal and gives up"
+
+
+def test_taking_the_window_back_backs_off_rather_than_waiting_flat():
+    """Twenty attempts two seconds apart is forty seconds of standing still inside a run,
+    and most focus losses clear on the first try. The long patience stays available for
+    starting up, where a notification panel can hold the foreground for half a minute."""
+    from jev.run.client import (
+        FOCUS_FIRST_WAIT_S,
+        FOCUS_MAX_WAIT_S,
+        FOCUS_PATIENCE_S,
+        FOCUS_QUICK_S,
+    )
+
+    assert FOCUS_FIRST_WAIT_S <= 0.5, "the first retry should be immediate-ish"
+    assert FOCUS_FIRST_WAIT_S < FOCUS_MAX_WAIT_S, "it does not back off at all"
+    assert FOCUS_QUICK_S < FOCUS_PATIENCE_S, "mid-run is as patient as start-up"
+
+    import inspect
+
+    from jev.run.client import Client as _C
+
+    body = inspect.getsource(_C.approach)
+    assert "FOCUS_QUICK_S" in body, "a refused walk waits the start-up patience"

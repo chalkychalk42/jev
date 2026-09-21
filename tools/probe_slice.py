@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import pathlib
 import sys
+import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
@@ -49,16 +50,24 @@ from jev.guide.coords import bounds_by_radio_id  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
 from jev.guide.tracker import Tracker  # noqa: E402
+from jev.learn.episode import Recorder, SkillOutcome  # noqa: E402
 from jev.perceive.radio_frame import list_lines, name_id  # noqa: E402
 from jev.run.client import NotRunning, attach, with_travel  # noqa: E402
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt  # noqa: E402
+from jev.run.journal import Journal, outcome_of  # noqa: E402
 from jev.world.state_v1 import StepKind  # noqa: E402
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--steps", type=int, default=1,
-                    help="how many graph nodes to attempt; one at a time by default")
+    ap.add_argument("--steps", type=int, default=0,
+                    help="debug only: stop after N nodes. 0 keeps playing")
+    ap.add_argument("--run-for", type=float, default=3600.0,
+                    help="seconds to keep playing before stopping")
+    ap.add_argument("--retries", type=int, default=3,
+                    help="attempts at the same node before calling it stuck")
+    ap.add_argument("--runs-dir", default="runs",
+                    help="where the flight recorder writes")
     ap.add_argument("--timeout", type=float, default=180.0)
     ap.add_argument("--hunt", type=float, default=600.0,
                     help="seconds to work an objective before reporting where it got to")
@@ -125,6 +134,11 @@ def main() -> int:
     chooser = ChooseListLine(hid=client.hid, read=client.reading,
                              window_origin=(ox, oy), window_size=(w, h))
 
+    # The flight recorder. A run can be repeated; the corpus of a run cannot be recovered
+    # afterwards, so recording is not optional and not conditional.
+    journal = Journal(Recorder(root=args.runs_dir), client_id="slice")
+    print(f"  recording to {journal.recorder.dir}")
+
     # The only difference between accepting and turning in.
     GOALS = {StepKind.QUEST_ACCEPT: Goal.HELD, StepKind.QUEST_TURNIN: Goal.CLEARED}
 
@@ -172,7 +186,8 @@ def main() -> int:
               + ("" if node.hunt_yards else "  (node carries none; using the default)"))
         hunt = Hunt(fight=fight, rest=rest, read=client.read,
                     approach=lambda world: client.approach(world, timeout_s=args.timeout),
-                    progress=lambda: progress(node.quest_id))
+                    progress=lambda: progress(node.quest_id),
+                    journal=journal, observe=client.state, step_id=node.id)
         outcome = hunt.run(node.world, radius, wanted, timeout_s=args.hunt)
         have, need = progress(node.quest_id)
         print(f"  {outcome.value}: {have}/{need} after {hunt.kills} kills over "
@@ -183,16 +198,44 @@ def main() -> int:
     memory = playhead.load(graph.graph_id)
     print(f"  completed so far: {sorted(memory.completed) or 'nothing remembered'}")
 
+    # The playhead loop. Not `--steps 1` with a human between steps: that is why every
+    # recovery tonight needed one. Resume, arm, record, next, until the clock runs out or
+    # the same node fails often enough to mean something.
     rc = 0
-    for step in range(args.steps):
+    step = 0
+    last_id: str | None = None
+    repeats = 0
+    deadline = time.monotonic() + args.run_for
+
+    def failed(node, why: str) -> bool:
+        """Record a failed step. True when the same node has failed too often to retry."""
+        nonlocal repeats, last_id
+        journal.skill(node.kind.value.upper() if node else "STEP",
+                      SkillOutcome.ABORTED, started_at=started, state=state,
+                      step_id=node.id if node else None, detail=why)
+        repeats = repeats + 1 if node is not None and node.id == last_id else 1
+        last_id = node.id if node is not None else None
+        if repeats >= args.retries:
+            print(f"  {why} - {repeats} times on the same node; stopping")
+            return True
+        print(f"  {why} - trying again ({repeats}/{args.retries})")
+        return False
+
+    while time.monotonic() < deadline and (args.steps == 0 or step < args.steps):
+        step += 1
+        started = time.monotonic()
+        state = client.state()
+        journal.tick(state)
+
         node = next_step()
         if node is None:
             print("\ncannot read the client; stopping")
             rc = 1
             break
 
-        print(f"\n--- step {step + 1}: {node.id} ---")
+        print(f"\n--- step {step}: {node.id} ---")
         print(f"  {node.kind.value} quest {node.quest_id} at {node.notes} {node.pos}")
+        journal.tick(state, skill=node.kind.value.upper(), intent=node.title or node.id)
 
         if node.world is None:
             print(f"  no spawn for this node ({node.notes}); the graph cannot place it")
@@ -202,8 +245,11 @@ def main() -> int:
         client.focused()
 
         if node.kind is StepKind.QUEST_OBJECTIVE:
-            rc = do_objective(node)
-            if rc:
+            if do_objective(node) == 0:
+                repeats, last_id = 0, node.id
+                continue
+            if failed(node, "the objective did not finish"):
+                rc = 1
                 break
             continue
 
@@ -223,9 +269,15 @@ def main() -> int:
             sg = inter.sighting
             print(f"  saw it: ring ({sg.ring.cx:.0f},{sg.ring.cy:.0f}) torso {sg.torso}")
         print(f"  {result.value}" + (f" - {inter.detail}" if inter.detail else ""))
+        journal.skill("INTERACT", outcome_of(result.opened), started_at=started,
+                      state=state, step_id=node.id,
+                      detail=f"{result.value}: {inter.detail}" if inter.detail
+                      else result.value)
         if not result.opened:
-            rc = 1
-            break
+            if failed(node, f"could not open {node.notes}"):
+                rc = 1
+                break
+            continue
 
         # A list, not a button. Pick our own quest out of it by name; the NPC may have
         # several, and they are identical to a camera.
@@ -237,30 +289,44 @@ def main() -> int:
         # `no_button - frame open but no advance button painted` while line 1 was
         # `Eagan Peltskinner` all along.
         if result is Result.GOSSIP or _is_a_list(client):
+            chose_at = time.monotonic()
             chose = chooser.run(node.title)
             print(f"  chose {node.title!r}: {chose.value} at {chooser.clicked}"
                   + (f" - {chooser.detail}" if chooser.detail else ""))
+            journal.skill("CHOOSE_LINE", outcome_of(chose.ok), started_at=chose_at,
+                          state=state, step_id=node.id,
+                          detail=f"{chose.value}: {chooser.detail}" if chooser.detail
+                          else chose.value)
             if not chose.ok:
-                rc = 1
-                break
+                if failed(node, f"could not pick {node.title!r} out of the list"):
+                    rc = 1
+                    break
+                continue
 
         client.log.reset()
+        advanced_at = time.monotonic()
         outcome = advance.run(node.quest_id, goal)
         print(f"  {goal.value}: pressed {advance.clicked} -> {outcome.value}"
               + (f" - {advance.detail}" if advance.detail else ""))
+        journal.skill(f"ADVANCE_{goal.value.upper()}", outcome_of(outcome.ok),
+                      started_at=advanced_at, state=state, step_id=node.id,
+                      detail=f"{outcome.value}: {advance.detail}" if advance.detail
+                      else outcome.value)
         if not outcome.ok:
-            rc = 1
-            break
+            if failed(node, f"could not {goal.value} quest {node.quest_id}"):
+                rc = 1
+                break
+            continue
+
         if node.kind is StepKind.QUEST_TURNIN and node.quest_id is not None:
             # The one fact 2.4.3 will not give back later. Written the moment it is
             # witnessed, because the log forgets a quest the instant it is handed in.
             memory = playhead.with_completed(memory, node.quest_id)
             playhead.save(graph.graph_id, node.id, memory.completed)
         print(f"  log now: {client.quest_ids()}")
+        repeats, last_id = 0, node.id
 
+    print(f"\nrecorded: {journal.summary()}")
+    journal.close()
     client.close()
     return rc
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
