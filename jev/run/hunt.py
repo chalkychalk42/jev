@@ -142,8 +142,9 @@ class Hunt:
             if outcome is Fought.KILLED:
                 self.kills += 1
                 dry = 0
+                self._top_up()
             elif outcome in (Fought.TOO_HURT, Fought.LOSING):
-                if self._recover() is Rested.NO_FOOD:
+                if not self._top_up() and self._recover() is Rested.NO_FOOD:
                     self.detail = "out of food and too hurt to carry on"
                     return Hunted.NO_FOOD
             else:
@@ -175,6 +176,20 @@ class Hunt:
             self.say("    indoors, and the camp is not; trying another station")
             return True
         return False
+
+    def _top_up(self) -> bool:
+        """Heal between fights, before reaching for food.
+
+        This is the step that was missing. A heal in a fight is a global cooldown not
+        spent swinging and it cannot finish under pushback anyway; between fights it
+        costs mana and a few seconds, and going into the next pull at 80% rather than
+        45% is the difference between winning it and a corpse run.
+        """
+        healed = self.fight.top_up()
+        if self.fight.top_ups:
+            self.say(f"    top up: {self.fight.top_ups_landed}/{self.fight.top_ups} landed"
+                     + ("" if healed else " - still short, eating instead"))
+        return healed
 
     def _recover(self) -> Rested:
         """Eat if it is a moment to eat. Interrupted is not a failure: it means something

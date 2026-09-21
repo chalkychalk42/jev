@@ -43,8 +43,17 @@ HEAL_IN_COMBAT = 0.40
 """Heal mid-fight below this. Low, because a heal is a global cooldown not spent
 swinging, and a fight is usually lost several seconds before the character falls over."""
 
-HEAL_OUT_OF_COMBAT = 0.55
-"""Top up below this between fights, but only when it is cheaper than sitting down."""
+HEAL_OUT_OF_COMBAT = 0.80
+"""Top up below this between fights.
+
+Much higher than the in-combat line, and for a different reason. In a fight a heal is a
+global cooldown not spent swinging, so it is a last resort. Between fights it costs
+nothing but mana and a few seconds, and going into the next pull at 80% instead of 45% is
+the difference between winning it and a two-hundred-yard corpse run.
+
+It is also the band where the spell actually works: Holy Light is a two and a half second
+cast that pushback stops from ever completing while something is hitting the character,
+and completes fine when nothing is."""
 
 EAT_BELOW = 0.60
 """Sit down below this out of combat. Twenty seconds against a two-hundred-yard corpse

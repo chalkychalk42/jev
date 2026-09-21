@@ -9,14 +9,20 @@ from jev.world.state_v1 import StepKind
 
 
 class _Fight:
-    def __init__(self, outcomes):
+    def __init__(self, outcomes, tops_up=False):
+        self.tops_up = tops_up
         self.outcomes = list(outcomes)
         self.calls = 0
         self.pressed: list[int] = []
         self.closed = 0
         self.heals_landed = 0
         self.heals_ignored = 0
+        self.top_ups = 0
+        self.top_ups_landed = 0
         self.detail = ""
+
+    def top_up(self, *_a, **_k):
+        return self.tops_up
 
     def run(self, name_id=None, **_):
         out = self.outcomes[min(self.calls, len(self.outcomes) - 1)]
@@ -176,3 +182,25 @@ def test_printed_lines_stay_ascii():
         for i, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if "print(" in line or 'f"  ' in line:
                 assert line.isascii(), f"{path}:{i} prints non-ascii"
+
+
+def test_hunt_tops_up_between_fights_before_reaching_for_food():
+    """The step that was missing. A heal in a fight is a global cooldown not spent
+    swinging and cannot finish under pushback; between fights it costs mana and a few
+    seconds, and going into the next pull at 80% rather than 45% is the difference
+    between winning it and a corpse run."""
+    h, _ = _hunt([Fought.KILLED, Fought.KILLED], [(1, 10), (2, 10), (10, 10)])
+    h.fight.tops_up = True
+    h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5)
+    assert h.fight.tops_up, "never asked the fight to heal between kills"
+
+    # When healing cannot get there, food is the fall-through, not the first resort.
+    h2, _ = _hunt([Fought.TOO_HURT], [(1, 10)], rest=_Rest(Rested.HEALTHY))
+    h2.fight.tops_up = False
+    h2.run((0.0, 0.0, 0.0), 30.0, timeout_s=1)
+    assert h2.rest.calls >= 1
+
+    h3, _ = _hunt([Fought.TOO_HURT], [(1, 10)], rest=_Rest(Rested.NO_FOOD))
+    h3.fight.tops_up = True
+    h3.run((0.0, 0.0, 0.0), 30.0, timeout_s=1)
+    assert h3.rest.calls == 0, "ate when a heal had already got us there"

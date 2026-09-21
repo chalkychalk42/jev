@@ -44,6 +44,7 @@ from enum import StrEnum
 from jev.perceive.units import Plate, find, find_plates
 from jev.world.combat import (
     HEAL_IN_COMBAT,
+    HEAL_OUT_OF_COMBAT,
     MIN_MANA_TO_HEAL,
     Ability,
     CombatProfile,
@@ -159,6 +160,11 @@ class Fight:
     selected_plate: Plate | None = field(default=None, init=False)
     heals_landed: int = field(default=0, init=False)
     heals_ignored: int = field(default=0, init=False)
+    # Counted apart from the in-combat tally on purpose: a heal that cannot finish under
+    # pushback says nothing about one cast standing still, and letting the in-combat
+    # give-up silence the top-up would be the wrong lesson learned twice.
+    top_ups: int = field(default=0, init=False)
+    top_ups_landed: int = field(default=0, init=False)
     _toggled: bool = field(default=False, init=False)
     _pending_heal: tuple[float, float] | None = field(default=None, init=False)
     last_hp: float | None = field(default=None, init=False)
@@ -439,6 +445,64 @@ class Fight:
                 self._toggled = True
             self._press(attack)
             return
+
+    def top_up(self, target: float = HEAL_OUT_OF_COMBAT, *, tries: int = 4,
+               settle_s: float = 3.5) -> bool:
+        """Heal between fights. Returns whether we reached `target`.
+
+        Out of combat only, and deliberately not gated on the in-combat give-up: those
+        heals fail to pushback, which says nothing about one cast standing still. Holy
+        Light completes fine when nothing is hitting the character, and going into the
+        next pull at 80% rather than 45% is the difference between winning it and a
+        two-hundred-yard corpse run.
+
+        Cheaper than food, so it is tried first; the caller falls through to `Rest` when
+        this reports it could not get there.
+        """
+        for _ in range(tries):
+            v = self.read()
+            if v is None or v.get("vitals.combat") is True:
+                return False
+            hp = v.get("vitals.hp")
+            if hp is None:
+                return False
+            if hp >= target:
+                return True
+
+            profile = self.profile or for_class(v.get("char.class_id"),
+                                                v.get("char.race_id"))
+            heal = profile.first(Role.HEAL)
+            ready, usable = v.get("bars.ready"), v.get("bars.usable")
+            if heal is None or ready is None or usable is None:
+                return False
+            bit = 1 << (heal.slot - 1)
+            if not (ready & bit) or not (usable & bit):
+                return False
+            if not self._has_mana_for(heal, v):
+                self.detail = "out of mana to top up with"
+                return False
+
+            self._press(heal)
+            self.top_ups += 1
+            if self._watch_top_up(hp, settle_s):
+                self.top_ups_landed += 1
+            else:
+                return False          # it did not land standing still; food is next
+        v = self.read()
+        return v is not None and (v.get("vitals.hp") or 0.0) >= target
+
+    def _watch_top_up(self, before: float, settle_s: float) -> bool:
+        """Did health actually rise? The same confirmation as in combat, waited on."""
+        deadline = time.monotonic() + settle_s
+        while time.monotonic() < deadline:
+            time.sleep(0.4)
+            v = self.read()
+            if v is None:
+                return False
+            hp = v.get("vitals.hp")
+            if hp is not None and hp > before + 0.02:
+                return True
+        return False
 
     def pressed_keys(self) -> list[str]:
         """The slots pressed this fight, as the keys they were sent as."""

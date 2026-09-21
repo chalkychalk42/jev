@@ -444,3 +444,43 @@ def test_a_landed_heal_clears_the_give_up():
     f.heals_ignored, f.heals_landed = 5, 1
     f._rotate(hurt)
     assert hid.taps.count("3") == 1, "abandoned a heal that does land"
+
+
+# -- topping up between fights ------------------------------------------------------
+
+def test_topping_up_is_out_of_combat_only():
+    """In a fight a heal is a global cooldown not spent swinging, and it cannot finish
+    under pushback. This is the other situation entirely."""
+    f = _fight([{**ALIVE, "vitals.hp": 0.4, "vitals.combat": True}])
+    assert f.top_up() is False
+    assert f.top_ups == 0, "cast a top-up while something was hitting us"
+
+
+def test_the_in_combat_give_up_does_not_silence_the_top_up():
+    """Heals that fail to pushback say nothing about one cast standing still. Letting
+    the in-combat tally gate this would be the wrong lesson learned twice."""
+    hid = _Hid()
+    hurt = {**ALIVE, "vitals.hp": 0.4, "vitals.combat": False,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    healed = {**hurt, "vitals.hp": 0.95}
+    f = _fight([hurt, hurt, healed, healed], hid=hid)
+    f.heals_ignored, f.heals_landed = 5, 0      # given up on, in combat
+    assert f.top_up(settle_s=2.0) is True
+    assert hid.taps.count("3") == 1
+    assert f.top_ups_landed == 1
+
+
+def test_a_top_up_that_does_not_land_falls_through_rather_than_repeating():
+    hid = _Hid()
+    hurt = {**ALIVE, "vitals.hp": 0.4, "vitals.combat": False,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    f = _fight([hurt], hid=hid)
+    assert f.top_up(settle_s=0.8) is False
+    assert f.top_ups == 1 and f.top_ups_landed == 0, "kept casting into nothing"
+
+
+def test_the_out_of_combat_band_is_much_higher_than_the_in_combat_one():
+    from jev.world.combat import HEAL_IN_COMBAT, HEAL_OUT_OF_COMBAT
+
+    assert HEAL_OUT_OF_COMBAT >= 0.75
+    assert HEAL_OUT_OF_COMBAT > HEAL_IN_COMBAT * 1.5
