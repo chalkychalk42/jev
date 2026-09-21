@@ -150,6 +150,7 @@ class Fought(StrEnum):
     LOST = "lost"                    # target gone while still healthy: fled, or evaded
     UNREACHABLE = "unreachable"      # engaged, but never got close enough to land a hit
     TOO_HURT = "too_hurt"            # not healthy enough to start
+    BROKEN = "broken"                # equipment at zero durability; swinging is pointless
     LOSING = "losing"                # broke off; the caller decides what to do about it
     DIED = "died"                    # we did
     TIMEOUT = "timeout"
@@ -210,6 +211,19 @@ class Fight:
         # stands there being hit at 49%, declines to eat because it is in combat, and
         # does nothing at all until it falls over.
         in_combat = v.get("vitals.combat") is True
+
+        # Broken gear is not a bad fight, it is no fight. A weapon at zero durability is
+        # unequipped as far as damage is concerned: the character swings its fists for
+        # 4-5, every pull times out at 45 seconds, and it eventually dies - which costs
+        # another 10% durability on everything else. A level 2 paladin spent a whole
+        # evening in that loop, and `bags.durability_min` read 0.0 throughout, because
+        # nothing was looking at it. Starting is the mistake; say so and let the caller
+        # go and repair.
+        if v.get("bags.durability_min") == 0.0:
+            self.detail = ("something equipped is broken; swinging it does unarmed "
+                           "damage and the fight cannot be won")
+            return Fought.BROKEN
+
         hp = v.get("vitals.hp")
         if not in_combat and hp is not None and hp < MIN_START_HP:
             self.detail = f"{hp:.0%} health; not starting a fight on that"

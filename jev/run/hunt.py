@@ -62,6 +62,7 @@ class Hunted(StrEnum):
     DIED = "died"
     NO_FOOD = "no_food"          # too hurt to continue and nothing to eat
     UNREACHABLE = "unreachable"  # could not stand anywhere on the disk
+    BROKEN = "broken"            # equipment at zero durability; repair before fighting
     TIMEOUT = "timeout"
     BLIND = "blind"
 
@@ -182,6 +183,11 @@ class Hunt:
                 return Hunted.DIED
             if outcome is Fought.BLIND:
                 return Hunted.BLIND
+            if outcome is Fought.BROKEN:
+                # Not a camp problem and not a health problem, so it must not be reported
+                # as one. Every station on the disk would fail the same way.
+                self.detail = self.fight.detail
+                return Hunted.BROKEN
             if outcome is Fought.KILLED:
                 self.kills += 1
                 dry = 0

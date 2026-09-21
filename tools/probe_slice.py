@@ -57,6 +57,7 @@ from jev.perceive.radio_frame import list_lines, name_id  # noqa: E402
 from jev.run.client import NotRunning, attach, with_travel  # noqa: E402
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt  # noqa: E402
 from jev.run.journal import Journal, outcome_of  # noqa: E402
+from jev.world.combat import HEAL_OUT_OF_COMBAT  # noqa: E402
 from jev.world.state_v1 import StepKind  # noqa: E402
 
 
@@ -221,6 +222,41 @@ def main() -> int:
     rc = 0
     step = 0
     last_id: str | None = None
+    def _fit_to_travel(state) -> bool:
+        """Heal and eat before starting a step. Returns False if the pass was spent on it.
+
+        Not a nicety. A corpse run gets the character up **where it died**, at half
+        health, next to whatever killed it - and the next thing the loop does is start a
+        two-hundred-yard walk. The wolves that killed it killed it again on the way, and
+        the run reported `could not free the character` because it was being eaten while
+        it walked. `Hunt` already refuses to pull below the line; travelling below it is
+        the same bet with the same odds, so it is the same rule.
+        """
+        if state is None:
+            return True
+        if state.vitals.combat is True:
+            # Fight it, do not walk away from it. A character that resurrects at its
+            # corpse resurrects in the middle of whatever killed it, and the loop's next
+            # move was a two-hundred-yard walk: turning your back on melee is free hits
+            # taken and none dealt, so it died on the same wolves twice more and reported
+            # `could not free the character` - which was true, because it was a corpse by
+            # the time anything tried. Nothing travels while something is hitting it.
+            print("\n--- in combat; nothing travels with something on it ---")
+            outcome = fight.run(None)
+            print(f"  {outcome.value} pressed {fight.pressed} closed {fight.closed}"
+                  + (f" - {fight.detail}" if fight.detail else ""))
+            return False
+        hp = state.vitals.hp
+        if hp is None or float(hp) >= HEAL_OUT_OF_COMBAT:
+            return True
+        print(f"\n--- {float(hp):.0%} health; not starting a step on that ---")
+        if fight.top_up():
+            print(f"  topped up: {fight.top_ups_landed}/{fight.top_ups} landed")
+            return True
+        outcome = rest.until(0.9)
+        print(f"  rest: {outcome.value}" + (f" - {rest.detail}" if rest.detail else ""))
+        return False
+
     last_node = None
     repeats = 0
     deadline = time.monotonic() + args.run_for
@@ -263,9 +299,15 @@ def main() -> int:
             # More than one pass, because one is rarely enough: a corpse run wedges on
             # the way and the planner replans from wherever it stopped. Every recovery
             # done by hand tonight took two to four passes for exactly this reason.
+            # The guess is only a fallback now. `Recover` reads the body's real position
+            # off the strip and will ignore this the moment the game offers one - which
+            # matters, because the last death was **240 yards** from the node the run was
+            # working, and thirteen passes at the node found nothing to get up from.
             for attempt in range(args.retries):
                 got_up = recover.run(corpse)
-                print(f"  recover {attempt + 1}: {got_up.value}"
+                went = recover.corpse
+                where_txt = "nowhere" if went is None else f"({went[0]:.4f}, {went[1]:.4f})"
+                print(f"  recover {attempt + 1} at {where_txt}: {got_up.value}"
                       + (f" - {recover.detail}" if recover.detail else ""))
                 if got_up.ok or got_up is Recovered.NO_CORPSE:
                     break
@@ -277,6 +319,9 @@ def main() -> int:
                 rc = 1
                 break
             continue
+
+        if not _fit_to_travel(state):
+            continue          # spent the pass getting well; re-read before deciding
 
         node = next_step()
         if node is None:

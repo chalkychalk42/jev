@@ -241,6 +241,26 @@ def test_a_fight_is_not_started_on_low_health():
     assert MIN_START_HP > FLEE_HP
 
 
+def test_a_fight_is_not_started_with_broken_equipment():
+    """A weapon at zero durability is an unequipped weapon: the paladin swung its fists
+    for 4-5 damage, every pull ran the full 45 seconds, and each death took another 10%
+    off everything else. `bags.durability_min` read 0.0 for the whole evening and nothing
+    looked at it, so the logs blamed the camp, the health band and the target picker in
+    turn. Health is not the guard that catches this - the character is at full health."""
+    broken = {**ALIVE, "bags.durability_min": 0.0}
+    f = _fight([broken])
+    assert f.run(timeout_s=1) is Fought.BROKEN
+    assert f.pressed == [], "a broken weapon should not have been swung at all"
+
+    # Worn is not broken - refusing at 1% would park the bot at the first scratch - and
+    # nothing equipped that *has* durability reads nil, which is not zero either. Both
+    # are checked at health the next guard rejects, so reaching `too_hurt` is the proof
+    # that this guard let them past.
+    for durability in (0.01, 1.0, None):
+        hurt = {**ALIVE, "vitals.hp": 0.2, "bags.durability_min": durability}
+        assert _fight([hurt]).run(timeout_s=1) is Fought.TOO_HURT, durability
+
+
 def test_a_losing_fight_is_broken_off_rather_than_finished():
     """A fight is usually lost several seconds before the character falls over, and
     finishing it standing up costs a two-hundred-yard corpse run."""
