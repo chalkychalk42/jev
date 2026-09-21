@@ -110,8 +110,13 @@ REAIM_EVERY = 3
 # camp, and it does not complete. Every attempt costs a global cooldown not spent
 # swinging, so a heal that has already failed twice in this fight is worse than no heal.
 #
-# Per fight, not forever. At a level where the cast finishes, it lands, and nothing here
-# has to know which level that is - or that it is a paladin.
+# The tally deliberately survives the fight. Scoping it per `run()` meant re-learning the
+# same lesson on every engagement: a later run pressed `[3, 2, 3]` and burned two more
+# global cooldowns discovering again that a heal it had already abandoned twice does not
+# land. A landed heal clears it, so nothing is permanent - at a level where the cast
+# finishes, the first one lands and the counter never reaches two.
+#
+# Not a class rule. A warrior has no heal row to give up on.
 HEAL_GIVE_UP = 2
 
 # Which key an action slot is. The default bindings run 1-9, then 0, then the two keys
@@ -166,7 +171,6 @@ class Fight:
         """Select, engage, and hold the rotation until something settles it."""
         self.pressed = []
         self.closed = 0
-        self.heals_landed = self.heals_ignored = 0
         self._toggled = False
         self._pending_heal = None
         self.last_hp = None
@@ -435,6 +439,10 @@ class Fight:
                 self._toggled = True
             self._press(attack)
             return
+
+    def pressed_keys(self) -> list[str]:
+        """The slots pressed this fight, as the keys they were sent as."""
+        return [SLOT_KEYS.get(slot, str(slot)) for slot in self.pressed]
 
     def _press(self, ability: Ability) -> None:
         key = SLOT_KEYS.get(ability.slot)

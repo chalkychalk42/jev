@@ -418,3 +418,29 @@ def test_a_heal_that_does_land_is_not_dropped():
     f.heals_ignored = HEAL_GIVE_UP          # some missed, but one landed
     f._rotate(hurt)
     assert hid.taps.count("3") == 2
+
+
+def test_giving_up_on_a_heal_outlives_the_fight_it_was_learned_in():
+    """Scoping the tally per run() meant re-learning it every engagement: a live run
+    pressed `[3, 2, 3]` and burned two more global cooldowns discovering again that a
+    heal it had already abandoned twice does not land."""
+    hid = _Hid()
+    hurt = {**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    f = _fight([hurt], hid=hid)
+    f.heals_ignored, f.heals_landed = HEAL_GIVE_UP, 0
+    f.acquire = lambda name_id: None
+    f.engage = lambda: True
+
+    f.run(timeout_s=1)
+    assert "3" not in f.pressed_keys(), "a new fight forgot what the last one proved"
+
+
+def test_a_landed_heal_clears_the_give_up():
+    hid = _Hid()
+    hurt = {**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    f = _fight([hurt], hid=hid)
+    f.heals_ignored, f.heals_landed = 5, 1
+    f._rotate(hurt)
+    assert hid.taps.count("3") == 1, "abandoned a heal that does land"
