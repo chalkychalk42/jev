@@ -122,6 +122,206 @@
       "source": "generated"
     },
     {
+      "id": "alli_human_1_12_vendor_elwynn_1",
+      "kind": "vendor",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.4182013140088375,
+        0.6716315075989406
+      ],
+      "world": [
+        -9494.1298828125,
+        83.90959930419922,
+        56.658599853515625
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 66,
+      "objectives": [
+        "vendor at Tharynn Bouden"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Tharynn Bouden; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_vendor_elwynn_2",
+      "kind": "vendor",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.4136552007792617,
+        0.6558661475959366
+      ],
+      "world": [
+        -9457.6396484375,
+        99.68840026855469,
+        58.427101135253906
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 74,
+      "objectives": [
+        "vendor at Kurran Steele"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Kurran Steele; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_vendor_elwynn_3",
+      "kind": "vendor",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.4723878990925565,
+        0.4190288055564814
+      ],
+      "world": [
+        -8909.4599609375,
+        -104.16300201416016,
+        82.03140258789062
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 78,
+      "objectives": [
+        "vendor at Janos Hammerknuckle"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Janos Hammerknuckle; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_vendor_elwynn_4",
+      "kind": "vendor",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.43960149497463624,
+        0.6591714473407189
+      ],
+      "world": [
+        -9465.2900390625,
+        9.633139610290527,
+        57.14590072631836
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 151,
+      "objectives": [
+        "vendor at Brog Hamfist"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Brog Hamfist; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_vendor_elwynn_5",
+      "kind": "vendor",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.4748521492546741,
+        0.4156285744302113
+      ],
+      "world": [
+        -8901.58984375,
+        -112.71600341796875,
+        82.03140258789062
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 152,
+      "objectives": [
+        "vendor at Brother Danil"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Brother Danil; route not recorded",
+      "source": "generated"
+    },
+    {
       "id": "alli_human_1_12_repair_elwynn_0",
       "kind": "repair",
       "zone": "Elwynn",
@@ -159,6 +359,206 @@
       "timeout_s": 300.0,
       "skippable": true,
       "notes": "Corina Steele; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_repair_elwynn_1",
+      "kind": "repair",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.4136552007792617,
+        0.6558661475959366
+      ],
+      "world": [
+        -9457.6396484375,
+        99.68840026855469,
+        58.427101135253906
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 74,
+      "objectives": [
+        "repair at Kurran Steele"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Kurran Steele; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_repair_elwynn_2",
+      "kind": "repair",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.4723878990925565,
+        0.4190288055564814
+      ],
+      "world": [
+        -8909.4599609375,
+        -104.16300201416016,
+        82.03140258789062
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 78,
+      "objectives": [
+        "repair at Janos Hammerknuckle"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Janos Hammerknuckle; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_repair_elwynn_3",
+      "kind": "repair",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.47560470615444705,
+        0.41395229719176097
+      ],
+      "world": [
+        -8897.7099609375,
+        -115.3280029296875,
+        81.99819946289062
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 190,
+      "objectives": [
+        "repair at Dermot Johns"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Dermot Johns; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_repair_elwynn_4",
+      "kind": "repair",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.25181262548330174,
+        0.738853051706381
+      ],
+      "world": [
+        -9649.7197265625,
+        661.4169921875,
+        38.73550033569336
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 896,
+      "objectives": [
+        "repair at Veldan Lightfoot"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Veldan Lightfoot; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_repair_elwynn_5",
+      "kind": "repair",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.646933872695966,
+        0.6951002327717474
+      ],
+      "world": [
+        -9548.4501953125,
+        -709.9829711914062,
+        90.51029968261719
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 959,
+      "objectives": [
+        "repair at Morley Eberlein"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "VENDOR_REPAIR"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Morley Eberlein; route not recorded",
       "source": "generated"
     },
     {
@@ -202,6 +602,126 @@
       "source": "generated"
     },
     {
+      "id": "alli_human_1_12_train_elwynn_1",
+      "kind": "train",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.2831362259701434,
+        0.20572896120175535
+      ],
+      "world": [
+        -8415.759765625,
+        552.697998046875,
+        95.53170013427734
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 5515,
+      "objectives": [
+        "train at Einris Brightspear"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "TRAIN_CLASS"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Einris Brightspear; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_train_elwynn_2",
+      "kind": "train",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.2843267236815052,
+        0.20336580267858387
+      ],
+      "world": [
+        -8410.2900390625,
+        548.5659790039062,
+        95.53170013427734
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 5516,
+      "objectives": [
+        "train at Ulfir Ironbeard"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "TRAIN_CLASS"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Ulfir Ironbeard; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_train_elwynn_3",
+      "kind": "train",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.286392223758071,
+        0.2044501300138009
+      ],
+      "world": [
+        -8412.7998046875,
+        541.39697265625,
+        102.5780029296875
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 5517,
+      "objectives": [
+        "train at Thorfin Stoneshield"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "TRAIN_CLASS"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Thorfin Stoneshield; route not recorded",
+      "source": "generated"
+    },
+    {
       "id": "alli_human_1_12_hearth_elwynn_0",
       "kind": "hearth",
       "zone": "Elwynn",
@@ -239,6 +759,46 @@
       "timeout_s": 300.0,
       "skippable": true,
       "notes": "Innkeeper Farley; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_hearth_elwynn_1",
+      "kind": "hearth",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        12
+      ],
+      "pos": [
+        0.2482814902902135,
+        0.40102559645386987
+      ],
+      "world": [
+        -8867.7900390625,
+        673.6729736328125,
+        97.98639678955078
+      ],
+      "map_id": 0,
+      "r": 0.03,
+      "hunt_yards": null,
+      "quest_id": null,
+      "title": "",
+      "npc_id": 6740,
+      "objectives": [
+        "hearth at Innkeeper Allison"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "TRAVEL_TO",
+        "HEARTH"
+      ],
+      "xp_est": null,
+      "timeout_s": 300.0,
+      "skippable": true,
+      "notes": "Innkeeper Allison; route not recorded",
       "source": "generated"
     },
     {

@@ -31,6 +31,7 @@ failure mode worth having.
 from __future__ import annotations
 
 import argparse
+import math
 import pathlib
 import sys
 import time
@@ -46,6 +47,7 @@ from jev.clients.fight import Fight  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
 from jev.clients.loot import Loot  # noqa: E402
 from jev.clients.recover import Recover, Recovered  # noqa: E402
+from jev.clients.repair import Repair  # noqa: E402
 from jev.clients.rest import Rest  # noqa: E402
 from jev.guide import playhead  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
@@ -151,6 +153,8 @@ def main() -> int:
     rest = Rest(hid=client.hid, read=client.read)
     loot = Loot(hid=client.hid, read=client.read, read_frame=client.frame,
                 window_origin=client.origin)
+    repair = Repair(hid=client.hid, read=client.read, visit=lambda: _visit_repairer(),
+                    window_origin=(ox, oy), window_size=(w, h))
 
     def walk_to(map_point) -> bool:
         """For the corpse run. The planner needs a height and a map fraction has none, so
@@ -222,6 +226,49 @@ def main() -> int:
     rc = 0
     step = 0
     last_id: str | None = None
+    def _nearest_repairer():
+        """The closest merchant in the graph who repairs. The guide lists the places and
+        the runtime picks: one repairer per zone was a lottery that sent a character in
+        Northshire Abbey to Goldshire, 556 yards away, past three that would have done."""
+        here = client.position()
+        placed = [n for n in graph.nodes
+                  if n.kind is StepKind.REPAIR and n.world is not None]
+        if here is None or not placed:
+            return None
+        return min(placed, key=lambda n: math.dist(n.world[:2], here[:2]))
+
+    def _visit_repairer() -> bool:
+        node = _nearest_repairer()
+        if node is None:
+            print("  no repair merchant in the graph; nothing to walk to")
+            return False
+        # `notes` is "<name>; route not recorded" on a service node, and the name is the
+        # half `Interact` matches a nameplate against.
+        name = node.notes.split(";")[0].strip()
+        print(f"  nearest repairer: {name} ({node.zone})")
+        result = inter.open_on(name, node_world=node.world, node_map=node.pos)
+        print(f"  {result.value}" + (f" - {inter.detail}" if inter.detail else ""))
+        return result.opened
+
+    def _settle_combat(state) -> bool:
+        """Fight what is on us. Returns False if the pass was spent doing it.
+
+        First of all the between-step rules, and absolute. A character that resurrects at
+        its corpse resurrects in the middle of whatever killed it, and turning your back
+        on melee is free hits taken and none dealt. Ordering this after the repair check
+        exempted the walk to the merchant from the rule, and the walk to the merchant is
+        the one that crosses the camp that did the killing: it died 80 yards along and
+        reported `could not free the character`, which was true, because by then it was a
+        corpse.
+        """
+        if state is None or state.vitals.combat is not True:
+            return True
+        print("\n--- in combat; nothing travels with something on it ---")
+        outcome = fight.run(None)
+        print(f"  {outcome.value} pressed {fight.pressed} closed {fight.closed}"
+              + (f" - {fight.detail}" if fight.detail else ""))
+        return False
+
     def _fit_to_travel(state) -> bool:
         """Heal and eat before starting a step. Returns False if the pass was spent on it.
 
@@ -234,18 +281,6 @@ def main() -> int:
         """
         if state is None:
             return True
-        if state.vitals.combat is True:
-            # Fight it, do not walk away from it. A character that resurrects at its
-            # corpse resurrects in the middle of whatever killed it, and the loop's next
-            # move was a two-hundred-yard walk: turning your back on melee is free hits
-            # taken and none dealt, so it died on the same wolves twice more and reported
-            # `could not free the character` - which was true, because it was a corpse by
-            # the time anything tried. Nothing travels while something is hitting it.
-            print("\n--- in combat; nothing travels with something on it ---")
-            outcome = fight.run(None)
-            print(f"  {outcome.value} pressed {fight.pressed} closed {fight.closed}"
-                  + (f" - {fight.detail}" if fight.detail else ""))
-            return False
         hp = state.vitals.hp
         if hp is None or float(hp) >= HEAL_OUT_OF_COMBAT:
             return True
@@ -258,6 +293,10 @@ def main() -> int:
         return False
 
     last_node = None
+    # Bounded, because `too_poor` does not get better by walking back. Two attempts and
+    # the run carries on and fails honestly wherever the gear lets it down.
+    MAX_REPAIR_TRIES = 2
+    repair_tries = 0
     repeats = 0
     deadline = time.monotonic() + args.run_for
 
@@ -318,6 +357,27 @@ def main() -> int:
                 print("  could not get back up; stopping")
                 rc = 1
                 break
+            continue
+
+        if not _settle_combat(state):
+            continue          # something is hitting us; that is the whole pass
+
+        if repair.needed() and repair_tries < MAX_REPAIR_TRIES:
+            # Before health, because a broken weapon loses the fight that the health was
+            # being saved for. This is the other half of dying: every death costs 10%
+            # durability, and a character that never repairs eventually punches wolves.
+            repair_tries += 1
+            worst = repair.before
+            print("\n--- gear is worn; repairing before anything else ---")
+            started = time.monotonic()
+            outcome = repair.run()
+            print(f"  repair: {outcome.value}"
+                  + (f" - {repair.detail}" if repair.detail else "")
+                  + (f" ({worst:.0%} -> {repair.after:.0%})"
+                     if repair.after is not None and worst is not None else ""))
+            journal.skill("REPAIR", outcome_of(outcome.ok), started_at=started,
+                          state=state, detail=f"{outcome.value}: {repair.detail}"
+                          if repair.detail else outcome.value)
             continue
 
         if not _fit_to_travel(state):

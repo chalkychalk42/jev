@@ -276,6 +276,10 @@ local ADVANCE_BUTTONS = {
     "QuestFrameCompleteQuestButton",
     "QuestFrameCompleteButton",
     "QuestFrameContinueButton",
+    -- Repair All, which is the same intent again: a merchant that can repair is a step
+    -- forward and the button only exists while one is open. Ahead of the popup for the
+    -- same reason the quest frames are — a real frame beats a dialog.
+    "MerchantRepairAllButton",
     -- Last, so a quest frame always wins. A StaticPopup's first button is the same
     -- intent as Accept — *move this forward* — and Release Spirit and Resurrect are
     -- both one. It is painted, not pressed: whether pressing is right is the caller's

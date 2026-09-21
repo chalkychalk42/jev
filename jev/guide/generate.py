@@ -99,6 +99,16 @@ class QuestRow:
     xp_est: int
 
 
+# How many of each service NPC to record per zone.
+#
+# One was a lottery. Elwynn's box contains Northshire, and the single repairer it kept was
+# Corina Steele in Goldshire - 556 yards from a character standing in the Abbey with three
+# repair merchants 108 yards away. The guide's job is to list the places; deciding which
+# one to walk to belongs to whatever is standing somewhere at the time, and it cannot
+# decide between alternatives it was never given.
+SERVICE_SPAWNS = 6
+
+
 def _cluster(npc_id: int, name: str, map_id: int, rows) -> Spawn:
     """The densest group of these spawns, and how far across it is.
 
@@ -652,7 +662,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             (NPC_INNKEEPER, StepKind.HEARTH, "HEARTH"),
             (NPC_FLIGHTMASTER, StepKind.FLIGHT, "FLIGHT_PATH"),
         ):
-            for i, spawn in enumerate(db.services(b, flag, limit=1)):
+            for i, spawn in enumerate(db.services(b, flag, limit=SERVICE_SPAWNS)):
                 frac, world, map_id = place(spawn, zid)
                 nodes.append(Node(
                     id=f"{prefix}_{kind.value}_{_slug(zname, 12)}_{i}",
