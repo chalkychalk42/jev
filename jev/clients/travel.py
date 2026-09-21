@@ -398,20 +398,20 @@ class Travel:
                 replans += 1
                 position = self.position()
 
-                # ...unless the leg never went anywhere. A re-plan is only worth
-                # anything if its input changed, and a character wedged on the spot is
-                # asking the identical question: a ghost against a Northshire fence got
-                # the same 199.0-yard path back every time, four waypoints and all, then
-                # re-planned into it three more times per pass. The mesh is simply wrong
-                # about that fence. So hand the leg to the wall heuristic **once** - the
-                # only thing here that learns from the world rather than from the mesh -
-                # and the planner has the route back as soon as it clears.
+                fresh = replan(position) if position is not None else None
+
+                # ...unless the planner has nothing new to say. A re-plan is only worth
+                # anything if its answer changed, and the mesh does not know about the
+                # obstacle: a ghost against a Northshire fence got the same 199.0-yard
+                # path back every time, four waypoints and all, then re-planned into it
+                # three more times per pass. So when the fresh route still starts by
+                # walking into the same place, hand the leg to the wall heuristic **once**
+                # - the only thing here that learns from the world rather than from the
+                # mesh - and the planner has the route back as soon as it clears.
                 #
-                # Against the leg's own start, not a remembered stall: each re-plan
-                # recurses into a fresh `follow`, so anything kept in a local here is
-                # `None` again exactly when it is needed.
-                if (position is not None
-                        and self.distance(position, last.start) <= self.stuck_step_yards):
+                # Comparing answers rather than positions, because a leg that walks eighty
+                # yards and *then* wedges has moved, and that one spins just as happily.
+                if self._same_answer(fresh, position, leg):
                     self.detours = 0       # a fresh obstacle, not the last one continued
                     last = self.to(leg, abort=abort, allow_detour=True,
                                    timeout_s=timeout_s - (time.perf_counter() - t0))
@@ -421,7 +421,6 @@ class Travel:
                     return self._result(last.outcome, legs[0], last.end, leg,
                                         time.perf_counter() - t0,
                                         f"leg {i} of {len(legs) - 1}: {last.detail}")
-                fresh = replan(position) if position is not None else None
                 if fresh is not None and getattr(fresh, "usable", False):
                     self.arrival_yards = exact
                     rest = self.follow(
@@ -459,6 +458,25 @@ class Travel:
             stuck_events=self.stuck_events, detours=self.detours,
             turn_rate_deg_s=last.turn_rate_deg_s, detail="",
         )
+
+    def _same_answer(self, fresh, position, leg) -> bool:
+        """Would following `fresh` walk straight back into the leg that just blocked?
+
+        A re-plan is new information only if it heads somewhere else. `fresh` is in world
+        yards and `leg` is a map fraction, so the comparison happens where both can be
+        said: the first waypoint the fresh route would actually travel to, against the
+        leg the character just failed to reach.
+        """
+        if fresh is None or not getattr(fresh, "usable", False):
+            return True                    # no answer at all is not a different answer
+        if position is None:
+            return False
+        ahead = [w for w in (world_to_map(pt[0], pt[1], self.bounds)
+                             for pt in fresh.points) if w is not None]
+        ahead = [w for w in ahead if self.distance(w, position) > self.arrival_yards]
+        if not ahead:
+            return True                    # nowhere left to go, so nothing new to try
+        return self.distance(ahead[0], leg) <= self.waypoint_arrival_yards
 
     def _detour(self, here, target) -> None:
         """Turn off the direct line and walk along the obstacle for a while.

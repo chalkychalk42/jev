@@ -309,6 +309,49 @@ class Hid:
         self.sent += len(path)
         return True
 
+    def button(self, down: bool, right: bool = False) -> bool:
+        """Press or release a mouse button where the cursor already is.
+
+        Separate from `click` because holding one across a movement is a different
+        gesture: a right button held while the mouse moves is mouse-look, and the client
+        reads it as camera control rather than as a click on whatever is underneath.
+        """
+        if not self._guard():
+            return False
+        if right:
+            flag = win32.MOUSEEVENTF_RIGHTDOWN if down else win32.MOUSEEVENTF_RIGHTUP
+        else:
+            flag = win32.MOUSEEVENTF_LEFTDOWN if down else win32.MOUSEEVENTF_LEFTUP
+        mi = win32.MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flag,
+                              time=0, dwExtraInfo=None)
+        win32.send_inputs([win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)])
+        self.sent += 1
+        return True
+
+    def move_by(self, dx: int, dy: int, step_px: int = 10) -> bool:
+        """Relative mouse movement, in small steps.
+
+        Mouse-look is relative: the client reads deltas, and absolute positioning says
+        nothing to it once the cursor is captured. Stepping rather than one large jump
+        because the client samples movement per frame and a single huge delta is both
+        clipped and obvious.
+        """
+        if not self._guard():
+            return False
+        sx = 0 if dx == 0 else (1 if dx > 0 else -1)
+        sy = 0 if dy == 0 else (1 if dy > 0 else -1)
+        left = max(abs(dx), abs(dy))
+        while left > 0:
+            take = min(step_px, left)
+            mi = win32.MOUSEINPUT(dx=sx * take, dy=sy * take, mouseData=0,
+                                  dwFlags=win32.MOUSEEVENTF_MOVE, time=0,
+                                  dwExtraInfo=None)
+            win32.send_inputs([win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)])
+            self.sent += 1
+            self._sleep(self.h.rng.uniform(8.0, 22.0) / 1000.0)
+            left -= take
+        return True
+
     def click(self, x: int | None = None, y: int | None = None, right: bool = False) -> bool:
         if x is not None and y is not None and not self.move_to(x, y):
             return False

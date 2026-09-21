@@ -42,6 +42,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 from jev.clients import win32  # noqa: E402
 from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
+from jev.clients.camera import Camera  # noqa: E402
 from jev.clients.choose import ChooseListLine  # noqa: E402
 from jev.clients.fight import Fight  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
@@ -155,6 +156,7 @@ def main() -> int:
                 window_origin=client.origin)
     repair = Repair(hid=client.hid, read=client.read, visit=lambda: _visit_repairer(),
                     window_origin=(ox, oy), window_size=(w, h))
+    camera = Camera(hid=client.hid, window_origin=(ox, oy), window_size=(w, h))
 
     def walk_to(map_point) -> bool:
         """For the corpse run. The planner needs a height and a map fraction has none, so
@@ -358,6 +360,12 @@ def main() -> int:
                 rc = 1
                 break
             continue
+
+        # Before anything that looks. A camera pitched at the ground makes every skill
+        # report the truth about an empty screen - `not_visible`, "no ring and nameplate
+        # to click" - while the character stands 4.6 yards from a targeted merchant whose
+        # nameplate is on screen. A second a pass, and it cannot make a good camera worse.
+        camera.level()
 
         if not _settle_combat(state):
             continue          # something is hitting us; that is the whole pass
