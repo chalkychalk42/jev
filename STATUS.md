@@ -991,6 +991,14 @@ ring, so a click just above the ring lands on the model. Both final kills used i
                        spammed. That is the game, not a predicate.
     idle disconnect    the server drops an idle session; Warden was disabled separately
                        and is no longer the cause.
+    NPCs wander        a node is a **spawn point**, and the NPC may not be on it. Two runs
+                       at 5261 arrived 4.0 yards from Deputy Willem's node, found only
+                       Marshal McBride's nameplate, and correctly refused to interact with
+                       the wrong NPC - `tried 1 nameplate(s); none was 22283: [57507]`.
+                       `Interact` has no step for "he is not here, look around", and the
+                       centre-click fallback is gated on standing on the node, which is
+                       true but does not help when the unit has walked off. Named rather
+                       than patched: the fix is a search, and a search is a skill.
 
 NOW: 608 tests, ruff clean. Gate A done.
 
