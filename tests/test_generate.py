@@ -124,3 +124,49 @@ def test_other_starting_spines_also_generate(faction, zones):
     g = generate(DB, graph_id="t", faction=faction, zone_ids=tuple(zones),
                  zone_names=zones, level_min=1, level_max=12)
     assert stats(g).quests >= 15
+
+
+def test_an_item_that_only_drops_from_crates_still_places_its_objective(human):
+    """Milly's Harvest (3904) wants item 11119, which has **no creature dropper at all**:
+    it lives in forty chests. A creature-only search returned nothing and the objective
+    fell back to the quest giver, so the node sat on Milly Osworth with a fifteen-yard
+    disk and the bot would have hunted the woman who wanted the apples.
+
+    Same failure shape as quest 33 hunting Eagan Peltskinner, one table over."""
+    node = next(n for n in human.nodes
+                if n.quest_id == 3904 and n.kind is StepKind.QUEST_OBJECTIVE)
+    giver = next(n for n in human.nodes
+                 if n.quest_id == 3904 and n.kind is StepKind.QUEST_ACCEPT)
+    assert node.world is not None
+    assert node.world != giver.world, "the objective is standing on the quest giver"
+    assert "Harvest" in node.notes, node.notes
+
+
+def test_a_camp_is_allowed_to_be_bigger_than_fifty_yards(human):
+    """Measured, against the belief that "no camp in the game is a hundred yards across".
+    The Tough Wolf Meat population is 27 spawns strung along the Northshire border with a
+    median of 100 yards; clamped to 50 the searched disk held three of them, and the bot
+    correctly reported an empty camp twenty times over."""
+    wolves = next(n for n in human.nodes
+                  if n.quest_id == 33 and n.kind is StepKind.QUEST_OBJECTIVE)
+    assert wolves.hunt_yards is not None and wolves.hunt_yards > 50.0, wolves.hunt_yards
+
+
+def test_a_cluster_is_pulled_by_drop_chance_not_by_headcount():
+    """A pool of droppers is not a pool of equals. Ten spawns of a 1% dropper should not
+    outvote four of an 80% one: the node belongs where the bag actually fills."""
+    from jev.guide.generate import _cluster
+
+    def rows(n, x, chance):
+        return [{"px": x + i, "py": 0.0, "pz": 0.0, "weight": chance} for i in range(n)]
+
+    many_but_stingy = rows(10, 1000.0, 1.0)
+    few_but_generous = rows(4, 0.0, 80.0)
+    spawn = _cluster(1, "mixed", 0, many_but_stingy + few_but_generous)
+    assert abs(spawn.x) < 100.0, f"clustered on the stingy pack at {spawn.x}"
+
+    # With no weights at all it is a plain headcount, exactly as a kill objective needs.
+    plain = _cluster(1, "mixed", 0,
+                     [{"px": r["px"], "py": 0.0, "pz": 0.0} for r in
+                      many_but_stingy + few_but_generous])
+    assert plain.x > 500.0

@@ -23,7 +23,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 63.502919878276884,
       "quest_id": null,
       "title": "",
       "npc_id": null,
@@ -62,7 +62,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 91.38131231664363,
       "quest_id": null,
       "title": "",
       "npc_id": null,
@@ -1326,7 +1326,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 89.71135995921618,
       "quest_id": 33,
       "title": "Wolves Across the Border",
       "npc_id": null,
@@ -1501,7 +1501,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 62.07866467609233,
       "quest_id": 15,
       "title": "Investigate Echo Ridge",
       "npc_id": null,
@@ -2026,7 +2026,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 62.63456419125976,
       "quest_id": 18,
       "title": "Brotherhood of Thieves",
       "npc_id": null,
@@ -2307,17 +2307,17 @@
         7
       ],
       "pos": [
-        0.5069234091743746,
-        0.39346483931492454
+        0.5395806180381673,
+        0.4886523878617784
       ],
       "world": [
-        -8850.2900390625,
-        -224.02999877929688,
-        81.77780151367188
+        -9070.609521484375,
+        -337.3777252197266,
+        73.45717945098878
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 15.0,
+      "hunt_yards": 31.5070558922551,
       "quest_id": 3904,
       "title": "Milly's Harvest",
       "npc_id": null,
@@ -2353,7 +2353,7 @@
       "xp_est": 360,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Milly Osworth",
+      "notes": "Milly's Harvest",
       "source": "generated"
     },
     {
@@ -2832,17 +2832,17 @@
         4
       ],
       "pos": [
-        0.4981900696286714,
-        0.36040925315447675
+        0.49185728056608713,
+        0.2831617112409104
       ],
       "world": [
-        -8773.780141022246,
-        -193.7180334834729,
-        83.54879346944519
+        -8594.984293113821,
+        -171.73797862745027,
+        87.1994937939793
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 50.45328561425518,
       "quest_id": 16,
       "title": "Give Gerard a Drink",
       "npc_id": null,
@@ -3133,7 +3133,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 55.28752610054466,
       "quest_id": 60,
       "title": "Kobold Candles",
       "npc_id": null,
@@ -3483,7 +3483,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 55.28752610054466,
       "quest_id": 47,
       "title": "Gold Dust Exchange",
       "npc_id": null,
@@ -4172,16 +4172,16 @@
       ],
       "pos": [
         0.5905059571896561,
-        0.7618645240583546
+        0.7618645240583554
       ],
       "world": [
-        -9702.981689453125,
+        -9702.981689453127,
         -514.1310857137045,
         48.40559593836466
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 89.93820045528682,
       "quest_id": 86,
       "title": "Pie for Billy",
       "npc_id": null,
@@ -4997,7 +4997,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 83.14134293797791,
       "quest_id": 112,
       "title": "Collecting Kelp",
       "npc_id": null,
@@ -5512,17 +5512,17 @@
         12
       ],
       "pos": [
-        0.8138208872725861,
-        0.6611156420335905
+        0.8215617312804545,
+        0.6059172025970089
       ],
       "world": [
-        -9469.7900390625,
-        -1289.219970703125,
-        41.18550109863281
+        -9342.02866908482,
+        -1316.087149483817,
+        63.36484282357352
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 15.0,
+      "hunt_yards": 58.98751412632714,
       "quest_id": 5545,
       "title": "A Bundle of Trouble",
       "npc_id": null,
@@ -5558,7 +5558,7 @@
       "xp_est": 810,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Supervisor Raelen",
+      "notes": "Bundle of Wood",
       "source": "generated"
     },
     {
@@ -6802,7 +6802,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 71.02129080476632,
       "quest_id": 71,
       "title": "Report to Thomas",
       "npc_id": null,
@@ -7268,7 +7268,7 @@
       ],
       "map_id": 0,
       "r": 0.06,
-      "hunt_yards": 50.0,
+      "hunt_yards": 69.04759339808528,
       "quest_id": 52,
       "title": "Protect the Frontier",
       "npc_id": null,

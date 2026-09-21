@@ -76,13 +76,22 @@ CLUSTER_CELL = 60.0
 CLUSTER_REACH = 150.0
 
 # What a hunt is allowed to believe about a camp's size. The floor keeps a lone spawn
-# searchable; the ceiling is the thing that stops this class of bug coming back, because
-# no camp in the game is a hundred yards across and a disk that big is a zone.
+# searchable; the ceiling catches a cluster query that has gone wrong.
 #
-# If a generated `hunt_yards` sits at the ceiling, the cluster query is wrong and the
-# ceiling is hiding it. Fix the query.
+# The ceiling used to be 50, on the grounds that "no camp in the game is a hundred yards
+# across". Measured, that is false. The Tough Wolf Meat cluster is 27 spawns of Young Wolf
+# and Timber Wolf along the Northshire border with a **median of 100 yards** - it is a
+# border strip, not a camp - and clamping it to 50 left the bot searching a disk holding
+# three of those 27. It reported an empty camp, correctly, twenty times.
+#
+# Echo Ridge's kobolds measure 49 on the same code, so both of those are real and the
+# range between them is what a "camp" actually spans.
+#
+# The ceiling still means something, because `CLUSTER_REACH` bounds the spread at 150: a
+# `hunt_yards` sitting exactly at the ceiling is worth a look at the query before it is
+# worth a bigger disk.
 HUNT_MIN_YARDS = 15.0
-HUNT_MAX_YARDS = 50.0
+HUNT_MAX_YARDS = 120.0
 
 
 @dataclass(frozen=True)
@@ -123,20 +132,35 @@ def _cluster(npc_id: int, name: str, map_id: int, rows) -> Spawn:
     It wants the scale at which walking somewhere else finds another mob, and half the
     camp is inside the median by construction.
     """
+    def weight(row) -> float:
+        """How much this spawn should pull the node.
+
+        A pool of droppers is not a pool of equals: an 80% drop and a 2% drop both put a
+        creature in the list, and letting them vote alike puts the node with whichever
+        happens to be commonest rather than with whatever will actually fill the bag.
+        Absent means one, so a plain kill objective clusters exactly as it always did.
+        """
+        try:
+            w = row["weight"]
+        except (KeyError, IndexError, TypeError):
+            return 1.0
+        return 1.0 if w is None else max(0.0, float(w))
+
     buckets: dict[tuple[int, int], list] = {}
     for row in rows:
         key = (int(row["px"] // CLUSTER_CELL), int(row["py"] // CLUSTER_CELL))
         buckets.setdefault(key, []).append(row)
-    seed = max(buckets.values(), key=len)
-    sx = sum(r["px"] for r in seed) / len(seed)
-    sy = sum(r["py"] for r in seed) / len(seed)
+    seed = max(buckets.values(), key=lambda rs: sum(weight(r) for r in rs))
+    seed_w = sum(weight(r) for r in seed) or 1.0
+    sx = sum(r["px"] * weight(r) for r in seed) / seed_w
+    sy = sum(r["py"] * weight(r) for r in seed) / seed_w
 
     near = [r for r in rows
             if math.hypot(r["px"] - sx, r["py"] - sy) <= CLUSTER_REACH] or seed
-    n = len(near)
-    x = sum(r["px"] for r in near) / n
-    y = sum(r["py"] for r in near) / n
-    z = sum(r["pz"] for r in near) / n
+    n = sum(weight(r) for r in near) or 1.0
+    x = sum(r["px"] * weight(r) for r in near) / n
+    y = sum(r["py"] * weight(r) for r in near) / n
+    z = sum(r["pz"] * weight(r) for r in near) / n
     reaches = sorted(math.hypot(r["px"] - x, r["py"] - y) for r in near)
     spread = reaches[len(reaches) // 2] if reaches else 0.0
     return Spawn(npc_id, name, map_id, x, y, z, spread=spread)
@@ -302,8 +326,8 @@ class WorldDB:
         ).fetchone()
         return self.object_spawn(r["id"]) if r else None
 
-    def objective_spawn(self, quest_id: int,
-                        zones: tuple[ZoneBounds, ...] = ()) -> Spawn | None:
+    def objective_spawn(self, quest_id: int, zones: tuple[ZoneBounds, ...] = (),
+                        home: ZoneBounds | None = None) -> Spawn | None:
         """Where the objective actually happens.
 
         A kill objective's node belongs where the mobs are, not where the quest was
@@ -329,7 +353,7 @@ class WorldDB:
             # Quest 33 wants Tough Wolf Meat and its node was placed on Eagan Peltskinner
             # with a fifteen yard disk, because nothing here looked past
             # ReqCreatureOrGOId1. The bot hunted the man who wanted the wolves.
-            return self._drops(r["item"], zones)
+            return self._drops(r["item"], zones, home)
         if not r or not r["a"] or r["a"] <= 0:
             return None
         rows = self.con.execute(
@@ -344,42 +368,74 @@ class WorldDB:
         same = [x for x in rows if x["map"] == m]
         return _cluster(r["a"], same[0]["Name"] or "mobs", m, same)
 
-    def _drops(self, item_id: int, zones: tuple[ZoneBounds, ...] = ()) -> Spawn | None:
-        """Where the creatures that drop this item live.
+    def _drops(self, item_id: int, zones: tuple[ZoneBounds, ...] = (),
+               home: ZoneBounds | None = None) -> Spawn | None:
+        """Where the things that drop this item live.
 
-        Every creature that drops it, pooled and then clustered, because a wolf camp is
-        a mixed population - Ragged Young Wolf, Young Wolf and Timber Wolf all carry
-        Tough Wolf Meat - and clustering them separately would put the node on whichever
-        happened to have one more spawn than the others.
+        Every source, pooled and then clustered, because a wolf camp is a mixed
+        population - Ragged Young Wolf, Young Wolf and Timber Wolf all carry Tough Wolf
+        Meat - and clustering them separately would put the node on whichever happened to
+        have one more spawn than the others.
+
+        **Gameobjects count.** An item objective is "bring me eight of these" and the
+        eight come off whatever holds them, which is as often a crate as a corpse.
+        Milly's Harvest (quest 3904) has *no* creature dropper at all: the item lives in
+        forty chests, a creature-only search returned nothing, and the objective node was
+        placed on Milly Osworth with a fifteen-yard disk. The bot would have stood next to
+        the woman who wanted the apples.
+
+        Spawns are weighted by drop chance, so a 2% dropper does not pull the node away
+        from an 80% one.
 
         The name that comes back is the commonest in the cluster, because that is what a
         hunt filters plates by.
         """
-        rows = self.con.execute(
+        rows = [dict(r) for r in self.con.execute(
             """
             select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py,
-                   cast(c.position_z as real) pz, t.Name, t.Entry
+                   cast(c.position_z as real) pz, t.Name, t.Entry,
+                   abs(l.ChanceOrQuestChance) as chance
             from world_creature_loot_template l
             join world_creature_template t on t.LootId = l.entry
             join world_creature c on c.id = t.Entry
             where l.item = ?
             """,
             (item_id,),
-        ).fetchall()
+        ).fetchall()]
+        rows += [dict(r) for r in self.con.execute(
+            """
+            select g.map, cast(g.position_x as real) px, cast(g.position_y as real) py,
+                   cast(g.position_z as real) pz, t.name as Name, t.entry as Entry,
+                   abs(l.ChanceOrQuestChance) as chance
+            from world_gameobject_loot_template l
+            join world_gameobject_template t on t.data1 = l.entry and t.type = 3
+            join world_gameobject g on g.id = t.entry
+            where l.item = ?
+            """,
+            (item_id,),
+        ).fetchall()]
+        for r in rows:
+            # A zero here means "always" in some rows and "unset" in others; either way a
+            # spawn that is in the table drops the thing, so it votes.
+            r["weight"] = float(r["chance"]) or 1.0
         if not rows:
             return None
 
-        # Only spawns inside a zone this guide covers. `Ragged Young Wolf` lives in
-        # several zones, and the globally densest pack of them is nowhere near the quest -
-        # the first version of this put the node at (-6326, 380), off every map in scope,
-        # while the quest giver stood outside Northshire Abbey.
-        if zones:
+        # Only spawns inside a zone this guide covers, and inside the quest's **own** zone
+        # first. A zone box is not a neighbourhood: Elwynn's contains Northshire and a
+        # great deal else, so filtering to "any zone in scope" left Young Wolf pooling 122
+        # spawns with a median of 2623 yards from the node it produced - and three of them
+        # inside that node's fifty-yard disk. Before the zone filter existed at all this
+        # put the node at (-6326, 380), off every map in scope.
+        for scope in ((home,) if home is not None else (), tuple(zones)):
             inside = [r for r in rows
-                      if any(r["map"] == z.map_id
+                      if any(z is not None and r["map"] == z.map_id
                              and (f := world_to_map(r["px"], r["py"], z)) is not None
                              and on_map(*f, slack=0.0)
-                             for z in zones)]
-            rows = inside or rows
+                             for z in scope)]
+            if inside:
+                rows = inside
+                break
         m = max({r["map"] for r in rows},
                 key=lambda mm: sum(1 for r in rows if r["map"] == mm))
         same = [r for r in rows if r["map"] == m]
@@ -595,60 +651,6 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             ))
             rib_for_zone.setdefault(zid, rid)
 
-    def _drops(self, item_id: int, zones: tuple[ZoneBounds, ...] = ()) -> Spawn | None:
-        """Where the creatures that drop this item live.
-
-        Every creature that drops it, pooled and then clustered, because a wolf camp is
-        a mixed population - Ragged Young Wolf, Young Wolf and Timber Wolf all carry
-        Tough Wolf Meat - and clustering them separately would put the node on whichever
-        happened to have one more spawn than the others.
-
-        The name that comes back is the commonest in the cluster, because that is what a
-        hunt filters plates by.
-        """
-        rows = self.con.execute(
-            """
-            select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py,
-                   cast(c.position_z as real) pz, t.Name, t.Entry
-            from world_creature_loot_template l
-            join world_creature_template t on t.LootId = l.entry
-            join world_creature c on c.id = t.Entry
-            where l.item = ?
-            """,
-            (item_id,),
-        ).fetchall()
-        if not rows:
-            return None
-
-        # Only spawns inside a zone this guide covers. `Ragged Young Wolf` lives in
-        # several zones, and the globally densest pack of them is nowhere near the quest -
-        # the first version of this put the node at (-6326, 380), off every map in scope,
-        # while the quest giver stood outside Northshire Abbey.
-        if zones:
-            inside = [r for r in rows
-                      if any(r["map"] == z.map_id
-                             and (f := world_to_map(r["px"], r["py"], z)) is not None
-                             and on_map(*f, slack=0.0)
-                             for z in zones)]
-            rows = inside or rows
-        m = max({r["map"] for r in rows},
-                key=lambda mm: sum(1 for r in rows if r["map"] == mm))
-        same = [r for r in rows if r["map"] == m]
-        spawn = _cluster(same[0]["Entry"], same[0]["Name"] or "mobs", m, same)
-
-        # Name the cluster after whatever is commonest inside it, not whatever the query
-        # happened to return first.
-        near = [r for r in same
-                if math.hypot(r["px"] - spawn.x, r["py"] - spawn.y) <= CLUSTER_REACH]
-        if near:
-            names = {}
-            for r in near:
-                names[r["Name"]] = names.get(r["Name"], 0) + 1
-            best = max(names, key=lambda n: names[n])
-            spawn = Spawn(near[0]["Entry"], best or "mobs", m,
-                          spawn.x, spawn.y, spawn.z, spread=spawn.spread)
-        return spawn
-
     # -- services ---------------------------------------------------------------
     for zid in zone_ids:
         b = db.bounds.get(zid)
@@ -724,7 +726,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         chain.append(f"{base}_accept")
 
         if needs_objective:
-            mobs = db.objective_spawn(q.quest_id, zones_in_scope)
+            mobs = db.objective_spawn(q.quest_id, zones_in_scope, db.bounds.get(zid))
             ofrac, oworld, omap = place(mobs or giver, zid)
             nodes.append(Node(
                 id=f"{base}_do", kind=StepKind.QUEST_OBJECTIVE, zone=zname, zone_id=zid,
