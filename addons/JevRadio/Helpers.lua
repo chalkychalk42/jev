@@ -262,52 +262,26 @@ end
 
 -- --------------------------------------------------------------------- facing
 
--- `GetPlayerFacing` arrives in 3.0 and this is 2.4.3, so DECISIONS V17 concluded there
--- was no facing at all and navigation has been closed-loop ever since: take a heading
--- from a position delta while moving, turn for angle/turn_rate, re-measure.
+-- `GetPlayerFacing` arrives in 3.0 and this is 2.4.3. The minimap draws its player arrow
+-- as a `Model`, and a `Model` has `GetFacing`, so AVR-TBC reads a heading off it and V29
+-- said this client could too.
 --
--- The minimap knows. It draws a player arrow as a Model, and a Model has `GetFacing`.
--- (XiconQoo/AVR-TBC, Core.lua, does exactly this.) The arrow is found by its model path
--- rather than by frame name, because the name is not guaranteed and the path is what it
--- is: `Interface\Minimap\MinimapArrow`.
+-- **Measured here, it cannot.** With `rotateMinimap` set to 0 and the client reloaded,
+-- the arrow is found by its model path and `GetFacing()` returns 0.0 at every heading:
+-- `tools/verify_facing.py` walked five times, the direction of travel varied across 160
+-- degrees, and the painted value did not move at all.
 --
--- **Which object carries the angle depends on a client setting.** With `rotateMinimap`
--- off the map is north-up and the arrow turns to show facing. With it on, the map turns
--- and the arrow is pinned pointing up, so the arrow reads a constant and the rotation is
--- on the minimap itself. Both are asked here and the first that answers wins, because
--- guessing which one a machine is configured for is how this comes back as a silent nil.
-local arrowCache = nil
-
-local function minimapArrow()
-    if arrowCache and arrowCache.GetFacing then return arrowCache end
-    arrowCache = nil
-    if not Minimap or not Minimap.GetChildren then return nil end
-    local kids = { Minimap:GetChildren() }
-    for i = 1, table.getn(kids) do
-        local f = kids[i]
-        if f and f.GetModel and f.GetFacing then
-            local ok, path = pcall(f.GetModel, f)
-            if ok and type(path) == "string"
-                    and string.find(string.lower(path), "minimaparrow", 1, true) then
-                arrowCache = f
-                return f
-            end
-        end
-    end
-    return nil
-end
-
+-- A constant is worse than nothing, because a navigator will act on it. So nothing is
+-- painted and V17's closed-loop turning stands: take a heading from a position delta
+-- while moving, turn for angle/turn_rate, re-measure.
+--
+-- What would settle it without guessing: this addon can record what it sees into
+-- SavedVariables on load - which model paths the minimap's children actually carry, and
+-- what each returns - and that file can be read off disk. That is client-local and
+-- involves no chat. Typing `/script` to ask instead is how a half-written line ends up
+-- sitting in the Say box.
 local function PLAYER_FACING()
     if GetPlayerFacing then return GetPlayerFacing() end   -- 3.0+, and free if it lands
-    local arrow = minimapArrow()
-    if arrow then
-        local ok, facing = pcall(arrow.GetFacing, arrow)
-        if ok and type(facing) == "number" then return facing end
-    end
-    if Minimap and Minimap.GetFacing then
-        local ok, facing = pcall(Minimap.GetFacing, Minimap)
-        if ok and type(facing) == "number" then return facing end
-    end
     return nil
 end
 

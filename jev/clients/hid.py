@@ -49,6 +49,16 @@ VK = {
     **{f"f{n}": 0x6F + n for n in range(1, 13)},
 }
 
+# Characters that are a shifted key rather than a key. Without these `type_text` refuses
+# anything with a bracket in it, which is every `/script` there is - and a diagnostic you
+# cannot type is a diagnostic nobody runs. Refusing was still the right behaviour: the
+# alternative was `(` arriving as `9`.
+SHIFTED = {
+    "(": "9", ")": "0", "!": "1", "@": "2", "#": "3", "$": "4", "%": "5",
+    "^": "6", "&": "7", "*": "8", "_": "-", "+": "=", ":": ";", '"': "'",
+    "<": ",", ">": ".", "?": "/", "|": "\\", "~": "`", "{": "[", "}": "]",
+}
+
 # Keys that must carry the extended-key flag or the game reads a different key entirely.
 EXTENDED = frozenset({"up", "down", "left", "right"})
 
@@ -259,11 +269,13 @@ class Hid:
             key = ch.lower()
             if key == " ":
                 key = "space"
+            shifted = ch.isupper() or ch in SHIFTED
+            key = SHIFTED.get(ch, key)
             if key not in VK:
                 self.unsendable.append(ch)
                 ok = False
                 continue
-            ok = (self.chord("shift", key) if ch.isupper() else self.tap(key)) and ok
+            ok = (self.chord("shift", key) if shifted else self.tap(key)) and ok
         return ok
 
     def slash(self, command: str) -> bool:

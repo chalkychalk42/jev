@@ -38,12 +38,13 @@ TO_THE_STOP_PX = 900
 # pitch range times whatever the operating system did to the deltas on the way.
 #
 # **This number is only meaningful with the pointer pinned** - see `tools/env_lock.py`.
-# It was first measured at Windows pointer speed 11, which scales every relative delta by
-# 1.25, and the machine has since been pinned to the neutral 10. Whether that makes the
-# true value 500 depends on whether the client reads the scaled cursor or the raw device,
-# and that is not something to reason about: `tools/calibrate_camera.py` drags a given
-# number of pixels and shows the result, which settles it in one run.
-LEVEL_PX = 400
+# It was first measured as 400 at Windows pointer speed 11, which scales every relative
+# delta by 1.25; the machine is now pinned to the neutral 10. Re-measured there with
+# `tools/calibrate_camera.py` at Dermot Johns' stall: 400 still looks at the ground, 600
+# looks into the canopy, 500 is level. That the arithmetic (400 x 1.25) and the
+# measurement agree is the answer to whether the client reads the scaled cursor or the
+# raw device - it reads the scaled one, so pointer speed matters and is pinned.
+LEVEL_PX = 500
 
 # Mouse-look has to be held across the movement, and the client needs a moment either side
 # to notice the button before the deltas start arriving.

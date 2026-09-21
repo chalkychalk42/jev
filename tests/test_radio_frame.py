@@ -671,7 +671,7 @@ CLIENT_API = frozenset({
     "UnitIsDead", "UnitIsGhost", "UnitExists", "UnitName", "UnitReaction",
     "UnitClassification", "UnitIsUnit", "UnitOnTaxi", "UnitIsAFK",
     "IsMounted", "IsSwimming", "IsFalling", "IsResting", "IsStealthed", "IsIndoors",
-    "GetPlayerFacing", "GetPlayerMapPosition", "GetCorpseMapPosition", "Minimap", "GetMoney", "CheckInteractDistance",
+    "GetPlayerFacing", "GetPlayerMapPosition", "GetCorpseMapPosition", "GetMoney", "CheckInteractDistance",
     "LootFrame", "GossipFrame", "MerchantFrame", "QuestFrame", "ClassTrainerFrame",
     "MailFrame",
 })

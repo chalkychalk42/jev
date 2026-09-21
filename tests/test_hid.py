@@ -130,3 +130,37 @@ def test_arrow_keys_carry_the_extended_flag():
     """Without it the game reads a different key entirely, and it fails silently."""
     assert {"up", "down", "left", "right"} == EXTENDED
     assert all(k in VK for k in EXTENDED)
+
+
+def test_every_printable_character_can_be_typed():
+    """`type_text` refused anything with a bracket in it, which is every `/script` there
+    is - so the diagnostics that would have settled four open questions about this client
+    were unrunnable. Refusing was still right: the alternative was `(` arriving as `9`,
+    because the shift was decided by `ch.isupper()` and punctuation is never upper."""
+    import string
+
+    from jev.clients.hid import SHIFTED, VK
+
+    untypeable = [c for c in string.printable.strip()
+                  if c.lower() not in VK and c not in SHIFTED]
+    assert untypeable == [], untypeable
+    assert all(target in VK for target in SHIFTED.values())
+
+
+def test_a_shifted_character_is_sent_as_a_chord_not_as_its_unshifted_key():
+    class _Rec(Hid):
+        def __init__(self):
+            super().__init__(hwnd=None, require_focus=False)
+            self.events: list[str] = []
+
+        def tap(self, key):
+            self.events.append(f"tap:{key}")
+            return True
+
+        def chord(self, modifier, key):
+            self.events.append(f"{modifier}+{key}")
+            return True
+
+    hid = _Rec()
+    assert hid.type_text("(a)")
+    assert hid.events == ["shift+9", "tap:a", "shift+0"]

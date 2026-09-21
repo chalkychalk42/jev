@@ -154,8 +154,8 @@ FIELDS: tuple[Field, ...] = (
           "if not y or y == 0 then return nil end\n"
           "return frac(y)"),
     Field("pos.facing", 10, Kind.ANGLE, "return angle(PLAYER_FACING())",
-          "radians, 0 = +X increasing toward +Y; do not negate dy. PLAYER_FACING is a "
-          "polyfill over the minimap arrow's model facing; 2.4.3 has no GetPlayerFacing"),
+          "radians, 0 = +X increasing toward +Y; do not negate dy. Unknown on 2.4.3: "
+          "GetPlayerFacing is 3.0, and the minimap arrow reads a constant (V29)"),
     _tri("pos.indoors", "return tri(IsIndoors())"),
     # Where the body is, from the game rather than from a guess. A ghost that has to
     # infer its corpse from the node it was working is a ghost forever the moment it dies
