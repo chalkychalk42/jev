@@ -19,9 +19,11 @@ class _Fight:
         self.heals_ignored = 0
         self.top_ups = 0
         self.top_ups_landed = 0
+        self.topped_up = 0
         self.detail = ""
 
     def top_up(self, *_a, **_k):
+        self.topped_up += 1
         return self.tops_up
 
     def run(self, name_id=None, **_):
@@ -104,11 +106,14 @@ def test_dying_stops_the_hunt_rather_than_looping():
 
 
 def test_being_hurt_rests_and_running_out_of_food_stops():
+    """Both happen *before* the pull now: heal, then eat, then refuse."""
     h, _ = _hunt([Fought.TOO_HURT], [(1, 10)], rest=_Rest(Rested.HEALTHY))
+    h.read = lambda: {"vitals.combat": False, "vitals.hp": 0.3}
     h.run((0.0, 0.0, 0.0), 30.0, timeout_s=1)
     assert h.rest.calls >= 1
 
     h2, _ = _hunt([Fought.TOO_HURT], [(1, 10)], rest=_Rest(Rested.NO_FOOD))
+    h2.read = lambda: {"vitals.combat": False, "vitals.hp": 0.3}
     assert h2.run((0.0, 0.0, 0.0), 30.0, timeout_s=5) is Hunted.NO_FOOD
 
 
@@ -184,23 +189,47 @@ def test_printed_lines_stay_ascii():
                 assert line.isascii(), f"{path}:{i} prints non-ascii"
 
 
-def test_hunt_tops_up_between_fights_before_reaching_for_food():
-    """The step that was missing. A heal in a fight is a global cooldown not spent
-    swinging and cannot finish under pushback; between fights it costs mana and a few
-    seconds, and going into the next pull at 80% rather than 45% is the difference
-    between winning it and a corpse run."""
-    h, _ = _hunt([Fought.KILLED, Fought.KILLED], [(1, 10), (2, 10), (10, 10)])
+def test_healing_is_tried_before_food_and_food_only_when_it_is_not_enough():
+    """A heal costs mana and a few seconds; food costs twenty. Order matters, and so
+    does not eating when a heal already got us there."""
+    h, _ = _hunt([Fought.KILLED], [(1, 10), (10, 10)], rest=_Rest(Rested.HEALTHY))
+    h.read = lambda: {"vitals.combat": False, "vitals.hp": 0.3}
     h.fight.tops_up = True
     h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5)
-    assert h.fight.tops_up, "never asked the fight to heal between kills"
+    assert h.fight.topped_up >= 1
+    assert h.rest.calls == 0, "ate when a heal had already got us there"
 
-    # When healing cannot get there, food is the fall-through, not the first resort.
-    h2, _ = _hunt([Fought.TOO_HURT], [(1, 10)], rest=_Rest(Rested.HEALTHY))
+    h2, _ = _hunt([Fought.KILLED], [(1, 10), (10, 10)], rest=_Rest(Rested.HEALTHY))
+    h2.read = lambda: {"vitals.combat": False, "vitals.hp": 0.3}
     h2.fight.tops_up = False
-    h2.run((0.0, 0.0, 0.0), 30.0, timeout_s=1)
-    assert h2.rest.calls >= 1
+    h2.run((0.0, 0.0, 0.0), 30.0, timeout_s=5)
+    assert h2.rest.calls >= 1, "healing failed and it never reached for food"
 
-    h3, _ = _hunt([Fought.TOO_HURT], [(1, 10)], rest=_Rest(Rested.NO_FOOD))
-    h3.fight.tops_up = True
-    h3.run((0.0, 0.0, 0.0), 30.0, timeout_s=1)
-    assert h3.rest.calls == 0, "ate when a heal had already got us there"
+
+def test_health_is_restored_before_the_pull_not_after_selected_outcomes():
+    """Topping up only after a kill or a break-off meant a `timeout` fell through the
+    dry-look branch and the next mob was pulled at whatever health the last fight left.
+    A live run reported `top up 0` and died without killing anything."""
+    h, _ = _hunt([Fought.TIMEOUT, Fought.KILLED], [(1, 10), (1, 10), (10, 10)])
+    h.read = lambda: {"vitals.combat": False, "vitals.hp": 0.3}
+    h.fight.tops_up = True
+    h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5)
+    assert h.fight.calls >= 1
+    assert h.fight.topped_up >= h.fight.calls, "pulled without topping up first"
+
+
+def test_a_pull_is_refused_when_nothing_can_restore_health():
+    """HP below the line, no heal and no food is not a pull. It is a corpse run."""
+    h, _ = _hunt([Fought.KILLED], [(1, 10)], rest=_Rest(Rested.NO_FOOD))
+    h.read = lambda: {"vitals.combat": False, "vitals.hp": 0.2}
+    h.fight.tops_up = False
+    assert h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5) is Hunted.NO_FOOD
+    assert h.fight.calls == 0, "pulled anyway"
+
+
+def test_being_in_combat_is_not_a_moment_to_heal_up_first():
+    h, _ = _hunt([Fought.KILLED], [(1, 10), (10, 10)])
+    h.read = lambda: {"vitals.combat": True, "vitals.hp": 0.2}
+    h.fight.tops_up = False
+    h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5)
+    assert h.fight.calls >= 1, "stood there healing while something was hitting us"

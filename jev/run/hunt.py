@@ -26,7 +26,7 @@ from enum import StrEnum
 
 from jev.clients.fight import Fight, Fought
 from jev.clients.rest import Rest, Rested
-from jev.world.combat import EAT_BELOW
+from jev.world.combat import EAT_BELOW, HEAL_OUT_OF_COMBAT
 
 # Fractions of the radius to ring, nearest first, and how many points on each ring.
 #
@@ -49,6 +49,10 @@ DRY_LOOKS = 2
 # correctly reported that it could not see any kobolds. A wrong default is recoverable;
 # reaching for a field that means something else is how that bug comes back.
 DEFAULT_HUNT_YARDS = 30.0
+
+# Health to take a pull at. The same band the top-up heals to, because arriving at a
+# kobold below it is the thing the top-up exists to prevent.
+PULL_LINE = HEAL_OUT_OF_COMBAT
 
 
 class Hunted(StrEnum):
@@ -128,6 +132,14 @@ class Hunt:
                 stood = True
                 dry = 0
 
+            # Before the next plate, not after selected outcomes. Topping up only after
+            # a kill or a break-off meant a `timeout` fell through the dry-look branch
+            # and the next mob was pulled at whatever health the last fight left - which
+            # is how a run reported `top up 0` and died without killing anything.
+            if not self._ready_to_pull():
+                self.detail = "too hurt to pull, and nothing left to fix it with"
+                return Hunted.NO_FOOD
+
             outcome = self.fight.run(name_id)
             self.say(f"    {outcome.value} ({have}/{need}) "
                      f"pressed {self.fight.pressed} closed {self.fight.closed} "
@@ -142,11 +154,6 @@ class Hunt:
             if outcome is Fought.KILLED:
                 self.kills += 1
                 dry = 0
-                self._top_up()
-            elif outcome in (Fought.TOO_HURT, Fought.LOSING):
-                if not self._top_up() and self._recover() is Rested.NO_FOOD:
-                    self.detail = "out of food and too hurt to carry on"
-                    return Hunted.NO_FOOD
             else:
                 # Nothing here worth swinging at. Two empty looks and the camp has moved
                 # on without us; go and stand somewhere else.
@@ -176,6 +183,33 @@ class Hunt:
             self.say("    indoors, and the camp is not; trying another station")
             return True
         return False
+
+    def _ready_to_pull(self) -> bool:
+        """Heal, then eat, until fit to take the next pull. `False` means do not pull.
+
+        The whole between-engagements contract in one place: in combat there is nothing
+        to decide, and out of combat the order is heal (mana and seconds), then food
+        (twenty seconds), then refuse. Pulling below the line with neither available is
+        how a character arrives at a kobold already half dead.
+        """
+        v = self.read()
+        if v is None:
+            return True                      # unreadable is not a reason to stand still
+        if v.get("vitals.combat") is True:
+            return True                      # already in it; Fight decides
+        hp = v.get("vitals.hp")
+        if hp is None or hp >= PULL_LINE:
+            return True
+
+        if self._top_up():
+            return True
+        outcome = self._recover()
+        if outcome is Rested.HEALTHY:
+            return True
+        if outcome is Rested.INTERRUPTED:
+            return True                      # something is hitting us; fight it
+        after = self.read()
+        return after is not None and (after.get("vitals.hp") or 0.0) >= PULL_LINE
 
     def _top_up(self) -> bool:
         """Heal between fights, before reaching for food.
