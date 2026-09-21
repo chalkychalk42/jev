@@ -922,7 +922,79 @@ movement cancels a cast, and the only thing being cast is the heal keeping it al
 `UNREACHABLE` now means out of bursts **and** nothing pressed **and** nothing landed —
 an answer, rather than a consequence of never having tried.
 
-NEXT: it cannot finish the objective yet. When nothing is in reach it stands still, so a
+## GATE A IS DONE
+
+Quest 7, Kobold Camp Cleanup, start to finish and unattended: accepted from Marshal
+McBride, ten Kobold Vermin killed at Echo Ridge, turned back in. Same engine that took
+and returned 783.
+
+    chose 'Kobold Camp Cleanup': chose at (219, 362)
+    cleared: pressed [(112, 681)] -> done
+    log now: ()
+
+The final run:
+
+    level  o0_have  killed  died  heals_ooc   heals_ic  NO_FOOD  where
+    2      10/10    2       0     4/4 landed  0/2       no       Echo Ridge camp
+
+Both kills at one station, no deaths, and the playhead has moved itself on to
+`alli_human_1_12_5261_eagan_peltskinner_accept` — Eagan Peltskinner, from Deputy Willem.
+Completed quests remembered: 7 and 783.
+
+### What actually fixed it
+
+Five bugs, in the order they were found, each with a trace. None of them was the
+character being undergeared, and the operator was right to refuse the grind.
+
+**The heal was never called out of combat.** Only the in-combat line existed, at 40%,
+which a fight rarely reaches before it ends. And in combat Holy Light cannot complete: it
+is a 2.5 second cast and pushback stops it — `heals 0/4`, `0/5`, `0/5` across three runs.
+Out of combat it completes every time. `top up: 4/4 landed`.
+
+**It was topped up after the wrong things.** The heal hung off the fight's *outcome*, so a
+`timeout` fell through and the next mob was pulled at whatever health the last fight left
+— one run logged `top up 0` and died without a kill. It belongs before the next plate, so
+`_ready_to_pull` is the whole contract in one place: in combat nothing to decide, else
+heal, then food, then refuse.
+
+**The fight was gated behind its own output.** `close_in()` walked until the target took
+damage and only then started the rotation — but damage comes from swinging, and swinging
+was behind the gate. Live: `pressed []` while being beaten to 29%.
+
+**It walked past them.** Closing ended only when health came off the target, so a slightly
+wrong facing meant walking through the kobold and out the other side, still holding `W`.
+Then the fix for that used `target.in_melee` to *stop* — which is `CheckInteractDistance`
+index 3, about eleven yards, where a swing needs five — and the character parked three
+quarters of the way there and stood still. It now shortens the stride instead of ending
+it.
+
+**It would not turn.** `engage()` gave up whenever `find()` returned `None`, and `find` is
+right to refuse a ring with no nameplate above it. But refusing to *turn* left the
+character facing the wrong way with the target in plain sight. A unit stands on its own
+ring, so a click just above the ring lands on the model. Both final kills used it:
+`no nameplate; aimed just above the ring to face it`.
+
+### Named gaps, not worked around
+
+    wedging            a character wedged in world geometry is freed by sweeping headings
+                       and jumping. `Travel._unstick` sweeps four headings and gives up
+                       where the same sweep by hand frees it on the first. Every corpse
+                       run and the McBride turn-in needed manual passes.
+    focus REFUSED      `Travel` correctly reports "the game window lost focus; nothing was
+                       pressed" and `Client.approach` retries once. One `win32.focus()`
+                       call is not enough — a run lost twelve stations to it.
+    distant selection  `acquire` can fall through to Tab and pick a unit far enough away
+                       that the client draws its name and **no health bar at all**. Not a
+                       threshold: the bar is absent, not dim. Measured, swept 100 to 70,
+                       and deliberately not tuned.
+    in-combat heal     unusable at this level and capped at two attempts rather than
+                       spammed. That is the game, not a predicate.
+    idle disconnect    the server drops an idle session; Warden was disabled separately
+                       and is no longer the cause.
+
+NOW: 608 tests, ruff clean. Gate A done.
+
+NEXT: the playhead is already on 5261. Nothing here needs a new skill to attempt it. When nothing is in reach it stands still, so a
 `quest_objective` needs to **search its own radius** rather than treat the spawn point as
 a spot. And it is out of food — `Rest` says so honestly instead of pressing a blank
 button, which makes the `vendor` node kinds the graph already carries the next real step.
