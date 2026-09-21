@@ -44,6 +44,7 @@ from jev.clients.advance import AdvanceQuestFrame, Goal  # noqa: E402
 from jev.clients.choose import ChooseListLine  # noqa: E402
 from jev.clients.fight import Fight  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
+from jev.clients.loot import Loot  # noqa: E402
 from jev.clients.rest import Rest  # noqa: E402
 from jev.guide import playhead  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id  # noqa: E402
@@ -146,6 +147,8 @@ def main() -> int:
                   window_origin=client.origin,
                   window_centre_x=client.size[0] // 2)
     rest = Rest(hid=client.hid, read=client.read)
+    loot = Loot(hid=client.hid, read=client.read, read_frame=client.frame,
+                window_origin=client.origin)
 
     def progress(quest_id):
         """Objective counts for one quest, from the **assembled** log.
@@ -187,7 +190,8 @@ def main() -> int:
         hunt = Hunt(fight=fight, rest=rest, read=client.read,
                     approach=lambda world: client.approach(world, timeout_s=args.timeout),
                     progress=lambda: progress(node.quest_id),
-                    journal=journal, observe=client.state, step_id=node.id)
+                    loot=loot, journal=journal, observe=client.state,
+                    step_id=node.id)
         outcome = hunt.run(node.world, radius, wanted, timeout_s=args.hunt)
         have, need = progress(node.quest_id)
         print(f"  {outcome.value}: {have}/{need} after {hunt.kills} kills over "

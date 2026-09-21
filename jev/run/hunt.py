@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from jev.clients.fight import Fight, Fought
+from jev.clients.loot import Loot, Looted
 from jev.clients.rest import Rest, Rested
 from jev.run.journal import Journal, outcome_of
 from jev.world.combat import EAT_BELOW, HEAL_OUT_OF_COMBAT
@@ -98,6 +99,7 @@ class Hunt:
     say: Callable[[str], None] = print
     # Optional flight recorder. A hunt is where most of a run's time goes, so a corpus
     # that skips it is a corpus of walking.
+    loot: Loot | None = None
     journal: Journal | None = None
     observe: Callable[[], object | None] | None = None
     step_id: str | None = None
@@ -172,6 +174,7 @@ class Hunt:
             if outcome is Fought.KILLED:
                 self.kills += 1
                 dry = 0
+                self._loot(state)
             else:
                 # Nothing here worth swinging at. Two empty looks and the camp has moved
                 # on without us; go and stand somewhere else.
@@ -182,6 +185,27 @@ class Hunt:
         have, need = self.progress()
         self.detail = f"{timeout_s:.0f}s and the counter is {have}/{need}"
         return Hunted.TIMEOUT
+
+    def _loot(self, state) -> None:
+        """Take what the corpse is holding, straight after the kill.
+
+        Here rather than inside `Fight` because looting is not fighting: the corpse is
+        not a target, an empty one is not a failure, and a full bag is a vendor problem.
+        A great many quests are "bring me eight of these" and the eight come off corpses,
+        so a kill counter can fill while the quest never does.
+        """
+        if self.loot is None:
+            return
+        started = time.monotonic()
+        outcome = self.loot.run()
+        if outcome is not Looted.NO_CORPSE:
+            self.say(f"    loot: {outcome.value}"
+                     + (f" - {self.loot.detail}" if self.loot.detail else ""))
+        if self.journal is not None:
+            self.journal.skill("LOOT", outcome_of(outcome.ok), started_at=started,
+                               state=state, step_id=self.step_id,
+                               detail=f"{outcome.value}: {self.loot.detail}"
+                               if self.loot.detail else outcome.value)
 
     def _wrong_side_of_a_door(self) -> bool:
         """Is this station indoors when the camp is not?

@@ -233,3 +233,32 @@ def test_being_in_combat_is_not_a_moment_to_heal_up_first():
     h.fight.tops_up = False
     h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5)
     assert h.fight.calls >= 1, "stood there healing while something was hitting us"
+
+
+def test_an_item_objective_is_placed_where_the_drop_lives():
+    """"Bring me eight of these" is still work that happens somewhere, and the somewhere
+    is wherever the thing that drops it lives. Quest 33 wants Tough Wolf Meat and its
+    node was placed on Eagan Peltskinner with a fifteen yard disk, because nothing looked
+    past ReqCreatureOrGOId1 - the bot hunted the man who wanted the wolves."""
+    from jev.guide.graph import Graph
+
+    g = Graph.load("content/tbc/ally_human_1_12.json")
+    node = g.get("alli_human_1_12_33_wolves_across_the_border_do")
+    assert node is not None and node.pos is not None, "the objective has no position"
+    assert "wolf" in (node.notes or "").lower(), f"placed on {node.notes!r}"
+
+    giver = g.get("alli_human_1_12_33_wolves_across_the_border_accept")
+    assert node.pos != giver.pos, "the objective is still on the quest giver"
+
+
+def test_a_drop_source_outside_the_zones_in_scope_is_not_used():
+    """`Ragged Young Wolf` lives in several zones, and the globally densest pack is
+    nowhere near the quest - the first version put the node at (-6326, 380), off every
+    map in scope, while the giver stood outside Northshire Abbey."""
+    from jev.guide.coords import on_map
+    from jev.guide.graph import Graph
+
+    g = Graph.load("content/tbc/ally_human_1_12.json")
+    for n in g.nodes:
+        if n.kind is StepKind.QUEST_OBJECTIVE and n.pos is not None:
+            assert on_map(*n.pos, slack=0.0), f"{n.id} is off the map at {n.pos}"

@@ -292,7 +292,8 @@ class WorldDB:
         ).fetchone()
         return self.object_spawn(r["id"]) if r else None
 
-    def objective_spawn(self, quest_id: int) -> Spawn | None:
+    def objective_spawn(self, quest_id: int,
+                        zones: tuple[ZoneBounds, ...] = ()) -> Spawn | None:
         """Where the objective actually happens.
 
         A kill objective's node belongs where the mobs are, not where the quest was
@@ -305,9 +306,20 @@ class WorldDB:
         that is in map fractions.
         """
         r = self.con.execute(
-            "select ReqCreatureOrGOId1 as a from world_quest_template where entry = ?",
+            "select ReqCreatureOrGOId1 as a, ReqItemId1 as item "
+            "from world_quest_template where entry = ?",
             (quest_id,),
         ).fetchone()
+        if r and (not r["a"] or r["a"] <= 0) and r["item"]:
+            # "Bring me eight of these" rather than "kill eight of those". The work still
+            # happens somewhere, and the somewhere is wherever the thing that drops it
+            # lives - so follow the item into the loot tables instead of giving up and
+            # falling back to the quest giver.
+            #
+            # Quest 33 wants Tough Wolf Meat and its node was placed on Eagan Peltskinner
+            # with a fifteen yard disk, because nothing here looked past
+            # ReqCreatureOrGOId1. The bot hunted the man who wanted the wolves.
+            return self._drops(r["item"], zones)
         if not r or not r["a"] or r["a"] <= 0:
             return None
         rows = self.con.execute(
@@ -321,6 +333,60 @@ class WorldDB:
         m = rows[0]["map"]
         same = [x for x in rows if x["map"] == m]
         return _cluster(r["a"], same[0]["Name"] or "mobs", m, same)
+
+    def _drops(self, item_id: int, zones: tuple[ZoneBounds, ...] = ()) -> Spawn | None:
+        """Where the creatures that drop this item live.
+
+        Every creature that drops it, pooled and then clustered, because a wolf camp is
+        a mixed population - Ragged Young Wolf, Young Wolf and Timber Wolf all carry
+        Tough Wolf Meat - and clustering them separately would put the node on whichever
+        happened to have one more spawn than the others.
+
+        The name that comes back is the commonest in the cluster, because that is what a
+        hunt filters plates by.
+        """
+        rows = self.con.execute(
+            """
+            select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py,
+                   cast(c.position_z as real) pz, t.Name, t.Entry
+            from world_creature_loot_template l
+            join world_creature_template t on t.LootId = l.entry
+            join world_creature c on c.id = t.Entry
+            where l.item = ?
+            """,
+            (item_id,),
+        ).fetchall()
+        if not rows:
+            return None
+
+        # Only spawns inside a zone this guide covers. `Ragged Young Wolf` lives in
+        # several zones, and the globally densest pack of them is nowhere near the quest -
+        # the first version of this put the node at (-6326, 380), off every map in scope,
+        # while the quest giver stood outside Northshire Abbey.
+        if zones:
+            inside = [r for r in rows
+                      if any(r["map"] == z.map_id
+                             and (f := world_to_map(r["px"], r["py"], z)) is not None
+                             and on_map(*f, slack=0.0)
+                             for z in zones)]
+            rows = inside or rows
+        m = max({r["map"] for r in rows},
+                key=lambda mm: sum(1 for r in rows if r["map"] == mm))
+        same = [r for r in rows if r["map"] == m]
+        spawn = _cluster(same[0]["Entry"], same[0]["Name"] or "mobs", m, same)
+
+        # Name the cluster after whatever is commonest inside it, not whatever the query
+        # happened to return first.
+        near = [r for r in same
+                if math.hypot(r["px"] - spawn.x, r["py"] - spawn.y) <= CLUSTER_REACH]
+        if near:
+            names = {}
+            for r in near:
+                names[r["Name"]] = names.get(r["Name"], 0) + 1
+            best = max(names, key=lambda n: names[n])
+            spawn = Spawn(near[0]["Entry"], best or "mobs", m,
+                          spawn.x, spawn.y, spawn.z, spread=spawn.spread)
+        return spawn
 
     # -- services ------------------------------------------------------------
 
@@ -519,6 +585,60 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             ))
             rib_for_zone.setdefault(zid, rid)
 
+    def _drops(self, item_id: int, zones: tuple[ZoneBounds, ...] = ()) -> Spawn | None:
+        """Where the creatures that drop this item live.
+
+        Every creature that drops it, pooled and then clustered, because a wolf camp is
+        a mixed population - Ragged Young Wolf, Young Wolf and Timber Wolf all carry
+        Tough Wolf Meat - and clustering them separately would put the node on whichever
+        happened to have one more spawn than the others.
+
+        The name that comes back is the commonest in the cluster, because that is what a
+        hunt filters plates by.
+        """
+        rows = self.con.execute(
+            """
+            select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py,
+                   cast(c.position_z as real) pz, t.Name, t.Entry
+            from world_creature_loot_template l
+            join world_creature_template t on t.LootId = l.entry
+            join world_creature c on c.id = t.Entry
+            where l.item = ?
+            """,
+            (item_id,),
+        ).fetchall()
+        if not rows:
+            return None
+
+        # Only spawns inside a zone this guide covers. `Ragged Young Wolf` lives in
+        # several zones, and the globally densest pack of them is nowhere near the quest -
+        # the first version of this put the node at (-6326, 380), off every map in scope,
+        # while the quest giver stood outside Northshire Abbey.
+        if zones:
+            inside = [r for r in rows
+                      if any(r["map"] == z.map_id
+                             and (f := world_to_map(r["px"], r["py"], z)) is not None
+                             and on_map(*f, slack=0.0)
+                             for z in zones)]
+            rows = inside or rows
+        m = max({r["map"] for r in rows},
+                key=lambda mm: sum(1 for r in rows if r["map"] == mm))
+        same = [r for r in rows if r["map"] == m]
+        spawn = _cluster(same[0]["Entry"], same[0]["Name"] or "mobs", m, same)
+
+        # Name the cluster after whatever is commonest inside it, not whatever the query
+        # happened to return first.
+        near = [r for r in same
+                if math.hypot(r["px"] - spawn.x, r["py"] - spawn.y) <= CLUSTER_REACH]
+        if near:
+            names = {}
+            for r in near:
+                names[r["Name"]] = names.get(r["Name"], 0) + 1
+            best = max(names, key=lambda n: names[n])
+            spawn = Spawn(near[0]["Entry"], best or "mobs", m,
+                          spawn.x, spawn.y, spawn.z, spread=spawn.spread)
+        return spawn
+
     # -- services ---------------------------------------------------------------
     for zid in zone_ids:
         b = db.bounds.get(zid)
@@ -552,6 +672,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
     if max_quests:
         quests = quests[:max_quests]
 
+    zones_in_scope = tuple(b for b in (db.bounds.get(z) for z in zone_ids) if b)
     chain: list[str] = []
     unplaceable: list[str] = []
     for q in quests:
@@ -593,7 +714,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         chain.append(f"{base}_accept")
 
         if needs_objective:
-            mobs = db.objective_spawn(q.quest_id)
+            mobs = db.objective_spawn(q.quest_id, zones_in_scope)
             ofrac, oworld, omap = place(mobs or giver, zid)
             nodes.append(Node(
                 id=f"{base}_do", kind=StepKind.QUEST_OBJECTIVE, zone=zname, zone_id=zid,
