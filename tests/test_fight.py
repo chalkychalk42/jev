@@ -535,3 +535,27 @@ def test_it_re_aims_when_the_target_stops_taking_damage():
     # moves in this frame, which is the whole point.
     f.run(timeout_s=REAIM_AFTER_S + 1.5)
     assert len(engages) > 1, "never turned back towards a target it had stopped hitting"
+
+
+def test_it_stops_walking_once_the_target_is_within_reach():
+    """Watched live: "we target and try to attack but then just keep running forwards and
+    passed them". Closing ended only when the target lost health, so a character facing
+    slightly wrong walked through the kobold and out the other side, still holding W, for
+    all eight bursts.
+
+    `target.in_melee` is too loose to prove we can hit something - it is about eleven
+    yards - but exact enough to prove we should stop running at it."""
+    hid = _Hid()
+    near = {**ALIVE, "target.in_melee": True}
+    f = _fight([near], hid=hid)
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda: True
+    f.run(timeout_s=1.5)
+    assert not hid.holds, "kept running at something it was already standing next to"
+
+    far = {**ALIVE, "target.in_melee": False}
+    g = _fight([far], hid=hid)
+    g.acquire = lambda name_id, **_: None
+    g.engage = lambda: True
+    g.run(timeout_s=1.5)
+    assert hid.holds, "never closed on something out of reach"

@@ -271,11 +271,26 @@ class Fight:
                 self._damage_at = time.monotonic()
 
             landing = self.last_hp is not None and self.last_hp < 1.0
+            # Already within reach: stop walking and turn instead.
+            #
+            # Closing used to end only when the target lost health, so a character that
+            # was facing slightly wrong walked *through* the kobold and out the other
+            # side, still holding W, for all eight bursts - watched live: "we target and
+            # try to attack but then just keep running forwards and passed them".
+            #
+            # `target.in_melee` is CheckInteractDistance index 3, about eleven yards. Too
+            # loose to prove we can hit something, which is why it never gated the
+            # rotation - but exact enough to prove we should stop running at it.
+            in_reach = v.get("target.in_melee") is True
+            if in_reach and not landing:
+                self.engage()
+                self._damage_at = time.monotonic()
+
             if landing and time.monotonic() - self._damage_at > REAIM_AFTER_S:
                 # Nothing has come off it for a while. Either it moved or we did.
                 self.engage()
                 self._damage_at = time.monotonic()
-            if not landing and self.closed < MAX_CLOSE_BURSTS:
+            if not landing and not in_reach and self.closed < MAX_CLOSE_BURSTS:
                 # Not while casting: movement cancels a cast, and the only thing being
                 # cast here is a heal that is keeping us alive.
                 if v.get("bars.casting") is not True:
@@ -283,7 +298,7 @@ class Fight:
                         self.engage()          # walking blind is walking the old heading
                     self.hid.hold("w", CLOSE_BURST_S)
                     self.closed += 1
-            elif not landing:
+            elif not landing and not in_reach:
                 # Out of bursts with the target still at full health. Whether anything was
                 # *pressed* says nothing about whether it was reached — a seal lands on
                 # the character, not on the kobold — and requiring "pressed nothing" here
