@@ -1046,3 +1046,53 @@ and the first skill row claimed a duration of fifty-six years because the caller
 `quest_objective` needs to **search its own radius** rather than treat the spawn point as
 a spot. And it is out of food — `Rest` says so honestly instead of pressing a blank
 button, which makes the `vendor` node kinds the graph already carries the next real step.
+
+## The evening the screen answered every question
+
+Six recovery passes reported `still_ghost` while arriving within 2.5 yards of the guess
+every time, which ruled out wedging and pointed at the guess. `GetCorpseMapPosition()`
+exists in 2.4.3 — `recover.py` said it did not — so schema 6 paints `pos.corpse_mx/my`
+and the first pass with it walked 199 yards and got up. The body was **240 yards** from
+the node the probe had been guessing. Then a ghost wedged on a fence and re-planned into
+the identical 199.0-yard path five times, because a re-plan is only new information if its
+answer changes; when the fresh route still starts by walking into the same place, the leg
+now goes to the wall heuristic once and the planner takes it back after. Same fence:
+arrived, 7 turns, 2 stuck.
+
+Three screenshots did what a night of logs could not. The first showed a
+`Couldn't load Blizzard_TimeManager` box left over from a UI reload. The second showed a
+level 2 paladin with **`Your skill in Unarmed has increased`** in the chat log and a red
+border on the main-hand slot: the weapon was at zero durability, so every pull had been
+fists at 4-5 damage, every fight ran the full 45 seconds, and every death took another
+10% off everything else. `bags.durability_min` had been painting **0.0** all along and
+nothing read it. `Fought.BROKEN` now refuses to start and says so. The third showed the
+camera pitched at the character's feet from directly above — which is why `not_visible`
+and "no ring and nameplate to click" were *true* every time they were reported. The bot
+could stand 4.6 yards from a targeted merchant, with his nameplate on screen, and not
+click him. Mouse-look is relative but it clamps, so `Camera.level` drags into the bottom
+stop and comes back a measured 400 pixels; the same frame went from bare ground to three
+merchants under an awning.
+
+`Repair` is the engine that follows from that, and it is the other half of dying.
+`MerchantRepairAllButton` joins the addon's `ADVANCE_BUTTONS`, so Repair All arrives as
+`ui.advance_x/y` like Accept and Release Spirit do and no field was added. The generator
+already emitted `StepKind.REPAIR` and kept one per zone — a lottery that sent a character
+stood in Northshire Abbey to Goldshire, 556 yards past three repairers 108 yards away —
+so it keeps six and the runtime picks the nearest. End to end, live: camera levelled,
+walked to Dermot Johns, merchant frame opened, Repair All pressed, and
+`too_poor - the worst item is still 0%; not enough money`. Honest, and the last word on
+the evening: **27 copper**.
+
+### Named gaps, still not worked around
+
+    money              the character is broken *and* broke, and `Fought.BROKEN` makes
+                       that a deadlock: no fight, so no loot, so no copper, so no repair.
+                       The graph already carries `StepKind.VENDOR` nodes; a sell skill
+                       needs item quality on the strip to know what is junk.
+    broken means weapon `bags.durability_min` is the worst of every slot, so broken boots
+                       would stop the bot fighting. Correct action either way — go and
+                       repair — but a main-hand field is the honest version.
+    corpse run spin    the first recovery pass burns its whole 180s at ~180 turns and
+                       ~12 yards. The second arrives. Nothing here explains why yet.
+    money in copper    `bags.money_silver` cannot see 27 copper, which is exactly the
+                       range a repair decision at level 2 lives in.
