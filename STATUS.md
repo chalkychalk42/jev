@@ -1008,7 +1008,41 @@ ring, so a click just above the ring lands on the model. Both final kills used i
 
 NOW: 608 tests, ruff clean. Gate A done.
 
-NEXT: the playhead is already on 5261. Nothing here needs a new skill to attempt it. When nothing is in reach it stands still, so a
+NEXT: the playhead is already on 5261. Nothing here needs a new skill to attempt it.
+
+---
+
+## THE RUNTIME RECORDS, AND PLAYS WITHOUT A HUMAN
+
+`jev/learn/episode.py` had a complete store from the beginning and nothing ever called
+it, so the first successful slice — accept, ten kills, turn-in — was recorded nowhere;
+a run can be repeated but its corpus cannot be recovered, so that was the only
+irreversible miss on the board. `jev/run/journal.py` now puts it on the loop that
+actually plays: ticks with full state, `situation_key` and an honest `armed_by: tracker`,
+plus a skill row per `FIGHT`, `INTERACT`, `CHOOSE_LINE` and `ADVANCE_*`. `--steps 1` is
+gone as a mode — the loop resumes, arms, records and moves on until the clock runs out or
+one node fails `--retries` times — and taking the window back after a `REFUSED` now backs
+off in short doubling waits rather than twenty flat two-second ones. Running it
+unattended for twenty minutes took **nine steps across three quests**: Eagan Peltskinner
+accepted on the fourth attempt and turned in, Wolves Across the Border accepted, and its
+objective attempted three times — **74 ticks and 72 skill outcomes on disk**, completed
+quests now `[7, 783, 5261]`. Two bugs in that new wiring were caught by running it: a
+splice dropped `if __name__ == "__main__"` so the probe printed nothing and exited zero,
+and the first skill row claimed a duration of fifty-six years because the caller passed
+`time.monotonic()` and the journal subtracted it from `time.time()`.
+
+### Named gaps, still not worked around
+
+    unstick            untouched on purpose. The hand sweep that frees a wedge runs right
+                       after an explicit `focused()` call, so it may work because of focus
+                       rather than extra headings, and a fifth heading will not beat that.
+    interact ring-aim  `Fight.engage` turns using a ring alone; `Interact` refuses,
+                       because an interact click needs a torso and a ring gives feet.
+                       This is what made Willem take four attempts.
+    loot               quest 33 wants Tough Wolf Meat. There is no loot skill, so the
+                       objective cannot finish however many wolves die.
+    wandering NPCs     a node is a spawn point and the NPC may be elsewhere.
+    idle disconnect    the server drops an idle session; this cost two logins tonight. When nothing is in reach it stands still, so a
 `quest_objective` needs to **search its own radius** rather than treat the spawn point as
 a spot. And it is out of food — `Rest` says so honestly instead of pressing a blank
 button, which makes the `vendor` node kinds the graph already carries the next real step.
