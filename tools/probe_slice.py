@@ -49,7 +49,7 @@ from jev.guide.coords import bounds_by_radio_id  # noqa: E402
 from jev.guide.graph import Graph  # noqa: E402
 from jev.guide.path import MmapQuery  # noqa: E402
 from jev.guide.tracker import Tracker  # noqa: E402
-from jev.perceive.radio_frame import name_id  # noqa: E402
+from jev.perceive.radio_frame import list_lines, name_id  # noqa: E402
 from jev.run.client import NotRunning, attach, with_travel  # noqa: E402
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt  # noqa: E402
 from jev.world.state_v1 import StepKind  # noqa: E402
@@ -148,6 +148,14 @@ def main() -> int:
                 return (o.have, o.need)
         return (None, None)
 
+    def _is_a_list(client) -> bool:
+        """A frame with lines and no button to press is a list, whatever opened it."""
+        reading = client.reading()
+        if reading is None or not reading.values:
+            return False
+        painted = reading.values.get("ui.advance_x")
+        return painted is None and bool(list_lines(reading))
+
     def do_objective(node) -> int:
         """Work the objective's **disk** until the server's counter says it is done.
 
@@ -221,7 +229,14 @@ def main() -> int:
 
         # A list, not a button. Pick our own quest out of it by name; the NPC may have
         # several, and they are identical to a camera.
-        if result is Result.GOSSIP:
+        #
+        # Gossip is not the only list. An NPC with two or more quests and nothing else to
+        # say opens the **quest greeting panel** instead - `ui.quest_frame` true,
+        # `ui.gossip` false, no Accept button painted, and the same `ui.list_*` lines
+        # underneath. Deputy Willem with two quests reported
+        # `no_button - frame open but no advance button painted` while line 1 was
+        # `Eagan Peltskinner` all along.
+        if result is Result.GOSSIP or _is_a_list(client):
             chose = chooser.run(node.title)
             print(f"  chose {node.title!r}: {chose.value} at {chooser.clicked}"
                   + (f" - {chooser.detail}" if chooser.detail else ""))

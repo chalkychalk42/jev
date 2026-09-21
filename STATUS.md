@@ -999,6 +999,12 @@ ring, so a click just above the ring lands on the model. Both final kills used i
                        centre-click fallback is gated on standing on the node, which is
                        true but does not help when the unit has walked off. Named rather
                        than patched: the fix is a search, and a search is a skill.
+    interact has no    `Fight.engage` will now turn using a ring alone, because facing
+    ring-only aim      only needs the model. `Interact` still refuses - it needs a torso
+                       to land a right-click that opens a window, and a ring gives feet.
+                       Live: `not_visible - selected the right unit, but no ring and plate
+                       to aim at` on Deputy Willem. Two skills, one primitive, different
+                       precision requirements; not obviously one fix.
 
 NOW: 608 tests, ruff clean. Gate A done.
 
