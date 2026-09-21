@@ -21,6 +21,7 @@ class _Fight:
         self.top_ups_landed = 0
         self.topped_up = 0
         self.detail = ""
+        self.broken = False
 
     def top_up(self, *_a, **_k):
         self.topped_up += 1

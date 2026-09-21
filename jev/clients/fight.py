@@ -150,7 +150,6 @@ class Fought(StrEnum):
     LOST = "lost"                    # target gone while still healthy: fled, or evaded
     UNREACHABLE = "unreachable"      # engaged, but never got close enough to land a hit
     TOO_HURT = "too_hurt"            # not healthy enough to start
-    BROKEN = "broken"                # equipment at zero durability; swinging is pointless
     LOSING = "losing"                # broke off; the caller decides what to do about it
     DIED = "died"                    # we did
     TIMEOUT = "timeout"
@@ -172,6 +171,9 @@ class Fight:
 
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
+    # Something equipped is at zero durability. Advisory: reported so the caller can
+    # decide to go and repair, never a reason to refuse the fight.
+    broken: bool = field(default=False, init=False)
     # The plate that produced the current selection, if a plate did.
     selected_plate: Plate | None = field(default=None, init=False)
     heals_landed: int = field(default=0, init=False)
@@ -195,6 +197,7 @@ class Fight:
         """Select, engage, and hold the rotation until something settles it."""
         self.pressed = []
         self.closed = 0
+        self.broken = False
         self._toggled = False
         self._pending_heal = None
         self._damage_mark = 1.0
@@ -212,17 +215,14 @@ class Fight:
         # does nothing at all until it falls over.
         in_combat = v.get("vitals.combat") is True
 
-        # Broken gear is not a bad fight, it is no fight. A weapon at zero durability is
-        # unequipped as far as damage is concerned: the character swings its fists for
-        # 4-5, every pull times out at 45 seconds, and it eventually dies - which costs
-        # another 10% durability on everything else. A level 2 paladin spent a whole
-        # evening in that loop, and `bags.durability_min` read 0.0 throughout, because
-        # nothing was looking at it. Starting is the mistake; say so and let the caller
-        # go and repair.
-        if v.get("bags.durability_min") == 0.0:
-            self.detail = ("something equipped is broken; swinging it does unarmed "
-                           "damage and the fight cannot be won")
-            return Fought.BROKEN
+        # Broken gear is a **preference, not a veto**. A weapon at zero durability does
+        # unarmed damage and the fight is worth far less - but refusing to start it
+        # protects nothing, because at zero there is no durability left for a death to
+        # cost. Vetoing it built a deadlock instead: no fight, so no loot, so no copper,
+        # so no repair, forever. Choosing to repair is the loop's decision and it needs
+        # money to make it; all this does is make the state impossible to miss again,
+        # after an evening of `bags.durability_min` reading 0.0 with no reader.
+        self.broken = v.get("bags.durability_min") == 0.0
 
         hp = v.get("vitals.hp")
         if not in_combat and hp is not None and hp < MIN_START_HP:

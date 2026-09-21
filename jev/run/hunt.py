@@ -62,7 +62,6 @@ class Hunted(StrEnum):
     DIED = "died"
     NO_FOOD = "no_food"          # too hurt to continue and nothing to eat
     UNREACHABLE = "unreachable"  # could not stand anywhere on the disk
-    BROKEN = "broken"            # equipment at zero durability; repair before fighting
     TIMEOUT = "timeout"
     BLIND = "blind"
 
@@ -176,6 +175,7 @@ class Hunt:
             self.say(f"    {outcome.value} ({have}/{need}) "
                      f"pressed {self.fight.pressed} closed {self.fight.closed} "
                      f"heals {self.fight.heals_landed}/{self.fight.heals_ignored}"
+                     + (" [broken gear]" if self.fight.broken else "")
                      + (f" - {self.fight.detail}" if self.fight.detail else ""))
 
             if outcome is Fought.DIED:
@@ -183,11 +183,6 @@ class Hunt:
                 return Hunted.DIED
             if outcome is Fought.BLIND:
                 return Hunted.BLIND
-            if outcome is Fought.BROKEN:
-                # Not a camp problem and not a health problem, so it must not be reported
-                # as one. Every station on the disk would fail the same way.
-                self.detail = self.fight.detail
-                return Hunted.BROKEN
             if outcome is Fought.KILLED:
                 self.kills += 1
                 dry = 0
@@ -214,7 +209,9 @@ class Hunt:
         if self.loot is None:
             return
         started = time.monotonic()
-        outcome = self.loot.run()
+        # The counter is the first thing worth believing about a corpse, and `Hunt` is
+        # what knows how to ask for it.
+        outcome = self.loot.run(progress=self.progress)
         if outcome is not Looted.NO_CORPSE:
             self.say(f"    loot: {outcome.value}"
                      + (f" - {self.loot.detail}" if self.loot.detail else ""))

@@ -48,7 +48,7 @@ from jev.clients.fight import Fight  # noqa: E402
 from jev.clients.interact import GOSSIP_YARDS, Interact, Result  # noqa: E402
 from jev.clients.loot import Loot  # noqa: E402
 from jev.clients.recover import Recover, Recovered  # noqa: E402
-from jev.clients.repair import Repair  # noqa: E402
+from jev.clients.repair import Repair, Repaired  # noqa: E402
 from jev.clients.rest import Rest  # noqa: E402
 from jev.guide import playhead  # noqa: E402
 from jev.guide.coords import bounds_by_radio_id, map_to_world  # noqa: E402
@@ -295,10 +295,17 @@ def main() -> int:
         return False
 
     last_node = None
-    # Bounded, because `too_poor` does not get better by walking back. Two attempts and
-    # the run carries on and fails honestly wherever the gear lets it down.
-    MAX_REPAIR_TRIES = 2
-    repair_tries = 0
+    # What the purse held the last time a repair could not be paid for.
+    #
+    # A `too_poor` does not get better by walking back, so the gate is money rather than a
+    # try count: after one, nothing goes to a merchant again until there is more money
+    # than there was when it failed. Between those, the loop fights with what it has -
+    # at zero durability a death costs no further durability, so refusing to fight
+    # protects nothing and only builds the deadlock it was meant to avoid.
+    #
+    # `money_copper` is quantised to 100 (the strip paints silver), so a rise has to be
+    # at least a silver to be seen. That is the right order of magnitude for a repair.
+    broke_at: int | None = None
     repeats = 0
     deadline = time.monotonic() + args.run_for
 
@@ -370,11 +377,12 @@ def main() -> int:
         if not _settle_combat(state):
             continue          # something is hitting us; that is the whole pass
 
-        if repair.needed() and repair_tries < MAX_REPAIR_TRIES:
-            # Before health, because a broken weapon loses the fight that the health was
+        purse = state.bags.money_copper if state is not None else None
+        richer = broke_at is None or (purse is not None and purse > broke_at)
+        if repair.needed() and richer:
+            # Ahead of health, because a broken weapon loses the fight the health was
             # being saved for. This is the other half of dying: every death costs 10%
             # durability, and a character that never repairs eventually punches wolves.
-            repair_tries += 1
             worst = repair.before
             print("\n--- gear is worn; repairing before anything else ---")
             started = time.monotonic()
@@ -386,6 +394,10 @@ def main() -> int:
             journal.skill("REPAIR", outcome_of(outcome.ok), started_at=started,
                           state=state, detail=f"{outcome.value}: {repair.detail}"
                           if repair.detail else outcome.value)
+            if outcome is Repaired.TOO_POOR:
+                broke_at = purse if purse is not None else 0
+                print(f"  not going back to a merchant until there is more than "
+                      f"{broke_at} copper")
             continue
 
         if not _fit_to_travel(state):
