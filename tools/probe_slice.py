@@ -330,3 +330,7 @@ def main() -> int:
     journal.close()
     client.close()
     return rc
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

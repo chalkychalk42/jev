@@ -84,12 +84,18 @@ class Journal:
               state: State | None = None, step_id: str | None = None,
               detail: str | None = None,
               armed_by: ArmedBy = ArmedBy.TRACKER) -> None:
-        """How one armed skill ended, and how long it took."""
+        """How one armed skill ended, and how long it took.
+
+        `started_at` is a `time.monotonic()` reading and the duration is measured against
+        the same clock. Mixing it with `time.time()` produced a first row claiming a
+        skill took fifty-six years, which is the kind of number a corpus keeps forever.
+        The row's `t` stays wall-clock, because that is what joins to everything else.
+        """
         try:
             self.recorder.skill_result(SkillResultRow(
                 run_id=self.run_id, client_id=self.client_id, t=time.time(),
                 tick_id=self.recorder._tick_id, skill=name, armed_by=armed_by,
-                outcome=outcome, duration_s=max(0.0, time.time() - started_at),
+                outcome=outcome, duration_s=max(0.0, time.monotonic() - started_at),
                 situation_key=situation_key(state) if state is not None else "",
                 step_id=step_id, detail=detail,
             ))

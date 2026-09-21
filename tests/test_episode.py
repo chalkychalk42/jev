@@ -159,3 +159,22 @@ def test_a_decision_records_the_artifacts_it_produced():
 
 def test_a_decision_with_no_artifacts_is_the_default_not_an_error():
     assert _decision("r").artifacts == []
+
+
+def test_a_skill_duration_uses_one_clock():
+    """A first live row claimed a skill took fifty-six years: the caller passed
+    `time.monotonic()` and the journal subtracted it from `time.time()`. A corpus keeps
+    a number like that forever."""
+    import tempfile
+    import time as _t
+
+    from jev.learn.episode import Recorder, SkillOutcome, read
+    from jev.run.journal import Journal
+
+    with tempfile.TemporaryDirectory() as d:
+        j = Journal(Recorder(root=d), client_id="t")
+        j.skill("FIGHT", SkillOutcome.SUCCEEDED, started_at=_t.monotonic() - 2.0)
+        j.close()
+        row = read(j.recorder.dir / "skills.jsonl")[0]
+        assert 1.5 < row["duration_s"] < 10.0, row["duration_s"]
+        assert row["t"] > 1_600_000_000, "t should stay wall-clock for joining"
