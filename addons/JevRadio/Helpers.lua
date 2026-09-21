@@ -260,6 +260,57 @@ local function DURABILITY_MIN()
     return worst
 end
 
+-- --------------------------------------------------------------------- facing
+
+-- `GetPlayerFacing` arrives in 3.0 and this is 2.4.3, so DECISIONS V17 concluded there
+-- was no facing at all and navigation has been closed-loop ever since: take a heading
+-- from a position delta while moving, turn for angle/turn_rate, re-measure.
+--
+-- The minimap knows. It draws a player arrow as a Model, and a Model has `GetFacing`.
+-- (XiconQoo/AVR-TBC, Core.lua, does exactly this.) The arrow is found by its model path
+-- rather than by frame name, because the name is not guaranteed and the path is what it
+-- is: `Interface\Minimap\MinimapArrow`.
+--
+-- **Which object carries the angle depends on a client setting.** With `rotateMinimap`
+-- off the map is north-up and the arrow turns to show facing. With it on, the map turns
+-- and the arrow is pinned pointing up, so the arrow reads a constant and the rotation is
+-- on the minimap itself. Both are asked here and the first that answers wins, because
+-- guessing which one a machine is configured for is how this comes back as a silent nil.
+local arrowCache = nil
+
+local function minimapArrow()
+    if arrowCache and arrowCache.GetFacing then return arrowCache end
+    arrowCache = nil
+    if not Minimap or not Minimap.GetChildren then return nil end
+    local kids = { Minimap:GetChildren() }
+    for i = 1, table.getn(kids) do
+        local f = kids[i]
+        if f and f.GetModel and f.GetFacing then
+            local ok, path = pcall(f.GetModel, f)
+            if ok and type(path) == "string"
+                    and string.find(string.lower(path), "minimaparrow", 1, true) then
+                arrowCache = f
+                return f
+            end
+        end
+    end
+    return nil
+end
+
+local function PLAYER_FACING()
+    if GetPlayerFacing then return GetPlayerFacing() end   -- 3.0+, and free if it lands
+    local arrow = minimapArrow()
+    if arrow then
+        local ok, facing = pcall(arrow.GetFacing, arrow)
+        if ok and type(facing) == "number" then return facing end
+    end
+    if Minimap and Minimap.GetFacing then
+        local ok, facing = pcall(Minimap.GetFacing, Minimap)
+        if ok and type(facing) == "number" then return facing end
+    end
+    return nil
+end
+
 -- --------------------------------------------------------------------- stock frames
 
 -- The button that moves a quest frame forward, in screen pixels.
@@ -647,6 +698,7 @@ JevRadioHelpers = {
     nameid = nameid,
     fnv1a16 = fnv1a16,
     ZONE_ID = ZONE_ID,
+    PLAYER_FACING = PLAYER_FACING,
     BAG_FREE = BAG_FREE,
     DURABILITY_MIN = DURABILITY_MIN,
     ADVANCE_BUTTON = ADVANCE_BUTTON,
