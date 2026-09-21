@@ -671,7 +671,7 @@ CLIENT_API = frozenset({
     "UnitIsDead", "UnitIsGhost", "UnitExists", "UnitName", "UnitReaction",
     "UnitClassification", "UnitIsUnit", "UnitOnTaxi", "UnitIsAFK",
     "IsMounted", "IsSwimming", "IsFalling", "IsResting", "IsStealthed", "IsIndoors",
-    "GetPlayerFacing", "GetPlayerMapPosition", "GetMoney", "CheckInteractDistance",
+    "GetPlayerFacing", "GetPlayerMapPosition", "GetCorpseMapPosition", "GetMoney", "CheckInteractDistance",
     "LootFrame", "GossipFrame", "MerchantFrame", "QuestFrame", "ClassTrainerFrame",
     "MailFrame",
 })
@@ -854,6 +854,7 @@ def test_an_impossible_level_is_refused_rather_than_carried():
 
 LIVE = pathlib.Path(__file__).parent / "fixtures" / "live-northshire-1600x900.npy"
 GHOST = pathlib.Path(__file__).parent / "fixtures" / "live-ghost-elwynn.npz"
+GHOST_LIVE = pathlib.Path(__file__).parent / "fixtures" / "live-ghost-northshire.npz"
 
 
 @pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")
@@ -935,15 +936,33 @@ def test_the_strip_reads_while_the_character_is_a_ghost():
     screen pixel-exact.
 
     The bot went blind precisely when it was a ghost and needed to find its corpse, so
-    this frame keeps a slab of the shaded world in it on purpose."""
+    this frame keeps a slab of the shaded world in it on purpose. Recorded before schema
+    6: its pixels are the evidence, so `locate` is what it is asked."""
     frame = np.load(GHOST)["frame"]
     left, right = radio_frame._marker_masks(frame)
     assert left.sum() < 2000 and right.sum() < 2000, "the ghost world is flooding a mask"
 
+    grid = radio_frame.locate(frame)
+    assert grid is not None, "both markers are on screen; locate must find them"
+
+
+def test_a_ghost_reads_its_own_corpse_off_the_strip():
+    """The live half of the test above, on a harder frame: a ghost in Northshire with the
+    camera pitched into the ground, so the shaded world fills it corner to corner. Five
+    thousand pixels clear the hue test here against two thousand in Elwynn, and the strip
+    still decodes — which is the claim that matters, since the mask count is only ever a
+    proxy for whether the candidate search survives.
+
+    `pos.corpse_mx/my` is the point of the frame. Recovery used to guess the corpse from
+    the node the run was working, and this character died 240 yards from that node."""
+    frame = np.load(GHOST_LIVE)["frame"]
     reading = radio_frame.read(frame)
     assert reading.ok, f"{reading.fault}: {reading.detail}"
-    assert reading.values["vitals.ghost"] is True
-    assert reading.values["vitals.hp"] < 0.1
+    v = reading.values
+    assert v["schema"] == SCHEMA
+    assert v["vitals.ghost"] is True
+    assert v["vitals.hp"] < 0.1
+    assert 0.0 < v["pos.corpse_mx"] < 1.0 and 0.0 < v["pos.corpse_my"] < 1.0
 
 
 def test_a_marker_must_be_saturated_not_merely_the_right_hue():
@@ -972,13 +991,19 @@ def test_the_strip_reads_against_a_saturated_blue_banner():
     world, from the opposite direction.
 
     Measured on this frame: the banner's `|G-B|/max(G,B)` is 0.55 and the marker's is 0.
-    The fixture keeps the banner in it on purpose."""
+    The fixture keeps the banner in it on purpose.
+
+    Recorded before schema 6, so its payload no longer decodes against this field table
+    and `locate` is what it is asked. That is not a weaker test: the banner never
+    corrupted a payload, it drowned the candidate search, and `locate` is the candidate
+    search. Re-recording it would need the character stood in the Abbey again."""
     frame = np.load(BANNER)["frame"]
     _left, right = radio_frame._marker_masks(frame)
     assert right.sum() < 20000, "the banner is flooding the cyan mask"
 
-    reading = radio_frame.read(frame)
-    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    grid = radio_frame.locate(frame)
+    assert grid is not None, "the strip is in this frame; the banner must not hide it"
+    assert grid.cols == GRID_COLS and grid.rows == GRID_ROWS
 
 
 def test_a_marker_needs_its_two_high_channels_to_match():

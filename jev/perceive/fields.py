@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 5                                    # bump when the field table changes shape
+SCHEMA = 6                                    # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -156,6 +156,21 @@ FIELDS: tuple[Field, ...] = (
     Field("pos.facing", 10, Kind.ANGLE, "return angle(GetPlayerFacing())",
           "radians, 0 = +X increasing toward +Y; do not negate dy"),
     _tri("pos.indoors", "return tri(IsIndoors())"),
+    # Where the body is, from the game rather than from a guess. A ghost that has to
+    # infer its corpse from the node it was working is a ghost forever the moment it dies
+    # on the way somewhere: seven stations around such a guess, every one arrived at, and
+    # the resurrect prompt never appeared because the body was a hundred yards north.
+    # Same coordinate space as mx/my, and 0,0 for the same reason - so the two fields
+    # are readable together or not at all.
+    Field("pos.corpse_mx", 14, Kind.FRAC,
+          "local x = select(1, GetCorpseMapPosition())\n"
+          "if not x or x == 0 then return nil end\n"
+          "return frac(x)",
+          "nil unless dead or a ghost, and only on the map the corpse is actually on"),
+    Field("pos.corpse_my", 14, Kind.FRAC,
+          "local _, y = GetCorpseMapPosition()\n"
+          "if not y or y == 0 then return nil end\n"
+          "return frac(y)"),
 
     # -- vitals ------------------------------------------------------------------
     Field("vitals.hp", 10, Kind.FRAC,

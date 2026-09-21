@@ -8,6 +8,7 @@ Three facts make it simple, and all three come from the radio rather than from a
 
     vitals.dead      the character is down; the release popup is up
     vitals.ghost     released, and standing at the graveyard
+    pos.corpse_mx/my where the body is, straight from the game
     ui.advance_x/y   where the popup's button is, painted by the addon
 
 That third one is the same field the quest frames use, and deliberately so. "Release
@@ -18,10 +19,18 @@ because a StaticPopup is also how the game asks whether to destroy an item.
 
 Where the corpse is
 -------------------
-Read before releasing. A dead character lies where it fell and the strip still paints its
-position, so the corpse is simply where we were standing a moment ago. After releasing,
-that is no longer true — the ghost is at the graveyard — and there is no API in 2.4.3 that
-will give the corpse back. Recording it first is the whole trick.
+`GetCorpseMapPosition()`, painted as `pos.corpse_mx/my`. It answers while dead **and**
+while a ghost, in the same coordinates as `pos.mx/my`, and it is the only source here that
+is not a guess.
+
+This file used to say there was no such API, and recovered by noting where the character
+was standing before it released. That works right up to the first auto-release, after
+which the position is gone and the caller has to invent one — usually the node the run was
+working. A ghost then walked to a node it had died a hundred and fifty yards short of,
+found no body, and reported `still_ghost`; thirteen passes and a ring of seven stations
+around the guess all arrived correctly at the wrong place. The remembered position is kept
+as a fallback for a strip that will not paint, and the caller's guess behind that, but
+neither is ever preferred to the game's own answer.
 """
 
 from __future__ import annotations
@@ -43,6 +52,20 @@ class Recovered(StrEnum):
     @property
     def ok(self) -> bool:
         return self is Recovered.ALIVE
+
+
+def _painted(values: dict | None) -> tuple[float, float] | None:
+    """The corpse position the strip is carrying, if it is carrying one.
+
+    Both halves or neither: a corpse at `(x, None)` is a decode that went wrong, and
+    walking to it would be walking to the equator.
+    """
+    if not values:
+        return None
+    mx, my = values.get("pos.corpse_mx"), values.get("pos.corpse_my")
+    if mx is None or my is None:
+        return None
+    return (float(mx), float(my))
 
 
 @dataclass
@@ -67,7 +90,7 @@ class Recover:
         is at the graveyard and the body's position is gone for good. A caller that saw
         the death knows where it happened and can hand it back.
         """
-        self.corpse = corpse
+        self.corpse = corpse           # the caller's guess, until the strip says better
         self.detail = ""
 
         v = self.read()
@@ -76,16 +99,23 @@ class Recover:
         if v.get("vitals.dead") is not True and v.get("vitals.ghost") is not True:
             return Recovered.NOT_DEAD
 
+        self.corpse = _painted(v) or self.corpse
         if v.get("vitals.ghost") is not True:
-            # Still at the corpse, so this is the only moment its position is readable.
-            if v.get("pos.mx") is None:
+            # Lying where we fell, so our own position is a corpse position too - but
+            # only as a fallback, and only if the game is not already telling us.
+            if self.corpse is None and v.get("pos.mx") is None:
                 self.detail = "dead, but the strip is not painting a position"
                 return Recovered.NO_CORPSE
-            self.corpse = (v["pos.mx"], v["pos.my"])   # read before releasing
+            if self.corpse is None:
+                self.corpse = (v["pos.mx"], v["pos.my"])
             if not self._press(v):
                 self.detail = "dead, but no popup button is painted to release with"
                 return Recovered.NO_BUTTON
             time.sleep(settle_s)
+            after = self.read()
+            if after is not None:
+                # Releasing is what makes the corpse a corpse; ask again now that it is.
+                self.corpse = _painted(after) or self.corpse
 
         if self.corpse is None:
             self.detail = ("a ghost with no corpse position; it auto-released before "
@@ -101,6 +131,7 @@ class Recover:
                 return Recovered.BLIND
             if v.get("vitals.dead") is not True and v.get("vitals.ghost") is not True:
                 return Recovered.ALIVE
+            self.corpse = _painted(v) or self.corpse
             self._press(v)
             time.sleep(1.0)
 

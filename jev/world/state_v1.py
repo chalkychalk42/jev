@@ -170,7 +170,18 @@ class Pos(Frozen):
     my: Fraction | None = None
     facing: float | None = None       # radians; see module docstring, do not negate dy
     indoors: Tri = None
+    # Where the body is, in the same space as mx/my. Painted only while dead or a ghost,
+    # and the single thing that turns a corpse run from a guess into a walk.
+    corpse_mx: Fraction | None = None
+    corpse_my: Fraction | None = None
     world: tuple[float, float, float] | None = None  # yards; derived, see docstring
+
+    @property
+    def corpse(self) -> tuple[float, float] | None:
+        """The body's map point, or `None` if the game is not offering one."""
+        if self.corpse_mx is None or self.corpse_my is None:
+            return None
+        return (float(self.corpse_mx), float(self.corpse_my))
 
 
 class Vitals(Frozen):
