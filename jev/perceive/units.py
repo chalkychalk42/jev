@@ -1,38 +1,19 @@
-"""Where units are on screen — one solver, every NPC and every mob.
+"""Shared world-geometry proposals for living units and corpses.
 
-This exists because there is no way to ask 2.4.3 where a unit is. `INTERACTTARGET` and
-`InteractUnit` both arrived in 3.0; `/follow` refuses NPCs; and aiming the character at a
-node's coordinates fails because a node is a *spawn point* and units wander — at five
-yards, a few yards of drift is forty degrees of error. Own facing is readable (V29) and
-does not help: it says which way the character points, not where anything else is.
+The client paints selection rings and nameplate health bars. Colour components with
+measured shape and fill can suggest those anchors, while preserving their actual pixel
+bounds. Bright grass also satisfies these tests: neither a component nor a complete
+ring/bar pair establishes the target's location.
 
-So the unit's position is read off the screen. Not by recognising models, which would need
-a class per creature and would still lose to armour, mounts and camera angle, but from the
-two things the client draws around **every** unit in the game, identically:
+``candidates`` returns bounded hypotheses instead of assigning identity to the largest
+component. ``revalidate`` checks an explicit point against freshly observed geometry.
+Living proposals require a separated bar/ring bracket; corpse proposals retain the
+measured point on the ring for a prone model. Missing anchors remain missing evidence.
 
-  * the **selection ring** — the coloured ellipse under whatever is targeted. Exactly one
-    exists, it sits at the unit's feet, and its colour is the unit's reaction.
-  * the **nameplate health bar** — a solid horizontal bar above any unit with a plate.
-
-Both come out of a single colour-mask and connected-components pass, and **fill ratio
-separates them**: a ring is hollow and a bar is not. Measured on live frames —
-
-    ring        59x33   aspect 1.79   fill 0.27
-    nameplate  145x5    aspect 29     fill 0.99
-    interface  131x4    aspect 33     fill 0.90   (fixed y, excluded by region)
-
-Nothing here knows what a kobold looks like. It knows what the *client* draws, which is
-the same for a level-1 rabbit and a raid boss.
-
-Failure is a fact, not a fallback
----------------------------------
-No usable ring means this frame cannot bracket the target: its feet may be occluded
-even when its plate is visible. That is the same rule as `Interact.preflight`: the
-reason a click is refused is worth more than the click.
-
-Known limit from the 22 September wolf run: yellow grass can also pass these component
-tests and pair with a real plate. A complete pair is therefore not proof of ring identity.
-The captured merchant views work; unattended wolf engagement remains unverified.
+Both contracts require exact fresh hover ownership and an observed action outcome in
+their caller. Hover can match a nameplate, and geometry cannot prove a body hitbox.
+The legacy ``find`` and ``_find_ring`` remain for compatibility with historical replay;
+new action callers must use the untrusted proposal contract.
 """
 
 from __future__ import annotations
@@ -55,10 +36,10 @@ class RingColour(StrEnum):
     bright **yellow** ring, because WoW colours unfriendly and neutral the same way a
     camera cannot tell apart.
 
-    So this answers one question — *where is the unit on screen* — and identity comes from
-    `target.name_id` after the click, which is the only source that cannot be wrong about
-    it. A ring matched by the "wrong" colour costs nothing, because nothing downstream
-    believes the colour.
+    This supplies colour hypotheses. The radio supplies target identity, and exact
+    mouseover-to-target equality supplies pointer ownership; a shared name alone cannot
+    distinguish two units. None of those observations establishes the actual hitbox or
+    proves an action worked.
     """
 
     GREEN = "green"      # friendly
@@ -194,10 +175,18 @@ BAR_MIN_H = 2
 # Generous, because the ring's centroid is pulled sideways by grass occluding one arc.
 PLATE_PAIR_MAX_DX = 140
 
+# Red has measured ring proposals, including a wolf whose bar remained yellow. It is
+# included only in the explicitly untrusted proposal API; acquisition and the legacy
+# locator retain their existing measured defaults.
+PROPOSAL_COLOURS = (RingColour.GREEN, RingColour.YELLOW, RingColour.RED)
+PROPOSAL_LIMIT = 24
+Bounds = tuple[int, int, int, int]
+Point = tuple[int, int]
+
 
 @dataclass(frozen=True)
 class Ring:
-    """The selection ring under the current target: its feet, on screen."""
+    """A ring-shaped colour component; neither shape nor area establishes identity."""
 
     cx: float
     cy: float
@@ -205,6 +194,7 @@ class Ring:
     h: int
     colour: RingColour
     area: int
+    bounds: Bounds | None = None
 
 
 @dataclass(frozen=True)
@@ -215,6 +205,8 @@ class Plate:
     cy: float
     w: int
     colour: RingColour
+    h: int = 1
+    bounds: Bounds | None = None
 
     def unit_below(self, drop: float = 0.55) -> tuple[int, int]:
         """Roughly where the unit is, below its plate. Bars are wider than rings for the
@@ -224,7 +216,7 @@ class Plate:
 
 @dataclass(frozen=True)
 class Sighting:
-    """A unit found on screen: its feet, its head, and where to click it."""
+    """A possible living bracket. Geometry cannot prove ownership or a body hitbox."""
 
     ring: Ring
     plate: Plate
@@ -234,6 +226,29 @@ class Sighting:
     def colour(self) -> RingColour:
         """What the client drew, not who the unit is. See `RingColour`."""
         return self.ring.colour
+
+    def admits(self, point: Point) -> bool:
+        """Whether a point is inside this measured bar-to-ring gap.
+
+        Old hand-authored fixtures remain constructible, but absent component bounds
+        cannot authorize this check. Excluding other bars and the interface additionally
+        requires the complete current frame; see ``revalidate``.
+        """
+        if self.plate.bounds is None or self.ring.bounds is None:
+            return False
+        left, _, right, bottom = self.plate.bounds
+        return left <= point[0] < right and bottom <= point[1] < self.ring.bounds[1]
+
+
+@dataclass(frozen=True)
+class CorpseSighting:
+    """A possible point on a ring in the measured prone pose, without identity."""
+
+    ring: Ring
+    point: Point
+
+    def admits(self, point: Point) -> bool:
+        return self.ring.bounds is not None and _contains(self.ring.bounds, point)
 
 
 def mask_for(frame: np.ndarray, colour: RingColour) -> np.ndarray:
@@ -305,17 +320,33 @@ def _rings(frame: np.ndarray, colours: tuple[RingColour, ...]) -> list[Ring]:
     rings = []
     for colour in colours:
         for blob in _blobs(mask_for(frame, colour)):
-            if blob.area < RING_MIN_AREA or not _outside_interface(blob, frame.shape[:2]):
-                continue
-            aspect = blob.w / max(1.0, blob.h)
-            fill = blob.area / max(1.0, blob.w * blob.h)
-            if not (RING_ASPECT[0] <= aspect <= RING_ASPECT[1]):
-                continue
-            if fill > RING_FILL_MAX:
-                continue        # solid: a bar, or an icon, not a ring
-            rings.append(Ring(cx=blob.cx, cy=blob.cy, w=int(blob.w), h=int(blob.h),
-                              colour=colour, area=blob.area))
+            if (ring := _ring_component(blob, colour, frame.shape[:2])) is not None:
+                rings.append(ring)
     return rings
+
+
+def _ring_component(blob: _Blob, colour: RingColour,
+                    shape: tuple[int, int]) -> Ring | None:
+    if blob.area < RING_MIN_AREA or not _outside_interface(blob, shape):
+        return None
+    aspect = blob.w / max(1.0, blob.h)
+    fill = blob.area / max(1.0, blob.w * blob.h)
+    if not (RING_ASPECT[0] <= aspect <= RING_ASPECT[1]) or fill > RING_FILL_MAX:
+        return None
+    return Ring(cx=blob.cx, cy=blob.cy, w=int(blob.w), h=int(blob.h),
+                colour=colour, area=blob.area, bounds=blob.bounds)
+
+
+def _plate_component(blob: _Blob, colour: RingColour,
+                     shape: tuple[int, int]) -> Plate | None:
+    if blob.w < BAR_MIN_W or blob.h < BAR_MIN_H or not _outside_interface(blob, shape):
+        return None
+    aspect = blob.w / max(1.0, blob.h)
+    fill = blob.area / max(1.0, blob.w * blob.h)
+    if aspect < BAR_ASPECT_MIN or fill < BAR_FILL_MIN:
+        return None
+    return Plate(cx=blob.cx, cy=blob.cy, w=int(blob.w), colour=colour,
+                 h=int(blob.h), bounds=blob.bounds)
 
 
 def plate_for(ring: Ring, plates: list[Plate]) -> Plate | None:
@@ -352,12 +383,161 @@ def find_plates(frame: np.ndarray,
     rules = _RULES if selected else _PLATE_RULES
     for colour in colours:
         for blob in _blobs(rules[colour].mask(frame)):
-            if (blob.w < BAR_MIN_W or blob.h < BAR_MIN_H
-                    or not _outside_interface(blob, frame.shape[:2])):
-                continue
-            aspect = blob.w / max(1.0, blob.h)
-            fill = blob.area / max(1.0, blob.w * blob.h)
-            if aspect >= BAR_ASPECT_MIN and fill >= BAR_FILL_MIN:
-                out.append(Plate(cx=blob.cx, cy=blob.cy, w=int(blob.w), colour=colour))
+            if (plate := _plate_component(blob, colour, frame.shape[:2])) is not None:
+                out.append(plate)
     out.sort(key=lambda p: -p.w)
     return out
+
+
+def _contains(bounds: Bounds, point: Point) -> bool:
+    left, top, right, bottom = bounds
+    return left <= point[0] < right and top <= point[1] < bottom
+
+
+def _point_clear(point: Point, frame: np.ndarray, plates: list[Plate]) -> bool:
+    """Exclude measured bar surfaces and the stock interface from a proposed point."""
+    x, y = point
+    height, width = frame.shape[:2]
+    if not (0 <= x < width and 0 <= y < height):
+        return False
+    if any(x0 <= x / width <= x1 and y0 <= y / height <= y1
+           for x0, y0, x1, y1 in _UI_ZONES):
+        return False
+    return not any(p.bounds is not None and _contains(p.bounds, point) for p in plates)
+
+
+def _compatible(ring: Ring, plate: Plate) -> bool:
+    return (ring.colour == plate.colour
+            or (ring.colour is RingColour.RED and plate.colour is RingColour.YELLOW))
+
+
+def _observations(frame: np.ndarray, colours: tuple[RingColour, ...]
+                  ) -> tuple[list[Ring], list[Plate], list[Plate]]:
+    """Share component passes for a single frame, with no stale cross-frame cache."""
+    rings, selected, excluded = [], [], []
+    shape = frame.shape[:2]
+    for colour in dict.fromkeys((*PROPOSAL_COLOURS, *colours)):
+        for blob in _blobs(mask_for(frame, colour)):
+            if (colour in colours
+                    and (ring := _ring_component(blob, colour, shape)) is not None):
+                rings.append(ring)
+            if (plate := _plate_component(blob, colour, shape)) is not None:
+                if colour in colours:
+                    selected.append(plate)
+                if colour is not RingColour.GREEN:
+                    excluded.append(plate)
+    # The only separate pass is the measured faded-green acquisition mask. Yellow
+    # and red use exactly the same components for both bar exclusion and proposals.
+    for blob in _blobs(_PLATE_RULES[RingColour.GREEN].mask(frame)):
+        if (plate := _plate_component(blob, RingColour.GREEN, shape)) is not None:
+            excluded.append(plate)
+    return rings, selected, excluded
+
+
+def _living_brackets(frame: np.ndarray, colours: tuple[RingColour, ...],
+                     plate: Plate | None) -> tuple[list[Sighting], list[Plate]]:
+    # Faded neighbouring bars still cover the world. They exclude a point even though
+    # the selected target's bar uses the stricter mask when proposing its bracket.
+    rings, plates, excluded = _observations(frame, colours)
+    if plate is not None:
+        plates = [p for p in plates if p.colour == plate.colour
+                  and abs(p.cx - plate.cx) <= min(p.w, plate.w) / 2]
+        if len(plates) != 1:
+            return [], excluded
+
+    out = []
+    for ring in rings:
+        if ring.bounds is None:
+            continue
+        for current in plates:
+            if current.bounds is None or not _compatible(ring, current):
+                continue
+            # Full extrema matter: the centroid of a hollow badge beside a bar can
+            # sit just below its centroid while the components still overlap.
+            ring_top = ring.bounds[1]
+            left, _, right, bar_bottom = current.bounds
+            if ring_top <= bar_bottom or not left <= ring.cx < right:
+                continue
+            point = (round(ring.cx), (bar_bottom + ring_top) // 2)
+            sighting = Sighting(ring, current, point)
+            if sighting.admits(point):
+                out.append(sighting)
+
+    # Compact brackets get the first hover measurement. This orders hypotheses; it
+    # neither promotes the largest component to identity nor claims the first is real.
+    out.sort(key=lambda s: (s.ring.bounds[1] - s.plate.bounds[3],
+                            s.plate.cy, s.ring.cx, s.colour))
+    return out, excluded
+
+
+def candidates(frame: np.ndarray,
+               colours: tuple[RingColour, ...] = PROPOSAL_COLOURS, *,
+               plate: Plate | None = None, limit: int = PROPOSAL_LIMIT
+               ) -> tuple[Sighting, ...]:
+    """Bounded possible living locations, requiring fresh ownership before input.
+
+    A proposal needs separated component rectangles and a point below its paired bar,
+    above the ring, within the bar's horizontal span, and outside every other detected
+    bar and stock interface region. Bright terrain can still satisfy all of these.
+    Neither a proposal nor its rank authorizes a click. Bar bounds describe the colour
+    surface, not every native nameplate ornament or the unit's model.
+
+    The limit bounds downstream measurement work. A truncated set, an empty set or
+    rejection of all proposals does not establish that the target is absent.
+    """
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        raise ValueError("candidate limit must be a positive integer")
+    brackets, plates = _living_brackets(frame, colours, plate)
+    return tuple(s for s in brackets if _point_clear(s.torso, frame, plates))[:limit]
+
+
+def revalidate(frame: np.ndarray, point: Point, *, plate: Plate | None = None,
+               colours: tuple[RingColour, ...] = PROPOSAL_COLOURS) -> Sighting | None:
+    """Find a current bracket containing the explicit point, without identity claims.
+
+    Recompute from the newly observed pixels. An earlier sighting or an earlier hover
+    match is not retained as permission when the model, camera or labels have moved.
+    The returned ``torso`` remains the fresh bracket's proposal; ``point`` is the point
+    this function checked, which need not equal that midpoint.
+    """
+    brackets, plates = _living_brackets(frame, colours, plate)
+    if not _point_clear(point, frame, plates):
+        return None
+    return next((s for s in brackets if s.admits(point)), None)
+
+
+def corpse_candidates(frame: np.ndarray,
+                      colours: tuple[RingColour, ...] = PROPOSAL_COLOURS, *,
+                      limit: int = PROPOSAL_LIMIT) -> tuple[CorpseSighting, ...]:
+    """Bounded prone-pose hypotheses; death and exact ownership come from telemetry.
+
+    Retain the existing measured corpse aim on the ring, a quarter of its height above
+    its colour centroid. This is a candidate within observed bounds, never a standing
+    body estimate or permission to loot a colour component.
+    """
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        raise ValueError("candidate limit must be a positive integer")
+    rings, _, plates = _observations(frame, colours)
+    out = []
+    for ring in rings:
+        point = (round(ring.cx), round(ring.cy - round(ring.h * 0.25)))
+        sighting = CorpseSighting(ring, point)
+        if sighting.admits(point) and _point_clear(point, frame, plates):
+            out.append(sighting)
+    # Screen order is deterministic and does not assign identity by component area.
+    out.sort(key=lambda s: (s.point[1], s.point[0], s.ring.colour))
+    return tuple(out[:limit])
+
+
+def revalidate_corpse(frame: np.ndarray, point: Point, *,
+                      colours: tuple[RingColour, ...] = PROPOSAL_COLOURS
+                      ) -> CorpseSighting | None:
+    """Require the explicit point still to be inside a current ring component's bounds."""
+    rings, _, plates = _observations(frame, colours)
+    if not _point_clear(point, frame, plates):
+        return None
+    for ring in rings:
+        sighting = CorpseSighting(ring, point)
+        if sighting.admits(point):
+            return sighting
+    return None

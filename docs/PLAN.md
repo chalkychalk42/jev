@@ -1,4 +1,9 @@
 # JEV — TBC Private-Server Leveling Agent
+
+Implementation update, 22 September 2026: the approved
+[visual teaching loop](TEACHING_LOOP.md) now defines teacher-led play and gradual learned
+handover. Its control and evaluation contract supersedes the high-level-only teacher
+split in this original planning document.
 ## Ultimate build plan (vision + virtual input, guide-directed, multi-client distillation)
 
 Status: planning document for a custom TBC private-server hackathon  

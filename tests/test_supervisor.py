@@ -81,6 +81,74 @@ def test_modal_cancels_before_a_replacement_can_start(tmp_path):
         supervisor.close()
 
 
+def test_capable_modal_wait_acknowledges_closed_popup_in_combat_but_death_still_preempts(tmp_path):
+    rt = runtime(tmp_path, [seen(0, ui=Ui(modal=True), vitals=Vitals(hp=1, combat=True)),
+                            seen(0.25, ui=Ui(modal=False), vitals=Vitals(hp=1, combat=True)),
+                            seen(0.5, ui=Ui(modal=False), vitals=Vitals(hp=0, dead=True))])
+    body = Body()
+    body.handles_modal = body.executes_wait = True
+    supervisor = Supervisor(rt, body, say=lambda _: None)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        assert worker.arm.decision.skill == "ABORT_WAIT"
+        supervisor.step(0.25)
+        assert worker.completion_observed
+        assert not worker.cancelled.is_set(), "closed popup needs acknowledgement before combat handover"
+        supervisor.step(0.5)
+        assert worker.done.wait(1)
+        assert worker.result.outcome is SkillOutcome.PREEMPTED
+        assert "dead" in worker.result.detail
+        assert body.maximum == 1
+    finally:
+        supervisor.close()
+
+
+def test_modal_capability_does_not_make_travel_immune_to_combat(tmp_path):
+    rt = runtime(tmp_path, [seen(), seen(0.25, vitals=Vitals(hp=1, combat=True))])
+    body = Body()
+    body.handles_modal = body.executes_wait = True
+    body.travelling = True
+    supervisor = Supervisor(rt, body, say=lambda _: None)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        supervisor.step(0.25)
+        assert worker.done.wait(1)
+        assert worker.result.outcome is SkillOutcome.PREEMPTED
+        assert "combat" in worker.result.detail
+    finally:
+        supervisor.close()
+
+
+def test_modal_acknowledgement_does_not_override_guide_failure_edge(tmp_path):
+    from jev.guide.graph import FailEdge, FailWhen
+    from jev.guide.tracker import Tracker
+
+    rt = runtime(tmp_path, [seen(0, ui=Ui(modal=True)), seen(0.25, ui=Ui(modal=False))])
+    first, second = rt.graph.nodes
+    first = first.model_copy(update={"on_fail": (FailEdge(when=FailWhen.TIMEOUT,
+                                                          value=0.2, goto=second.id),)})
+    rt.graph = rt.graph.model_copy(update={"nodes": (first, second)})
+    rt.tracker = Tracker(rt.graph, first.id)
+    body = Body()
+    body.handles_modal = body.executes_wait = True
+    supervisor = Supervisor(rt, body, say=lambda _: None)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        supervisor.step(0.25)
+        assert rt.tracker.step_id == second.id
+        assert worker.done.wait(1)
+        assert worker.result.outcome is SkillOutcome.PREEMPTED
+        assert "playhead changed" in worker.result.detail
+    finally:
+        supervisor.close()
+
+
 def test_combat_interrupts_travel_inside_a_composite(tmp_path):
     rt = runtime(tmp_path, [seen(), seen(0.25, vitals=Vitals(hp=0.8, combat=True))])
     body = Body()

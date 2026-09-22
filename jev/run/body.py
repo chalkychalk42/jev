@@ -20,6 +20,7 @@ from jev.clients.loot import Loot
 from jev.clients.recover import Recover
 from jev.clients.repair import Repair
 from jev.clients.rest import Rest
+from jev.clients.targeting import Targeting
 from jev.clients.vendor import Vendor
 from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
@@ -50,7 +51,8 @@ class LiveBody:
     available = frozenset(HANDLERS)
 
     def __init__(self, client: Client, graph: Graph, *, travel_timeout: float = 180,
-                 hunt_timeout: float = 600, say: Callable[[str], None] = print):
+                 hunt_timeout: float = 600, say: Callable[[str], None] = print,
+                 record_frame: Callable[..., dict] | None = None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
         self.client, self.graph = client, graph
@@ -62,27 +64,44 @@ class LiveBody:
         ox, oy = client.origin
         w, h = client.size
         # Reader checkpoints stop loops which aren't currently sending keys as well.
+        self.targeting = Targeting(client.hid, self._read, read_frame=self._frame,
+                                    window_origin=client.origin, record_frame=record_frame)
         self.interact = Interact(hid=client.hid, bounds=client.bounds, read=self._read,
                                  read_frame=self._frame, read_pos=self._position,
                                  window_centre=(ox + w // 2, oy + h // 2),
-                                 window_origin=client.origin, approach=self._approach)
+                                 window_origin=client.origin, approach=self._approach,
+                                 targeting=self.targeting)
         self.advance = AdvanceQuestFrame(hid=client.hid, read=self._read,
                                         quest_ids=self._quest_ids,
                                         window_origin=client.origin, window_size=client.size)
         self.chooser = ChooseListLine(hid=client.hid, read=self._reading,
                                       window_origin=client.origin, window_size=client.size)
         self.fight = Fight(hid=client.hid, read=self._read, read_frame=self._frame,
-                           window_origin=client.origin, window_centre_x=w // 2)
+                           window_origin=client.origin, window_centre_x=w // 2,
+                           targeting=self.targeting)
         self.rest = Rest(hid=client.hid, read=self._read)
         self.loot = Loot(hid=client.hid, read=self._read, read_frame=self._frame,
-                         window_origin=client.origin)
+                         window_origin=client.origin, targeting=self.targeting)
         self.repair = Repair(hid=client.hid, read=self._read, visit=self._visit_repairer,
                              window_origin=client.origin, window_size=client.size)
         self.recover = Recover(hid=client.hid, read=self._read, walk_to=self._corpse_walk,
                                window_origin=client.origin, window_size=client.size)
-        camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
-        self.interact.level = self.fight.level = self.loot.level = camera.level
+        self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
+        self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
         client.travel.read_pos = self._position
+
+    def has_focus(self) -> bool:
+        """Observe ownership even between skills, when the supervisor is watching."""
+        ready = self.client.hid.ready()
+        if not ready:
+            self.camera.invalidate("client lost focus")
+        return ready
+
+    def reconnect(self, checkpoint, *, env_file=None) -> Result:
+        from jev.run.watchdog import reconnect_client
+
+        self.camera.invalidate("session reconnect")
+        return reconnect_client(self.client, checkpoint, env_file=env_file)
 
     def _read(self):
         self.checkpoint()
@@ -108,7 +127,7 @@ class LiveBody:
         self.arm = arm
         def focused_checkpoint():
             checkpoint()
-            if not self.client.hid.ready():
+            if not self.has_focus():
                 raise FocusLost("client lost focus; release before refocusing")
         self.checkpoint = focused_checkpoint
         self.client.hid.checkpoint = focused_checkpoint
@@ -118,7 +137,7 @@ class LiveBody:
         error = self._parameters()
         if error:
             return Result(SkillOutcome.ABORTED, error, "unsupported")
-        if (not self.client.hid.ready()
+        if (not self.has_focus()
                 and not self.client.focused(FOCUS_QUICK_S, checkpoint=checkpoint)):
             return Result(SkillOutcome.ABORTED, "client refused focus after backoff", "refused")
         self.checkpoint()
@@ -218,7 +237,7 @@ class LiveBody:
             return Result(SkillOutcome.ABORTED, "quest target needs a supported creature identity", "unsupported")
         opened = self.interact.open_on(node.target_name, node_world=node.world, node_map=node.pos)
         if not opened.opened:
-            return Result(SkillOutcome.ABORTED, self.interact.detail, opened.value)
+            return self._result(opened, self.interact.detail)
         reading = self._reading()
         is_list = (reading is not None and reading.values
                    and reading.values.get("ui.advance_x") is None and list_lines(reading))
@@ -312,7 +331,9 @@ class LiveBody:
     def _fight(self, state) -> Result:
         outcome = self.fight.run(None)
         if outcome.ok:
-            self.loot.run(progress=self._progress)
+            looted = self.loot.run(progress=self._progress)
+            if not looted.ok:
+                return self._result(looted, f"post-kill loot: {self.loot.detail}")
         return self._result(outcome, self.fight.detail)
 
     def _loot(self, state) -> Result:

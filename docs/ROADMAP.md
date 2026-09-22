@@ -1,6 +1,13 @@
 Jev: plan from live acceptance to sustained improvement
 ======================================================
 
+**Current implementation:** [the teaching loop](TEACHING_LOOP.md) now provides visual
+teacher actions, independent outcome recording and gradual local capability handover.
+It supersedes the historical assessment below that learning only reproduces the guide.
+The live acceptance gates and shared-mechanism rules remain binding. Offline coverage
+does not establish wolf engagement or a soak; transport readiness and its current quota
+blocker are documented in [TEACHING_TRANSPORT.md](TEACHING_TRANSPORT.md).
+
 Reviewed 22 September 2026 against `97c4829`, the source, all 34 recorded runs and the
 latest Windows acceptance evidence. This document sets the execution order for the next
 work. `ARCHITECTURE.md` remains the architectural authority; `docs/PLAN.md` retains the

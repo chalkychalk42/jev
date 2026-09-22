@@ -36,9 +36,9 @@ def main() -> int:
         print("  /mnt/c/forever-win/Scripts/python.exe tools/probe_window.py")
         return 2
 
-    windows = win32.find_windows("World of Warcraft")
-    if not windows:
-        print("no window whose title contains 'World of Warcraft'")
+    windows = win32.find_game()
+    if len(windows) != 1:
+        print(f"need one verified game window; found {len(windows)}")
         return 1
     print(f"windows found: {len(windows)}")
     for h in windows:

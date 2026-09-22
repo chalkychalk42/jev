@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+
 from jev.clients.fight import Fought
+from jev.clients.loot import Looted
 from jev.clients.rest import Rested
 from jev.run.hunt import DRY_LOOKS, STATIONS, Hunt, Hunted, stations
 from jev.world.state_v1 import StepKind
@@ -315,3 +320,40 @@ def test_a_ghost_stops_the_hunt_instead_of_reporting_a_camp_problem():
     h2, _ = _hunt([Fought.KILLED], [(1, 10)])
     h2.read = lambda: {"vitals.dead": True, "vitals.combat": False, "vitals.hp": 0.0}
     assert h2.run((0.0, 0.0, 0.0), 30.0, timeout_s=5) is Hunted.DIED
+
+
+@pytest.mark.parametrize("outcome, expected", [
+    (Fought.REFUSED, Hunted.REFUSED), (Fought.BLIND, Hunted.BLIND),
+    (Fought.INTERRUPTED, Hunted.INTERRUPTED),
+])
+def test_terminal_fight_evidence_stops_the_hunt_before_another_station(outcome, expected):
+    hunt, walked = _hunt([outcome], [(0, 8)])
+    hunt.fight.detail = "shared body verification stopped"
+    hunt.loot = SimpleNamespace(run=lambda **_: pytest.fail("loot after failed fight"))
+    assert hunt.run((0, 0, 0), 30) is expected
+    assert hunt.fight.calls == 1
+    assert len(walked) == 1
+    assert hunt.detail == "shared body verification stopped"
+
+
+@pytest.mark.parametrize("outcome, expected", [
+    (Looted.REFUSED, Hunted.REFUSED), (Looted.BLIND, Hunted.BLIND),
+    (Looted.INTERRUPTED, Hunted.INTERRUPTED), (Looted.BAGS_FULL, Hunted.BAGS_FULL),
+    (Looted.WINDOW_OPEN, Hunted.WINDOW_OPEN),
+])
+def test_terminal_loot_result_survives_a_successful_kill(outcome, expected):
+    hunt, walked = _hunt([Fought.KILLED], [(0, 1), (1, 1)])
+    attempts = []
+    hunt.loot = SimpleNamespace(run=lambda **_: attempts.append(1) or outcome,
+                                detail="corpse outcome requires attention")
+    assert hunt.run((0, 0, 0), 30) is expected
+    assert hunt.kills == hunt.fight.calls == len(attempts) == len(walked) == 1
+    assert hunt.detail == "loot: corpse outcome requires attention"
+
+
+@pytest.mark.parametrize("outcome", [Looted.TOOK, Looted.NOTHING])
+def test_observed_loot_results_allow_the_next_objective_check(outcome):
+    hunt, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)])
+    hunt.loot = SimpleNamespace(run=lambda **_: outcome, detail="observed")
+    assert hunt.run((0, 0, 0), 30) is Hunted.DONE
+    assert hunt.fight.calls == 1

@@ -350,6 +350,15 @@ class Hid:
 
     # -- mouse ---------------------------------------------------------------
 
+    def cursor_position(self) -> tuple[int, int] | None:
+        """Actual desktop point, including absolute-input rounding or outside movement."""
+        if not self.ready():
+            return None
+        point = win32.POINT()
+        if not win32.user32.GetCursorPos(ctypes.byref(point)):
+            return None
+        return point.x, point.y
+
     def _abs(self, x: int, y: int) -> tuple[int, int]:
         """Screen pixels to the 0..65535 absolute space `SendInput` wants."""
         sw = win32.user32.GetSystemMetrics(0)

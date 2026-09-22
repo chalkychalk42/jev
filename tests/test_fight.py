@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import inspect
 import time
+from itertools import pairwise
+
+import pytest
 
 from jev.clients.fight import (
     CLOSE_BURST_S,
@@ -11,7 +14,6 @@ from jev.clients.fight import (
     DEAD_HP,
     FLEE_HP,
     HEAL_GIVE_UP,
-    LOST_HP,
     MAX_CLOSE_BURSTS,
     MAX_SELECTS,
     MIN_START_HP,
@@ -21,6 +23,7 @@ from jev.clients.fight import (
     Fight,
     Fought,
 )
+from jev.clients.targeting import ClickCode, ClickResult, PaintCode, PaintResult
 from jev.world.combat import GENERIC, Ability, Role, for_class
 
 
@@ -40,9 +43,32 @@ class _Hid:
 
     def click(self, x, y, right=False):
         self.clicks.append((x, y, right))
+        return True
 
 
-A_FRAME = object()   # stands in for pixels; `find` is not what these tests exercise
+A_FRAME = object()   # shared Targeting has its own pixel/hover tests
+
+
+class _Targeting:
+    """A measured-delivery boundary, independent of perception and radio sequencing."""
+
+    def __init__(self, read, hid, action=None):
+        self.read, self.hid = read, hid
+        self.action = action or ClickResult(ClickCode.CLICKED, (710, 438), "delivered", 1)
+        self.requests = []
+        self.paints = 0
+
+    def wait_for_paint(self):
+        self.paints += 1
+        after = self.read()
+        code = PaintCode.FRESH if after is not None else PaintCode.BLIND
+        return PaintResult(code, None, after, "observed post-selection paint")
+
+    def click_selected(self, **request):
+        self.requests.append(request)
+        if self.action.delivered:
+            assert self.hid.click(*self.action.point, right=True) is True
+        return self.action
 
 
 def _fight(frames, hid=None, frame=A_FRAME):
@@ -55,8 +81,9 @@ def _fight(frames, hid=None, frame=A_FRAME):
         state["i"] += 1
         return v
 
-    return Fight(hid=hid or _Hid(), read=read, read_frame=lambda: frame,
-                 window_origin=(10, 38))
+    hid = hid or _Hid()
+    return Fight(hid=hid, read=read, read_frame=lambda: frame,
+                 window_origin=(10, 38), targeting=_Targeting(read, hid))
 
 
 ALIVE = {"target.has": True, "target.hp": 1.0, "target.name_id": 1161,
@@ -97,10 +124,12 @@ def test_engaging_refuses_when_the_unit_cannot_be_seen():
     sighting means no way to face it, and swinging anyway hits whatever the camera is
     pointed at."""
     hid = _Hid()
-    f = Fight(hid=hid, read=lambda: ALIVE, read_frame=lambda: None)
+    targeting = _Targeting(lambda: ALIVE, hid,
+        ClickResult(ClickCode.NOT_VISIBLE, None, "no current body bracket"))
+    f = Fight(hid=hid, read=lambda: ALIVE, read_frame=lambda: None, targeting=targeting)
     assert f.engage() is False
     assert hid.clicks == []
-    assert "face" in f.detail
+    assert "bracket" in f.detail
 
 
 def test_a_vanishing_target_at_full_health_is_not_a_kill():
@@ -111,7 +140,7 @@ def test_a_vanishing_target_at_full_health_is_not_a_kill():
     assert f._settle() is Fought.LOST
     f.last_hp = 0.0
     assert f._settle() is Fought.KILLED
-    assert LOST_HP > DEAD_HP
+    assert DEAD_HP == 0
 
 
 def test_the_rotation_respects_the_global_cooldown_and_casting():
@@ -163,6 +192,7 @@ def test_a_toggle_is_not_pressed_once_damage_is_already_landing():
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
     f.last_hp = 0.6
+    f._damage_seen = True
     for _ in range(3):
         f._rotate(ALIVE)
     assert "1" not in hid.taps
@@ -552,14 +582,16 @@ def test_it_re_aims_when_the_target_stops_taking_damage():
     absence of that is what triggers a re-aim."""
     hid = _Hid()
     engages = []
-    f = _fight([{**ALIVE, "target.hp": 0.6}], hid=hid)
-    f.acquire = lambda name_id, **_: None
+    f = _fight([ALIVE, {**ALIVE, "target.hp": 0.6}], hid=hid)
+    def acquired(name_id, **_):
+        f._damage_mark = 1.0  # health at confirmed selection, before the observed drop
+    f.acquire = acquired
     f.engage = lambda: engages.append(1) or True
-    f.last_hp = 0.6                       # damage has landed; closing is over
     # Real time, because `run` starts the damage clock itself. The target's health never
     # moves in this frame, which is the whole point.
     f.run(timeout_s=REAIM_AFTER_S + 1.5)
     assert len(engages) > 1, "never turned back towards a target it had stopped hitting"
+    assert f.hid.holds == [], "observed damage already ended closing"
 
 
 def test_it_creeps_the_last_yards_rather_than_stopping_or_charging_through():
@@ -587,30 +619,247 @@ def test_it_creeps_the_last_yards_rather_than_stopping_or_charging_through():
     assert any(secs == CLOSE_BURST_S for _k, secs in g.hid.holds), "crept from far away"
 
 
-def test_a_ring_with_no_nameplate_is_still_enough_to_turn_towards():
-    """Watched live: "do not turn to face". `find` refuses when it has a ring and no
-    plate - correctly, because it brackets feet and head to get a torso - but refusing to
-    *turn* because of that leaves the character facing the wrong way with the target in
-    plain sight.
+def test_missing_body_evidence_never_uses_a_raw_ring_or_plate_drop():
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.targeting.action = ClickResult(ClickCode.NOT_VISIBLE, None, "ring without body bracket")
+    assert f.engage() is False
+    assert hid.clicks == []
+    assert f.targeting.requests == [{"kind": "living", "expected_name_id": None, "plate": None}]
 
-    A unit stands on its own ring, so a click just above it lands on the model. This is
-    for facing, not for a torso; missing costs a click that opens nothing."""
-    import numpy as np
 
-    import jev.clients.fight as mod
-    from jev.perceive.units import Ring, RingColour
+@pytest.mark.parametrize("last_hp", [None, 1.0, 0.03])
+def test_unknown_or_low_health_followed_by_target_loss_is_not_a_kill(last_hp):
+    f = _fight([ALIVE])
+    f.last_hp = last_hp
+    assert f._settle() is Fought.LOST
+
+
+def test_refused_tab_cannot_accept_a_preexisting_matching_target():
+    hid = _Hid()
+    hid.tap = lambda _: False
+    f = _fight([ALIVE], hid=hid)
+    assert f.select(1161) is Fought.REFUSED
+    assert f.targeting.paints == 0
+    assert not f.targeting.requests
+
+
+def test_refused_plate_selection_cannot_accept_a_preexisting_matching_target(monkeypatch):
+    from jev.perceive.units import Plate, RingColour
 
     hid = _Hid()
-    f = Fight(hid=hid, read=lambda: ALIVE, read_frame=lambda: np.zeros((4, 4, 3)),
-              window_origin=(10, 38))
-    ring = Ring(cx=700.0, cy=500.0, w=60, h=20, colour=RingColour.YELLOW, area=300)
-    real_find, real_ring = mod.find, mod._find_ring
-    mod.find, mod._find_ring = (lambda _f: None), (lambda _f: ring)
-    try:
-        assert f.engage() is True, "had a ring on screen and refused to turn"
-        x, y, right = hid.clicks[-1]
-        assert right is True
-        assert x == 10 + 700
-        assert y < 38 + 500, "aimed at or below the ring instead of at the model above it"
-    finally:
-        mod.find, mod._find_ring = real_find, real_ring
+    hid.click = lambda *_, **__: False
+    f = _fight([ALIVE], hid=hid)
+    monkeypatch.setattr(f, "_candidates", lambda _: [Plate(700, 300, 140, RingColour.YELLOW)])
+    assert f.acquire(1161) is Fought.REFUSED
+    assert f.targeting.paints == 0
+    assert not f.targeting.requests
+
+
+def test_refused_reaim_stops_before_any_following_movement():
+    near = {**ALIVE, "vitals.combat": True, "target.in_melee": True}
+    f = _fight([near])
+    actions = iter([
+        ClickResult(ClickCode.CLICKED, (710, 438), "initial input delivered", 1),
+        ClickResult(ClickCode.REFUSED, None, "fresh pointer input refused", 1),
+    ])
+    f.targeting.click_selected = lambda **_: next(actions)
+    assert f.run(timeout_s=1) is Fought.REFUSED
+    assert f.hid.holds == []
+    assert f.closed == 0
+
+
+def test_initially_injured_target_is_not_evidence_of_our_landed_damage():
+    f = _fight([{**ALIVE, "target.hp": 0.6}])
+    f.last_hp = 0.6
+    f._rotate({**ALIVE, "target.hp": 0.6, "bars.ready": 0b101})
+    assert f.hid.taps == ["1"]
+    assert not f._damage_seen
+
+
+def test_a_fight_at_constant_injured_health_still_closes_and_starts_its_attack():
+    f = _fight([{**ALIVE, "target.hp": 0.6, "vitals.combat": True}])
+    assert f.run(timeout_s=0.6) is Fought.TIMEOUT
+    assert f.hid.holds
+    assert "1" in f.hid.taps
+    assert not f._damage_seen
+
+
+def test_selection_cancellation_propagates():
+    from jev.run.supervisor import Cancelled
+
+    f = _fight([ALIVE])
+    def cancelled():
+        raise Cancelled("stop requested")
+    f.targeting.wait_for_paint = cancelled
+    with pytest.raises(Cancelled, match="stop requested"):
+        f.select(1161)
+
+
+@pytest.fixture
+def combat_clock(monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr("jev.clients.fight.time.monotonic", lambda: now[0])
+    monkeypatch.setattr("jev.clients.fight.time.sleep",
+                        lambda seconds: now.__setitem__(0, now[0] + seconds))
+    return now
+
+
+@pytest.mark.parametrize("phase", ["wait_for_paint", "click_selected"])
+def test_acquisition_and_initial_verification_do_not_spend_the_fight_timeout(combat_clock, phase):
+    """Slow selection/body verification must still leave time for a first attack."""
+    f = _fight([ALIVE], frame=None)
+    original = getattr(f.targeting, phase)
+    calls = []
+    delay = 5.0
+
+    def slow_first_call(*args, **kwargs):
+        if not calls:
+            combat_clock[0] += delay
+        calls.append(combat_clock[0])
+        return original(*args, **kwargs)
+
+    setattr(f.targeting, phase, slow_first_call)
+    assert f.run(timeout_s=0.6) is Fought.TIMEOUT
+    assert f.hid.holds and f.pressed, "acquisition consumed the budget before any attack"
+    assert combat_clock[0] >= delay + 0.6
+
+
+@pytest.mark.parametrize("timeout_s", [None, 15.0])
+def test_reaim_cadence_does_not_extend_the_configured_fight_timeout(combat_clock, timeout_s):
+    """A hit then a stall earns spaced re-aims within the existing fight deadline."""
+    started = {**ALIVE, "vitals.combat": True}
+    stalled = {**started, "target.hp": 0.6}
+    f = _fight([started, stalled])
+    original = f.targeting.click_selected
+    aimed_at = []
+
+    def measured_action(**kwargs):
+        aimed_at.append(combat_clock[0])
+        return original(**kwargs)
+
+    f.targeting.click_selected = measured_action
+    configured = 45.0 if timeout_s is None else timeout_s
+    arguments = {} if timeout_s is None else {"timeout_s": timeout_s}
+    assert f.run(**arguments) is Fought.TIMEOUT
+    assert f._damage_seen and not f.hid.holds
+    assert len(aimed_at) >= 3, "the local attempt never exercised repeated re-aims"
+    assert all(REAIM_AFTER_S <= later - earlier <= REAIM_AFTER_S + 0.21
+               for earlier, later in pairwise(aimed_at))
+    assert configured <= combat_clock[0] <= configured + 0.21
+    assert f.detail == f"{configured:.0f}s and it is still standing"
+
+
+def test_near_and_closing_conditions_share_one_reaim_per_iteration(combat_clock):
+    from collections import Counter
+
+    f = _fight([{**ALIVE, "vitals.combat": True, "target.in_melee": True}])
+    original = f.targeting.click_selected
+    aims_at_closed = []
+
+    def measured_action(**kwargs):
+        aims_at_closed.append(f.closed)
+        return original(**kwargs)
+
+    f.targeting.click_selected = measured_action
+    assert f.run() is Fought.UNREACHABLE
+    assert f.closed == MAX_CLOSE_BURSTS
+    # Exclude the initial body action; each remaining action belongs to a loop iteration.
+    counts = Counter(aims_at_closed[1:])
+    assert counts[REAIM_EVERY] == counts[2 * REAIM_EVERY] == 1
+    assert all(count == 1 for count in counts.values()), "overlapping conditions double-clicked"
+
+
+@pytest.mark.parametrize("timeout_s", [45.0, 5.0])
+def test_slow_fresh_verification_keeps_the_existing_closing_and_timeout_bounds(
+        combat_clock, timeout_s):
+    """A former 12s damage cap stopped the live attempt before eight validated steps.
+
+    Each successful verification here costs two seconds. The established eight-step
+    budget remains usable when it fits the configured timeout; a shorter explicit
+    timeout still stops the attempt before all steps have been delivered.
+    """
+    f = _fight([{**ALIVE, "vitals.combat": True, "target.in_melee": True}])
+    original = f.targeting.click_selected
+
+    def slow_verified_action(**kwargs):
+        combat_clock[0] += 2.0
+        return original(**kwargs)
+
+    f.targeting.click_selected = slow_verified_action
+    outcome = f.run(timeout_s=timeout_s)
+    assert len(f.hid.holds) == f.closed
+    assert all(key == "w" and duration == CLOSE_NUDGE_S for key, duration in f.hid.holds)
+    if timeout_s == 45.0:
+        assert outcome is Fought.UNREACHABLE
+        assert f.closed == MAX_CLOSE_BURSTS
+        assert 12.0 < combat_clock[0] < timeout_s
+    else:
+        assert outcome is Fought.TIMEOUT
+        assert 0 < f.closed < MAX_CLOSE_BURSTS
+    assert f.pressed, "fresh verification displaced the existing rotation"
+
+
+def test_acquisition_plate_expires_only_after_successful_body_delivery():
+    from jev.perceive.units import Plate, RingColour
+
+    f = _fight([ALIVE])
+    plate = Plate(700, 300, 140, RingColour.YELLOW)
+    f.selected_plate = plate
+    f.targeting.action = ClickResult(ClickCode.STALE, None, "target moved during verification")
+    assert f.engage() is False
+    assert f.selected_plate is plate
+    f.targeting.action = ClickResult(ClickCode.CLICKED, (710, 438), "delivered", 1)
+    assert f.engage() is True
+    assert f.selected_plate is None
+    assert f.engage() is True
+    assert [request["plate"] for request in f.targeting.requests] == [plate, plate, None]
+
+
+@pytest.mark.parametrize("values, key", [
+    ({**ALIVE, "vitals.combat": True, "vitals.hp": 0.2,
+      "vitals.power": 0.9, "vitals.power_max": 100}, "3"),
+    ({**ALIVE, "vitals.combat": True, "vitals.hp": 1.0, "bars.ready": 0b1}, "1"),
+])
+def test_refused_heal_or_toggle_stops_without_recording_a_press_or_pending_effect(
+        combat_clock, values, key):
+    f = _fight([values])
+    attempts = []
+    f.hid.tap = lambda pressed: attempts.append(pressed) or False
+    assert f.run(timeout_s=1) is Fought.REFUSED
+    assert attempts == [key]
+    assert f._pending_heal is None and not f._toggled
+    assert f.pressed == [] and f._last_use == {}
+    assert f.heals_landed == f.heals_ignored == 0
+
+
+def test_refused_top_up_stops_without_waiting_or_recording_a_cast(combat_clock, monkeypatch):
+    f = _fight([{**ALIVE, "vitals.combat": False, "vitals.hp": 0.6,
+                 "vitals.power": 0.9, "vitals.power_max": 100}])
+    attempts = []
+    f.hid.tap = lambda key: attempts.append(key) or False
+    monkeypatch.setattr(f, "_watch_top_up", lambda *_: pytest.fail("waited for a refused heal"))
+    assert f.top_up(tries=4) is False
+    assert attempts == ["3"]
+    assert f.top_ups == f.top_ups_landed == 0
+    assert f.pressed == [] and f._last_use == {}
+    assert f._pending_heal is None
+
+
+def test_unready_heal_slot_without_health_gain_is_not_a_landed_heal(combat_clock):
+    """Cooldown/cast state can change even when pushback prevents the heal landing."""
+    hurt = {**ALIVE, "vitals.combat": True, "vitals.hp": 0.2,
+            "vitals.power": 0.9, "vitals.power_max": 100}
+    f = _fight([hurt])
+    f._rotate(hurt)
+    assert f._pending_heal is not None
+    heal = for_class(hurt["char.class_id"]).first(Role.HEAL)
+    unready = hurt["bars.ready"] & ~(1 << (heal.slot - 1))
+    combat_clock[0] = 0.1
+    f._watch_heal({**hurt, "bars.ready": unready}, unready)
+    assert f.heals_landed == f.heals_ignored == 0
+    assert f._pending_heal is not None
+    combat_clock[0] = 3.0
+    f._watch_heal({**hurt, "bars.ready": unready}, unready)
+    assert f.heals_landed == 0 and f.heals_ignored == 1
+    assert f._pending_heal is None

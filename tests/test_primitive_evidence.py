@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from test_execution_evidence import arm
-from test_fight import ALIVE, _Hid
+from test_fight import ALIVE, _Hid, _Targeting
 from test_interact import ELWYNN
 from test_repair import AT_VENDOR, FIXED, WORN, _repair
 from test_vendor import Shop
@@ -15,16 +15,16 @@ from jev.clients.loot import Loot, Looted
 from jev.clients.recover import Recover, Recovered
 from jev.clients.repair import Repaired
 from jev.clients.rest import Rest, Rested
+from jev.clients.targeting import ClickCode, ClickResult
 from jev.clients.vendor import Vended
 from jev.learn.episode import Recorder, read
 from jev.perceive.radio_frame import name_id
-from jev.perceive.units import Plate, Ring, RingColour, Sighting
+from jev.perceive.units import Plate, RingColour
 from jev.run.evidence import bind
 from jev.run.hunt import Hunt, Hunted
 from jev.world.vendor import Supply
 
 PLATE = Plate(cx=700, cy=300, w=70, colour=RingColour.YELLOW)
-RING = Ring(cx=700, cy=500, w=60, h=20, colour=RingColour.YELLOW, area=300)
 
 
 def captured(recorder):
@@ -35,21 +35,27 @@ def captured(recorder):
 def test_hunt_records_selection_click_observation_and_loot_under_one_arm(tmp_path, monkeypatch):
     monkeypatch.setattr("jev.clients.fight.time.sleep", lambda _: None)
     monkeypatch.setattr("jev.clients.fight.find_plates", lambda _: [PLATE])
-    monkeypatch.setattr("jev.clients.fight.find", lambda _: Sighting(RING, PLATE, (700, 400)))
-    monkeypatch.setattr("jev.clients.loot._find_ring", lambda _: RING)
     values = iter([ALIVE, ALIVE, {**ALIVE, "target.hp": 0.5}, {**ALIVE, "target.hp": 0}])
     reads = []
     def fight_read():
         value = next(values)
         reads.append(value)
         return value
-    fight = Fight(_Hid(), fight_read, lambda: object())
+    fight_hid = _Hid()
+    fight = Fight(fight_hid, fight_read, lambda: object(),
+                  targeting=_Targeting(fight_read, fight_hid))
     loot_hid = _Hid()
     have = [0]
     def take(*args, **kwargs):
         have[0] = 1
+        return True
     loot_hid.click = take
-    loot = Loot(loot_hid, lambda: {"bags.free": 8, "ui.loot": False}, lambda: object())
+    def loot_read():
+        return {"bags.free": 8, "ui.loot": False,
+                "target.has": True, "target.hp": 0, "target.name_id": 1161}
+    loot = Loot(loot_hid, loot_read, lambda: object(),
+                targeting=_Targeting(loot_read, loot_hid,
+                    ClickResult(ClickCode.CLICKED, (700, 495), "delivered", 1)))
     hunt = Hunt(fight, SimpleNamespace(), lambda: {}, lambda _: True,
                 lambda: (have[0], 1), loot=loot, say=lambda _: None)
     rec = Recorder(tmp_path)
@@ -72,11 +78,13 @@ def test_hunt_records_selection_click_observation_and_loot_under_one_arm(tmp_pat
 
 def test_interaction_records_identity_between_plate_and_model_click(tmp_path, monkeypatch):
     monkeypatch.setattr("jev.clients.interact.time.sleep", lambda _: None)
-    monkeypatch.setattr("jev.clients.interact.find", lambda *_, **__: Sighting(RING, PLATE, (700, 400)))
-    selected = {"target.name_id": name_id("Merchant")}
+    selected = {"target.has": True, "target.name_id": name_id("Merchant")}
     values = iter([selected, {**selected, "ui.vendor": True}])
-    skill = Interact(_Hid(), ELWYNN, lambda: next(values), lambda: object(),
-                     lambda: (0.5, 0.5), (800, 450))
+    hid = _Hid()
+    def read_values():
+        return next(values)
+    skill = Interact(hid, ELWYNN, read_values, lambda: object(),
+                     lambda: (0.5, 0.5), (800, 450), targeting=_Targeting(read_values, hid))
     rec = Recorder(tmp_path)
     with bind(rec, arm(), client_id="c"):
         assert skill._try(PLATE, name_id("Merchant")) is Interacted.VENDOR
@@ -88,9 +96,12 @@ def test_interaction_records_identity_between_plate_and_model_click(tmp_path, mo
     assert rows[-1]["code"] == "vendor"
 
 
-def test_loot_without_a_delta_does_not_record_confirmed_empty_corpse(tmp_path, monkeypatch):
-    monkeypatch.setattr("jev.clients.loot._find_ring", lambda _: RING)
-    skill = Loot(_Hid(), lambda: {"bags.free": 8}, lambda: object())
+def test_loot_without_a_delta_does_not_record_confirmed_empty_corpse(tmp_path):
+    hid = _Hid()
+    def read_values():
+        return {"bags.free": 8, "ui.loot": False, "target.has": True, "target.hp": 0,
+                "target.name_id": 1161}
+    skill = Loot(hid, read_values, lambda: object(), targeting=_Targeting(read_values, hid))
     rec = Recorder(tmp_path)
     with bind(rec, arm(), client_id="c"):
         assert skill.run(settle_s=0) is Looted.NOTHING

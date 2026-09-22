@@ -1,0 +1,491 @@
+{
+  "schema_version": 1,
+  "role": "post_change_evaluation",
+  "annotation_date": "2026-09-22",
+  "run_id": "20260922T192105-3d5fcf",
+  "implementation_revision": "Shared targeting changes were active in an uncommitted worktree; the run does not retain a complete implementation snapshot. Git HEAD alone must not be claimed as its tested revision.",
+  "coordinate_convention": "Pixel xyxy rectangles, minimum inclusive and maximum exclusive, origin at top left of each original 1611x906 frame. Manual boundaries are approximate, not masks.",
+  "annotation_method": "Independent visual review of complete retained pre/post action images. Target regions and delivered-point surfaces are manually observed, not copied from locator proposals. Action coordinates and attribution come from executions.jsonl. Radio facts are decoded from original pixels.",
+  "limits": [
+    "All four evaluation sources come from one new run and remain one independence group distinct from the historical development references.",
+    "This evaluation was recorded after the targeting implementation changed. Once used to guide a later correction it is no longer an untouched evaluation set for that correction.",
+    "The terrain point in frame 94 remains an observed accepted false body location. No test is made to pass by relabeling it.",
+    "Visible body placement and matching hover do not establish an actual hitbox, damage, range, facing, a kill or loot.",
+    "Only the four primary PNG sources are vendored. Reviewed-after metadata records the original follow-up artifact hashes and facts; those follow-up PNG files remain local run artifacts.",
+    "No corpse observation exists in this set."
+  ],
+  "cases": [
+    {
+      "id": "evaluation_visible_wolf_without_health_bar",
+      "source": {
+        "path": "tests/fixtures/target-localization-evaluation/000079-20260922T182220.258080Z.png",
+        "original_path": "runs/20260922T192105-3d5fcf/screenshots/000079-20260922T182220.258080Z.png",
+        "array_key": null,
+        "sha256": "3ed87dc9b93538147566303cf7e7ce57efa788ed9d47bd6250104f2bff9bcfc7",
+        "frame_sha256": "aa42afde3c7390bc95c252fb220ac5665af22ae11e1946d9d951086a27426873",
+        "shape": [
+          906,
+          1611,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "production-evaluation-20260922T192105-3d5fcf",
+        "screenshot_index": 79,
+        "captured_at": 1790101340.2580795
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "seq": 168,
+        "facts": {
+          "vitals.combat": false,
+          "vitals.dead": false,
+          "vitals.ghost": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.in_melee": false,
+          "target.attacking_me": false,
+          "cursor.has": false,
+          "cursor.is_target": false,
+          "cursor.dead": null,
+          "cursor.world": true,
+          "ui.error_id": 0,
+          "quests.slot_id": 33,
+          "quests.o0_have": 0,
+          "quests.o0_need": 8
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "abstain",
+        "body_extent": [
+          599,
+          408,
+          632,
+          452
+        ],
+        "visible_body_cores": [
+          [
+            607,
+            418,
+            620,
+            434
+          ]
+        ],
+        "visible_ring_extent": [
+          581,
+          438,
+          651,
+          455
+        ],
+        "health_bar_extent": null,
+        "delivered_point_surface": null,
+        "notes": [
+          "Selected wolf body, ring and yellow unit-name text are visible. No world health-bar surface is visible.",
+          "The missing required health-bar anchor justifies abstention; this frame must not be labeled as an absent target."
+        ]
+      },
+      "execution": {
+        "operation_id": "8aefade283f6468895080857881ae595",
+        "arm_id": "20260922T192105-3d5fcf:slice:arm1",
+        "decision_id": "20260922T192105-3d5fcf:d1",
+        "code": "not_visible",
+        "detail": "no eligible target geometry",
+        "attempts": 0,
+        "screen_point": null,
+        "frame_point": null,
+        "window_origin": [
+          1821,
+          35
+        ],
+        "image_phase": "target-no-proposal"
+      }
+    },
+    {
+      "id": "evaluation_matching_hover_on_terrain",
+      "source": {
+        "path": "tests/fixtures/target-localization-evaluation/000094-20260922T182231.533494Z.png",
+        "original_path": "runs/20260922T192105-3d5fcf/screenshots/000094-20260922T182231.533494Z.png",
+        "array_key": null,
+        "sha256": "62d36d0fce109a1b9c501716e209a1145c96b11e2f34a8139fa443ce1a863a42",
+        "frame_sha256": "bd3f17f64f34465a271243a62f921e742fc36a2604e5fad614feb94c7598c13a",
+        "shape": [
+          906,
+          1611,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "production-evaluation-20260922T192105-3d5fcf",
+        "screenshot_index": 94,
+        "captured_at": 1790101351.5334935
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "seq": 25,
+        "facts": {
+          "vitals.combat": false,
+          "vitals.dead": false,
+          "vitals.ghost": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.in_melee": true,
+          "target.attacking_me": false,
+          "cursor.has": true,
+          "cursor.is_target": true,
+          "cursor.dead": false,
+          "cursor.world": true,
+          "ui.error_id": 0,
+          "quests.slot_id": 33,
+          "quests.o0_have": 0,
+          "quests.o0_need": 8
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          756,
+          430,
+          839,
+          479
+        ],
+        "visible_body_cores": [
+          [
+            773,
+            445,
+            795,
+            456
+          ]
+        ],
+        "visible_ring_extent": [
+          750,
+          461,
+          850,
+          490
+        ],
+        "health_bar_extent": [
+          705,
+          398,
+          853,
+          406
+        ],
+        "delivered_point_surface": "terrain",
+        "notes": [
+          "The delivered point (830,434) is visibly terrain just above and to the right of the wolf model, despite matching exact selected-unit hover and accepted current geometry.",
+          "A body bounding rectangle includes background; membership in this rectangle must not relabel this point as model pixels.",
+          "This is a retained observed limitation, not a passing body-targeting result. No production threshold or proposal was changed from this example."
+        ]
+      },
+      "execution": {
+        "operation_id": "8316fe9387ee479e8d2b8f23e0ff7498",
+        "arm_id": "20260922T192105-3d5fcf:slice:arm1",
+        "decision_id": "20260922T192105-3d5fcf:d1",
+        "code": "clicked",
+        "detail": "input delivered; effect unconfirmed",
+        "attempts": 1,
+        "screen_point": [
+          2651,
+          469
+        ],
+        "frame_point": [
+          830,
+          434
+        ],
+        "window_origin": [
+          1821,
+          35
+        ],
+        "image_phase": "target-before-click",
+        "input": {
+          "right": true,
+          "coordinates_supplied": false
+        }
+      },
+      "reviewed_after": {
+        "original_path": "runs/20260922T192105-3d5fcf/screenshots/000095-20260922T182231.752033Z.png",
+        "sha256": "5b342560be41864851b1cd332e8bf856b4c3d034ec27fb0a906e2692ced78d84",
+        "frame_sha256": "b36f49ea7fded30e783164a985d747f855a23e3186b016acd304cfa413dfc802",
+        "screenshot_index": 95,
+        "captured_at": 1790101351.7520325,
+        "vendored": false,
+        "radio": {
+          "vitals.combat": false,
+          "vitals.dead": false,
+          "vitals.ghost": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.in_melee": true,
+          "target.attacking_me": false,
+          "cursor.has": true,
+          "cursor.is_target": true,
+          "cursor.dead": false,
+          "cursor.world": true,
+          "ui.error_id": 0,
+          "quests.slot_id": 33,
+          "quests.o0_have": 0,
+          "quests.o0_need": 8
+        }
+      }
+    },
+    {
+      "id": "evaluation_body_back_first",
+      "source": {
+        "path": "tests/fixtures/target-localization-evaluation/000099-20260922T182233.847933Z.png",
+        "original_path": "runs/20260922T192105-3d5fcf/screenshots/000099-20260922T182233.847933Z.png",
+        "array_key": null,
+        "sha256": "4a96f126b38364c29e95c08676b04e643f0f797cff89b783eb5cd4f736f47312",
+        "frame_sha256": "8ca4df422ac979177609fe1c7594814131d49fd5c60a0f8873b8d4669c24dc06",
+        "shape": [
+          906,
+          1611,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "production-evaluation-20260922T192105-3d5fcf",
+        "screenshot_index": 99,
+        "captured_at": 1790101353.8479333
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "seq": 48,
+        "facts": {
+          "vitals.combat": false,
+          "vitals.dead": false,
+          "vitals.ghost": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.in_melee": true,
+          "target.attacking_me": false,
+          "cursor.has": true,
+          "cursor.is_target": true,
+          "cursor.dead": false,
+          "cursor.world": true,
+          "ui.error_id": 0,
+          "quests.slot_id": 33,
+          "quests.o0_have": 0,
+          "quests.o0_need": 8
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          613,
+          465,
+          715,
+          543
+        ],
+        "visible_body_cores": [
+          [
+            645,
+            490,
+            670,
+            508
+          ]
+        ],
+        "visible_ring_extent": [
+          604,
+          515,
+          720,
+          549
+        ],
+        "health_bar_extent": [
+          563,
+          441,
+          712,
+          453
+        ],
+        "delivered_point_surface": "visible_model",
+        "notes": [
+          "The delivered point (674,482) lies visibly on the wolf's back, below its health bar.",
+          "The player and target are separate rendered bodies. Visible model placement is not evidence of damage, facing or a successful melee attack."
+        ]
+      },
+      "execution": {
+        "operation_id": "de7de96512f44b9683a0534d5e3fbb4e",
+        "arm_id": "20260922T192105-3d5fcf:slice:arm1",
+        "decision_id": "20260922T192105-3d5fcf:d1",
+        "code": "clicked",
+        "detail": "input delivered; effect unconfirmed",
+        "attempts": 2,
+        "screen_point": [
+          2495,
+          517
+        ],
+        "frame_point": [
+          674,
+          482
+        ],
+        "window_origin": [
+          1821,
+          35
+        ],
+        "image_phase": "target-before-click",
+        "input": {
+          "right": true,
+          "coordinates_supplied": false
+        }
+      },
+      "reviewed_after": {
+        "original_path": "runs/20260922T192105-3d5fcf/screenshots/000100-20260922T182234.089917Z.png",
+        "sha256": "9c8ae365bf65f860076c4a9336d7f364cd0333c708cdb095ed82df6bedb34cb0",
+        "frame_sha256": "fa2976d11667cbb8887ed9ab876b9f96bd688f0420f7080510bb2ddb7a8cba16",
+        "screenshot_index": 100,
+        "captured_at": 1790101354.089917,
+        "vendored": false,
+        "radio": {
+          "vitals.combat": false,
+          "vitals.dead": false,
+          "vitals.ghost": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.in_melee": true,
+          "target.attacking_me": false,
+          "cursor.has": true,
+          "cursor.is_target": true,
+          "cursor.dead": false,
+          "cursor.world": true,
+          "ui.error_id": 0,
+          "quests.slot_id": 33,
+          "quests.o0_have": 0,
+          "quests.o0_need": 8
+        }
+      }
+    },
+    {
+      "id": "evaluation_body_back_second",
+      "source": {
+        "path": "tests/fixtures/target-localization-evaluation/000102-20260922T182235.289213Z.png",
+        "original_path": "runs/20260922T192105-3d5fcf/screenshots/000102-20260922T182235.289213Z.png",
+        "array_key": null,
+        "sha256": "08712539b6652ff51a7799cc34f68fee8797caa89578179392d454c4e4474ceb",
+        "frame_sha256": "f9b03f957f2e17661bd2f07d96a65e274fe8fb20d38de92f132eca35cdaf9c98",
+        "shape": [
+          906,
+          1611,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "production-evaluation-20260922T192105-3d5fcf",
+        "screenshot_index": 102,
+        "captured_at": 1790101355.2892132
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "seq": 62,
+        "facts": {
+          "vitals.combat": false,
+          "vitals.dead": false,
+          "vitals.ghost": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.in_melee": true,
+          "target.attacking_me": false,
+          "cursor.has": true,
+          "cursor.is_target": true,
+          "cursor.dead": false,
+          "cursor.world": true,
+          "ui.error_id": 0,
+          "quests.slot_id": 33,
+          "quests.o0_have": 0,
+          "quests.o0_need": 8
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          607,
+          473,
+          711,
+          550
+        ],
+        "visible_body_cores": [
+          [
+            642,
+            495,
+            671,
+            512
+          ]
+        ],
+        "visible_ring_extent": [
+          597,
+          524,
+          715,
+          557
+        ],
+        "health_bar_extent": [
+          556,
+          445,
+          704,
+          455
+        ],
+        "delivered_point_surface": "visible_model",
+        "notes": [
+          "The delivered point (652,493) lies visibly on the wolf's back.",
+          "This is another frame from the same engagement and must not be treated as another independent success. No damage or loot follows in the reviewed pair."
+        ]
+      },
+      "execution": {
+        "operation_id": "f12206035f2a4c6091ef44c847744a4d",
+        "arm_id": "20260922T192105-3d5fcf:slice:arm1",
+        "decision_id": "20260922T192105-3d5fcf:d1",
+        "code": "clicked",
+        "detail": "input delivered; effect unconfirmed",
+        "attempts": 1,
+        "screen_point": [
+          2473,
+          528
+        ],
+        "frame_point": [
+          652,
+          493
+        ],
+        "window_origin": [
+          1821,
+          35
+        ],
+        "image_phase": "target-before-click",
+        "input": {
+          "right": true,
+          "coordinates_supplied": false
+        }
+      },
+      "reviewed_after": {
+        "original_path": "runs/20260922T192105-3d5fcf/screenshots/000103-20260922T182235.506819Z.png",
+        "sha256": "ce83c682c6c717047776590da9d9fdabcfc4ecefd0541c13db0945508993122c",
+        "frame_sha256": "948a7f15abab2d37f8c47ddbf4063025dbbed9e4904a7631f435e2ebdca9c640",
+        "screenshot_index": 103,
+        "captured_at": 1790101355.5068185,
+        "vendored": false,
+        "radio": {
+          "vitals.combat": false,
+          "vitals.dead": false,
+          "vitals.ghost": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.in_melee": true,
+          "target.attacking_me": false,
+          "cursor.has": true,
+          "cursor.is_target": true,
+          "cursor.dead": false,
+          "cursor.world": true,
+          "ui.error_id": 0,
+          "quests.slot_id": 33,
+          "quests.o0_have": 0,
+          "quests.o0_need": 8
+        }
+      }
+    }
+  ]
+}

@@ -42,7 +42,8 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
-from jev.perceive.units import Plate, _find_ring, find, find_plates
+from jev.clients.targeting import ClickCode, PaintCode, Targeting
+from jev.perceive.units import Plate, find_plates
 from jev.run.evidence import event, operation, traced
 from jev.world.combat import (
     HEAL_IN_COMBAT,
@@ -54,12 +55,8 @@ from jev.world.combat import (
     for_class,
 )
 
-# How dead is dead. The strip carries health as a fraction in 10 bits, so "zero" arrives as
-# a very small number rather than exactly nothing.
-DEAD_HP = 0.02
-
-# A unit that vanished while this healthy was not killed by us.
-LOST_HP = 0.5
+# The radio fraction preserves zero exactly. Low health is still a living target.
+DEAD_HP = 0.0
 
 # Nameplates to try before falling back to Tab. Small, and ordered by how central they
 # are: the character is standing in the camp facing it, so the nearest plate to the middle
@@ -156,6 +153,8 @@ class Fought(StrEnum):
     DIED = "died"                    # we did
     TIMEOUT = "timeout"
     BLIND = "blind"
+    REFUSED = "refused"
+    INTERRUPTED = "interrupted"
 
     @property
     def ok(self) -> bool:
@@ -176,6 +175,7 @@ class Fight:
     # where the camera points is neither. `None` means whoever wired it up is confident
     # the camera is already level, which nothing was, for an evening.
     level: Callable[[], object] | None = None
+    targeting: Targeting | None = None
 
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
@@ -193,9 +193,14 @@ class Fight:
     top_ups_landed: int = field(default=0, init=False)
     _toggled: bool = field(default=False, init=False)
     _pending_heal: tuple[float, float] | None = field(default=None, init=False)
-    _damage_mark: float = field(default=1.0, init=False)
+    _damage_mark: float | None = field(default=None, init=False)
     _damage_at: float = field(default=0.0, init=False)
+    _last_aim_at: float = field(default=0.0, init=False)
     last_hp: float | None = field(default=None, init=False)
+    _selected_name_id: int | None = field(default=None, init=False)
+    _aim_code: ClickCode | None = field(default=None, init=False)
+    _damage_seen: bool = field(default=False, init=False)
+    _input_refused: bool = field(default=False, init=False)
     detail: str = field(default="", init=False)
     _last_use: dict[int, float] = field(default_factory=dict, init=False)
 
@@ -207,11 +212,15 @@ class Fight:
         self.pressed = []
         self.closed = 0
         self.broken = False
-        if self.level is not None:
-            self.level()
+        if self.level is not None and self.level() is False:
+            self.detail = "camera input refused"
+            return Fought.REFUSED
         self._toggled = False
         self._pending_heal = None
-        self._damage_mark = 1.0
+        self._damage_mark = None
+        self._damage_seen = self._input_refused = False
+        self._selected_name_id = None
+        self._aim_code = None
         self._damage_at = time.monotonic()
         self.last_hp = None
         self.detail = ""
@@ -245,7 +254,7 @@ class Fight:
         # Already engaged with something alive: that is the fight, and shopping for a
         # better one just adds a second attacker.
         engaged = (in_combat and v.get("target.has") is True
-                   and (v.get("target.hp") or 1.0) > DEAD_HP)
+                   and v.get("target.hp") is not None and v["target.hp"] > DEAD_HP)
         if not engaged:
             # In combat the name filter loosens, but it does not come off. Dropping it
             # entirely meant that after killing a kobold the next plate could be a Timber
@@ -258,10 +267,14 @@ class Fight:
             acquired = self.acquire(name_id, defend=in_combat)
             if acquired is not None:
                 return acquired
+        else:
+            self._selected_name_id = v.get("target.name_id")
+            self._damage_mark = v.get("target.hp")
+            self.selected_plate = None
         if not self.engage():
-            return Fought.NOT_VISIBLE
-
-
+            return self._aim_failure()
+        # Acquisition/verification time is not time spent trying to deal damage.
+        self._damage_at = self._last_aim_at = time.monotonic()
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             v = self.read()
@@ -271,6 +284,9 @@ class Fight:
             if v.get("vitals.dead") is True or v.get("vitals.ghost") is True:
                 self.detail = "the character died"
                 return Fought.DIED
+            if v.get("ui.modal") is True:
+                self.detail = "modal interrupted the fight"
+                return Fought.INTERRUPTED
             mine = v.get("vitals.hp")
             if (mine is not None and mine < FLEE_HP
                     and v.get("vitals.combat") is not True):
@@ -285,10 +301,16 @@ class Fight:
                 self.detail = f"broke off at {mine:.0%} health"
                 return Fought.LOSING
 
+            if v.get("target.has") is not True:
+                return self._settle()
+            if (self._selected_name_id is not None
+                    and v.get("target.name_id") != self._selected_name_id):
+                self.detail = "selected target changed during fight"
+                return Fought.LOST
             hp = v.get("target.hp")
             if hp is not None:
                 self.last_hp = hp
-            if v.get("target.has") is not True or (hp is not None and hp <= DEAD_HP):
+            if hp == DEAD_HP:
                 return self._settle()
 
             # Walking and swinging are the same loop, not one after the other.
@@ -298,11 +320,14 @@ class Fight:
             # rotation was behind the gate — so a live run reported
             # `unreachable pressed [] closed 8` eight times over. It had walked at the
             # kobold and never once pressed anything at it.
-            if hp is not None and hp < self._damage_mark:
+            if hp is not None:
+                if self._damage_mark is not None and hp < self._damage_mark:
+                    self._damage_seen = True
+                    self._damage_at = time.monotonic()
+                if self._damage_mark is None:
+                    self._damage_at = time.monotonic()
                 self._damage_mark = hp
-                self._damage_at = time.monotonic()
-
-            landing = self.last_hp is not None and self.last_hp < 1.0
+            landing = self._damage_seen
             # Already within reach: stop walking and turn instead.
             #
             # Closing used to end only when the target lost health, so a character that
@@ -322,23 +347,24 @@ class Fight:
             # creep, so the last few yards are covered without running straight through
             # and out the other side.
             near = v.get("target.in_melee") is True
-            if near and not landing:
-                self.engage()
-
-            if landing and time.monotonic() - self._damage_at > REAIM_AFTER_S:
-                # Nothing has come off it for a while. Either it moved or we did.
-                self.engage()
-                self._damage_at = time.monotonic()
+            closing = not landing and self.closed < MAX_CLOSE_BURSTS
+            due_to_close = (closing and v.get("bars.casting") is not True
+                            and self.closed > 0 and self.closed % REAIM_EVERY == 0)
+            due_to_damage = (landing and time.monotonic()
+                             - max(self._damage_at, self._last_aim_at) > REAIM_AFTER_S)
+            # One verification per iteration even when both closing rules apply.
+            if ((near and not landing) or due_to_close or due_to_damage) and not self.engage():
+                return self._aim_failure()
             if not landing and self.closed < MAX_CLOSE_BURSTS:
                 # Not while casting: movement cancels a cast, and the only thing being
                 # cast here is a heal that is keeping us alive.
                 if v.get("bars.casting") is not True:
-                    if self.closed and self.closed % REAIM_EVERY == 0:
-                        self.engage()          # walking blind is walking the old heading
                     duration = CLOSE_NUDGE_S if near else CLOSE_BURST_S
                     event("approach.request", data={"key": "w", "duration_s": duration,
                                                     "closed": self.closed, "near": near})
-                    self.hid.hold("w", duration)
+                    if not self.hid.hold("w", duration):
+                        self.detail = "approach input refused"
+                        return Fought.REFUSED
                     self.closed += 1
             elif not landing:
                 # Out of bursts with the target still at full health. Whether anything was
@@ -351,6 +377,8 @@ class Fight:
                 return Fought.UNREACHABLE
 
             self._rotate(v)
+            if self._input_refused:
+                return Fought.REFUSED
             time.sleep(0.2)
 
         self.detail = f"{timeout_s:.0f}s and it is still standing"
@@ -372,10 +400,15 @@ class Fight:
                 event("selection.request", data={"method": "plate", "wanted_name_id": name_id,
                       "point": [self.window_origin[0] + round(plate.cx),
                                 self.window_origin[1] + round(plate.cy)]})
-                self.hid.click(self.window_origin[0] + round(plate.cx),
-                               self.window_origin[1] + round(plate.cy))
-                time.sleep(0.35)
-                if self._acceptable(name_id, defend=defend) is True:
+                if not self.hid.click(self.window_origin[0] + round(plate.cx),
+                                      self.window_origin[1] + round(plate.cy)):
+                    self.detail = "selection input refused"
+                    return Fought.REFUSED
+                paint = self._targeting().wait_for_paint()
+                if paint.code is not PaintCode.FRESH:
+                    self.detail = paint.detail
+                    return Fought.BLIND
+                if self._acceptable(name_id, defend=defend, values=paint.after) is True:
                     self.selected_plate = plate
                     return None
         return self.select(name_id, defend=defend)
@@ -405,9 +438,10 @@ class Fight:
                     "candidates": [asdict(p) for p in plates[:MAX_CANDIDATES]]})
         return plates[:MAX_CANDIDATES]
 
-    def _acceptable(self, name_id: int | None, *, defend: bool = False) -> bool | None:
+    def _acceptable(self, name_id: int | None, *, defend: bool = False,
+                    values: dict | None = None) -> bool | None:
         """Is what we just selected worth fighting? `None` if nothing is readable."""
-        v = self.read()
+        v = values if values is not None else self.read()
         self._observe(v)
         event("selection.expected", data={"wanted_name_id": name_id, "defend": defend})
         if v is None:
@@ -417,10 +451,13 @@ class Fight:
         hp = v.get("target.hp")
         if hp is not None and hp <= DEAD_HP:
             return False                       # a corpse is selectable and not a fight
-        if name_id is None or v.get("target.name_id") == name_id:
+        if (name_id is None or v.get("target.name_id") == name_id
+                or (defend and v.get("target.attacking_me") is True)):
+            self._selected_name_id = v.get("target.name_id")
+            self._damage_mark = hp
             return True
         # Not what we came for. Worth fighting only if it is already hitting us.
-        return defend and v.get("target.attacking_me") is True
+        return False
 
     @traced("target.select")
     def select(self, name_id: int | None, *, defend: bool = False) -> Fought | None:
@@ -432,9 +469,14 @@ class Fight:
         for _ in range(MAX_SELECTS):
             event("selection.request", data={"method": "tab", "wanted_name_id": name_id,
                                              "defend": defend})
-            self.hid.tap("tab")
-            time.sleep(0.35)
-            v = self.read()
+            if not self.hid.tap("tab"):
+                self.detail = "selection input refused"
+                return Fought.REFUSED
+            paint = self._targeting().wait_for_paint()
+            if paint.code is not PaintCode.FRESH:
+                self.detail = paint.detail
+                return Fought.BLIND
+            v = paint.after
             self._observe(v)
             if v is None:
                 return Fought.BLIND
@@ -445,68 +487,37 @@ class Fight:
             if (name_id is not None and v.get("target.name_id") != name_id
                     and not (defend and v.get("target.attacking_me") is True)):
                 continue
+            self._selected_name_id = v.get("target.name_id")
+            self._damage_mark = v.get("target.hp")
             return None
         self.detail = "no nameplate and no Tab target worth fighting"
         return Fought.NO_TARGET
 
+    def _targeting(self) -> Targeting:
+        return self.targeting or Targeting(self.hid, self.read, read_frame=self.read_frame,
+                                           window_origin=self.window_origin)
+
     @traced("target.engage")
     def engage(self) -> bool:
-        """Right-click the model: faces the character and starts auto-attack.
+        """Deliver one verified body click. Facing and damage remain observed effects."""
+        result = self._targeting().click_selected(kind="living",
+                    expected_name_id=self._selected_name_id, plate=self.selected_plate)
+        self._aim_code = result.code
+        self.detail = result.detail
+        event("engage.request", code=result.code.value,
+              data={"point": result.point, "attempts": result.attempts})
+        if result.delivered:
+            # A plate is an acquisition hint, not a durable pixel identity. Future
+            # re-aims observe current geometry and exact selected-unit ownership.
+            self.selected_plate = None
+            self._last_aim_at = time.monotonic()
+        return result.delivered
 
-        The only way to aim this character at anything. If the unit is not properly
-        visible — ring **and** nameplate — this refuses, because the alternative is
-        swinging at whatever the camera happens to be pointed at.
-        """
-        ox, oy = self.window_origin
-        # The ring is drawn a moment after the selection, so looking once loses races the
-        # client was always going to win eventually.
-        for _ in range(ENGAGE_LOOKS):
-            frame = self.read_frame()
-            sighting = None if frame is None else find(frame)
-            with operation("target.location") as span:
-                if span.enabled:
-                    span.finish(code="blind" if frame is None else
-                                "candidate" if sighting is not None else "not_visible",
-                                data={"sighting": asdict(sighting) if sighting else None})
-            if sighting is not None:
-                event("engage.request", data={"method": "plate_ring",
-                      "point": [ox + sighting.torso[0], oy + sighting.torso[1]]})
-                self.hid.click(ox + sighting.torso[0], oy + sighting.torso[1], right=True)
-                time.sleep(0.5)
-                return True
-            time.sleep(0.25)
-
-        # A ring with no nameplate above it still tells us where the unit is standing.
-        # `find` is right to refuse - it brackets feet and head to get a torso, and one
-        # of those is missing - but refusing to *turn* because of that leaves the
-        # character facing the wrong way with the target in plain sight, which is what
-        # the operator watched happen. A click just above the ring lands on the model:
-        # a unit stands on its own ring.
-        #
-        # This is for facing, not for a torso. Missing costs a click that opens nothing.
-        ring = None if frame is None else _find_ring(frame)
-        if ring is not None:
-            point = (round(ring.cx), round(ring.cy - max(8, ring.h)))
-            event("engage.request", data={"method": "ring_only", "point": [ox + point[0], oy + point[1]]})
-            self.hid.click(ox + point[0], oy + point[1], right=True)
-            time.sleep(0.5)
-            self.detail = "no nameplate; aimed just above the ring to face it"
-            return True
-
-        if self.selected_plate is not None:
-            # No ring — the unit's feet are behind a rise, or grass, or the model itself.
-            # Its plate is still on screen and **the radio has already confirmed who is
-            # selected**, so the approximation below the plate is aimed at a known unit
-            # rather than a hopeful pixel. Missing costs a click that opens nothing.
-            point = self.selected_plate.unit_below()
-            event("engage.request", data={"method": "plate_offset", "point": [ox + point[0], oy + point[1]]})
-            self.hid.click(ox + point[0], oy + point[1], right=True)
-            time.sleep(0.5)
-            self.detail = "no ring; aimed below the nameplate instead"
-            return True
-
-        self.detail = "selected, but no ring and nameplate to click, so no way to face it"
-        return False
+    def _aim_failure(self) -> Fought:
+        return {ClickCode.REFUSED: Fought.REFUSED, ClickCode.BLIND: Fought.BLIND,
+                ClickCode.INTERRUPTED: Fought.INTERRUPTED,
+                ClickCode.NO_TARGET: Fought.LOST, ClickCode.WRONG_TARGET: Fought.LOST,
+                ClickCode.WRONG_KIND: Fought.LOST}.get(self._aim_code, Fought.NOT_VISIBLE)
 
     def _rotate(self, values: dict) -> None:
         """Press the highest-priority row the client says is ready.
@@ -547,8 +558,8 @@ class Fight:
                 and values.get("vitals.combat") is True
                 and hp is not None and hp < HEAL_IN_COMBAT
                 and self._has_mana_for(heal, values)):
-            self._press(heal)
-            self._pending_heal = (hp, time.monotonic())
+            if self._press(heal):
+                self._pending_heal = (hp, time.monotonic())
             return
 
         # 2. Keep the buff up, and only when it is actually lapsing: `bars.ready` says a
@@ -567,11 +578,11 @@ class Fight:
             if not pressable(attack):
                 continue
             if attack.toggle:
-                landed = self.last_hp is not None and self.last_hp < 1.0
+                landed = self._damage_seen
                 if self._toggled or landed:
                     continue
+            if self._press(attack) and attack.toggle:
                 self._toggled = True
-            self._press(attack)
             return
 
     @traced("heal.top_up")
@@ -612,7 +623,8 @@ class Fight:
                 self.detail = "out of mana to top up with"
                 return False
 
-            self._press(heal)
+            if not self._press(heal):
+                return False
             self.top_ups += 1
             if self._watch_top_up(hp, settle_s):
                 self.top_ups_landed += 1
@@ -640,15 +652,21 @@ class Fight:
         """The slots pressed this fight, as the keys they were sent as."""
         return [SLOT_KEYS.get(slot, str(slot)) for slot in self.pressed]
 
-    def _press(self, ability: Ability) -> None:
+    def _press(self, ability: Ability) -> bool:
         key = SLOT_KEYS.get(ability.slot)
         if key is None:
-            return
+            self._input_refused = True
+            self.detail = f"ability slot {ability.slot} has no configured key"
+            return False
         event("ability.request", data={"slot": ability.slot, "key": key,
                                        "role": ability.role.value})
-        self.hid.tap(key)
+        if not self.hid.tap(key):
+            self._input_refused = True
+            self.detail = f"ability slot {ability.slot} input refused"
+            return False
         self._last_use[ability.slot] = time.monotonic()
         self.pressed.append(ability.slot)
+        return True
 
     def _has_mana_for(self, ability: Ability, values: dict) -> bool:
         """Enough mana for this, and enough left afterwards to matter.
@@ -668,11 +686,10 @@ class Fight:
         return True
 
     def _watch_heal(self, values: dict, ready: int) -> None:
-        """Did the last heal actually fire?
+        """Did health rise after the last heal request?
 
-        Confirmed on health rising or the slot going unready — **not** on having tapped
-        the key. A press that the client ignored looks identical to one that worked if
-        nobody checks, and the failure it hides is a picker predicate that never fires.
+        A slot going unready can mean casting or cooldown; it cannot confirm healing.
+        Retain that observation separately from the measured health change.
         """
         if self._pending_heal is None:
             return
@@ -683,7 +700,7 @@ class Fight:
         went_unready = heal is not None and not (ready & (1 << (heal.slot - 1)))
         event("heal.observed", data={"hp_before": at_press, "hp_after": hp,
                                      "slot_went_unready": went_unready})
-        if (hp is not None and hp > at_press + 0.02) or went_unready:
+        if hp is not None and hp > at_press + 0.02:
             self.heals_landed += 1
             self._pending_heal = None
         elif time.monotonic() - when > 2.5:
@@ -699,10 +716,10 @@ class Fight:
         server's tally and not an inference.
         """
         event("fight.last_health", data={"target_hp": self.last_hp})
-        if self.last_hp is not None and self.last_hp >= LOST_HP:
-            self.detail = f"target vanished at {self.last_hp:.0%} health; not ours"
-            return Fought.LOST
-        return Fought.KILLED
+        if self.last_hp == 0.0:
+            return Fought.KILLED
+        self.detail = "target disappeared without observed death"
+        return Fought.LOST
 
     @staticmethod
     def _observe(values: dict | None) -> None:

@@ -107,8 +107,14 @@ def fake_live(monkeypatch, tmp_path, *, disconnected=False):
     class FakeBody:
         available = frozenset({"TRAVEL_TO"})
         validate = staticmethod(lambda decision, step: None)
-        def __init__(self, *args, **kwargs):
+        def __init__(self, client, *args, **kwargs):
+            self.client = client
             events.append("body created")
+        def has_focus(self):
+            return self.client.hid.ready()
+        def reconnect(self, checkpoint, *, env_file=None):
+            events.append("body reconnect")
+            return cli.reconnect_client(self.client, checkpoint, env_file=env_file)
     monkeypatch.setattr(cli, "LiveBody", FakeBody)
     class FakeBackground:
         def __init__(self, *args, **kwargs):
@@ -192,6 +198,7 @@ def test_screenshots_stop_before_capture_closes_even_when_supervisor_fails(tmp_p
 
     class FakeScreenshots:
         error = None
+        record_frame = Mock(return_value={})
 
         def __init__(self, frame, directory):
             assert frame is client.frame
@@ -219,6 +226,7 @@ def test_screenshot_storage_failure_cancels_worker_and_stops_test(tmp_path, monk
     graph = route_file(tmp_path)
     _client, events = fake_live(monkeypatch, tmp_path)
     screenshots = SimpleNamespace(error=None, start=lambda: None,
+                                  record_frame=Mock(return_value={}),
                                   close=lambda: events.append("screenshots closed"))
     monkeypatch.setattr(cli, "Screenshots", lambda *args: screenshots)
     worker = SimpleNamespace(cancel=Mock())
@@ -416,3 +424,67 @@ def test_screenshot_failure_during_startup_prevents_focus_and_input(tmp_path, mo
     client.focused.assert_not_called()
     client.hid.release_all.assert_called_once()
     assert events == ["screenshots closed", "client closed"]
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_live_body_receives_the_active_screenshot_event_writer(tmp_path, monkeypatch, enabled):
+    graph = route_file(tmp_path)
+    _, events = fake_live(monkeypatch, tmp_path)
+    monitor = SimpleNamespace(error=None, start=lambda: events.append("monitor started"),
+                              close=lambda: None, record_frame=Mock(return_value={"file": "event.png"}))
+    monkeypatch.setattr(cli, "Screenshots", lambda *args: monitor)
+    original = cli.LiveBody
+    supplied = []
+    class RecordingBody(original):
+        def __init__(self, *args, **kwargs):
+            supplied.append(kwargs["record_frame"])
+            super().__init__(*args, **kwargs)
+    monkeypatch.setattr(cli, "LiveBody", RecordingBody)
+    args = ["--graph", str(graph), "--run-for", "1", "--runs-dir", str(tmp_path / "runs")]
+    if enabled:
+        args.append("--screenshots")
+    assert cli.main(args) == 0
+    assert supplied == [monitor.record_frame if enabled else None]
+    if enabled:
+        assert events.index("monitor started") < events.index("body created")
+
+
+@pytest.mark.parametrize("reconnect_enabled", [False, True])
+def test_supervision_observes_focus_and_reconnects_through_the_shared_body_owner(
+        tmp_path, monkeypatch, reconnect_enabled):
+    graph = route_file(tmp_path)
+    client, events = fake_live(monkeypatch, tmp_path)
+    restored = SimpleNamespace(code="reconnected", detail="fixture session restored")
+    reconnect = Mock(return_value=restored)
+    monkeypatch.setattr(cli, "reconnect_client", reconnect)
+    original = cli.Supervisor
+    checkpoint = Mock()
+    env_file = tmp_path / "fixture.env"
+
+    class LifecycleSupervisor(original):
+        def __init__(self, runtime, body, *, has_focus, watchdog, **kwargs):
+            super().__init__(runtime, body, **kwargs)
+            assert has_focus.__self__ is body
+            self.has_focus, self.watchdog = has_focus, watchdog
+
+        def run(self, *args, **kwargs):
+            client.hid.ready = lambda: False
+            assert self.has_focus() is False
+            client.hid.ready = lambda: True
+            assert self.has_focus() is True
+            if reconnect_enabled:
+                assert self.watchdog.reconnect(checkpoint) is restored
+            else:
+                assert self.watchdog.reconnect is None
+
+    monkeypatch.setattr(cli, "Supervisor", LifecycleSupervisor)
+    args = ["--graph", str(graph), "--run-for", "1", "--env-file", str(env_file),
+            "--runs-dir", str(tmp_path / "runs")]
+    if reconnect_enabled:
+        args.append("--reconnect")
+    assert cli.main(args) == 0
+    if reconnect_enabled:
+        assert events.count("body reconnect") == 1
+        reconnect.assert_called_once_with(client, checkpoint, env_file=env_file)
+    else:
+        reconnect.assert_not_called()

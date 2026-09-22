@@ -1,5 +1,14 @@
 # Jev — architecture
 
+**Current contract, 22 September 2026:** [the visual teaching loop](docs/TEACHING_LOOP.md)
+supersedes this document's original rare-teacher/whole-skill-only restriction. In teaching
+mode Jev chooses bounded motor actions from screenshots and observed outcomes, using the
+guide and existing routines as support. Evaluated local capabilities progressively take
+over through outcome-qualified training, independent evaluation, canaries and rollback.
+The older scripted mode and its strategic learner remain available. The historical
+sections below describe that earlier mode; zero teacher dependency is a goal earned per
+capability, not an invariant imposed on an untrained motor controller.
+
 `docs/PLAN.md` is the vision. This file is the buildable form of it, and overrides the
 plan wherever the two disagree. Every deviation is recorded with its reason so nobody
 re-derives it. Decisions live in `DECISIONS.md`.

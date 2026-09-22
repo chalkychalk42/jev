@@ -1443,3 +1443,86 @@ Verification: **1,119 tests passed**, including concurrent/nested recorder lifec
 actual primitive composition, old corpus/parquet compatibility, Lua wire execution,
 historical schemas, partial input failure, cleanup failure, event capture and freshness.
 Ruff (`jev tools tests`), generated-addon identity and `git diff --check` pass.
+
+## 2026-09-22 — Shared targeting composition and retained camera geometry
+
+DID: carried the earlier measured hover work into the shared `Targeting.click_selected`
+path used by Fight, Interact and Loot. Fresh post-arrival hover, pointer position and
+owned frame geometry govern button delivery. Native window binding checks both executable
+identity and the game window class. Shared UI cleanup preserves unread/open-window
+failures. Portable annotated corpus images and a separate evaluation set retain false
+positive cases for repeatable offline checks.
+
+Camera pitch calibration is retained across compatible calls and invalidated on actual
+focus, geometry or reconnect changes. No replacement combat timing or navigation tuning
+was introduced. The experimental no-damage cutoff was withdrawn; measured close/reaim
+and navigation constants remain intact.
+
+LIVE EVIDENCE BEFORE THE OPERATOR PAUSE: runs `20260922T192105-3d5fcf` and
+`20260922T193609-c61a62` retained the one-second and event images. Calibration no longer
+repeated on every attempt, but some grass hypotheses still passed targeting, and the
+wolf approach produced no verified damage or wolf-meat progress. Quest 33 stayed 0/8.
+This did not prove engagement, a soak or an eligible learned capability. The final
+read-only check at that pause reported movement keys and mouse buttons released.
+
+## 2026-09-22 — Visual teaching and gradual motor handover
+
+DID: implemented the owner-confirmed architecture in `jev/play`, composed inside the
+existing guide, supervisor and single input worker. The full contract and supervised
+launcher are in [TEACHING_LOOP.md](docs/TEACHING_LOOP.md); architectural decision V38
+supersedes the original whole-skill-only teacher restriction.
+
+- Jev receives an owned screenshot, same-capture radio/state, configured key semantics,
+  current objective and recent measured results. It proposes a bounded movement, turn,
+  action-slot activation, grounded pointer/click, camera adjustment or existing skill.
+  Fresh execution guards and cleanup apply to teacher and student alike. Camera work is
+  optional; confirmed scripted routines and navigation constants remain available.
+- Knowledge retrieval now includes the existing complete TBC 2.4.3 build 8606 world/DBC
+  snapshot, in read-only mode with pinned provenance and hash. Bounded entity lookups
+  cover quests, NPCs, items, spells, objects, loot, vendors, trainers and related spawns.
+  Missing information and live binding/action-bar uncertainty remain explicit.
+- Crash-readable records join requests, accepted actions, actual delivery, independent
+  effects and completed episodes. Movement, model confidence and delivered clicks cannot
+  manufacture combat, quest or learning success. Composed resupply verifies stable item
+  counts; no-take loot remains non-fatal without positive credit; unknown power type
+  cannot finish rest. Modal Escape is reachable during combat without bypassing death,
+  guide failure or normal combat interruption.
+- The continuous local learner fits visual-conditioned action/parameter examples only
+  from verified useful episodes. Whole-run evaluation, novel-state abstention, shadow,
+  bounded canaries, audits and rollback govern authority per capability. Promotion
+  counts all teacher calls in complete episodes, including corrections in other
+  capabilities, and requires maintained useful progress. New weights repeat the gates;
+  no production model has been trained or promoted from fixtures.
+- Teaching and adaptive CLI modes enable one-second screenshots and learning. The
+  prepared native Windows launcher defaults to an offline check. Explicit continuous
+  collection closes each real session before the next and preserves the playhead/store;
+  failure or operator stop never auto-restarts. No client was attached or controlled
+  during this implementation turn.
+
+DEPLOYMENT EVIDENCE: native Windows checked every configured path, both saved binding
+files, the full world snapshot and the launcher's actual offline entrypoint. It reports
+31 supported quest chains and no missing executors. Native readiness reports
+`ok=true`, `model_calls=0`, `game_input_executed=false`. The native Claude executable,
+required flags and subscription login also pass deployment checks.
+
+TRANSPORT LIMIT: automatic approval review rejected exporting a saved game image and
+derived prompt to Claude because explicit export approval was not established. No game
+image was sent. A separately approved synthetic-only probe and one diagnostic follow-up
+used generated colored rectangles and public-example literals from a neutral directory.
+The diagnostic returned HTTP 429: “You've hit your weekly limit · resets 4am
+(Europe/London)”. No reset date is inferred; no actual served model/token usage or
+successful vision round-trip was established. No further model calls were attempted.
+See [the recorded transport evidence](docs/TEACHING_TRANSPORT.md).
+
+NOW: implementation and native offline setup are complete. The first supervised live
+acceptance remains approach → observed damage → death/loot → quest-counter progress,
+followed by turn-in, sustained service/recovery and eventually measured student handover.
+It requires available subscription capacity and resolution of the screenshot-export
+approval block. Offline success is not evidence that the next wolf will be engaged.
+
+VERIFICATION: **1,676 tests passed in 93.48 seconds** after the final composition
+corrections. Ruff (`jev tools tests`) and `git diff --check` pass. Tests include actual
+controller/executor composition with fake input and painted telemetry, continuous learner
+handover/rollback, subprocess cleanup, the observed quota error, exact SQLite schema
+queries and the modal/combat/loot/service boundaries. Native Windows offline checks passed
+separately; no live test or game screenshot export was performed in this build turn.

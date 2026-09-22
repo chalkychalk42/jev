@@ -20,10 +20,14 @@ from jev.perceive.units import (
     Ring,
     RingColour,
     _find_ring,
+    candidates,
+    corpse_candidates,
     find,
     find_plates,
     mask_for,
     plate_for,
+    revalidate,
+    revalidate_corpse,
 )
 
 LIVE = pathlib.Path(__file__).parent / "fixtures" / "live-willem-targeted.npz"
@@ -266,3 +270,166 @@ def test_faded_merchants_remain_candidates_when_someone_else_is_selected():
     assert len(bright) == 1 and abs(bright[0].cx - 774) < 2
     dermot = next(plate for plate in plates if abs(plate.cx - 997) < 2)
     assert find(frame, plate=dermot) is None
+
+
+# --- untrusted proposals and fresh geometry --------------------------------
+
+def _scene(*, ring_colour=(211, 173, 8), ring_left=770, ring_top=540,
+           bar_left=728, bar_top=345):
+    """Simple independent surfaces; no fixture's desired point is used to draw these."""
+    frame = np.zeros((900, 1600, 3), dtype=np.uint8)
+    frame[bar_top:bar_top + 5, bar_left:bar_left + 145] = (130, 117, 3)
+    _outline(frame, ring_left, ring_top, 60, 20, ring_colour)
+    return frame
+
+
+def _outline(frame, left, top, width, height, colour):
+    frame[top, left:left + width] = colour
+    frame[top + height - 1, left:left + width] = colour
+    frame[top:top + height, left] = colour
+    frame[top:top + height, left + width - 1] = colour
+
+
+def test_component_bounds_preserve_extrema_instead_of_centring_on_colour_mass():
+    from jev.perceive.radio_frame import _blobs
+
+    mask = np.zeros((12, 20), dtype=bool)
+    mask[2:9, 3] = True
+    mask[8, 3:16] = True
+    [blob] = _blobs(mask)
+    assert blob.bounds == (3, 2, 16, 9)
+    assert (blob.w, blob.h) == (13, 7)
+    assert blob.cx != (3 + 15) / 2
+    assert blob.cy != (2 + 8) / 2
+
+
+def test_proposals_preserve_measured_ring_and_bar_bounds():
+    [sighting] = candidates(_scene())
+    assert sighting.ring.bounds == (770, 540, 830, 560)
+    assert sighting.plate.bounds == (728, 345, 873, 350)
+    assert sighting.plate.h == 5
+    assert sighting.torso == (800, 445)
+    assert sighting.admits(sighting.torso)
+    assert not sighting.admits((800, 349))
+    assert not sighting.admits((800, 540))
+    assert not sighting.admits((873, 445))
+
+
+def test_multiple_proposals_do_not_promote_the_largest_component_to_identity():
+    frame = _scene()
+    _outline(frame, 755, 650, 90, 40, (211, 173, 8))
+    proposals = candidates(frame)
+    assert len(proposals) == 2
+    assert proposals[0].ring.area < proposals[1].ring.area
+    assert proposals[0].ring.bounds == (770, 540, 830, 560)
+    assert candidates(frame, limit=1) == proposals[:1]
+
+
+@pytest.mark.parametrize("limit", [0, -1, 1.5, True])
+def test_proposal_budget_requires_a_positive_integer(limit):
+    frame = _scene()
+    with pytest.raises(ValueError, match="positive integer"):
+        candidates(frame, limit=limit)
+    with pytest.raises(ValueError, match="positive integer"):
+        corpse_candidates(frame, limit=limit)
+
+
+def test_ring_badge_overlapping_bar_is_rejected_by_actual_bounds():
+    # A red component remains separate from the yellow bar, even where they overlap
+    # vertically. Comparing centroids alone would allow it to pose as feet below a bar.
+    frame = _scene(ring_colour=(220, 20, 20), ring_top=346)
+    assert candidates(frame) == ()
+
+
+def test_living_point_must_stay_inside_paired_bar_horizontal_span():
+    frame = _scene(ring_left=910)
+    assert find(frame) is not None  # legacy loose 140-pixel association
+    assert candidates(frame) == ()
+
+
+def test_another_nameplate_covering_the_point_excludes_it():
+    frame = _scene()
+    frame[443:448, 740:885] = (72, 219, 48)
+    assert candidates(frame) == ()
+    assert revalidate(frame, (800, 445)) is None
+
+
+def test_red_is_an_explicit_untrusted_ring_proposal_with_a_yellow_bar():
+    frame = _scene(ring_colour=(220, 20, 20))
+    assert find(frame) is None
+    [sighting] = candidates(frame)
+    assert sighting.ring.colour is RingColour.RED
+    assert sighting.plate.colour is RingColour.YELLOW
+    assert MEASURED == (RingColour.GREEN, RingColour.YELLOW)
+
+
+def test_revalidation_checks_the_requested_point_in_current_pixels():
+    before = _scene()
+    [sighting] = candidates(before)
+    assert revalidate(before, sighting.torso) is not None
+    # The target moves sideways while the pointer approaches. The earlier midpoint
+    # cannot be reused merely because the earlier bracket still exists in memory.
+    after = _scene(ring_left=1010, bar_left=968)
+    assert candidates(after)
+    assert revalidate(after, sighting.torso) is None
+    assert revalidate(before, (800, 348)) is None  # own nameplate surface
+
+
+def test_revalidation_does_not_require_the_requested_point_to_be_a_new_midpoint():
+    frame = _scene()
+    checked = (790, 430)
+    current = revalidate(frame, checked)
+    assert current is not None
+    assert current.torso != checked
+    assert current.admits(checked)
+
+
+def test_legacy_manual_components_cannot_invent_measured_brackets():
+    from jev.perceive.units import Sighting
+
+    ring = Ring(800, 550, 60, 20, RingColour.YELLOW, 150)
+    plate = Plate(800, 347, 145, RingColour.YELLOW)
+    assert ring.bounds is None and plate.bounds is None
+    assert not Sighting(ring, plate, (800, 445)).admits((800, 445))
+
+
+def test_corpse_proposal_retains_the_measured_prone_pose_and_requires_current_ring():
+    frame = _scene()
+    [sighting] = corpse_candidates(frame)
+    assert sighting.point == (800, 544)
+    assert sighting.ring.bounds == (770, 540, 830, 560)
+    assert revalidate_corpse(frame, sighting.point) is not None
+    assert revalidate_corpse(frame, (800, 445)) is None
+    moved = _scene(ring_left=1010, bar_left=968)
+    assert revalidate_corpse(moved, sighting.point) is None
+
+
+def test_corpse_proposal_rejects_plate_surfaces_and_interface():
+    frame = _scene()
+    frame[542:547, 728:873] = (72, 219, 48)
+    assert all(not (542 <= s.point[1] < 547) for s in corpse_candidates(frame))
+    assert revalidate_corpse(frame, (800, 544)) is None
+    # The component's centroid clears the minimap, while the prone-pose point lies
+    # inside it. The shared point check still excludes that interface surface.
+    frame = np.zeros((900, 1600, 3), dtype=np.uint8)
+    _outline(frame, 1400, 200, 80, 80, (211, 173, 8))
+    assert _find_ring(frame) is not None
+    assert corpse_candidates(frame) == ()
+    assert revalidate_corpse(frame, (1440, 220)) is None
+
+
+@pytest.mark.parametrize("fixture", [
+    "live-dermot-targeted.npz", "live-dermot-thin-ring.npz",
+    "live-dermot-unselected.npz",
+])
+def test_measured_merchant_brackets_survive_proposal_and_revalidation(fixture):
+    frame = np.load(LIVE.parent / fixture)["frame"]
+    proposals = candidates(frame)
+    assert len(proposals) == 1
+    current = proposals[0]
+    assert current.ring.bounds is not None and current.plate.bounds is not None
+    assert revalidate(frame, current.torso) == current
+
+
+def test_name_only_target_cannot_borrow_unrelated_visible_bars():
+    assert candidates(hostile_frame()) == ()

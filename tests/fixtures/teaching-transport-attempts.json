@@ -1,0 +1,33 @@
+{
+  "source": "Native Windows Claude 2.1.280, synthetic generated-shapes-only probes, 2026-09-22",
+  "contains_game_data": false,
+  "attempts": [
+    {
+      "status": "transport_or_schema_failed",
+      "model_calls": 1,
+      "requested_model": "sonnet",
+      "actual_model": null,
+      "tokens_in": null,
+      "tokens_out": null,
+      "latency_ms": 1619.3121000105748
+    },
+    {
+      "status": "transport_api_error_429",
+      "model_calls": 1,
+      "requested_model": "sonnet",
+      "actual_model": null,
+      "tokens_in": null,
+      "tokens_out": null,
+      "latency_ms": 2055.639300000621,
+      "diagnostic": {
+        "subtype": "success",
+        "is_error": true,
+        "api_error_status": 429,
+        "stop_reason": "stop_sequence",
+        "terminal_reason": "api_error",
+        "result_error": "You've hit your weekly limit \u00b7 resets 4am (Europe/London)",
+        "stderr": ""
+      }
+    }
+  ]
+}

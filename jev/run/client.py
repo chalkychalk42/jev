@@ -78,6 +78,7 @@ class Client:
     log: QuestLog = field(default_factory=QuestLog)
     _seq: int | None = field(default=None, init=False)
     _seq_at: float = field(default=0.0, init=False)
+    _paint_generation: int = field(default=0, init=False)
     travel: Travel | None = field(default=None, init=False)
     query: PathQuery | None = field(default=None, init=False)
     bounds: ZoneBounds | None = field(default=None, init=False)
@@ -117,6 +118,7 @@ class Client:
         now = time.monotonic()
         if seq != self._seq or self._seq_at == 0.0:
             self._seq, self._seq_at = seq, now
+            self._paint_generation += 1
 
     def frozen_for(self) -> float:
         """Seconds since the strip's sequence number last advanced."""
@@ -189,17 +191,25 @@ class Client:
             r = self.reading()
             if r is None:
                 return None
-            state = radio_frame.to_state(r, t=time.time(), client_id=self.client_id,
-                                         quests=self.log.complete)
-            if self.bounds is None:
-                return state
-            values = self._navigation_values(r.values)
-            updates = {name: values.get(f"pos.{name}") for name in (
-                "mx", "my", "corpse_mx", "corpse_my", "coord_zone_id",
-                "raw_mx", "raw_my", "raw_corpse_mx", "raw_corpse_my")}
-            updates["zone"] = self.coordinate_names.get(state.pos.zone_id)
-            return state.model_copy(update={"pos": Pos.model_validate({
-                **state.pos.model_dump(), **updates})})
+            return self.state_from(r, captured_at=time.time())
+
+    def state_from(self, reading, *, captured_at: float):
+        """Assemble state from an owned observation without taking a second frame.
+
+        Callers hold ``_capturing`` while updating/reading the assembled quest log.
+        Both the ordinary tracker and visual action loop use the same map transform.
+        """
+        state = radio_frame.to_state(reading, t=captured_at, client_id=self.client_id,
+                                     quests=self.log.complete)
+        if self.bounds is None:
+            return state
+        values = self._navigation_values(reading.values)
+        updates = {name: values.get(f"pos.{name}") for name in (
+            "mx", "my", "corpse_mx", "corpse_my", "coord_zone_id",
+            "raw_mx", "raw_my", "raw_corpse_mx", "raw_corpse_my")}
+        updates["zone"] = self.coordinate_names.get(state.pos.zone_id)
+        return state.model_copy(update={"pos": Pos.model_validate({
+            **state.pos.model_dump(), **updates})})
 
     # -- the one composed action ---------------------------------------------
 
@@ -286,10 +296,10 @@ def attach(client_id: str = "run", *, title: str = "World of Warcraft",
     """Find the window and wire it up. Raises `NotRunning` rather than returning `None`."""
     if not win32.available():
         raise NotRunning("this needs Windows Python; there is no window on this platform")
-    hwnds = win32.find_windows(title)
-    if not hwnds:
-        raise NotRunning(f"no window matching {title!r}")
-    hwnd = hwnds[0]
+    try:
+        hwnd = win32.game_window(title)
+    except win32.GameWindowError as exc:
+        raise NotRunning(str(exc)) from exc
     ox, oy, w, h = win32.client_rect(hwnd)
     return Client(
         hwnd=hwnd,

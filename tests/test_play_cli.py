@@ -1,0 +1,194 @@
+"""The visual-playing CLI must preserve the read-only preflight and one-owner launch."""
+
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+from test_run_cli import fake_live, route_file
+
+from jev.run import cli
+
+
+@pytest.mark.parametrize("mode", ["teach", "adaptive"])
+def test_play_check_is_read_only_and_forces_evidence_and_learning(tmp_path, monkeypatch, capsys, mode):
+    graph = route_file(tmp_path)
+    monkeypatch.setattr(cli, "ROOT", tmp_path)
+    prohibited = []
+    for name in ("attach", "input_lock_path", "file_lock", "Recorder", "MmapQuery", "Background",
+                 "reconnect_client", "Screenshots", "atomic_json"):
+        mock = Mock(side_effect=AssertionError(f"--check invoked {name}"))
+        monkeypatch.setattr(cli, name, mock)
+        prohibited.append(mock)
+    for name in ("PlayingBody", "ClaudeVisionClient", "VisionTeacher", "MotorLearner", "PlayJournal"):
+        mock = Mock(side_effect=AssertionError(f"--check constructed {name}"))
+        monkeypatch.setattr(f"jev.play.runtime.{name}", mock)
+        prohibited.append(mock)
+    credentials = Mock(side_effect=AssertionError("--check read reconnect credentials"))
+    monkeypatch.setattr("jev.run.watchdog.credentials", credentials)
+    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+    result = cli.main(["--check", "--graph", str(graph), "--play-mode", mode,
+                       "--teacher-binary", "/missing/never-execute", "--teacher-model", "fixture",
+                       "--play-teacher-calls-per-hour", "3", "--play-decision-timeout", "2",
+                       "--learning-store", str(tmp_path / "learning"),
+                       "--runs-dir", str(tmp_path / "runs"), "--reconnect",
+                       "--bindings", str(tmp_path / "account-bindings.wtf"),
+                       "--bindings", str(tmp_path / "character-bindings.wtf")])
+    assert result == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["play_mode"] == mode and report["motor_learning"] and report["visual_teacher"]
+    assert report["screenshots"] and report["learning"]
+    assert report["motor_handover"] is (mode == "adaptive")
+    assert report["play_teacher_calls_per_hour"] == 3
+    assert report["bindings"] == [str(tmp_path / "account-bindings.wtf"),
+                                  str(tmp_path / "character-bindings.wtf")]
+    assert report["live_tested"] is False
+    assert sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*")) == before
+    for mock in [*prohibited, credentials]:
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize(("option", "value"), [
+    ("--play-decision-timeout", "0"), ("--play-decision-timeout", "-1"),
+    ("--play-decision-timeout", "nan"), ("--play-decision-timeout", "inf"),
+    ("--play-teacher-calls-per-hour", "0"),
+])
+def test_invalid_play_exposure_or_budget_is_rejected_before_attachment(tmp_path, monkeypatch, option, value):
+    graph = route_file(tmp_path)
+    attach = Mock(side_effect=AssertionError("invalid setup attached client"))
+    monkeypatch.setattr(cli, "attach", attach)
+    with pytest.raises(SystemExit) as error:
+        cli.main(["--check", "--graph", str(graph), "--play-mode", "teach", option, value])
+    assert error.value.code == 2
+    attach.assert_not_called()
+
+
+def install_playing_launcher(monkeypatch, events):
+    arguments = {}
+
+    class FakeScreenshots:
+        error = None
+        record_frame = Mock()
+        def __init__(self, frame, directory):
+            events.append("screenshots created")
+        def start(self):
+            events.append("screenshots started")
+            return self
+        def close(self):
+            events.append("screenshots closed")
+
+    class FakePlayingBody:
+        def __init__(self, spine, **kwargs):
+            events.append("playing created")
+            arguments.update(kwargs)
+            self.spine, self.available, self.validate = spine, spine.available, spine.validate
+            self.has_focus, self.reconnect = spine.has_focus, spine.reconnect
+        def poll(self, state):
+            events.append("playing poll")
+        def close(self):
+            events.append("playing closed")
+
+    monkeypatch.setattr(cli, "Screenshots", FakeScreenshots)
+    monkeypatch.setattr("jev.play.runtime.PlayingBody", FakePlayingBody)
+    strategic = Mock(side_effect=AssertionError("parallel strategic teacher constructed during visual play"))
+    monkeypatch.setattr("jev.teacher.client.ClaudeSubscriptionClient", strategic)
+    return arguments, strategic, FakePlayingBody
+
+
+@pytest.mark.parametrize("mode", ["teach", "adaptive"])
+def test_launch_wraps_one_spine_after_screenshots_and_uses_motor_tutor_budget(tmp_path, monkeypatch, mode):
+    graph = route_file(tmp_path)
+    client, events = fake_live(monkeypatch, tmp_path)
+    arguments, strategic, body_class = install_playing_launcher(monkeypatch, events)
+    seen = {}
+    class Supervisor:
+        failure = None
+        def __init__(self, runtime, body, **kwargs):
+            assert isinstance(body, body_class)
+            assert body.spine.client is client
+            seen["body"] = body
+            seen["runtime"] = runtime
+            seen["housekeeping"] = kwargs["housekeeping"]
+            events.append("supervisor created")
+        def run(self, *args, **kwargs):
+            seen["housekeeping"](None)
+            events.append("supervisor ran")
+        def close(self):
+            events.append("supervisor closed")
+    monkeypatch.setattr(cli, "Supervisor", Supervisor)
+    assert cli.main(["--graph", str(graph), "--play-mode", mode, "--teacher",
+                     "--teacher-model", "fixture", "--play-teacher-calls-per-hour", "7",
+                     "--play-decision-timeout", "4", "--bindings", str(tmp_path / "bindings.wtf"),
+                     "--runs-dir", str(tmp_path / "runs"),
+                     "--learning-store", str(tmp_path / "learning"), "--run-for", "1"]) == 0
+    assert arguments["mode"] == mode and arguments["config"].mode == mode
+    assert arguments["teacher_calls_per_hour"] == 7
+    assert arguments["config"].teacher_timeout_s == 4
+    assert arguments["teacher_model"] == "fixture"
+    assert arguments["binding_paths"] == [tmp_path / "bindings.wtf"]
+    assert arguments["screenshots"] is not None
+    assert events.index("screenshots started") < events.index("playing created")
+    assert events.index("playing created") < events.index("supervisor created")
+    assert events.index("supervisor closed") < events.index("playing closed")
+    assert events.index("playing closed") < events.index("client closed")
+    assert events.count("body created") == 1 and events.count("playing created") == 1
+    assert "playing poll" in events
+    strategic.assert_not_called()
+
+
+def test_interrupt_stops_worker_then_visual_learning_and_capture(tmp_path, monkeypatch):
+    graph = route_file(tmp_path)
+    _client, events = fake_live(monkeypatch, tmp_path)
+    install_playing_launcher(monkeypatch, events)
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt()
+    monkeypatch.setattr(cli.Supervisor, "run", interrupted)
+    assert cli.main(["--graph", str(graph), "--play-mode", "teach", "--run-for", "1",
+                     "--runs-dir", str(tmp_path / "runs"),
+                     "--learning-store", str(tmp_path / "learning")]) == 130
+    assert events[-5:] == ["supervisor closed", "playing closed", "screenshots closed",
+                           "background closed", "client closed"]
+
+
+def test_visual_setup_failure_releases_input_and_capture_without_starting_worker(tmp_path, monkeypatch):
+    graph = route_file(tmp_path)
+    client, events = fake_live(monkeypatch, tmp_path)
+    install_playing_launcher(monkeypatch, events)
+    def broken(*args, **kwargs):
+        raise ValueError("invalid control configuration")
+    monkeypatch.setattr("jev.play.runtime.PlayingBody", broken)
+    with pytest.raises(ValueError, match="invalid control configuration"):
+        cli.main(["--graph", str(graph), "--play-mode", "teach", "--run-for", "1",
+                  "--runs-dir", str(tmp_path / "runs"),
+                  "--learning-store", str(tmp_path / "learning")])
+    assert "supervisor created" not in events and "background created" not in events
+    assert events[-2:] == ["screenshots closed", "client closed"]
+    client.hid.release_all.assert_called_once()
+    assert client.hid.checkpoint is None
+
+
+def test_screenshot_failure_stops_playing_worker_before_another_decision(tmp_path, monkeypatch):
+    graph = route_file(tmp_path)
+    _client, events = fake_live(monkeypatch, tmp_path)
+    arguments, _, _ = install_playing_launcher(monkeypatch, events)
+    worker = SimpleNamespace(cancel=Mock())
+    class Supervisor:
+        failure = None
+        def __init__(self, *args, housekeeping, **kwargs):
+            import threading
+            self.worker, self.stopped, self.housekeeping = worker, threading.Event(), housekeeping
+        def run(self, *args, **kwargs):
+            arguments["screenshots"].error = "disk full"
+            self.housekeeping(None)
+            assert self.stopped.is_set()
+        def close(self):
+            events.append("supervisor closed")
+    monkeypatch.setattr(cli, "Supervisor", Supervisor)
+    assert cli.main(["--graph", str(graph), "--play-mode", "teach", "--run-for", "1",
+                     "--runs-dir", str(tmp_path / "runs"),
+                     "--learning-store", str(tmp_path / "learning")]) == 1
+    worker.cancel.assert_called_once_with("disk full")
+    assert "playing poll" not in events
+    assert events[-1] == "client closed"

@@ -78,6 +78,35 @@ def test_sequence_wrap_is_fresh(clock):
     assert result.code == HoverCode.MATCH
 
 
+@pytest.mark.parametrize("actual", [(399, 501), (401, 499)])
+def test_hover_reports_the_measured_landing_including_input_rounding(clock, actual):
+    samples = iter([radio(1), radio(2), radio(3)])
+    moves = []
+    hid = SimpleNamespace(move_to=lambda *point: moves.append(point) or True,
+                          cursor_position=lambda: actual, checkpoint=None)
+    result = Targeting(hid, lambda: next(samples), wait_s=0.2).probe((400, 500))
+    assert result.code is HoverCode.MATCH
+    assert result.point == actual
+    assert moves == [(400, 500)]
+
+
+def test_pointer_drift_during_paint_wait_invalidates_hover_ownership(clock):
+    point = [(400, 500)]
+    samples = iter([radio(1), radio(2), radio(3)])
+
+    def read():
+        sample = next(samples)
+        if sample["seq"] == 3:
+            point[0] = (500, 600)
+        return sample
+
+    hid = SimpleNamespace(move_to=lambda *point: True,
+                          cursor_position=lambda: point[0], checkpoint=None)
+    result = Targeting(hid, read, wait_s=0.2).probe((400, 500))
+    assert result.code is not HoverCode.MATCH
+    assert result.point == (400, 500)
+
+
 def test_old_schema_is_unknown(clock):
     samples = [{key: val for key, val in radio(seq).items() if not key.startswith("cursor.")}
                for seq in (1, 2, 3)]

@@ -235,6 +235,9 @@ class _Blob:
     cy: float
     w: float
     h: float
+    # Preserve actual component extrema. A colour centroid need not be the centre of
+    # its bounding rectangle (an occluded selection arc is a common example).
+    bounds: tuple[int, int, int, int] | None = None
 
 
 def _rgb(frame: np.ndarray) -> np.ndarray:
@@ -325,6 +328,7 @@ def _blobs(mask: np.ndarray) -> list[_Blob]:
                 cy=sy / area,
                 w=xmax - xmin + 1,
                 h=ymax - ymin + 1,
+                bounds=(int(xmin), int(ymin), int(xmax) + 1, int(ymax) + 1),
             )
         )
     out.sort(key=lambda b: -b.area)

@@ -3,7 +3,9 @@
 Capture uses the client's existing locked reader. Periodic encoding and disk writes stay
 on the worker thread. Explicit event captures are synchronous so their returned file is
 an actual observation around an action, never a nearest periodic frame. Both paths share
-one lock and manifest. Slow samples skip elapsed slots instead of inventing pictures.
+one lock and manifest. Already captured action observations can be persisted afterwards
+without taking another frame or putting PNG writes between verification and input. Slow
+samples skip elapsed slots instead of inventing pictures.
 """
 
 from __future__ import annotations
@@ -71,22 +73,61 @@ class Screenshots:
         Storage failure is fatal, just as for periodic monitoring. This synchronous
         observation is not atomic with a caller's separate radio read or input.
         """
-        if not isinstance(label, str) or _EVENT_LABEL.fullmatch(label) is None:
-            raise ValueError("event label must be 1-80 letters, digits, dots, underscores or hyphens, "
-                             "starting with a letter or digit")
+        self._validate_label(label)
         requested = time.time()
         with self._lock:
-            if self.error is not None:
-                raise ScreenshotError(self.error)
-            if self._closed or self._stop.is_set():
-                raise ScreenshotError("screenshot recorder is closed")
-            if self._thread is None or self._stream is None or self._stream.closed:
-                raise ScreenshotError("screenshot recorder has not been started")
+            self._require_open()
             try:
                 return self._sample(kind="event", label=label, event_t=requested)
             except Exception as exc:
                 self._failed(exc)
                 raise ScreenshotError(self.error) from exc
+
+    def record_frame(self, label: str, pixels: object | None, *, captured_at: float) -> dict:
+        """Persist the supplied observation without calling the capture reader.
+
+        ``captured_at`` is the caller's capture time in Unix seconds, also retained in
+        ``t`` for the visual timeline. ``event_t`` is this persistence request's time;
+        ``recorded_at`` starts the write after lock acquisition, and ``duration_s``
+        measures persistence only. The caller may therefore save both sides of an
+        action after input without relabeling those observations as later captures.
+
+        Pixels must remain unchanged until this synchronous call returns. A missing
+        observation is recorded as unavailable, never replaced by a fresh or periodic
+        frame. Storage failures and close ownership match ``capture_event``.
+        """
+        self._validate_label(label)
+        if (isinstance(captured_at, bool) or not isinstance(captured_at, (int, float))
+                or not math.isfinite(captured_at) or captured_at <= 0):
+            raise ValueError("capture time must be positive and finite Unix seconds")
+        requested = time.time()
+        with self._lock:
+            self._require_open()
+            started = time.monotonic()
+            row = {"index": self.captured + self.missing, "t": captured_at,
+                   "kind": "event", "label": label, "event_t": requested,
+                   "captured_at": captured_at, "recorded_at": time.time(),
+                   "source": "recorded_frame", "skipped_slots": self.skipped}
+            try:
+                return self._persist(pixels, row, started)
+            except Exception as exc:
+                self._failed(exc)
+                raise ScreenshotError(self.error) from exc
+
+    @staticmethod
+    def _validate_label(label: str) -> None:
+        if not isinstance(label, str) or _EVENT_LABEL.fullmatch(label) is None:
+            raise ValueError("event label must be 1-80 letters, digits, dots, underscores or hyphens, "
+                             "starting with a letter or digit")
+
+    def _require_open(self) -> None:
+        """Called while holding the capture/write lock."""
+        if self.error is not None:
+            raise ScreenshotError(self.error)
+        if self._closed or self._stop.is_set():
+            raise ScreenshotError("screenshot recorder is closed")
+        if self._thread is None or self._stream is None or self._stream.closed:
+            raise ScreenshotError("screenshot recorder has not been started")
 
     def close(self) -> None:
         self._stop.set()
@@ -135,9 +176,15 @@ class Screenshots:
             row.update(label=label, event_t=event_t)
         try:
             pixels = self.frame()
-            if pixels is None:
-                raise ScreenshotError("client frame unavailable")
         except Exception as exc:
+            return self._persist(None, row, started, capture_error=exc)
+        return self._persist(pixels, row, started)
+
+    def _persist(self, pixels: object | None, row: dict, started: float, *,
+                 capture_error: Exception | None = None) -> dict:
+        """One PNG/index/manifest path, always under the recorder's ownership lock."""
+        if capture_error is not None or pixels is None:
+            exc = capture_error or ScreenshotError("client frame unavailable")
             self.missing += 1
             detail = f"{type(exc).__name__}: {exc}"
             row.update(status="unavailable", error=detail)
@@ -145,8 +192,8 @@ class Screenshots:
                 self.say(f"screenshot unavailable: {detail}")
             self._last_capture_error = detail
         else:
-            stamp = datetime.fromtimestamp(wall, UTC).strftime("%Y%m%dT%H%M%S.%fZ")
-            name = f"{index:06d}-{stamp}.png"
+            stamp = datetime.fromtimestamp(row["t"], UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+            name = f"{row['index']:06d}-{stamp}.png"
             path = self.directory / name
             pending = path.with_suffix(".png.tmp")
             try:

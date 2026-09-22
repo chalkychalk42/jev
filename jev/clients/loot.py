@@ -3,12 +3,9 @@
 A great many quests are "bring me eight of these", and the eight come off corpses rather
 than out of the air. Without this a kill counter can fill while the quest never does.
 
-The corpse is where the kill was, and the client is still pointing at it: a unit stays
-selected after it dies, so its **selection ring is still drawn** and `units._find_ring`
-still finds it. That is the same primitive the fight already uses to turn, reused rather
-than a second way of knowing where something is. Right-click just above the ring - a unit
-stands on its own ring, alive or not - and with auto-loot enabled the client empties it
-in one action.
+A corpse lies on its selection ring. Shared Targeting proposes that measured pose,
+verifies dead selected-unit hover and fresh geometry, then delivers the input. This skill
+observes what changed; input delivery alone never establishes a take or an empty corpse.
 
 What counts as having looted
 ----------------------------
@@ -26,11 +23,12 @@ rather than an inference from the bags.
 stack meat 1 made, so seven of the eight take no new slot: a bot that believes free slots
 reports `nothing` for most of a collect quest while the counter climbs behind it.
 
-The loot frame is **not** evidence and is not consulted. A frame appearing means a corpse
+The loot frame alone is **not** evidence of a take. A frame appearing means a corpse
 was opened, not that anything was taken, and it is only auto loot that makes the two
 coincide - which is a client setting this code cannot see. `autoLootCorpse "1"` is set in
 `WTF/Config.wtf`; if it is ever off, the frame would stand open and nothing would be in
 the bags, and believing the frame would report a take on every empty wolf in the zone.
+Window visibility is used only to verify that cleanup leaves the next action unblocked.
 
 An empty corpse is a real and common outcome. `NOTHING` means no observed change after
 the click; that remains non-fatal, but cannot prove whether the corpse was empty or the
@@ -44,26 +42,15 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import StrEnum
 
-from jev.perceive.units import _find_ring
-from jev.run.evidence import event, operation, traced
+from jev.clients.targeting import ClickCode, Targeting
+from jev.clients.windows import CloseCode, close_observed
+from jev.run.evidence import event, traced
 
 # How long to wait for the bags or the loot frame to admit something happened.
 SETTLE_S = 2.0
-
-# Where to aim on a corpse: the ring itself.
-#
-# A living unit stands on its ring, so the fight aims above it to hit the body. A dead one
-# **lies on** it, and aiming above a corpse clicks the empty air it used to occupy. First
-# live attempt: `killed` then `loot: nothing`, on a wolf with an eighty percent quest drop
-# and a counter that did not move.
-#
-# A small lift, because the carcass has some height and the ring's lower arc is ground.
-ABOVE_RING_PX = 0
-CORPSE_LIFT_FRACTION = 0.25
-
 
 class Looted(StrEnum):
     TOOK = "took"              # objective, money or bag capacity changed
@@ -71,6 +58,9 @@ class Looted(StrEnum):
     NO_CORPSE = "no_corpse"    # nothing selected to loot
     BAGS_FULL = "bags_full"    # would not fit; a vendor is the answer, not a click
     BLIND = "blind"
+    REFUSED = "refused"
+    INTERRUPTED = "interrupted"
+    WINDOW_OPEN = "window_open"   # observed loot UI could not be confirmed closed
 
     @property
     def ok(self) -> bool:
@@ -85,6 +75,7 @@ class Loot:
     window_origin: tuple[int, int] = (0, 0)
     # A corpse has a ring only if the camera is pointing at it. See `Fight.level`.
     level: Callable[[], object] | None = None
+    targeting: Targeting | None = None
     _progress: Callable[[], tuple[int | None, int | None]] | None = field(
         default=None, init=False)
     clicked: tuple[int, int] | None = field(default=None, init=False)
@@ -101,37 +92,30 @@ class Loot:
         self.clicked = None
         self.detail = ""
         self._progress = progress
-        if self.level is not None:
-            self.level()
+        if self.level is not None and self.level() is False:
+            self.detail = "camera input refused"
+            return Looted.REFUSED
 
         v = self.read()
         if v is None:
             return Looted.BLIND
         if v.get("bags.free") == 0:
-            self._close_if_open(v)
             self.detail = "bags are full; looting would take nothing"
-            return Looted.BAGS_FULL
+            return self._close_if_open(v) or Looted.BAGS_FULL
         before = {**v, "objective": self._counter()}
         event("loot.before", data={key: before.get(key) for key in (
             "objective", "bags.money_copper", "bags.money_silver", "bags.free",
             "target.has", "target.name_id", "target.hp", "ui.loot")})
 
-        frame = self.read_frame()
-        ring = None if frame is None else _find_ring(frame)
-        with operation("loot.location") as span:
-            if span.enabled:
-                span.finish(code="blind" if frame is None else
-                            "candidate" if ring is not None else "no_ring",
-                            data={"ring": asdict(ring) if ring else None})
-        if ring is None:
-            self.detail = "no ring, so nothing on screen to loot"
-            return Looted.NO_CORPSE
-
-        ox, oy = self.window_origin
-        lift = max(ABOVE_RING_PX, round(ring.h * CORPSE_LIFT_FRACTION))
-        self.clicked = (ox + round(ring.cx), oy + round(ring.cy - lift))
-        event("loot.request", data={"point": self.clicked, "method": "ring"})
-        self.hid.click(*self.clicked, right=True)
+        targeting = self.targeting or Targeting(self.hid, self.read, read_frame=self.read_frame,
+                                                window_origin=self.window_origin)
+        action = targeting.click_selected(kind="corpse", expected_name_id=v.get("target.name_id"))
+        self.clicked, self.detail = action.point, action.detail
+        event("loot.request", code=action.code.value,
+              data={"point": self.clicked, "method": "verified_corpse"})
+        if not action.delivered:
+            return {ClickCode.REFUSED: Looted.REFUSED, ClickCode.BLIND: Looted.BLIND,
+                    ClickCode.INTERRUPTED: Looted.INTERRUPTED}.get(action.code, Looted.NO_CORPSE)
 
         deadline = time.monotonic() + settle_s
         while time.monotonic() < deadline:
@@ -141,26 +125,32 @@ class Loot:
                   data={} if after is None else {key: after.get(key) for key in (
                       "bags.money_copper", "bags.money_silver", "bags.free", "ui.loot")})
             if after is None:
-                continue
+                self.detail = "radio lost after corpse input; outcome unobserved"
+                return Looted.BLIND
             why = self._what_changed(before, after)
             if why:
-                event("loot.change", code="observed", detail=why)
-                self.took += 1
-                self.detail = why
-                self._close_if_open(after)
-                return Looted.TOOK
+                return self._finish(after, why)
 
-        self._close_if_open(self.read() or {})
-        self.detail = "no observed objective, money or bag-slot change after the click"
-        return Looted.NOTHING
+        after = self.read()
+        if after is None:
+            self.detail = "radio lost at final loot observation; outcome unobserved"
+            return Looted.BLIND
+        return self._finish(after, self._what_changed(before, after))
+
+    def _finish(self, after: dict, why: str) -> Looted:
+        """Retain the observed take even when closing the resulting UI fails."""
+        if why:
+            event("loot.change", code="observed", detail=why)
+            self.took += 1
+            self.detail = why
+        else:
+            self.detail = "no observed objective, money or bag-slot change after the click"
+        return self._close_if_open(after) or (Looted.TOOK if why else Looted.NOTHING)
 
     def _counter(self) -> int | None:
         if self._progress is None:
             return None
-        try:
-            have, _need = self._progress()
-        except Exception:                    # a reader that fails is not a loot failure
-            return None
+        have, _need = self._progress()
         return have
 
     def _what_changed(self, before: dict, after: dict) -> str:
@@ -171,7 +161,9 @@ class Loot:
                 and have_now > have_before):
             return f"objective {have_before} -> {have_now}"
 
-        for key, unit in (("bags.money_silver", "silver"),):
+        money_key = ("bags.money_copper" if before.get("bags.money_copper") is not None
+                     and after.get("bags.money_copper") is not None else "bags.money_silver")
+        for key, unit in ((money_key, "copper" if money_key.endswith("copper") else "silver"),):
             was, now = before.get(key), after.get(key)
             if was is not None and now is not None and now > was:
                 return f"{now - was} {unit}"
@@ -181,12 +173,15 @@ class Loot:
             return f"{was - now} bag slot{'s' if was - now > 1 else ''}"
         return ""
 
-    def _close_if_open(self, values: dict) -> None:
+    def _close_if_open(self, values: dict) -> Looted | None:
         """Auto-loot usually closes itself. When it does not, a left-open loot window
         swallows the next click, so it is shut - against a screen the radio has measured,
         not a blind Escape."""
-        if values.get("ui.loot") is True:
-            time.sleep(0.4)
-            still = self.read()
-            if still is not None and still.get("ui.loot") is True:
-                self.hid.tap("esc")
+        targeting = self.targeting or Targeting(self.hid, self.read)
+        closed = close_observed(self.hid, self.read, ("ui.loot",), values=values,
+                                settle_s=0.4, wait_for_paint=targeting.wait_for_paint)
+        if closed.code is CloseCode.CLOSED:
+            return None
+        self.detail = f"{self.detail}; {closed.detail}" if self.detail else closed.detail
+        return {CloseCode.REFUSED: Looted.REFUSED, CloseCode.BLIND: Looted.BLIND,
+                CloseCode.NOT_CLOSED: Looted.WINDOW_OPEN}[closed.code]

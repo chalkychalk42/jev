@@ -1,5 +1,10 @@
 # Continuous runs and learning
 
+For the new visual tutor and motor learner, use
+[TEACHING_LOOP.md](TEACHING_LOOP.md). `--play-mode teach` gives Jev bounded actions inside
+the guide objective; `adaptive` permits evaluated motor handover. The instructions below
+describe the earlier scripted/strategic-policy mode, which remains available.
+
 Live acceptance started on 22 September 2026. Schema 7 deployment, reconnect, camera
 reset, repair, water restocking, concurrent recording and the Windows learner have been exercised. See
 `STATUS.md` for measured outcomes and remaining failures; wiring alone does not prove

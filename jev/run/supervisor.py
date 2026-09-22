@@ -148,19 +148,22 @@ class Worker:
 
 
 def interruption(arm: Armed, state: State, *, travelling: bool = False,
-                 completion_observed: bool = False) -> str | None:
+                 completion_observed: bool = False, handles_modal: bool = False) -> str | None:
     skill = arm.decision.skill
     if not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5:
         return "perception unavailable"
     recovery = skill in {"RELEASE_SPIRIT", "CORPSE_RUN"}
     if (state.vitals.dead is True or state.vitals.ghost is True) and not recovery:
         return "dead or ghost"
-    if state.ui.modal is True and not recovery:
+    if state.ui.modal is True and not recovery and not handles_modal:
         return "blocking modal"
     if state.flags.falling is True and not recovery:
         return "falling"
     fighting = skill in {"COMBAT_PROFILE", "APPROACH_TARGET", "ACQUIRE_TARGET", "GRIND_UNTIL", "LOOT"}
-    if state.vitals.combat is True and (travelling or not fighting) and not recovery:
+    modal_cleanup = (handles_modal and skill == "ABORT_WAIT"
+                     and (state.ui.modal is True or completion_observed))
+    if (state.vitals.combat is True and (travelling or not fighting)
+            and not recovery and not modal_cleanup):
         return "combat interrupted the leg or service"
     if arm.step_id != state.guide.step_id and not recovery and not completion_observed:
         return "playhead changed"
@@ -234,7 +237,8 @@ class Supervisor:
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if self.failures[key] >= self.max_failures:
                         exhausted = key, result.detail
-            if (result.code in {"error", "unsupported", "no_food", "refused"}
+            if (result.code in {"error", "unsupported", "no_food", "refused",
+                                "teacher_unavailable", "teaching_stalled"}
                     and not model_fault and worker.maintenance is None):
                 self.failure = result.detail or result.code
                 self.stopped.set()
@@ -279,8 +283,15 @@ class Supervisor:
                 # finish their bounded tail (notably looting a kill). Let them acknowledge
                 # completion; a fail edge still cancels, and hard preempts still win.
                 self.worker.completion_observed = True
+            if (getattr(self.body, "handles_modal", False)
+                    and self.worker.arm.decision.skill == "ABORT_WAIT" and state.ui.modal is False
+                    and self.runtime._tracker_event not in {"fail", "rejoin_or_skip"}):
+                # Let the same input owner acknowledge Escape's observed result even
+                # if combat is active; the next arm can then service combat normally.
+                self.worker.completion_observed = True
             reason = interruption(self.worker.arm, state, travelling=self.body.travelling,
-                                  completion_observed=self.worker.completion_observed)
+                                  completion_observed=self.worker.completion_observed,
+                                  handles_modal=getattr(self.body, "handles_modal", False))
             # Hunt yields between pulls, after looting. Interrupting it as combat drops
             # would leave the killed corpse behind. A standalone travel leg can yield now.
             if reason is None and self.worker.arm.decision.skill == "TRAVEL_TO":
@@ -300,9 +311,11 @@ class Supervisor:
             self.worker = Worker(self.body, None, state, maintenance=maintenance)
             self.worker.thread.start()
         elif (self.worker is None and choose and not self.stopped.is_set() and self.runtime.armed
-              and self.runtime.armed.decision.skill not in (None, "IDLE", "ABORT_WAIT")):
+              and self.runtime.armed.decision.skill not in (None, "IDLE")
+              and (self.runtime.armed.decision.skill != "ABORT_WAIT"
+                   or getattr(self.body, "executes_wait", False))):
             arm = self.runtime.armed
-            reason = interruption(arm, state)
+            reason = interruption(arm, state, handles_modal=getattr(self.body, "handles_modal", False))
             if not reason:
                 self.worker = Worker(self.body, arm, state, recorder=self.runtime.recorder)
                 self.worker.thread.start()

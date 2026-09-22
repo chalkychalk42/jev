@@ -28,7 +28,9 @@ thing to be wrong, and the clamp already makes the result repeatable.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from jev.run.evidence import event, traced
 
 # Far enough to reach the stop from any starting pitch, with room to spare. Overshooting
 # into a clamp costs nothing - that is the entire point of using one as a reference.
@@ -63,14 +65,33 @@ class Camera:
     hid: object
     window_origin: tuple[int, int] = (0, 0)
     window_size: tuple[int, int] = (1600, 900)
+    _calibrated_geometry: tuple | None = field(default=None, init=False, repr=False)
+    _generation: int = field(default=0, init=False, repr=False)
 
-    def level(self) -> bool:
-        """Put the camera back on the horizon. Safe to call when it is already there.
+    def invalidate(self, reason: str = "camera control changed") -> None:
+        """Forget calibration when ownership or session continuity is lost."""
+        if self._calibrated_geometry is not None:
+            event("camera.invalidated", detail=reason)
+        self._generation += 1
+        self._calibrated_geometry = None
 
-        Cheap enough to do before looking rather than only after failing to see: about a
-        second, no keystrokes, and it cannot make a good camera worse because the stop is
-        where it measures from either way.
+    def ensure_level(self) -> bool:
+        """Reuse this session's completed calibration until explicitly invalidated.
+
+        Movement, target changes and missing nameplates do not change camera pitch.
+        The runtime invalidates on observed focus loss and before reconnecting; callers
+        that deliberately change the camera must invalidate it too.
         """
+        if self._calibrated_geometry == (self.window_origin, self.window_size, self._generation):
+            event("camera.ready", code="retained")
+            return True
+        return self.level()
+
+    @traced("camera.calibrate")
+    def level(self) -> bool:
+        """Force the measured stop-and-return sequence; diagnostics use this explicitly."""
+        self.invalidate("calibration started")
+        generation = self._generation
         ox, oy = self.window_origin
         w, h = self.window_size
         if not self.hid.move_to(ox + w // 2, oy + h // 2):
@@ -92,4 +113,7 @@ class Camera:
         finally:
             released = self.hid.button(False, right=True)
         time.sleep(SETTLE_S)
-        return released
+        if released and self._generation == generation:
+            self._calibrated_geometry = (self.window_origin, self.window_size, generation)
+            return True
+        return False

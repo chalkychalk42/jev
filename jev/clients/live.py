@@ -22,7 +22,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-from jev.clients.capture import Backend, CaptureError, WindowCapture, find_game
+from jev.clients import win32
+from jev.clients.capture import Backend, CaptureError, WindowCapture
 from jev.clients.source import blind
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
@@ -124,16 +125,12 @@ class LiveSource:
 
 
 def bind(title: str = "World of Warcraft", client_id: str = "c01",
-         index: int = 0, backend: Backend = Backend.SCREEN) -> LiveSource:
+         index: int | None = None, backend: Backend = Backend.SCREEN) -> LiveSource:
     """Find the game window and bind to it.
 
     Raises rather than guessing when there is no window or more than one and no index was
     chosen. Binding the wrong window is a failure that presents as "the bot does nothing"
     for as long as it takes someone to notice which window has focus.
     """
-    candidates = find_game(title)
-    if not candidates:
-        raise RuntimeError(f"no visible window whose title contains {title!r}")
-    if index >= len(candidates):
-        raise RuntimeError(f"asked for window {index}, found {len(candidates)}")
-    return LiveSource(hwnd=candidates[index], client_id=client_id, backend=backend)
+    hwnd = win32.game_window(title, index=index)
+    return LiveSource(hwnd=hwnd, client_id=client_id, backend=backend)

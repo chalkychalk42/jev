@@ -58,11 +58,11 @@ def main() -> int:
     if not win32.available():
         print("run this with Windows Python")
         return 2
-    hwnds = win32.find_windows("World of Warcraft")
-    if not hwnds:
-        print("no game window")
+    try:
+        hwnd = win32.game_window()
+    except win32.GameWindowError as exc:
+        print(exc)
         return 1
-    hwnd = hwnds[0]
     win32.focus(hwnd)
     time.sleep(0.4)
     if not win32.is_foreground(hwnd):

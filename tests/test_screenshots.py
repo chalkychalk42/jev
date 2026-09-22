@@ -166,6 +166,8 @@ def test_event_labels_are_bounded_diagnostic_identifiers(tmp_path, label):
     monitor = Screenshots(lambda: None, tmp_path)
     with pytest.raises(ValueError, match="event label"):
         monitor.capture_event(label)
+    with pytest.raises(ValueError, match="event label"):
+        monitor.record_frame(label, None, captured_at=time.time())
     assert not list(tmp_path.iterdir())
 
 
@@ -173,11 +175,15 @@ def test_event_capture_requires_an_open_recorder(tmp_path):
     monitor = Screenshots(lambda: np.zeros((2, 2, 3), dtype=np.uint8), tmp_path)
     with pytest.raises(ScreenshotError, match="not been started"):
         monitor.capture_event("before")
+    with pytest.raises(ScreenshotError, match="not been started"):
+        monitor.record_frame("before", None, captured_at=time.time())
     monitor.start()
     monitor.close()
     count = monitor.captured
     with pytest.raises(ScreenshotError, match="closed"):
         monitor.capture_event("after")
+    with pytest.raises(ScreenshotError, match="closed"):
+        monitor.record_frame("after", None, captured_at=time.time())
     assert monitor.captured == count
 
 
@@ -199,9 +205,17 @@ def test_missing_event_frame_returns_an_explicit_unavailable_result(tmp_path):
     assert [r["index"] for r in rows(tmp_path)] == [0, 1, 2]
 
 
-def test_event_storage_failure_stops_all_recording_and_keeps_its_event_label(tmp_path, monkeypatch):
+@pytest.mark.parametrize("record_existing", [False, True])
+def test_event_storage_failure_stops_all_recording_and_keeps_its_event_label(
+        tmp_path, monkeypatch, record_existing):
     monitor = Screenshots(lambda: np.zeros((2, 2, 3), dtype=np.uint8), tmp_path,
                           interval_s=30).start()
+
+    def record(label):
+        if record_existing:
+            return monitor.record_frame(label, np.ones((3, 4, 3), dtype=np.uint8),
+                                        captured_at=time.time() - 2)
+        return monitor.capture_event(label)
 
     def fail_save(self, path, **kwargs):
         path.write_bytes(b"partial image")
@@ -211,9 +225,9 @@ def test_event_storage_failure_stops_all_recording_and_keeps_its_event_label(tmp
         until(lambda: monitor.captured == 1)
         monkeypatch.setattr(Image.Image, "save", fail_save)
         with pytest.raises(ScreenshotError, match="event disk full"):
-            monitor.capture_event("before")
+            record("before")
         with pytest.raises(ScreenshotError, match="event disk full"):
-            monitor.capture_event("after")
+            record("after")
     finally:
         monitor.close()
     assert "event disk full" in monitor.error
@@ -275,3 +289,110 @@ def test_close_serializes_with_an_event_capture_and_rejects_later_events(tmp_pat
     assert manifest[-1] == results[0]
     with pytest.raises(ScreenshotError, match="closed"):
         monitor.capture_event("too-late")
+
+
+def test_supplied_frames_preserve_pixels_and_capture_time_without_taking_a_frame(tmp_path):
+    calls = []
+
+    def frame():
+        calls.append(time.time())
+        return np.zeros((2, 2, 3), dtype=np.uint8)
+
+    monitor = Screenshots(frame, tmp_path, interval_s=30).start()
+    pixels = np.arange(9 * 7 * 3, dtype=np.uint8).reshape(9, 7, 3)
+    before, after = pixels.copy(), np.flip(pixels, axis=0).copy()
+    captured_at = time.time() - 60
+    try:
+        until(lambda: monitor.captured == 1)
+        requested = time.time()
+        first = monitor.record_frame("body-before", before, captured_at=captured_at)
+        second = monitor.record_frame("body-after", after, captured_at=captured_at + 1)
+        assert len(calls) == 1, "record_frame invoked the capture reader"
+        before[:] = 0
+        after[:] = 0
+    finally:
+        monitor.close()
+    manifest = rows(tmp_path)
+    assert manifest == [manifest[0], first, second]
+    assert [row["index"] for row in manifest] == [0, 1, 2]
+    for row, wanted, observed_at in ((first, pixels, captured_at),
+                                     (second, np.flip(pixels, axis=0), captured_at + 1)):
+        assert row["kind"] == "event" and row["source"] == "recorded_frame"
+        assert row["t"] == row["captured_at"] == observed_at
+        assert requested <= row["event_t"] <= row["recorded_at"]
+        assert row["duration_s"] < row["recorded_at"] - row["captured_at"]
+        assert row["status"] == "ok"
+        with Image.open(tmp_path / row["file"]) as saved:
+            assert np.array_equal(np.asarray(saved), wanted)
+    assert first["file"] != second["file"]
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("captured_at", [0, -1, float("nan"), float("inf"),
+                                        -float("inf"), True, None, "123"])
+def test_supplied_frame_time_must_be_positive_finite_unix_seconds(tmp_path, captured_at):
+    monitor = Screenshots(lambda: pytest.fail("capture reader invoked"), tmp_path)
+    with pytest.raises(ValueError, match="capture time"):
+        monitor.record_frame("body", np.zeros((2, 2, 3), dtype=np.uint8),
+                             captured_at=captured_at)
+    assert not list(tmp_path.iterdir())
+
+
+def test_missing_supplied_frame_is_not_replaced_by_an_available_capture(tmp_path):
+    calls = []
+    pixels = np.ones((2, 2, 3), dtype=np.uint8)
+    monitor = Screenshots(lambda: calls.append(1) or pixels, tmp_path, interval_s=30).start()
+    try:
+        until(lambda: monitor.captured == 1)
+        missing = monitor.record_frame("missing", None, captured_at=time.time() - 2)
+        recovered = monitor.record_frame("recovered", pixels, captured_at=time.time() - 1)
+    finally:
+        monitor.close()
+    assert len(calls) == 1
+    assert missing["status"] == "unavailable" and "file" not in missing
+    assert recovered["status"] == "ok" and monitor.error is None
+    assert (monitor.captured, monitor.missing) == (2, 1)
+    assert [r["index"] for r in rows(tmp_path)] == [0, 1, 2]
+
+
+def test_close_waits_for_supplied_frame_persistence_and_rejects_later_writes(tmp_path, monkeypatch):
+    entered, release, closed = threading.Event(), threading.Event(), threading.Event()
+    results, errors = [], []
+    pixels = np.ones((3, 5, 3), dtype=np.uint8)
+    monitor = Screenshots(lambda: pixels, tmp_path, interval_s=0.01).start()
+    until(lambda: monitor.captured >= 1)
+    save = Image.Image.save
+
+    def save_paused(self, path, **kwargs):
+        if threading.current_thread().name == "recorded-frame":
+            entered.set()
+            assert release.wait(2)
+        return save(self, path, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", save_paused)
+
+    def record():
+        try:
+            results.append(monitor.record_frame("during-close", pixels,
+                                                captured_at=time.time() - 5))
+        except Exception as exc:
+            errors.append(exc)
+
+    recorder = threading.Thread(target=record, name="recorded-frame")
+    recorder.start()
+    assert entered.wait(2)
+    closer = threading.Thread(target=lambda: (monitor.close(), closed.set()))
+    closer.start()
+    try:
+        assert not closed.wait(0.03)
+    finally:
+        release.set()
+        recorder.join(2)
+        closer.join(2)
+    assert closed.is_set() and not errors
+    manifest = rows(tmp_path)
+    assert manifest[-1] == results[0]
+    assert manifest[-1]["status"] == "ok"
+    assert [r["index"] for r in manifest] == list(range(len(manifest)))
+    with pytest.raises(ScreenshotError, match="closed"):
+        monitor.record_frame("too-late", pixels, captured_at=time.time())

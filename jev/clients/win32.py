@@ -105,6 +105,36 @@ PW_RENDERFULLCONTENT = 0x00000002
 SRCCOPY = 0x00CC0020
 DIB_RGB_COLORS = 0
 BI_RGB = 0
+TH32CS_SNAPPROCESS = 0x00000002
+GAME_WINDOW_CLASS = "GxWindowClassD3d"
+GAME_EXECUTABLE = "wow.exe"
+
+
+class GameWindowError(RuntimeError):
+    """No uniquely identified game window can be selected."""
+
+
+class PROCESSENTRY32W(ctypes.Structure):
+    _fields_ = [
+        ("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+        ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+        ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+        ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", wintypes.LONG),
+        ("dwFlags", wintypes.DWORD), ("szExeFile", wintypes.WCHAR * 260),
+    ]
+
+
+if IS_WINDOWS:                                          # pragma: no cover - platform
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 
 
 class RECT(ctypes.Structure):
@@ -175,6 +205,66 @@ def window_title(hwnd: int) -> str:
     buf = ctypes.create_unicode_buffer(512)             # pragma: no cover - platform
     user32.GetWindowTextW(hwnd, buf, 512)               # pragma: no cover - platform
     return buf.value                                    # pragma: no cover - platform
+
+
+def window_process_id(hwnd: int) -> int | None:
+    _require()
+    pid = wintypes.DWORD()
+    thread = user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return pid.value if thread and pid.value else None
+
+
+def _process_names() -> dict[int, str]:
+    """Read PID/executable names, without opening a process or reading its memory.
+
+    The measured game rejects OpenProcess with access denied even for a limited image
+    query. The read-only process snapshot supplies the required basename directly.
+    """
+    _require()
+    snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snapshot is None or snapshot == ctypes.c_void_p(-1).value:
+        return {}
+    try:
+        entry = PROCESSENTRY32W(dwSize=ctypes.sizeof(PROCESSENTRY32W))
+        names = {}
+        present = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while present:
+            names[entry.th32ProcessID] = entry.szExeFile
+            present = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+        return names
+    finally:
+        kernel32.CloseHandle(snapshot)
+
+
+def find_game(title: str = "World of Warcraft") -> list[int]:
+    """Visible native game windows with measured class and executable identity.
+
+    A title substring only narrows this identified set. A browser showing a page about
+    the game must never become an input destination because it has a matching title.
+    Unknown process identity is refused; there is no title-only fallback.
+    """
+    candidates = find_windows(title_contains=title, class_name=GAME_WINDOW_CLASS)
+    if not candidates:
+        return []
+    processes = _process_names()
+    return [hwnd for hwnd in candidates
+            if processes.get(window_process_id(hwnd), "").casefold() == GAME_EXECUTABLE]
+
+
+def game_window(title: str = "World of Warcraft", *, index: int | None = None) -> int:
+    """Select one identified game, rejecting ambiguity unless an index is explicit."""
+    if index is not None and (type(index) is not int or index < 0):
+        raise GameWindowError("game window index must be a nonnegative integer")
+    candidates = find_game(title)
+    if not candidates:
+        raise GameWindowError("no visible game window with verified class and executable")
+    if index is None:
+        if len(candidates) != 1:
+            raise GameWindowError(f"{len(candidates)} verified game windows; select one explicitly")
+        return candidates[0]
+    if index >= len(candidates):
+        raise GameWindowError(f"asked for game window {index}, found {len(candidates)}")
+    return candidates[index]
 
 
 def client_rect(hwnd: int) -> tuple[int, int, int, int]:

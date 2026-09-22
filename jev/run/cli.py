@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import signal
 from contextlib import contextmanager
@@ -74,6 +75,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--teacher-model", default="sonnet")
     parser.add_argument("--teacher-binary")
     parser.add_argument("--teacher-calls-per-hour", type=int, default=12)
+    parser.add_argument("--play-mode", choices=("off", "teach", "adaptive"), default="off",
+                        help="visual Jev actions inside guide skills; adaptive enables evaluated motor handover")
+    parser.add_argument("--play-teacher-calls-per-hour", type=int, default=240,
+                        help="separate motor tutor budget, counting each actual request/lookup")
+    parser.add_argument("--play-decision-timeout", type=float, default=30,
+                        help="bounded visual tutor decision deadline in seconds")
+    parser.add_argument("--bindings", type=Path, action="append", default=[],
+                        help="saved bindings-cache.wtf, account first then character overrides")
+    parser.add_argument("--world-db", type=Path, default=ROOT / "data/knowledge/tbc-243.sqlite",
+                        help="read-only exact-server world/DBC knowledge snapshot for the visual tutor")
     parser.add_argument("--reconnect", action="store_true", help="use measured Session with credentials from environment")
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env",
                         help="optional reconnect credentials; environment takes precedence")
@@ -89,8 +100,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.run_for <= 0 or args.timeout <= 0 or args.hunt <= 0 or args.retries < 1 or args.steps < 0:
         parser.error("durations and retries must be positive; steps must be nonnegative")
     if (args.blind_grace <= 0 or args.no_progress <= 0 or args.reconnect_limit < 1
-            or args.teacher_calls_per_hour < 1):
+            or args.teacher_calls_per_hour < 1 or args.play_teacher_calls_per_hour < 1
+            or not math.isfinite(args.play_decision_timeout) or args.play_decision_timeout <= 0):
         parser.error("watchdog durations and budgets must be positive")
+    if args.play_mode != "off":
+        args.screenshots = args.learn = True
     if not re.fullmatch(r"[A-Za-z0-9_-]+", args.client_id):
         parser.error("client-id must contain only letters, numbers, underscores or hyphens")
     if args.playhead is None:
@@ -121,6 +135,13 @@ def main(argv: list[str] | None = None) -> int:
                           "route_exclusions": [asdict(e) for e in route.excluded],
                           "learning": args.learn, "policy_mode": args.policy_mode,
                           "teacher": args.teacher, "reconnect": args.reconnect,
+                          "play_mode": args.play_mode,
+                          "visual_teacher": args.play_mode != "off",
+                          "motor_learning": args.play_mode != "off",
+                          "motor_handover": args.play_mode == "adaptive",
+                          "play_teacher_calls_per_hour": args.play_teacher_calls_per_hour,
+                          "bindings": [str(path) for path in args.bindings],
+                          "world_db": str(args.world_db),
                           "screenshots": args.screenshots,
                           "stop_file": str(args.stop_file) if args.stop_file else None,
                           "live_tested": False}, indent=2))
@@ -145,7 +166,7 @@ def _live(args, graph, memory, route) -> int:
     except NotRunning as exc:
         print(exc)
         return 2
-    recorder = supervisor = background = screenshots = None
+    recorder = supervisor = background = screenshots = playing = None
 
     def operator_checkpoint():
         if args.stop_file is not None and args.stop_file.exists():
@@ -185,9 +206,22 @@ def _live(args, graph, memory, route) -> int:
         with_travel(client, bounds, MmapQuery(args.jevpath, args.mmaps, launcher=launcher,
                     checkpoint=lambda: client.hid.checkpoint() if client.hid.checkpoint else None),
                     arrival_yards=GOSSIP_YARDS, say=print, zones=zones)
-        body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt)
+        body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt,
+                        record_frame=screenshots.record_frame if screenshots is not None else None)
         if recorder is None:
             recorder = Recorder(root=args.runs_dir)
+        if args.play_mode != "off":
+            from jev.play.controller import PlayConfig
+            from jev.play.runtime import PlayingBody
+
+            playing = PlayingBody(
+                body, recorder=recorder, store=args.learning_store, screenshots=screenshots,
+                mode=args.play_mode, teacher_model=args.teacher_model,
+                teacher_binary=args.teacher_binary,
+                teacher_calls_per_hour=args.play_teacher_calls_per_hour,
+                binding_paths=args.bindings, world_db=args.world_db,
+                config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout))
+            body = playing
         atomic_json(recorder.dir / "route.json", {
             "mode": args.route_mode, "source": route.source_graph_id, "graph": graph.graph_id,
             "graph_digest": hashlib.sha256(json.dumps(graph.model_dump(mode="json"),
@@ -203,7 +237,7 @@ def _live(args, graph, memory, route) -> int:
             validate_action=body.validate,
         )
         teacher = None
-        if args.teacher:
+        if args.teacher and args.play_mode == "off":
             try:
                 from jev.teacher.client import ClaudeSubscriptionClient
                 teacher = ClaudeSubscriptionClient(binary=args.teacher_binary, model=args.teacher_model)
@@ -216,8 +250,8 @@ def _live(args, graph, memory, route) -> int:
             print(f"learning store: {args.learning_store}")
         watchdog = Watchdog(blind_grace_s=args.blind_grace, no_progress_s=args.no_progress,
                             reconnect_limit=args.reconnect_limit,
-                            reconnect=(lambda checkpoint: reconnect_client(client, checkpoint,
-                                                                            env_file=args.env_file))
+                            reconnect=(lambda checkpoint: body.reconnect(checkpoint,
+                                                                         env_file=args.env_file))
                             if args.reconnect else None)
         def housekeeping(state):
             operator_checkpoint()
@@ -228,9 +262,11 @@ def _live(args, graph, memory, route) -> int:
                     supervisor.worker.cancel(screenshots.error)
                 return
             background.poll(state)
+            if playing is not None:
+                playing.poll(state)
 
         supervisor = Supervisor(runtime, body, max_failures=args.retries,
-                                has_focus=client.hid.ready,
+                                has_focus=body.has_focus,
                                 focus=lambda checkpoint: client.focused(FOCUS_QUICK_S,
                                                                          checkpoint=checkpoint),
                                 housekeeping=housekeeping, watchdog=watchdog)
@@ -259,8 +295,12 @@ def _live(args, graph, memory, route) -> int:
                 client.hid.release_all()
         finally:
             try:
-                if screenshots is not None:
-                    screenshots.close()
+                try:
+                    if playing is not None:
+                        playing.close()
+                finally:
+                    if screenshots is not None:
+                        screenshots.close()
             finally:
                 try:
                     if background is not None:

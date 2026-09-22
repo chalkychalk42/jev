@@ -9,7 +9,7 @@
     "Ring extent bounds visible arc pixels, including empty space inside the ellipse; it is not an inferred full ellipse.",
     "All wolf frames come from one failed engagement sequence and must remain one independence group, not split into training and validation.",
     "Historical NPC fixtures are references, not independent live acceptance outcomes.",
-    "PNG run sources are currently ignored local artifacts and are not supplied by a fresh clone. Sources must be vendored or restored before replay.",
+    "Vendored PNG sources preserve their original bytes and run-path provenance; copying does not create independent observations.",
     "No real corpse fixture was found; corpse targeting remains a required new measurement."
   ],
   "cases": [
@@ -327,7 +327,7 @@
     {
       "id": "selected_target_not_in_view",
       "source": {
-        "path": "runs/20260922T131407-487841/screenshots/000053-20260922T121501.647108Z.png",
+        "path": "tests/fixtures/target-localization/000053-20260922T121501.647108Z.png",
         "array_key": null,
         "sha256": "a1ff107bd213826430fb447a202cca85da83cd08060982d9b604f5eb95d63eb8",
         "frame_sha256": "ebe27d8e4fb3aa9c4a24e6edb233a15a56bde8e3ccf033f790ea2f24511f9b69",
@@ -336,10 +336,11 @@
           1600,
           3
         ],
-        "tracked_source": false,
+        "tracked_source": true,
         "independence_group": "wolf-run-20260922",
         "screenshot_index": 53,
-        "captured_at": 1790079301.647108
+        "captured_at": 1790079301.647108,
+        "original_path": "runs/20260922T131407-487841/screenshots/000053-20260922T121501.647108Z.png"
       },
       "identity": "Brother Danil",
       "radio": {
@@ -373,7 +374,7 @@
     {
       "id": "wolf_distant_grass_distractor",
       "source": {
-        "path": "runs/20260922T131407-487841/screenshots/000061-20260922T121509.632648Z.png",
+        "path": "tests/fixtures/target-localization/000061-20260922T121509.632648Z.png",
         "array_key": null,
         "sha256": "47e61c7900f11734c7f6cc185a1918205c78dc767a956069be6fd03cf5258c2d",
         "frame_sha256": "8a78c12713115b86ef80124ea92bc157406691341f81c30fcde7d9eb589414ef",
@@ -382,10 +383,11 @@
           1600,
           3
         ],
-        "tracked_source": false,
+        "tracked_source": true,
         "independence_group": "wolf-run-20260922",
         "screenshot_index": 61,
-        "captured_at": 1790079309.6326475
+        "captured_at": 1790079309.6326475,
+        "original_path": "runs/20260922T131407-487841/screenshots/000061-20260922T121509.632648Z.png"
       },
       "identity": "Young Wolf",
       "radio": {
@@ -451,7 +453,7 @@
     {
       "id": "wolf_side_pose_grass_distractor",
       "source": {
-        "path": "runs/20260922T131407-487841/screenshots/000064-20260922T121512.645698Z.png",
+        "path": "tests/fixtures/target-localization/000064-20260922T121512.645698Z.png",
         "array_key": null,
         "sha256": "3b6a14d1f8fc8304d343e5231081e642b3b66a7e16ad0a6b8afa4db84dce6de7",
         "frame_sha256": "c85891d179b254c94b73bad2be0167aad57ff89fa13dedebd34477bffe946641",
@@ -460,10 +462,11 @@
           1600,
           3
         ],
-        "tracked_source": false,
+        "tracked_source": true,
         "independence_group": "wolf-run-20260922",
         "screenshot_index": 64,
-        "captured_at": 1790079312.6456978
+        "captured_at": 1790079312.6456978,
+        "original_path": "runs/20260922T131407-487841/screenshots/000064-20260922T121512.645698Z.png"
       },
       "identity": "Young Wolf",
       "radio": {
@@ -528,7 +531,7 @@
     {
       "id": "wolf_ring_and_body_split_by_grass",
       "source": {
-        "path": "runs/20260922T131407-487841/screenshots/000067-20260922T121515.642306Z.png",
+        "path": "tests/fixtures/target-localization/000067-20260922T121515.642306Z.png",
         "array_key": null,
         "sha256": "e2a6be9f6e5177531675977f91482c5cf9239024c4256ae10d4fd7fab9e1ca1d",
         "frame_sha256": "54066454f1e7ec1a0ab88159d4671056fa10bd99d1868bf6cbdae0f6eddb618b",
@@ -537,10 +540,11 @@
           1600,
           3
         ],
-        "tracked_source": false,
+        "tracked_source": true,
         "independence_group": "wolf-run-20260922",
         "screenshot_index": 67,
-        "captured_at": 1790079315.6423063
+        "captured_at": 1790079315.6423063,
+        "original_path": "runs/20260922T131407-487841/screenshots/000067-20260922T121515.642306Z.png"
       },
       "identity": "Young Wolf",
       "radio": {
@@ -602,7 +606,7 @@
     {
       "id": "wolf_red_ring_yellow_health_bar",
       "source": {
-        "path": "runs/20260922T131407-487841/screenshots/000090-20260922T121538.627916Z.png",
+        "path": "tests/fixtures/target-localization/000090-20260922T121538.627916Z.png",
         "array_key": null,
         "sha256": "61029eb1d993e6c25c8889d4165f39545efeec28c6486a0c064265fc242cb084",
         "frame_sha256": "3084dd0a7d95f666fb49b93bc1acf6888523bfa34f5cdb925d4e2d9927e100b0",
@@ -611,10 +615,11 @@
           1600,
           3
         ],
-        "tracked_source": false,
+        "tracked_source": true,
         "independence_group": "wolf-run-20260922",
         "screenshot_index": 90,
-        "captured_at": 1790079338.6279163
+        "captured_at": 1790079338.6279163,
+        "original_path": "runs/20260922T131407-487841/screenshots/000090-20260922T121538.627916Z.png"
       },
       "identity": "Young Wolf",
       "radio": {
@@ -670,7 +675,7 @@
     {
       "id": "wolf_near_front_pose",
       "source": {
-        "path": "runs/20260922T131407-487841/screenshots/000096-20260922T121544.655141Z.png",
+        "path": "tests/fixtures/target-localization/000096-20260922T121544.655141Z.png",
         "array_key": null,
         "sha256": "8c5fda3ec64bab40d00ec8b37d133713878b8782b907c8f37f6702d736947f36",
         "frame_sha256": "f51339aa5dcfd35ac88d25061abde09af9c19d7f8878691949226204e35c91ed",
@@ -679,10 +684,11 @@
           1600,
           3
         ],
-        "tracked_source": false,
+        "tracked_source": true,
         "independence_group": "wolf-run-20260922",
         "screenshot_index": 96,
-        "captured_at": 1790079344.6551414
+        "captured_at": 1790079344.6551414,
+        "original_path": "runs/20260922T131407-487841/screenshots/000096-20260922T121544.655141Z.png"
       },
       "identity": "Young Wolf",
       "radio": {
@@ -738,7 +744,7 @@
     {
       "id": "wolf_clipped_by_frame_and_tooltip",
       "source": {
-        "path": "runs/20260922T131407-487841/screenshots/000100-20260922T121548.638664Z.png",
+        "path": "tests/fixtures/target-localization/000100-20260922T121548.638664Z.png",
         "array_key": null,
         "sha256": "8acf60fc769bb5a6772199307256b7a00f7cf2234368c1c2d3ef633ede36f274",
         "frame_sha256": "701699c4a8ca8e05f1035ba570163e761fedd11802fd8e060e1f21a950464552",
@@ -747,10 +753,11 @@
           1600,
           3
         ],
-        "tracked_source": false,
+        "tracked_source": true,
         "independence_group": "wolf-run-20260922",
         "screenshot_index": 100,
-        "captured_at": 1790079348.6386638
+        "captured_at": 1790079348.6386638,
+        "original_path": "runs/20260922T131407-487841/screenshots/000100-20260922T121548.638664Z.png"
       },
       "identity": "Young Wolf",
       "radio": {

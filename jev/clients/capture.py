@@ -149,5 +149,5 @@ class WindowCapture:
 
 
 def find_game(title: str = "World of Warcraft") -> list[int]:
-    """Candidate game windows, newest last. Never picks one for you."""
-    return win32.find_windows(title_contains=title)
+    """Identified native game windows; title alone never establishes game identity."""
+    return win32.find_game(title)

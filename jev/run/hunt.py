@@ -64,6 +64,9 @@ class Hunted(StrEnum):
     UNREACHABLE = "unreachable"  # could not stand anywhere on the disk
     TIMEOUT = "timeout"
     BLIND = "blind"
+    REFUSED = "refused"
+    INTERRUPTED = "interrupted"
+    WINDOW_OPEN = "window_open"
     BAGS_FULL = "bags_full"      # hand the same guide step back to the service policy
     SERVICE_NEEDED = "service_needed"
 
@@ -189,12 +192,17 @@ class Hunt:
             if outcome is Fought.DIED:
                 self.detail = "died on the objective"
                 return Hunted.DIED
-            if outcome is Fought.BLIND:
-                return Hunted.BLIND
+            stopped = {Fought.BLIND: Hunted.BLIND, Fought.REFUSED: Hunted.REFUSED,
+                       Fought.INTERRUPTED: Hunted.INTERRUPTED}.get(outcome)
+            if stopped is not None:
+                self.detail = self.fight.detail
+                return stopped
             if outcome is Fought.KILLED:
                 self.kills += 1
                 dry = 0
-                self._loot()
+                stopped = self._loot()
+                if stopped is not None:
+                    return stopped
             else:
                 # Nothing here worth swinging at. Two empty looks and the camp has moved
                 # on without us; go and stand somewhere else.
@@ -206,7 +214,7 @@ class Hunt:
         self.detail = f"{timeout_s:.0f}s and the counter is {have}/{need}"
         return Hunted.TIMEOUT
 
-    def _loot(self) -> None:
+    def _loot(self) -> Hunted | None:
         """Take what the corpse is holding, straight after the kill.
 
         Here rather than inside `Fight` because looting is not fighting: the corpse is
@@ -222,6 +230,12 @@ class Hunt:
         if outcome is not Looted.NO_CORPSE:
             self.say(f"    loot: {outcome.value}"
                      + (f" - {self.loot.detail}" if self.loot.detail else ""))
+        stopped = {Looted.BLIND: Hunted.BLIND, Looted.REFUSED: Hunted.REFUSED,
+                   Looted.INTERRUPTED: Hunted.INTERRUPTED, Looted.BAGS_FULL: Hunted.BAGS_FULL,
+                   Looted.WINDOW_OPEN: Hunted.WINDOW_OPEN}.get(outcome)
+        if stopped is not None:
+            self.detail = f"loot: {self.loot.detail}"
+        return stopped
 
     def _wrong_side_of_a_door(self) -> bool:
         """Is this station indoors when the camp is not?

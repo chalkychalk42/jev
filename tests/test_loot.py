@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
+from test_fight import _Targeting
+
 from jev.clients.loot import Loot, Looted
-from jev.perceive.units import Ring, RingColour
+from jev.clients.targeting import ClickCode, ClickResult
 
 A_FRAME = object()
-RING = Ring(cx=700.0, cy=500.0, w=60, h=20, colour=RingColour.YELLOW, area=300)
 
 
 class _Hid:
@@ -16,14 +18,14 @@ class _Hid:
 
     def click(self, x, y, right=False):
         self.clicks.append((x, y, right))
+        return True
 
     def tap(self, key):
         self.taps.append(key)
+        return True
 
 
-def _loot(readings, hid=None, ring=RING):
-    import jev.clients.loot as mod
-
+def _loot(readings, hid=None, code=ClickCode.CLICKED):
     seq = list(readings)
     state = {"i": 0}
 
@@ -32,19 +34,23 @@ def _loot(readings, hid=None, ring=RING):
         state["i"] += 1
         return v
 
-    skill = Loot(hid=hid or _Hid(), read=read, read_frame=lambda: A_FRAME,
-                 window_origin=(10, 38))
-    mod._find_ring = lambda _f: ring
+    hid = hid or _Hid()
+    action = ClickResult(code, (710, 533) if code is ClickCode.CLICKED else None,
+                         "observed targeting result", 1)
+    skill = Loot(hid=hid, read=read, read_frame=lambda: A_FRAME,
+                 window_origin=(10, 38), targeting=_Targeting(read, hid, action))
     return skill
 
 
-HAVE = {"bags.free": 8, "ui.loot": False, "bags.money_silver": 3}
+HAVE = {"bags.free": 8, "ui.loot": False, "bags.money_silver": 3,
+        "target.has": True, "target.hp": 0.0, "target.name_id": 1161}
 
 
 def test_full_bags_close_a_persisting_loot_frame_before_service(monkeypatch):
     monkeypatch.setattr("jev.clients.loot.time.sleep", lambda _: None)
     hid = _Hid()
-    skill = _loot([{**HAVE, "bags.free": 0, "ui.loot": True}], hid=hid)
+    opened = {**HAVE, "bags.free": 0, "ui.loot": True}
+    skill = _loot([opened, opened, {**opened, "ui.loot": False}], hid=hid)
     assert skill.run() is Looted.BAGS_FULL
     assert not hid.clicks
     assert hid.taps == ["esc"]
@@ -61,24 +67,18 @@ def test_a_full_bag_is_not_clicked_at():
 
 def test_nothing_selected_is_not_a_corpse():
     hid = _Hid()
-    skill = _loot([HAVE], hid=hid, ring=None)
+    skill = _loot([{**HAVE, "target.has": False}], hid=hid, code=ClickCode.NO_TARGET)
     assert skill.run() is Looted.NO_CORPSE
     assert hid.clicks == []
 
 
-def test_it_aims_at_the_ring_because_a_corpse_lies_on_it():
-    """A living unit stands on its ring, so the fight aims above it to hit the body. A
-    dead one lies on it, and aiming above a corpse clicks the empty air it used to
-    occupy - first live attempt was `killed` then `loot: nothing`, on a wolf with an
-    eighty percent quest drop and a counter that did not move."""
+def test_loot_delegates_the_selected_corpse_pose_to_shared_targeting():
     hid = _Hid()
     skill = _loot([HAVE, {**HAVE, "bags.free": 7}], hid=hid)
-    skill.run(settle_s=1.0)
-    x, y, right = hid.clicks[0]
-    assert right is True
-    assert x == 10 + 700
-    lift = 38 + 500 - y
-    assert 0 <= lift < RING.h, f"aimed {lift}px up; a corpse is not standing"
+    assert skill.run(settle_s=1.0) is Looted.TOOK
+    assert skill.targeting.requests == [{"kind": "corpse", "expected_name_id": 1161}]
+    assert hid.clicks == [(710, 533, True)]
+    assert skill.clicked == (710, 533)
 
 
 def test_bags_falling_is_what_counts_as_having_looted():
@@ -92,8 +92,10 @@ def test_a_loot_frame_is_not_a_take():
     """A frame means a corpse was opened, not that anything came out of it. Only auto
     loot makes the two coincide, and that is a client setting this code cannot see: if it
     were ever off, every empty wolf in the zone would report a take."""
-    skill = _loot([HAVE, {**HAVE, "ui.loot": True}, {**HAVE, "ui.loot": True}])
-    assert skill.run(settle_s=0.8) is Looted.NOTHING
+    opened = {**HAVE, "ui.loot": True}
+    skill = _loot([HAVE, opened, opened, HAVE])
+    assert skill.run(settle_s=0) is Looted.NOTHING
+    assert skill.took == 0
 
 
 def test_the_objective_counter_is_believed_before_the_bags():
@@ -140,7 +142,7 @@ def test_a_loot_window_that_stays_open_is_closed():
     hid = _Hid()
     open_frame = {**HAVE, "ui.loot": True}
     took = {**open_frame, "bags.free": 7}
-    skill = _loot([HAVE, took, took, took], hid=hid)
+    skill = _loot([HAVE, took, took, {**took, "ui.loot": False}], hid=hid)
     assert skill.run(settle_s=1.0) is Looted.TOOK
     assert hid.taps == ["esc"]
 
@@ -149,6 +151,112 @@ def test_an_empty_corpse_still_gets_its_window_shut():
     """A left-open window swallows the next click whether or not anything came out."""
     hid = _Hid()
     open_frame = {**HAVE, "ui.loot": True}
-    skill = _loot([HAVE, open_frame, open_frame, open_frame, open_frame], hid=hid)
-    assert skill.run(settle_s=0.8) is Looted.NOTHING
+    skill = _loot([HAVE, open_frame, open_frame, HAVE], hid=hid)
+    assert skill.run(settle_s=0) is Looted.NOTHING
     assert hid.taps == ["esc"]
+
+
+@pytest.mark.parametrize("code, expected", [
+    (ClickCode.REFUSED, Looted.REFUSED), (ClickCode.BLIND, Looted.BLIND),
+    (ClickCode.INTERRUPTED, Looted.INTERRUPTED),
+    (ClickCode.NOT_VISIBLE, Looted.NO_CORPSE), (ClickCode.STALE, Looted.NO_CORPSE),
+])
+def test_unverified_corpse_input_never_becomes_an_empty_corpse(code, expected):
+    skill = _loot([HAVE], code=code)
+    assert skill.run(settle_s=0) is expected
+    assert not expected.ok
+    assert skill.hid.clicks == []
+    assert skill.took == 0
+
+
+def test_lost_radio_after_delivered_input_leaves_outcome_unobserved():
+    skill = _loot([HAVE, None])
+    assert skill.run(settle_s=1) is Looted.BLIND
+    assert skill.hid.clicks == [(710, 533, True)]
+    assert skill.took == 0
+
+
+def test_missing_final_observation_does_not_claim_no_loot_change():
+    skill = _loot([HAVE, None])
+    assert skill.run(settle_s=0) is Looted.BLIND
+
+
+def test_a_single_copper_counts_without_rounded_silver_or_bag_change():
+    before = {**HAVE, "bags.money_copper": 303}
+    after = {**before, "bags.money_copper": 304}
+    skill = _loot([before, after])
+    assert skill.run(settle_s=1) is Looted.TOOK
+    assert skill.detail == "1 copper"
+
+
+def test_exact_copper_takes_precedence_over_a_rounded_silver_change():
+    before = {**HAVE, "bags.money_copper": 399}
+    after = {**before, "bags.money_copper": 400, "bags.money_silver": 4}
+    skill = _loot([before, after])
+    assert skill.run(settle_s=1) is Looted.TOOK
+    assert skill.detail == "1 copper"
+
+
+def test_camera_refusal_prevents_a_corpse_click():
+    skill = _loot([HAVE])
+    skill.level = lambda: False
+    assert skill.run() is Looted.REFUSED
+    assert skill.targeting.requests == []
+
+
+def test_objective_reader_cancellation_propagates_before_input():
+    from jev.run.supervisor import Cancelled
+
+    skill = _loot([HAVE])
+    def cancelled():
+        raise Cancelled("stop requested")
+    with pytest.raises(Cancelled, match="stop requested"):
+        skill.run(progress=cancelled)
+    assert skill.hid.clicks == []
+
+
+def test_targeting_cancellation_propagates():
+    from jev.run.supervisor import Cancelled
+
+    skill = _loot([HAVE])
+    def cancelled(**_):
+        raise Cancelled("stop requested")
+    skill.targeting.click_selected = cancelled
+    with pytest.raises(Cancelled, match="stop requested"):
+        skill.run()
+
+
+def test_final_observation_can_confirm_a_take_after_the_settle_deadline():
+    after = {**HAVE, "bags.free": 7}
+    skill = _loot([HAVE, after])
+    assert skill.run(settle_s=0) is Looted.TOOK
+    assert skill.took == 1
+    assert skill.detail == "1 bag slot"
+
+
+@pytest.mark.parametrize("failure", ["refused", "blind", "open"])
+def test_observed_take_survives_in_evidence_but_failed_closure_is_propagated(failure):
+    taken = {**HAVE, "bags.free": 7, "ui.loot": True}
+    skill = _loot([HAVE, taken, taken, None if failure == "blind" else taken])
+    if failure == "refused":
+        skill.hid.tap = lambda _: False
+    expected = {"refused": Looted.REFUSED, "blind": Looted.BLIND, "open": Looted.WINDOW_OPEN}
+    assert skill.run(settle_s=0) is expected[failure]
+    assert skill.took == 1
+    assert "1 bag slot" in skill.detail
+    assert not expected[failure].ok
+
+
+def test_no_change_with_an_unclosed_window_is_not_a_completed_empty_corpse():
+    opened = {**HAVE, "ui.loot": True}
+    skill = _loot([HAVE, opened])
+    assert skill.run(settle_s=0) is Looted.WINDOW_OPEN
+    assert skill.took == 0
+
+
+def test_full_bags_propagate_refused_window_closure_before_service():
+    skill = _loot([{**HAVE, "bags.free": 0, "ui.loot": True}])
+    skill.hid.tap = lambda _: False
+    assert skill.run() is Looted.REFUSED
+    assert skill.hid.clicks == []
+    assert "bags are full" in skill.detail

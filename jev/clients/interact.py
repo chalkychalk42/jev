@@ -1,37 +1,8 @@
-"""Open an NPC's window. One target, one look, one walk, one click.
+"""Select an NPC, verify its current body point, and observe the resulting window.
 
-2.4.3 has no `INTERACTTARGET` and no `InteractUnit` — both arrived in 3.0 — so
-interacting means right-clicking the model, which means knowing where it is. (It does
-have facing, off the minimap arrow; see V29. That was wrong here for a while, and it
-would not have helped: knowing which way the character points is not knowing where the
-merchant stands.)
-`jev.perceive.units` answers that from the nameplate and ring the client draws around
-every unit, so this file does not guess, sweep, or aim with coordinates.
-
-**Nothing here types.** An earlier version opened chat and sent `/target <name>` to
-acquire the unit before looking for it. That is one mangled keystroke away from a public
-sentence, and it got there: with Caps Lock on — machine state no part of the bot could
-see — `/target Marshal McBride` left the client as `?target mARSHAL mCbRIDE`, said out
-loud in Northshire. The keystrokes all "succeeded"; there was nothing to detect.
-
-Right-clicking a nameplate does the same job without a keyboard. It targets *and* opens
-in one action, and the radio then says who was targeted — so identity is **confirmed
-after the fact from the client's own state** rather than asserted beforehand by a string.
-A wrong unit is a closed window and the next candidate, not a message anyone can read.
-
-It replaces a version that grew a method per failure: preflight, approach, leave_range,
-turn_to, find_on_screen, locate, a click offset and a fourteen-point sweep. Each was a
-patch on the last one's symptom. The caps below are the point of rewriting it.
-
-    no typing            ever; a bot that can talk is a bot that can say the wrong thing
-    one look             nothing visible is a failure, not a reason to spin
-    walk until stopped   the mesh stands us there; this only decides where to click
-    one click per unit   at the nameplate's unit, nearest the middle of the screen first
-    one confirmation     the radio names who was targeted, or the skill failed
-
-**`in_melee` deliberately gates nothing here.** It is `CheckInteractDistance` index 3 —
-duel range, about eleven yards — and an NPC talks at roughly five. Believing it is how a
-character stood well back and right-clicked a model it could see and could not reach.
+Navigation supplies the approach. Shared Targeting owns body/corpse point verification;
+this composition owns requested identity and gossip/quest/vendor outcome. No chat, pixel
+drop or spawn-point centre click supplies missing visual evidence.
 """
 
 from __future__ import annotations
@@ -42,14 +13,12 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 from jev.clients.hid import Hid
-from jev.guide.coords import ZoneBounds, distance_yards
+from jev.clients.targeting import ClickCode, PaintCode, Targeting
+from jev.clients.windows import CloseCode, close_observed
+from jev.guide.coords import ZoneBounds
 from jev.perceive.radio_frame import name_id
-from jev.perceive.units import Plate, Sighting, find, find_plates
+from jev.perceive.units import Plate, Sighting, find_plates
 from jev.run.evidence import event, operation, traced
-
-# How close to the node counts as "standing on it", for the one case where the ring is
-# hidden because the character is on top of the unit.
-AT_NODE_YARDS = 6.0
 
 # How many nameplates to try before giving up. Small: we are standing on the unit's spawn
 # point, so the one we want is among the nearest few to the middle of the screen. Trying
@@ -77,6 +46,9 @@ class Result(StrEnum):
     NO_WINDOW = "no_window"        # clicked the unit and nothing opened
     APPROACH_FAILED = "approach_failed"   # walked into a fence, a slope, the wrong thing
     BLIND = "blind"                # no readable frame at all
+    REFUSED = "refused"
+    INTERRUPTED = "interrupted"
+    WINDOW_OPEN = "window_open"    # an existing window could not be observed closed
 
     @property
     def opened(self) -> bool:
@@ -98,10 +70,10 @@ class Interact:
     # 4.6 yards from a targeted merchant, with his nameplate on screen, and reported
     # `not_visible` - correctly, because the camera was aimed at the character's feet.
     level: Callable[[], object] | None = None
+    targeting: Targeting | None = None
 
     sighting: Sighting | None = field(default=None, init=False)
     clicked: tuple[int, int] | None = field(default=None, init=False)
-    used_centre: bool = field(default=False, init=False)
     # Who answered each click, in order. The postmortem for "it opened the wrong NPC".
     tried: list[int | None] = field(default_factory=list, init=False)
     detail: str = field(default="", init=False)
@@ -111,7 +83,7 @@ class Interact:
     @traced("interact")
     def open_on(self, name: str, node_world: tuple[float, float, float] | None = None,
                 node_map: tuple[float, float] | None = None) -> Result:
-        """Stand there, look, right-click a nameplate, confirm who answered.
+        """Stand there, select via a nameplate, verify the body, and observe a window.
 
         `approach` is injected rather than built here: the planner belongs to the guide
         layer and this skill has no business knowing about navmeshes.
@@ -121,72 +93,35 @@ class Interact:
         was the old shape, and it needed a name typed into chat to do it.
         """
         self.sighting = self.clicked = None
-        self.used_centre = False
         self.tried = []
         self.detail = ""
         event("interact.request", data={"name": name, "node_world": node_world,
                                         "node_map": node_map})
-        if self.level is not None:
-            self.level()
+        if self.level is not None and self.level() is False:
+            self.detail = "camera input refused"
+            return Result.REFUSED
 
-        self._close_open_window()
+        closed = self._close_open_window()
+        if closed is not None:
+            return closed
         if self.approach is not None and node_world is not None and not self.approach(node_world):
             self.detail = "the planner could not stand us on the node"
             return Result.APPROACH_FAILED
 
         wanted = name_id(name)
-        unseen = None
         for plate in self._candidates():
             opened = self._try(plate, wanted)
-            if opened is Result.NOT_VISIBLE:
-                # Identity was confirmed, but the player may hide the selected ring.
-                # Give the existing underfoot fallback its one bounded attempt too.
-                unseen = opened
-                break
             if opened is not None:
                 return opened
-
-        if self._at(node_map):
-            # Standing on the spawn and facing it, so the unit is in the middle of the
-            # screen whether or not its nameplate was clickable. A health bar is five
-            # pixels tall and at three yards it can sit under the frame or off the top,
-            # which is why this is a fallback and not an error — and it is still not a
-            # guess, because the radio names whoever answers before anything else happens.
-            opened = self._try_centre(wanted)
-            if opened is not None:
-                return opened
-
-        if unseen is not None:
-            return unseen
         if not self.tried:
-            self.detail = "no nameplate on screen, and not standing on the node"
+            self.detail = "no observed nameplate for selection"
             return Result.NOT_VISIBLE
-        self.detail = (f"tried {len(self.tried)} nameplate(s); none was {wanted}: "
-                       f"{self.tried}")
+        self.detail = f"tried {len(self.tried)} nameplate(s); none was {wanted}: {self.tried}"
         return Result.NO_TARGET
 
-    @traced("interact.centre")
-    def _try_centre(self, wanted: int) -> Result | None:
-        """Right-click the middle of the screen. `None` means it was not the right unit."""
-        self.used_centre = True
-        self.clicked = self.window_centre
-        event("interact.click", data={"method": "centre", "point": self.clicked,
-                                      "wanted_name_id": wanted})
-        self.hid.click(*self.clicked, right=True)
-        time.sleep(0.9)
-        values = self.read()
-        event("selection.observed", code="blind" if values is None else "readable",
-              data={"wanted_name_id": wanted,
-                    "observed_name_id": values.get("target.name_id") if values else None})
-        if values is None:
-            self.detail = "no readable frame after the centre click"
-            return Result.BLIND
-        painted = values.get("target.name_id")
-        self.tried.append(painted)
-        if painted != wanted:
-            self._close_open_window()
-            return None
-        return self._window_open() or Result.NO_WINDOW
+    def _targeting(self) -> Targeting:
+        return self.targeting or Targeting(self.hid, self.read, read_frame=self.read_frame,
+                                           window_origin=self.window_origin)
 
     def _candidates(self) -> list[Plate]:
         """Nameplates worth a click, nearest the middle of the screen first.
@@ -217,9 +152,9 @@ class Interact:
         Two clicks, and the split is the point. A nameplate is a *label*: clicking it
         selects reliably at any range, but it floats above the unit by an amount that
         depends on distance, so guessing the model's position from it lands on the floor.
-        Selecting first makes the client draw the selection ring, and `units.find` then
-        brackets the model between ring and plate — feet and head — which is the measured
-        way to get a torso and is already proven on this NPC.
+        Selecting first makes the client draw the selection ring. Shared Targeting
+        proposes points between ring and plate, then checks current geometry and fresh
+        selected-unit ownership before it delivers the right-click.
 
         Identity is checked **between** the two clicks. Nothing is interacted with until
         the radio has said who is selected, so a wrong plate costs a selection, not an
@@ -229,10 +164,14 @@ class Interact:
         self.clicked = (ox + round(plate.cx), oy + round(plate.cy))
         event("selection.request", data={"method": "plate", "point": self.clicked,
                                          "wanted_name_id": wanted})
-        self.hid.click(*self.clicked)
-        time.sleep(0.6)
-
-        values = self.read()
+        if not self.hid.click(*self.clicked):
+            self.detail = "selection input refused"
+            return Result.REFUSED
+        paint = self._targeting().wait_for_paint()
+        if paint.code is not PaintCode.FRESH:
+            self.detail = paint.detail
+            return Result.BLIND
+        values = paint.after
         event("selection.observed", code="blind" if values is None else "readable",
               data={"wanted_name_id": wanted,
                     "observed_name_id": values.get("target.name_id") if values else None})
@@ -244,35 +183,21 @@ class Interact:
         if painted != wanted:
             return None
 
-        frame = self.read_frame()
-        if frame is None:
-            self.detail = "no captured frame after selecting"
-            return Result.BLIND
-        # The radio just identified this plate. Keep that evidence when locating its
-        # body; a larger ring-shaped patch of another colour is not this target.
-        self.sighting = find(frame, plate=plate)
-        with operation("target.location") as span:
-            if span.enabled:
-                span.finish(code="candidate" if self.sighting is not None else "not_visible",
-                            data={"sighting": asdict(self.sighting) if self.sighting else None})
-        if self.sighting is None:
-            self.detail = "selected the right unit, but no ring and plate to aim at"
-            return Result.NOT_VISIBLE
-        self.clicked = (ox + self.sighting.torso[0], oy + self.sighting.torso[1])
-        event("interact.click", data={"method": "plate_ring", "point": self.clicked,
-                                      "wanted_name_id": wanted})
-        self.hid.click(*self.clicked, right=True)
+        action = self._targeting().click_selected(kind="living", expected_name_id=wanted,
+                                                   plate=plate)
+        self.detail, self.clicked = action.detail, action.point
+        self.sighting = action.proposal if isinstance(action.proposal, Sighting) else None
+        event("interact.click", code=action.code.value,
+              data={"point": self.clicked, "wanted_name_id": wanted})
+        if not action.delivered:
+            return {ClickCode.REFUSED: Result.REFUSED, ClickCode.BLIND: Result.BLIND,
+                    ClickCode.INTERRUPTED: Result.INTERRUPTED,
+                    ClickCode.NO_TARGET: Result.NO_TARGET,
+                    ClickCode.WRONG_TARGET: Result.NO_TARGET}.get(action.code, Result.NOT_VISIBLE)
         time.sleep(0.9)
         return self._window_open() or Result.NO_WINDOW
 
     # -- pieces --------------------------------------------------------------
-
-    def _at(self, node_map: tuple[float, float] | None) -> bool:
-        """Close enough to the node to believe the unit is underfoot."""
-        if node_map is None:
-            return False
-        here = self.read_pos()
-        return here is not None and distance_yards(here, node_map, self.bounds) <= AT_NODE_YARDS
 
     def _centre_x(self) -> int:
         return self.window_centre[0] - self.window_origin[0]
@@ -290,7 +215,11 @@ class Interact:
                 return result
         return None
 
-    def _close_open_window(self) -> None:
-        if self._window_open() not in (None, Result.BLIND):
-            self.hid.tap("esc")
-            time.sleep(0.4)
+    def _close_open_window(self) -> Result | None:
+        closed = close_observed(self.hid, self.read,
+                                wait_for_paint=self._targeting().wait_for_paint)
+        if closed.code is CloseCode.CLOSED:
+            return None
+        self.detail = closed.detail
+        return {CloseCode.REFUSED: Result.REFUSED, CloseCode.BLIND: Result.BLIND,
+                CloseCode.NOT_CLOSED: Result.WINDOW_OPEN}[closed.code]

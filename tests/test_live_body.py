@@ -8,7 +8,9 @@ from test_runtime_records import seen
 
 from jev.clients.advance import Advanced, Goal
 from jev.clients.choose import Chose
+from jev.clients.fight import Fought
 from jev.clients.interact import Result as Interacted
+from jev.clients.loot import Looted
 from jev.clients.recover import Recover, Recovered
 from jev.clients.rest import Rested
 from jev.coach.schema import Decision, Intent
@@ -217,3 +219,157 @@ def test_release_is_separate_from_the_corpse_walk_and_requires_observed_ghost(mo
 def test_unknown_life_state_is_not_successful_recovery():
     recovery = Recover(hid=None, read=lambda: {})
     assert recovery.run() is Recovered.BLIND
+
+
+def test_all_unit_actions_share_one_targeting_owner_and_event_frame_writer():
+    original = body()
+    retain = Mock(return_value={"file": "observed.png"})
+    composed = LiveBody(original.client, original.graph, record_frame=retain)
+    assert composed.interact.targeting is composed.fight.targeting is composed.loot.targeting
+    assert composed.targeting is composed.fight.targeting
+    assert composed.targeting.hid is composed.client.hid
+    assert composed.targeting.window_origin == composed.client.origin
+    assert composed.targeting.record_frame is retain
+    composed.checkpoint = Mock()
+    composed.targeting.read()
+    composed.targeting.read_frame()
+    assert composed.checkpoint.call_count == 2
+
+
+@pytest.mark.parametrize("outcome, status", [
+    (Looted.REFUSED, SkillOutcome.ABORTED), (Looted.BLIND, SkillOutcome.PREEMPTED),
+    (Looted.INTERRUPTED, SkillOutcome.PREEMPTED), (Looted.BAGS_FULL, SkillOutcome.PREEMPTED),
+    (Looted.WINDOW_OPEN, SkillOutcome.ABORTED), (Looted.NO_CORPSE, SkillOutcome.ABORTED),
+])
+def test_direct_combat_does_not_hide_post_kill_loot_failure(outcome, status):
+    b = body()
+    b.fight = SimpleNamespace(run=Mock(return_value=Fought.KILLED), detail="observed death")
+    b.loot = SimpleNamespace(run=Mock(return_value=outcome), detail="uncompleted corpse action")
+    result = b._fight(seen())
+    assert result.outcome is status and result.code == outcome.value
+    assert result.detail == "post-kill loot: uncompleted corpse action"
+    b.loot.run.assert_called_once_with(progress=b._progress)
+
+
+@pytest.mark.parametrize("outcome", [Looted.TOOK, Looted.NOTHING])
+def test_direct_combat_keeps_success_after_observed_loot_outcome(outcome):
+    b = body()
+    b.fight = SimpleNamespace(run=lambda _: Fought.KILLED, detail="observed death")
+    b.loot = SimpleNamespace(run=lambda **_: outcome, detail="observed corpse outcome")
+    result = b._fight(seen())
+    assert result.outcome is SkillOutcome.SUCCEEDED and result.code == "killed"
+
+
+@pytest.mark.parametrize("outcome", [Fought.REFUSED, Fought.BLIND, Fought.INTERRUPTED])
+def test_direct_combat_failure_never_attempts_loot(outcome):
+    b = body()
+    b.fight = SimpleNamespace(run=lambda _: outcome, detail="fight stopped")
+    b.loot = SimpleNamespace(run=Mock())
+    result = b._fight(seen())
+    assert result.outcome is not SkillOutcome.SUCCEEDED
+    assert result.code == outcome.value and result.detail == "fight stopped"
+    b.loot.run.assert_not_called()
+
+
+@pytest.mark.parametrize("outcome, status", [
+    (Interacted.BLIND, SkillOutcome.PREEMPTED), (Interacted.INTERRUPTED, SkillOutcome.PREEMPTED),
+    (Interacted.REFUSED, SkillOutcome.ABORTED), (Interacted.WINDOW_OPEN, SkillOutcome.ABORTED),
+])
+def test_quest_interaction_uses_the_same_terminal_outcome_mapping_as_services(outcome, status):
+    b = body()
+    b.interact = SimpleNamespace(open_on=lambda *_, **__: outcome, detail="interaction stopped")
+    b.advance = SimpleNamespace(run=Mock())
+    result = b._quest(seen())
+    assert result.outcome is status and result.code == outcome.value
+    assert result.detail == "interaction stopped"
+    b.advance.run.assert_not_called()
+
+
+def calibration_devices(b, monkeypatch):
+    """Keep the real Camera and its shared HID owner; replace only physical delivery."""
+    monkeypatch.setattr("jev.clients.camera.time.sleep", lambda _: None)
+    b.client.hid.move_to = Mock(return_value=True)
+    b.client.hid.move_by = Mock(return_value=True)
+    b.client.hid.button = Mock(return_value=True)
+    return b.client.hid
+
+
+def test_interact_fight_and_loot_reuse_one_camera_across_ordinary_skill_releases(monkeypatch):
+    b = body()
+    hid = calibration_devices(b, monkeypatch)
+    assert b.interact.level.__self__ is b.fight.level.__self__ is b.loot.level.__self__ is b.camera
+    assert b.camera.hid is b.client.hid
+    assert b.interact.level() is True
+    b.release()
+    assert b.fight.level() is True
+    b.release()
+    assert b.loot.level() is True
+    b.release()
+    assert b.interact.level() is True
+    assert hid.move_to.call_count == 1
+    assert hid.move_by.call_count == hid.button.call_count == 2
+
+
+def test_observed_focus_loss_between_workers_invalidates_the_shared_camera(monkeypatch):
+    b = body()
+    hid = calibration_devices(b, monkeypatch)
+    assert b.fight.level() is True
+    hid.ready = lambda: False
+    assert b.has_focus() is False
+    assert hid.move_by.call_count == 2, "invalidation itself sent camera input"
+    hid.ready = lambda: True
+    assert b.has_focus() is True
+    assert b.loot.level() is True
+    assert hid.move_by.call_count == 4
+    assert b.interact.level() is True
+    assert hid.move_by.call_count == 4
+
+
+def test_active_worker_focus_checkpoint_invalidates_before_raising(monkeypatch):
+    b = body()
+    hid = calibration_devices(b, monkeypatch)
+    assert b.interact.level() is True
+
+    def quest(_):
+        hid.ready = lambda: False
+        hid.checkpoint()
+        pytest.fail("worker continued after losing input ownership")
+
+    b._quest = quest
+    with pytest.raises(FocusLost):
+        b.execute(b.arm, seen(), lambda: None)
+    b.release()
+    hid.ready = lambda: True
+    assert b.loot.level() is True
+    assert hid.move_by.call_count == 4
+
+
+@pytest.mark.parametrize("outcome", ["restored", "failed", "cancelled"])
+def test_reconnect_invalidates_camera_before_session_work_even_when_reconnect_fails(
+        monkeypatch, outcome):
+    b = body()
+    hid = calibration_devices(b, monkeypatch)
+    assert b.fight.level() is True
+    checkpoint = Mock()
+    response = Result(SkillOutcome.SUCCEEDED if outcome == "restored" else SkillOutcome.ABORTED,
+                      "fixture session attempt", "reconnected" if outcome == "restored" else "error")
+    observed = []
+
+    def reconnect(client, supplied_checkpoint, *, env_file):
+        assert client is b.client and supplied_checkpoint is checkpoint
+        assert env_file == "fixture.env"
+        observed.append(b.camera._calibrated_geometry)
+        if outcome == "cancelled":
+            raise Cancelled("stop requested")
+        return response
+
+    monkeypatch.setattr("jev.run.watchdog.reconnect_client", reconnect)
+    if outcome == "cancelled":
+        with pytest.raises(Cancelled, match="stop requested"):
+            b.reconnect(checkpoint, env_file="fixture.env")
+    else:
+        assert b.reconnect(checkpoint, env_file="fixture.env") is response
+    assert observed == [None], "session work began with an old calibration still valid"
+    assert hid.move_by.call_count == 2, "reconnecting performed speculative calibration"
+    assert b.loot.level() is True
+    assert hid.move_by.call_count == 4
