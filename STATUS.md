@@ -1206,3 +1206,52 @@ reports graph catalog and target gaps without attaching a client. Broken-and-bro
 equipment is still a real resource deadlock. Facing remains unknown under V17/V29, and
 the earlier corpse-run spin remains unexplained. Live outcome collection and measured
 student promotion remain ahead; this work does not claim unattended 1–12 coverage.
+
+## 2026-09-22 — keep the current loop running: service, focus and recovery handoffs
+
+DID: continued within the existing runtime/body scope. No client opened, new live runs,
+teacher/learner work, Fight rewrite, wander search or new unstick measurements.
+
+- Long hunts now hand back to the shared service policy between pulls, **after looting
+  the kill**. Full bags stop another pull; standalone travel can yield to service too.
+  The body and coach share the same observed repair-purse context. An unaffordable
+  repair no longer hides a simultaneous full-bag condition. Service requires an observed
+  out-of-combat state. The current bag-service executor is still absent, so full bags
+  stop with that named gap instead of continuing to kill with no space.
+- A full bag with a persistent loot window now closes that observed window through the
+  existing close method. Otherwise the high-priority open-loot rule could keep selecting
+  loot and never reach service. Corpse aim, settle timing and empty-corpse success remain
+  unchanged.
+- Focus loss releases the worker before another game action. The supervisor can run the
+  existing bounded focus backoff even when another window hides the radio, while it
+  continues recording observations. That operation sends no game keys and is not
+  reported as successful quest execution. Refused focus stops once with its reason;
+  operator stop cancels the backoff. No new unstick heading or facing inference.
+- A guide predicate succeeding no longer cancels its own body composition before its
+  final confirmation/loot finishes. Replacement input still waits for release. Hard
+  preempts, failed guide transitions and skill deadlines still apply. At the terminal
+  guide step, the run waits for the worker's result instead of cutting it off immediately.
+- Measured death, blindness, interrupted rest and service handoffs are interruptions,
+  rather than failed quest attempts. A death can therefore enter release/corpse recovery
+  even with a one-attempt quest retry budget, and return to the same step afterward.
+
+NOW: offline integration executes the real Hunt → LiveBody → Supervisor → ClientRuntime
+composition through fight → loot → repair → fight → loot, retaining the same objective
+and recording the interrupted hunt, successful repair and completed hunt separately.
+Another threaded test executes quest → death → release → corpse run → same quest without
+consuming its retry budget. Hidden-radio focus tests prove continued recording, no game
+skill while unfocused, bounded refusal, and cancellation. Existing live constants and
+the pre-existing camera/scratch edits remain untouched.
+
+Review correction: current `Fight.run` marks broken gear and still allows fighting; it
+is a preference, not a hard veto. Earlier notes describing a broken-gear veto/deadlock
+do not describe the current Fight code. This continuation preserves that behavior and
+the measured purse gate, so a refused repair does not force repeated merchant trips.
+
+NEXT: live acceptance remains pending under the instruction to keep the client closed.
+Safe bag selling through the existing vendor/Interact composition remains unimplemented;
+no item-quality evidence, selling clicks or vendor success have been invented. The named
+wandering-NPC, idle-disconnect and in-combat Holy Light measurements remain open.
+
+Verification: **751 tests passed in 79.56 s**, including the real navmesh checks and all
+new threaded continuity/focus cases. Ruff (`jev tools tests`) and `git diff --check` pass.

@@ -20,6 +20,7 @@ from jev.clients.loot import Loot
 from jev.clients.recover import Recover
 from jev.clients.repair import Repair
 from jev.clients.rest import Rest
+from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world
 from jev.guide.graph import Graph
@@ -27,9 +28,9 @@ from jev.guide.objectives import progress
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import list_lines, name_id
-from jev.run.client import Client
+from jev.run.client import FOCUS_QUICK_S, Client
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
-from jev.run.supervisor import BodyFailure, Cancelled, Result, Unsupported
+from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role
 from jev.world.state_v1 import PowerType, State, StepKind
 
@@ -52,6 +53,7 @@ class LiveBody:
         self.client, self.graph = client, graph
         self.travel_timeout, self.hunt_timeout, self.say = travel_timeout, hunt_timeout, say
         self.travelling = False
+        self.policy_context = Context()
         self.checkpoint: Callable[[], None] = lambda: None
         self.arm: Armed | None = None
         ox, oy = client.origin
@@ -100,16 +102,23 @@ class LiveBody:
         return self.client.quest_ids(tries=1)
 
     def execute(self, arm: Armed, state: State, checkpoint: Callable[[], None]) -> Result:
-        self.arm, self.checkpoint = arm, checkpoint
-        self.client.hid.checkpoint = checkpoint
+        self.arm = arm
+        def focused_checkpoint():
+            checkpoint()
+            if not self.client.hid.ready():
+                raise FocusLost("client lost focus; release before refocusing")
+        self.checkpoint = focused_checkpoint
+        self.client.hid.checkpoint = focused_checkpoint
         handler = self.HANDLERS.get(arm.decision.skill)
         if handler is None:
             return Result(SkillOutcome.ABORTED, f"no executor for {arm.decision.skill}", "unsupported")
         error = self._parameters()
         if error:
             return Result(SkillOutcome.ABORTED, error, "unsupported")
-        if not self.client.hid.ready():
-            return Result(SkillOutcome.ABORTED, "client is not focused", "refused")
+        if (not self.client.hid.ready()
+                and not self.client.focused(FOCUS_QUICK_S, checkpoint=checkpoint)):
+            return Result(SkillOutcome.ABORTED, "client refused focus after backoff", "refused")
+        self.checkpoint()
         return getattr(self, handler)(state)
 
     def _parameters(self) -> str | None:
@@ -145,7 +154,9 @@ class LiveBody:
 
     @staticmethod
     def _result(outcome, detail="") -> Result:
-        status = (SkillOutcome.SUCCEEDED if outcome.ok else
+        status = (SkillOutcome.PREEMPTED if outcome.value in
+                  ("bags_full", "service_needed", "died", "blind", "interrupted") else
+                  SkillOutcome.SUCCEEDED if outcome.ok else
                   SkillOutcome.TIMED_OUT if outcome.value == "timeout" else SkillOutcome.ABORTED)
         return Result(status, detail, outcome.value)
 
@@ -245,11 +256,19 @@ class LiveBody:
                 return None if level is None else level >= needed
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
-                    is_complete=complete_reader)
+                    is_complete=complete_reader, service_needed=self._service_needed)
         outcome = hunt.run(node.world, node.hunt_yards or DEFAULT_HUNT_YARDS,
                            name_id(node.target_name),
                            timeout_s=self.hunt_timeout)
         return self._result(outcome, hunt.detail)
+
+    def _service_needed(self) -> str | None:
+        self.checkpoint()
+        state = self.client.state()
+        if state is None:
+            return None
+        plan = service(state, context=self.policy_context)
+        return plan.decision.why if plan else None
 
     def _fight(self, state) -> Result:
         outcome = self.fight.run(None)

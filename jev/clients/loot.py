@@ -106,6 +106,7 @@ class Loot:
         if v is None:
             return Looted.BLIND
         if v.get("bags.free") == 0:
+            self._close_if_open(v)
             self.detail = "bags are full; looting would take nothing"
             return Looted.BAGS_FULL
         before = {**v, "objective": self._counter()}

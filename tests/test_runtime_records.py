@@ -138,6 +138,20 @@ def test_broke_repair_waits_for_observed_money_growth_and_combat_wins():
     assert decide(combat, graph().nodes[0], context=ctx).rule.startswith("fight.")
 
 
+def test_an_unaffordable_repair_does_not_hide_full_bags():
+    context = Context()
+    context.repair_failed(10)
+    state = seen(bags=Bags(free=0, durability_min=0, money_copper=10))
+    assert decide(state, context=context).rule == "service.bags_full"
+
+
+def test_service_waits_for_observed_out_of_combat_state():
+    from jev.coach.policy import service
+
+    state = seen(vitals=Vitals(combat=None), bags=Bags(free=0, durability_min=0))
+    assert service(state) is None
+
+
 def test_changed_params_are_a_new_arm_even_with_same_skill(tmp_path):
     rt = runtime(tmp_path, [seen(), seen(2)], take=lambda key: answer())
     rt.tick()

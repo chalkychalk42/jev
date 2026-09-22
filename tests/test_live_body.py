@@ -16,9 +16,10 @@ from jev.guide.coords import ZoneBounds
 from jev.guide.graph import Graph, Node
 from jev.guide.objectives import progress
 from jev.guide.tracker import Event, Tracker
+from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.run.body import LiveBody
-from jev.run.supervisor import BodyFailure, Cancelled, Unsupported
+from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world.state_v1 import ArmedBy, Objective, Quest, StepKind
 
 
@@ -111,6 +112,41 @@ def test_an_arm_cannot_silently_target_a_different_quest():
     result = b.execute(b.arm, seen(), lambda: None)
     assert result.code == "unsupported" and "step_id" in result.detail
     b.interact.open_on.assert_not_called()
+
+
+def test_focus_loss_stops_the_body_before_another_physical_action():
+    b = body()
+    def quest(_):
+        b.client.hid.ready = lambda: False
+        b.client.hid.checkpoint()
+        pytest.fail("the body continued after focus loss")
+    b._quest = quest
+    with pytest.raises(FocusLost):
+        b.execute(b.arm, seen(), lambda: None)
+
+
+def test_a_replacement_uses_focus_backoff_before_executing():
+    b = body()
+    b.client.hid.ready = lambda: False
+    events = []
+    def focus(*args, **kw):
+        kw["checkpoint"]()
+        events.append("focus")
+        b.client.hid.ready = lambda: True
+        return True
+    b.client.focused = focus
+    b._quest = lambda _: events.append("quest") or Result(SkillOutcome.SUCCEEDED)
+    assert b.execute(b.arm, seen(), lambda: None).outcome is SkillOutcome.SUCCEEDED
+    assert events == ["focus", "quest"]
+
+
+def test_refused_focus_never_enters_the_skill():
+    b = body()
+    b.client.hid.ready = lambda: False
+    b.client.focused = Mock(return_value=False)
+    b._quest = Mock()
+    assert b.execute(b.arm, seen(), lambda: None).code == "refused"
+    b._quest.assert_not_called()
 
 
 def test_a_later_objective_is_not_hunted_at_the_first_objectives_spawn():

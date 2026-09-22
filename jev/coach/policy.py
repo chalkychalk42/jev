@@ -120,12 +120,16 @@ def preempt(state: State) -> Plan | None:
 # --------------------------------------------------------------------------- soft tier
 
 
-def _service(state: State) -> Plan | None:
+def service(state: State, *, context: Context | None = None) -> Plan | None:
+    """The service priority, shared by idle selection and long-skill handoff."""
+    if state.vitals.combat is not False:
+        return None
     b = state.bags
+    can_repair = context is None or context.can_repair(b.money_copper)
 
     # `is not None` throughout: unknown bags are not full bags, and a service loop on an
     # unread number is the failure the verifier's `no_service_loop` rule also guards.
-    if b.durability_min is not None and b.durability_min <= 0.05:
+    if can_repair and b.durability_min is not None and b.durability_min <= 0.05:
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "equipment is broken", 0.85,
                        ("dead", "combat"), service="repair"), True, "service.broken")
 
@@ -133,7 +137,7 @@ def _service(state: State) -> Plan | None:
         return Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are full; nothing can drop",
                        0.75, ("dead", "combat"), service="bags"), True, "service.bags_full")
 
-    if b.durability_min is not None and b.durability_min < 0.35:
+    if can_repair and b.durability_min is not None and b.durability_min < 0.35:
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is low", 0.65,
                        ("dead", "combat"), service="repair"), True, "service.durability")
 
@@ -235,12 +239,8 @@ def decide(state: State, node: Node | None = None, *, context: Context | None = 
     """
     # Safety first, and safety is not derated: a preempt fires on a positive observation
     # (`is True`), so if one matched, something was read.
-    for tier in (preempt, _fight, _service, _recover):
-        plan = tier(state)
+    for plan in (preempt(state), _fight(state), service(state, context=context), _recover(state)):
         if plan is not None:
-            if (plan.decision.skill == "VENDOR_REPAIR" and context is not None
-                    and not context.can_repair(state.bags.money_copper)):
-                continue
             return plan
 
     plan = _guide(state, node) or _fallback(state)

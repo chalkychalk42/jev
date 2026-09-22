@@ -200,7 +200,8 @@ class Client:
                   + (f" - {result.detail}" if result.detail else ""))
         return result.outcome.value == "arrived"
 
-    def focused(self, patience_s: float = FOCUS_PATIENCE_S) -> bool:
+    def focused(self, patience_s: float = FOCUS_PATIENCE_S, *,
+                checkpoint: Callable[[], None] | None = None) -> bool:
         """Bring the window forward, and say whether it actually came.
 
         Not assumed. A Windows notification panel holds the foreground and refuses to give
@@ -210,11 +211,19 @@ class Client:
         deadline = time.monotonic() + patience_s
         wait = FOCUS_FIRST_WAIT_S
         while True:
+            if checkpoint is not None:
+                checkpoint()
             if win32.focus(self.hwnd) and win32.is_foreground(self.hwnd):
                 return True
             if time.monotonic() + wait >= deadline:
                 return win32.is_foreground(self.hwnd)
-            time.sleep(wait)
+            if checkpoint is None:
+                time.sleep(wait)
+            else:
+                wake = time.monotonic() + wait
+                while time.monotonic() < wake:
+                    checkpoint()
+                    time.sleep(min(0.05, max(0.0, wake - time.monotonic())))
             wait = min(FOCUS_MAX_WAIT_S, wait * 2)
 
     def close(self) -> None:

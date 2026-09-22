@@ -4,7 +4,25 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from jev.run.client import STALE_AFTER_S, Client
+
+
+def test_focus_backoff_is_cancellable_before_another_focus_attempt(monkeypatch):
+    from jev.clients import win32
+    from jev.run.supervisor import Cancelled
+
+    calls = []
+    monkeypatch.setattr(win32, "focus", lambda _: calls.append("focus") or False)
+    monkeypatch.setattr(win32, "is_foreground", lambda _: False)
+    client = Client(hwnd=1, hid=None, cap=_Cap(), origin=(0, 0), size=(1600, 900))
+    def checkpoint():
+        if calls:
+            raise Cancelled("operator stop")
+    with pytest.raises(Cancelled, match="operator stop"):
+        client.focused(checkpoint=checkpoint)
+    assert calls == ["focus"]
 
 
 class _Cap:

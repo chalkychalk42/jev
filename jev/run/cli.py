@@ -15,7 +15,7 @@ from jev.guide.path import MmapQuery
 from jev.learn.episode import Recorder
 from jev.orch.runtime import ClientRuntime
 from jev.run.body import LiveBody
-from jev.run.client import ClientSource, NotRunning, attach, with_travel
+from jev.run.client import FOCUS_QUICK_S, ClientSource, NotRunning, attach, with_travel
 from jev.run.supervisor import Supervisor
 from jev.world.state_v1 import StepKind
 
@@ -81,7 +81,10 @@ def main(argv: list[str] | None = None) -> int:
             completed=set(memory.completed),
             on_progress=lambda step, done: playhead.save(graph.graph_id, step, done, args.playhead),
         )
-        supervisor = Supervisor(runtime, body, max_failures=args.retries)
+        supervisor = Supervisor(runtime, body, max_failures=args.retries,
+                                has_focus=client.hid.ready,
+                                focus=lambda checkpoint: client.focused(FOCUS_QUICK_S,
+                                                                         checkpoint=checkpoint))
         print(f"recording to {recorder.dir}")
         supervisor.run(args.run_for, max_steps=args.steps)
         if supervisor.failure:

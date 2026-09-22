@@ -64,6 +64,8 @@ class Hunted(StrEnum):
     UNREACHABLE = "unreachable"  # could not stand anywhere on the disk
     TIMEOUT = "timeout"
     BLIND = "blind"
+    BAGS_FULL = "bags_full"      # hand the same guide step back to the service policy
+    SERVICE_NEEDED = "service_needed"
 
     @property
     def ok(self) -> bool:
@@ -104,6 +106,7 @@ class Hunt:
     observe: Callable[[], object | None] | None = None
     step_id: str | None = None
     is_complete: Callable[[], bool | None] | None = None
+    service_needed: Callable[[], str | None] | None = None
 
     kills: int = field(default=0, init=False)
     _outdoors: bool | None = field(default=None, init=False)
@@ -139,6 +142,13 @@ class Hunt:
             if complete is True:
                 self.say(f"  objective complete: {have}/{need}")
                 return Hunted.DONE
+
+            if v is not None and v.get("bags.free") == 0 and v.get("vitals.combat") is False:
+                self.detail = "bags are full; service before the next pull"
+                return Hunted.BAGS_FULL
+            if self.service_needed is not None and (reason := self.service_needed()):
+                self.detail = reason
+                return Hunted.SERVICE_NEEDED
 
             if not stood:
                 if post >= len(posts):

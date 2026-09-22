@@ -77,6 +77,37 @@ def test_stations_work_outward_from_the_node_and_stay_on_the_disk():
     assert reach(posts[1]) < 10.0, "the first move is a long way from the node"
 
 
+def test_full_bags_yield_before_another_pull_without_walking_the_camp():
+    hunt, walked = _hunt([Fought.KILLED], [(0, 8)])
+    hunt.read = lambda: {"bags.free": 0, "vitals.combat": False}
+    assert hunt.run((0, 0, 0), 30) is Hunted.BAGS_FULL
+    assert hunt.fight.calls == 0 and walked == []
+
+
+def test_full_bags_do_not_interrupt_an_existing_fight_or_hide_completion():
+    hunt, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)])
+    hunt.read = lambda: {"bags.free": 0, "vitals.combat": True}
+    assert hunt.run((0, 0, 0), 30) is Hunted.DONE
+    assert hunt.fight.calls == 1
+    hunt.read = lambda: {"bags.free": 0, "vitals.combat": False}
+    assert hunt.run((0, 0, 0), 30) is Hunted.DONE
+    assert hunt.fight.calls == 1
+
+
+def test_service_handoff_happens_after_looting_the_kill():
+    from types import SimpleNamespace
+
+    from jev.clients.loot import Looted
+
+    hunt, _ = _hunt([Fought.KILLED], [(0, 8)])
+    events = []
+    hunt.loot = SimpleNamespace(run=lambda **kw: events.append("loot") or Looted.NOTHING,
+                                detail="empty corpse")
+    hunt.service_needed = lambda: "repair needed" if events else None
+    assert hunt.run((0, 0, 0), 30) is Hunted.SERVICE_NEEDED
+    assert hunt.fight.calls == 1 and events == ["loot"]
+
+
 def test_the_counter_ends_it_and_nothing_counts_its_own_kills():
     """`quests.o0_have` is the server's tally. A swing that missed, a mob somebody else
     tagged and a kill for a different quest are indistinguishable from the inside."""

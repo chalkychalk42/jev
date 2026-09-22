@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from jev.coach.policy import Context, service
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed, ClientRuntime
 from jev.skills.catalog import get
@@ -21,6 +22,10 @@ from jev.world.state_v1 import State
 
 class Cancelled(Exception):
     pass
+
+
+class FocusLost(Cancelled):
+    """Release the body before the next attempt uses the existing focus backoff."""
 
 
 class Unsupported(Exception):
@@ -45,18 +50,24 @@ class BodyFailure(Exception):
 class Body(Protocol):
     available: frozenset[str]
     travelling: bool
+    policy_context: Context
 
     def execute(self, arm: Armed, state: State, checkpoint: Callable[[], None]) -> Result: ...
     def release(self) -> None: ...
 
 
 class Worker:
-    def __init__(self, body: Body, arm: Armed, state: State):
+    def __init__(self, body: Body, arm: Armed | None, state: State, *,
+                 focus: Callable[[Callable[[], None]], bool] | None = None):
+        if arm is None and focus is None:
+            raise ValueError("a game worker needs an armed skill")
         self.body, self.arm = body, arm
+        self.focus = focus
         self.reason = ""
         self.cancelled = threading.Event()
         self.done = threading.Event()
         self.result: Result | None = None
+        self.completion_observed = False
         self.thread = threading.Thread(target=self._run, args=(state,), name="jev-body")
 
     def checkpoint(self) -> None:
@@ -71,7 +82,15 @@ class Worker:
     def _run(self, state: State) -> None:
         try:
             self.checkpoint()
-            self.result = self.body.execute(self.arm, state, self.checkpoint)
+            if self.focus is not None:
+                restored = self.focus(self.checkpoint)
+                self.result = Result(SkillOutcome.SUCCEEDED if restored else SkillOutcome.ABORTED,
+                                     "focus restored" if restored else "client refused focus after backoff",
+                                     "focused" if restored else "refused")
+            else:
+                self.result = self.body.execute(self.arm, state, self.checkpoint)
+        except FocusLost as exc:
+            self.result = Result(SkillOutcome.PREEMPTED, str(exc), "focus_lost")
         except Cancelled as exc:
             timed_out = self.reason == "skill timeout"
             self.result = Result(SkillOutcome.TIMED_OUT if timed_out else SkillOutcome.PREEMPTED,
@@ -91,7 +110,8 @@ class Worker:
                 self.done.set()
 
 
-def interruption(arm: Armed, state: State, *, travelling: bool = False) -> str | None:
+def interruption(arm: Armed, state: State, *, travelling: bool = False,
+                 completion_observed: bool = False) -> str | None:
     skill = arm.decision.skill
     if not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5:
         return "perception unavailable"
@@ -105,7 +125,7 @@ def interruption(arm: Armed, state: State, *, travelling: bool = False) -> str |
     fighting = skill in {"COMBAT_PROFILE", "APPROACH_TARGET", "ACQUIRE_TARGET", "GRIND_UNTIL", "LOOT"}
     if state.vitals.combat is True and (travelling or not fighting) and not recovery:
         return "combat interrupted the leg or service"
-    if arm.step_id != state.guide.step_id and not recovery:
+    if arm.step_id != state.guide.step_id and not recovery and not completion_observed:
         return "playhead changed"
     spec = get(skill or "")
     if spec and state.t - arm.at >= spec.timeout_s:
@@ -115,9 +135,15 @@ def interruption(arm: Armed, state: State, *, travelling: bool = False) -> str |
 
 class Supervisor:
     def __init__(self, runtime: ClientRuntime, body: Body,
-                 *, say: Callable[[str], None] = print, max_failures: int = 3):
+                 *, say: Callable[[str], None] = print, max_failures: int = 3,
+                 has_focus: Callable[[], bool] | None = None,
+                 focus: Callable[[Callable[[], None]], bool] | None = None):
+        if (has_focus is None) != (focus is None):
+            raise ValueError("focus observation and restoration must be supplied together")
         self.runtime, self.body, self.say = runtime, body, say
+        self.has_focus, self.focus = has_focus, focus
         self.runtime.available_skills = body.available
+        self.body.policy_context = runtime.policy_context
         self.worker: Worker | None = None
         self.next_record = self.next_coach = 0.0
         self.stopped = threading.Event()
@@ -133,22 +159,30 @@ class Supervisor:
             worker, self.worker = self.worker, None
             worker.thread.join()
             result = worker.result or Result(SkillOutcome.ABORTED, "worker returned no result", "error")
-            self.runtime.finish(result.outcome, result.detail, state=state)
-            self.say(f"{worker.arm.decision.skill}: {result.code or result.outcome.value} {result.detail}")
-            if result.code == "too_poor":
-                self.runtime.policy_context.repair_failed(state.bags.money_copper)
-            key = worker.arm.step_id, worker.arm.decision.skill
-            if result.outcome is SkillOutcome.SUCCEEDED:
-                self.failures.pop(key, None)
-            elif result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT) and result.code != "too_poor":
-                self.failures[key] = self.failures.get(key, 0) + 1
-                if self.failures[key] >= self.max_failures:
-                    exhausted = key, result.detail
+            if worker.focus is not None:
+                self.say(f"focus: {result.detail}")
+                if result.outcome is not SkillOutcome.SUCCEEDED:
+                    self.failure = result.detail or "focus restoration interrupted"
+                    self.stopped.set()
+            else:
+                self.runtime.finish(result.outcome, result.detail, state=state)
+                self.say(f"{worker.arm.decision.skill}: {result.code or result.outcome.value} {result.detail}")
+                if result.code == "too_poor":
+                    self.runtime.policy_context.repair_failed(state.bags.money_copper)
+                key = worker.arm.step_id, worker.arm.decision.skill
+                if result.outcome is SkillOutcome.SUCCEEDED:
+                    self.failures.pop(key, None)
+                elif result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT) and result.code != "too_poor":
+                    self.failures[key] = self.failures.get(key, 0) + 1
+                    if self.failures[key] >= self.max_failures:
+                        exhausted = key, result.detail
             if result.code in {"error", "unsupported", "no_food", "refused"}:
                 self.failure = result.detail or result.code
                 self.stopped.set()
 
-        choose = self.worker is None and now >= self.next_coach and not self.stopped.is_set()
+        needs_focus = self.has_focus is not None and not self.has_focus()
+        choose = (self.worker is None and not needs_focus and now >= self.next_coach
+                  and not self.stopped.is_set())
         record = now >= self.next_record
         state = self.runtime.tick(choose=choose, record=record, state=state)
         # Give the tracker's on_fail edge first refusal; stop only if it cannot rejoin.
@@ -162,11 +196,32 @@ class Supervisor:
             self.next_record = now + 0.5
         if choose:
             self.next_coach = now + 0.5
-        if self.worker:
-            reason = interruption(self.worker.arm, state, travelling=self.body.travelling)
+        if self.worker and self.worker.focus is None:
+            if self.runtime._tracker_event in {"fail", "rejoin_or_skip"}:
+                self.worker.completion_observed = False
+            if (self.runtime._tracker_event == "advance"
+                    and self.runtime._tracker_from == self.worker.arm.step_id
+                    and self.worker.arm.decision.skill in {"ACCEPT_QUEST", "TURNIN_QUEST", "GRIND_UNTIL"}):
+                # These compositions confirm the same guide predicate themselves, then
+                # finish their bounded tail (notably looting a kill). Let them acknowledge
+                # completion; a fail edge still cancels, and hard preempts still win.
+                self.worker.completion_observed = True
+            reason = interruption(self.worker.arm, state, travelling=self.body.travelling,
+                                  completion_observed=self.worker.completion_observed)
+            # Hunt yields between pulls, after looting. Interrupting it as combat drops
+            # would leave the killed corpse behind. A standalone travel leg can yield now.
+            if reason is None and self.worker.arm.decision.skill == "TRAVEL_TO":
+                needed = service(state, context=self.runtime.policy_context)
+                if needed is not None:
+                    reason = f"service needed: {needed.decision.why}"
             if reason:
                 self.worker.cancel(reason)
-        elif (choose and not self.stopped.is_set() and self.runtime.armed
+        elif self.worker is None and not self.stopped.is_set() and needs_focus:
+            # Raising the already-bound window sends no game keys. Keep recording while
+            # the existing focus backoff runs, even if another window hides the radio.
+            self.worker = Worker(self.body, None, state, focus=self.focus)
+            self.worker.thread.start()
+        elif (self.worker is None and choose and not self.stopped.is_set() and self.runtime.armed
               and self.runtime.armed.decision.skill not in (None, "IDLE", "ABORT_WAIT")):
             arm = self.runtime.armed
             reason = interruption(arm, state)
@@ -181,7 +236,8 @@ class Supervisor:
             while not self.stopped.is_set() and time.monotonic() < deadline:
                 started = time.monotonic()
                 self.step(started)
-                if self.runtime.finished or (max_steps and self.runtime.counters.advances >= max_steps):
+                if ((self.runtime.finished and self.worker is None)
+                        or (max_steps and self.runtime.counters.advances >= max_steps)):
                     break
                 self.stopped.wait(max(0.0, 0.25 - (time.monotonic() - started)))
         finally:
@@ -196,7 +252,7 @@ class Supervisor:
                 pass
             self.worker.thread.join()
             result = self.worker.result
-            if result and result.outcome is not SkillOutcome.PREEMPTED:
+            if result and self.worker.focus is None and result.outcome is not SkillOutcome.PREEMPTED:
                 self.runtime.finish(result.outcome, result.detail)
             self.worker = None
         self.body.release()

@@ -41,6 +41,15 @@ def _loot(readings, hid=None, ring=RING):
 HAVE = {"bags.free": 8, "ui.loot": False, "bags.money_silver": 3}
 
 
+def test_full_bags_close_a_persisting_loot_frame_before_service(monkeypatch):
+    monkeypatch.setattr("jev.clients.loot.time.sleep", lambda _: None)
+    hid = _Hid()
+    skill = _loot([{**HAVE, "bags.free": 0, "ui.loot": True}], hid=hid)
+    assert skill.run() is Looted.BAGS_FULL
+    assert not hid.clicks
+    assert hid.taps == ["esc"]
+
+
 def test_a_full_bag_is_not_clicked_at():
     """Looting into a full bag silently takes nothing, and the fix is a vendor rather
     than another click."""
