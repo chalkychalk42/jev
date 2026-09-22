@@ -17,9 +17,9 @@ Why pitch can be set at all
 Mouse-look is relative, so there is no "set pitch to X". But it **clamps**: drag down far
 enough and the camera stops looking straight down, however it started. A clamp is an
 absolute reference, so the sequence is drag hard into the stop, then come back a measured
-amount. From the bottom stop, 400 pixels of upward drag is level — measured live at
-Dermot Johns' stall in Northshire, where the same frame went from bare ground to three
-merchants under an awning.
+amount. From the bottom stop, 500 pixels of upward drag is level at the pinned Windows
+pointer speed 10 — measured live at Dermot Johns' stall in Northshire, where the same
+frame went from bare ground to three merchants under an awning.
 
 This deliberately does not read the frame to decide. A horizon detector would be a second
 thing to be wrong, and the clamp already makes the result repeatable.
@@ -32,7 +32,13 @@ from dataclasses import dataclass
 
 # Far enough to reach the stop from any starting pitch, with room to spare. Overshooting
 # into a clamp costs nothing - that is the entire point of using one as a reference.
-TO_THE_STOP_PX = 900
+#
+# And it has to be generous, because getting this wrong does not look like a short drag:
+# it looks like `level()` not being absolute any more. 900 was measured alongside
+# `LEVEL_PX` at pointer speed 11; pinning the pointer to 10 cut every delta by a fifth,
+# 900 stopped reaching the clamp, and the resulting pitch depended on wherever the camera
+# already was. Two calls in a row put the same nameplate at y=441 and then y=211.
+TO_THE_STOP_PX = 2000
 
 # From the bottom stop, how far up is level. Measured, not derived: it is the client's
 # pitch range times whatever the operating system did to the deltas on the way.

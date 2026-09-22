@@ -96,6 +96,19 @@ def test_a_plate_far_to_the_side_does_not_belong_to_it():
     assert plate_for(ring, [far]) is None
 
 
+def test_an_attack_selection_ring_can_change_colour_without_changing_its_plate():
+    # Live wolf frame 90: the ring flashed red/orange while its health bar stayed yellow.
+    ring = Ring(cx=1302.0, cy=423.0, w=119, h=16, colour=RingColour.RED, area=768)
+    plate = Plate(cx=1308.0, cy=305.0, w=145, colour=RingColour.YELLOW)
+    assert plate_for(ring, [plate]) is plate
+
+
+def test_a_different_colour_plate_does_not_belong_to_the_ring():
+    ring = Ring(cx=800.0, cy=600.0, w=50, h=28, colour=RingColour.GREEN, area=380)
+    label = Plate(cx=800.0, cy=500.0, w=140, colour=RingColour.YELLOW)
+    assert plate_for(ring, [label]) is None
+
+
 # --- unmeasured rules stay off ----------------------------------------------
 
 def test_only_measured_colours_are_searched_by_default():
@@ -103,7 +116,7 @@ def test_only_measured_colours_are_searched_by_default():
     terrain, on a frame whose only ring was friendly. An unmeasured rule is a guess with a
     type annotation."""
     assert MEASURED == (RingColour.GREEN, RingColour.YELLOW)
-    assert RingColour.RED not in MEASURED, "red has not met a frame yet"
+    assert RingColour.RED not in MEASURED, "red detection still admits measured terrain"
 
 
 def test_the_hostile_rule_still_exists_ready_to_be_measured(frame):
@@ -182,3 +195,74 @@ def test_a_target_with_no_nameplate_is_not_a_sighting():
     assert ring is not None and plates
     assert all(abs(p.cx - ring.cx) > PLATE_PAIR_MAX_DX for p in plates)
     assert find(frame) is None
+
+
+@pytest.mark.parametrize("fixture, expected", [
+    ("live-dermot-targeted.npz", (1007, 486)),
+    ("live-dermot-thin-ring.npz", (1002, 480)),
+])
+def test_dermot_is_bracketed_despite_larger_yellow_terrain(fixture, expected):
+    """22 September acceptance: selection succeeded, but the largest yellow ground
+    component displaced the actual green ring before any plate association occurred.
+    The second frame also contains a genuine partly hidden 67x7 ring (aspect 9.57).
+    Both captures retain all original pixels, including the distracting terrain.
+    """
+    frame = np.load(LIVE.parent / fixture)["frame"]
+    for known_plate in (None, Plate(cx=996, cy=422, w=145, colour=RingColour.GREEN)):
+        sighting = find(frame, plate=known_plate)
+        assert sighting is not None
+        assert sighting.colour is RingColour.GREEN
+        assert sighting.torso == expected
+        assert 990 < sighting.ring.cx < 1020
+        assert 560 < sighting.ring.cy < 580
+        # Selection rearranged the labels; the old y=422 must not become the head.
+        assert 390 < sighting.plate.cy < 405
+
+
+def test_confirmed_plate_cannot_borrow_a_ring_of_another_colour():
+    frame = np.load(LIVE.parent / "live-dermot-thin-ring.npz")["frame"]
+    wrong = Plate(cx=996, cy=422, w=145, colour=RingColour.YELLOW)
+    assert find(frame, plate=wrong) is None
+
+
+def test_two_current_plates_matching_the_confirmed_column_are_ambiguous():
+    frame = np.load(LIVE.parent / "live-dermot-thin-ring.npz")["frame"].copy()
+    # A second solid green bar in the same column cannot be identified by colour and
+    # geometry alone. The locator must abstain rather than choose the nearer label.
+    frame[450:455, 925:1070] = (72, 219, 48)
+    known = Plate(cx=996, cy=422, w=145, colour=RingColour.GREEN)
+    assert find(frame, plate=known) is None
+
+
+def test_stock_nameplate_border_cannot_be_selected_as_a_health_bar():
+    """The monitored merchant attempt selected a rabbit through the yellow border.
+    Its 37x1 component at (990,391) sorts ahead of the real green bar at (1000,398)
+    by distance to screen centre. Both components occur in this original live capture.
+    """
+    frame = np.load(LIVE.parent / "live-dermot-targeted.npz")["frame"]
+    assert mask_for(frame, RingColour.YELLOW)[391, 972:1009].all()
+    plates = find_plates(frame)
+    assert len(plates) == 4
+    assert all(plate.colour is RingColour.GREEN for plate in plates)
+    selected = find_plates(frame, selected=True)
+    assert len(selected) == 1
+    assert abs(selected[0].cx - 1000) < 2
+    assert abs(selected[0].cy - 398) < 2
+
+
+def test_faded_merchants_remain_candidates_when_someone_else_is_selected():
+    """Last frame of the monitored attempt: Brother Danil is selected while Dermot,
+    Godric and Janos have faded bars. Reusing the bright ring mask erased all three.
+    """
+    frame = np.load(LIVE.parent / "live-dermot-unselected.npz")["frame"]
+    plates = find_plates(frame)
+    assert len(plates) == 4
+    assert all(plate.colour is RingColour.GREEN for plate in plates)
+    nearest = sorted(plates, key=lambda plate: abs(plate.cx - 800))[:3]
+    assert any(abs(plate.cx - 997) < 2 and abs(plate.cy - 401) < 2 for plate in nearest)
+    # Broadening acquisition cannot change the selected target's locator mask. Its
+    # one bright bar belongs to Brother Danil, and the faded merchant cannot borrow it.
+    bright = find_plates(frame, selected=True)
+    assert len(bright) == 1 and abs(bright[0].cx - 774) < 2
+    dermot = next(plate for plate in plates if abs(plate.cx - 997) < 2)
+    assert find(frame, plate=dermot) is None

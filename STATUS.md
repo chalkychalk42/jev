@@ -1324,3 +1324,69 @@ Verification: **927 tests passed in 85.32 s**. Ruff (`jev tools tests`),
 `git diff --check`, graph regeneration identity, real Lua addon execution and the
 all-flags offline readiness check pass. Regenerated wire: 112 fields / 1035 payload
 bits, 12×9 grid. All code verification remained offline.
+
+
+## 2026-09-22 — Windows setup and supervised service acceptance
+
+DID: the operator authorized opening the client and then requested one screenshot per
+second during every live test. Installed the matching schema 7 addon (all five files,
+including Supplies.lua), verified Windows learning dependencies with pip check, started
+the existing local realm/world servers, and reconnected through the measured Session
+composition. A bounded subscription probe returned a valid teacher reply. Sonnet was
+requested but CLI usage metadata reported Haiku; transport access is confirmed, model
+routing is not inferred from the requested alias.
+
+- Camera stop 2000 / return 500 was repeated live at pointer speed 10 with acceleration
+  disabled. Both returns matched; later one-second sequences show the temporary downward
+  view during the clamp returning to the same pitch. The preserved camera edit is now
+  measured. No navigation, closing-burst or combat-rotation constants were changed.
+- `--screenshots` records lossless PNGs every second off the input thread with a timestamp
+  manifest. The first four monitored tests recorded 173 images, no missing/skipped slots,
+  and a maximum interval of 1.025 seconds. Sequences were reviewed as part of testing.
+  `--stop-file` requests the existing cooperative shutdown; the live stop returned 130,
+  and Win32 key-state reads confirmed all movement keys and both mouse buttons released.
+  Review added startup coverage: screenshots begin before focus/reconnect, STOP is checked
+  during login, and interrupted screenshot startup still joins its thread before capture
+  handles close. Merchant blindness retains its existing PREEMPTED classification.
+- Windows byte-range locks on the WSL UNC learning store reproduced EINVAL. Windows UNC
+  checkouts now select a stable native AppData store, printed by the CLI; overrides remain
+  explicit and locking remains intact. The native worker processed the actual corpus
+  without errors. It has not manufactured eligible examples or promoted a model.
+  The checkout identity preserves case-sensitive WSL directories; its corrected store is
+  `foreverv2-3c309d13f4025150`. Existing live state was copied with file hashes checked,
+  retaining the earlier store as a backup.
+  A final native worker pass covered 34 actual runs with no errors or eligible examples.
+  The standalone worker and live CLI share the same platform storage resolver and
+  checkout root; launching the standalone worker cannot silently return to the UNC default.
+- Merchant acquisition now includes measured dimmed green bars and excludes one-pixel
+  borders. A confirmed plate anchors the fresh selected-target ring/plate pairing, so
+  unrelated larger terrain does not displace the selected merchant. A measured 67x7 ring
+  fits the shared aspect bound; ring-only torso guesses remain absent. The existing
+  close-range centre fallback is reachable when the player occludes a correctly selected
+  NPC's ring; a missing frame is BLIND and cannot activate that fallback. Nested merchant
+  failures now retain their actual interaction cause in the run.
+- Vendor coordinates are numeric at generation and load boundaries, matching the guide
+  generator. All 2,266 vendor spawns were regenerated: numeric values, identities and
+  stock are identical; Supplies.lua is byte-identical. Tests exercise SQLite TEXT
+  coordinates, legacy JSON strings and actual catalog navigation/ranking.
+
+LIVE EVIDENCE: run `20260922T130724-bfdc92` repaired durability 0 -> 100% for 33 copper
+(1027 -> 994). Run `20260922T131407-487841` bought ten water for 46 copper (994 -> 948),
+closed the merchant, and walked 76.7 yards to the wolf area with zero stuck events.
+Its 209 valid radio ticks had a maximum gap of 0.603 seconds. Two wolf approaches then
+landed no hits; the operator stop preserved quest 33 at 0/8, full health and repaired gear.
+The failed hunt did not become a successful learning example. Wolf frames expose yellow
+grass passing the ring mask and being paired with a real health bar. The actual ring is
+sometimes fragmented below the measured component area, or flashes red while its plate
+stays yellow. Separate brighter ring masking, closest-pair ranking, and requiring a ring
+within the plate's horizontal span/width each still produced false clicks on recorded
+frames. Those experimental changes were not applied. Wolf engagement remains a named
+blocker; these service passes do not prove a soak.
+
+Verification: **978 tests passed in 86.42 s**, Ruff (`jev tools tests`) and
+`git diff --check` pass. The all-flags offline check reports 31 supported quest chains,
+zero missing executors and zero unsupported targets within that explicit derivative.
+Standalone Windows `python -m jev.learn.worker --once`, with no path overrides, also
+processed the same 34 runs without errors, regrading unchanged data or promoting a model.
+A final read-only client capture confirmed full health, no combat, 100% durability and
+ten waters; Win32 reported all movement keys and both mouse buttons released.

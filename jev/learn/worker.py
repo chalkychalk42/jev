@@ -1,6 +1,6 @@
 """Continuous, restart-safe outcome learning without a client or a teacher dependency.
 
-    python -m jev.learn.worker --runs runs --store var/learning --once
+    python -m jev.learn.worker --once
 
 Only derived grades/model artifacts are written. One OS lock bounds concurrent training,
 registry edits are atomic, and unchanged graded examples never produce another candidate.
@@ -31,6 +31,9 @@ from jev.learn.evidence import (
 )
 from jev.learn.grade import grade_run
 from jev.learn.registry import ModelRegistry, atomic_json, file_lock
+from jev.run.paths import default_learning_store
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -310,15 +313,20 @@ class LearningWorker:
             stop.wait(self.config.interval_s)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--runs", type=Path, default=Path("runs"))
-    parser.add_argument("--store", type=Path, default=Path("var/learning"))
+    parser.add_argument("--runs", type=Path, default=ROOT / "runs")
+    parser.add_argument("--store", type=Path)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--interval", type=float, default=60)
     parser.add_argument("--allow-canary", action="store_true",
                         help="enable evidence-gated sampled trials; runtime must also be adaptive")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.store is None:
+        try:
+            args.store = default_learning_store(ROOT)
+        except ValueError as exc:
+            parser.error(f"{exc}; pass --store with a native path")
     worker = LearningWorker(args.runs, args.store,
                             config=WorkerConfig(interval_s=args.interval,
                                                 allow_canary=args.allow_canary))

@@ -26,9 +26,13 @@ the same for a level-1 rabbit and a raid boss.
 
 Failure is a fact, not a fallback
 ---------------------------------
-No ring means the target is not on screen — which is real information, and the caller
-fails the skill rather than clicking hopefully. That is the same rule as
-`Interact.preflight`: the reason a click is refused is worth more than the click.
+No usable ring means this frame cannot bracket the target: its feet may be occluded
+even when its plate is visible. That is the same rule as `Interact.preflight`: the
+reason a click is refused is worth more than the click.
+
+Known limit from the 22 September wolf run: yellow grass can also pass these component
+tests and pair with a real plate. A complete pair is therefore not proof of ring identity.
+The captured merchant views work; unattended wolf engagement remains unverified.
 """
 
 from __future__ import annotations
@@ -111,10 +115,19 @@ _RULES: dict[RingColour, ColourRule] = {
     RingColour.RED: ColourRule(high=(0,), low=(1, 2), high_min=150, gap=90),
 }
 
+# Selecting one unit fades the other stock nameplates. With Brother Danil selected,
+# Dermot's visible bar measured median G=107 and median G-max(R,B)=64, so the selected
+# ring's green mask erased it. These measured acquisition thresholds recover all four
+# real merchant bars; the existing geometry still rejects terrain and borders. They
+# never locate a ring or the selected target's plate, whose brighter rules stay above.
+_PLATE_RULES = {**_RULES,
+                RingColour.GREEN: ColourRule(high=(1,), low=(0, 2), high_min=90, gap=45)}
+
 MEASURED: tuple[RingColour, ...] = (RingColour.GREEN, RingColour.YELLOW)
 """Which rules have met a real frame, and **the default search set**.
 
-Red is written above by symmetry and is not searched, because no frame has proved it yet.
+Red is not searched by default: live wolf frames now show a red/orange attack-selection
+ring, but that mask also admits roof and terrain components. Detection is not validated.
 That is not caution for its own sake: the previous guessed rule, switched on untested,
 produced a confident ring on a patch of Northshire terrain.
 
@@ -131,11 +144,12 @@ proved it, not before.
 # unambiguously rings, and the tight range rejected the second while the unit stood
 # centred and in plain sight. A third, on a distant kobold, measured 5.56.
 #
-# The ceiling is 8 rather than 12 because 12 let a **nameplate plus its name text** in at
-# 11.4 — a bar and a line of writing stacked, which is not an ellipse at any pitch. The
-# bounds only exclude shapes no ellipse can be; they do not try to identify one.
+# Dermot's ring, partly hidden by his stall, measured 67x7 (9.57) on 22 September.
+# Eight rejected that real ellipse. Ten includes it while retaining the exclusion of a
+# measured **nameplate plus its name text** at 11.4. Shape only supplies candidates;
+# a living unit still needs its matching plate before any torso can be returned.
 RING_FILL_MAX = 0.55
-RING_ASPECT = (0.8, 8.0)
+RING_ASPECT = (0.8, 10.0)
 RING_MIN_AREA = 60
 
 # 0.65, not 0.8. A friendly nameplate measured 0.99 because it is a flat colour, but a
@@ -169,6 +183,12 @@ _UI_ZONES: tuple[tuple[float, float, float, float], ...] = (
 # A nameplate is a wide bar. Thirteen pixels of something solid is not one, and one such
 # blob presented itself as a plate on a live frame.
 BAR_MIN_W = 30
+
+# A health bar has a surface, not just a horizontal edge. The yellow stock nameplate
+# border produced a solid 37x1 component at (990,391); clicking it selected a rabbit
+# behind the label. Every measured green/yellow bar is 5-7 pixels high;
+# excluding single-row strokes keeps those surfaces and rejects this border exactly.
+BAR_MIN_H = 2
 
 # How far a plate may sit from a ring, horizontally, and still belong to the same unit.
 # Generous, because the ring's centroid is pulled sideways by grass occluding one arc.
@@ -234,7 +254,8 @@ def _outside_interface(blob: _Blob, shape: tuple[int, int] | None = None) -> boo
 
 
 def find(frame: np.ndarray,
-         colours: tuple[RingColour, ...] = MEASURED) -> Sighting | None:
+         colours: tuple[RingColour, ...] = MEASURED, *,
+         plate: Plate | None = None) -> Sighting | None:
     """Where the selected unit is, or `None`.
 
     The whole public surface. A sighting needs **both** a ring and its nameplate, because
@@ -248,20 +269,40 @@ def find(frame: np.ndarray,
     nothing. A guessed pixel is worse than an honest `None` — the caller can act on
     "cannot see it" and cannot act on a plausible wrong answer.
     """
-    ring = _find_ring(frame, colours)
-    if ring is None:
+    plates = find_plates(frame, colours, selected=True)
+    if plate is not None:
+        # The caller selected this plate and confirmed identity on the radio. Selection
+        # can rearrange overlapping labels vertically: Dermot moved 24 pixels without
+        # moving himself. Re-read the bar rather than using that stale head position.
+        # Each bar's centre must still fall inside the other's horizontal span. Two
+        # possible matches are ambiguous; proximity alone cannot identify the target.
+        plates = [p for p in plates if p.colour == plate.colour
+                  and abs(p.cx - plate.cx) <= min(p.w, plate.w) / 2]
+        if len(plates) != 1:
+            return None
+        colours = (plate.colour,)
+
+    # A bright piece of terrain can pass the hollow-shape test and be larger than the
+    # real ring. Choosing the largest blob *before* pairing let yellow ground at x=279
+    # hide Dermot's green ring at x=1007. Rank only complete ring/plate sightings.
+    pairs = [(ring, matched) for ring in _rings(frame, colours)
+             if (matched := plate_for(ring, plates)) is not None]
+    if not pairs:
         return None
-    plate = plate_for(ring, find_plates(frame, colours))
-    if plate is None:
-        return None
-    return Sighting(ring=ring, plate=plate,
-                    torso=(round(ring.cx), round((ring.cy + plate.cy) / 2)))
+    ring, matched = max(pairs, key=lambda pair: pair[0].area)
+    return Sighting(ring=ring, plate=matched,
+                    torso=(round(ring.cx), round((ring.cy + matched.cy) / 2)))
 
 
 def _find_ring(frame: np.ndarray,
                colours: tuple[RingColour, ...] = MEASURED) -> Ring | None:
     """The selection ring. Exactly one exists, under whatever is targeted."""
-    best: Ring | None = None
+    return max(_rings(frame, colours), key=lambda ring: ring.area, default=None)
+
+
+def _rings(frame: np.ndarray, colours: tuple[RingColour, ...]) -> list[Ring]:
+    """Hollow colour components; only association with a plate makes a sighting."""
+    rings = []
     for colour in colours:
         for blob in _blobs(mask_for(frame, colour)):
             if blob.area < RING_MIN_AREA or not _outside_interface(blob, frame.shape[:2]):
@@ -272,10 +313,9 @@ def _find_ring(frame: np.ndarray,
                 continue
             if fill > RING_FILL_MAX:
                 continue        # solid: a bar, or an icon, not a ring
-            if best is None or blob.area > best.area:
-                best = Ring(cx=blob.cx, cy=blob.cy, w=int(blob.w), h=int(blob.h),
-                            colour=colour, area=blob.area)
-    return best
+            rings.append(Ring(cx=blob.cx, cy=blob.cy, w=int(blob.w), h=int(blob.h),
+                              colour=colour, area=blob.area))
+    return rings
 
 
 def plate_for(ring: Ring, plates: list[Plate]) -> Plate | None:
@@ -287,7 +327,11 @@ def plate_for(ring: Ring, plates: list[Plate]) -> Plate | None:
     """
     candidates = [
         p for p in plates
-        if p.cy < ring.cy and abs(p.cx - ring.cx) <= PLATE_PAIR_MAX_DX
+        # An attack-selection ring can flash red while its health bar stays yellow.
+        # Colour is a measured visual signal, not a universal identity equality.
+        if (p.colour == ring.colour
+            or (ring.colour is RingColour.RED and p.colour is RingColour.YELLOW))
+        and p.cy < ring.cy and abs(p.cx - ring.cx) <= PLATE_PAIR_MAX_DX
     ]
     if not candidates:
         return None
@@ -295,17 +339,21 @@ def plate_for(ring: Ring, plates: list[Plate]) -> Plate | None:
 
 
 def find_plates(frame: np.ndarray,
-                colours: tuple[RingColour, ...] = MEASURED) -> list[Plate]:
+                colours: tuple[RingColour, ...] = MEASURED, *,
+                selected: bool = False) -> list[Plate]:
     """Every nameplate health bar on screen, biggest first.
 
     Not needed to click the current target — the ring is better for that — but it is how
     a unit is found *before* it is targeted, which is what picking the next kobold out of
-    a camp requires.
+    a camp requires. Acquisition includes measured faded green bars. ``selected=True``
+    retains the original bright mask for the unit whose identity was just confirmed.
     """
     out: list[Plate] = []
+    rules = _RULES if selected else _PLATE_RULES
     for colour in colours:
-        for blob in _blobs(mask_for(frame, colour)):
-            if blob.w < BAR_MIN_W or not _outside_interface(blob, frame.shape[:2]):
+        for blob in _blobs(rules[colour].mask(frame)):
+            if (blob.w < BAR_MIN_W or blob.h < BAR_MIN_H
+                    or not _outside_interface(blob, frame.shape[:2])):
                 continue
             aspect = blob.w / max(1.0, blob.h)
             fill = blob.area / max(1.0, blob.w * blob.h)

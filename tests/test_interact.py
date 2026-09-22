@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import inspect
 import pathlib
+from unittest.mock import Mock
+
+import pytest
 
 from jev.clients.hid import Hid
 from jev.clients.interact import (
@@ -163,3 +166,59 @@ def test_being_underfoot_is_the_only_excuse_for_a_centre_click():
     assert "self._at(node_map)" in body, "the centre click is not gated on being there"
     # And it is identity-checked like every other click, not trusted because we arrived.
     assert "painted != wanted" in inspect.getsource(Interact._try_centre)
+
+
+def test_confirmed_repair_plate_leads_to_a_body_click_on_the_live_frame(monkeypatch):
+    import numpy as np
+
+    import jev.clients.interact as module
+    from jev.perceive.radio_frame import name_id
+    from jev.perceive.units import Plate, RingColour
+
+    frame = np.load(pathlib.Path(__file__).parent / "fixtures/live-dermot-targeted.npz")["frame"]
+    clicks = []
+
+    class Device:
+        def click(self, x, y, right=False):
+            clicks.append((x, y, right))
+            return True
+
+    def painted():
+        return {"target.name_id": name_id("Dermot Johns"),
+                "ui.vendor": bool(clicks and clicks[-1] == (1007, 486, True))}
+
+    monkeypatch.setattr(module.time, "sleep", lambda _: None)
+    inter = _interact(frame=frame)
+    inter.hid, inter.read = Device(), painted
+    plate = Plate(cx=996, cy=422, w=145, colour=RingColour.GREEN)
+    assert inter._try(plate, name_id("Dermot Johns")) is Result.VENDOR
+    assert clicks == [(996, 422, False), (1007, 486, True)]
+
+
+@pytest.mark.parametrize("near", [True, False])
+def test_selected_but_occluded_unit_keeps_the_existing_underfoot_fallback(near):
+    inter = _interact()
+    inter._close_open_window = lambda: None
+    inter._candidates = lambda: [object(), object()]
+    inter._try = Mock(return_value=Result.NOT_VISIBLE)
+    inter._try_centre = Mock(return_value=Result.VENDOR)
+    point = (0.5, 0.5) if near else (0.9, 0.9)
+    result = inter.open_on("Supplier", node_map=point)
+    assert result is (Result.VENDOR if near else Result.NOT_VISIBLE)
+    assert inter._try.call_count == 1
+    assert inter._try_centre.call_count == int(near)
+
+
+def test_capture_failure_after_selection_never_uses_the_underfoot_fallback(monkeypatch):
+    import jev.clients.interact as module
+    from jev.perceive.radio_frame import name_id
+    from jev.perceive.units import Plate, RingColour
+
+    monkeypatch.setattr(module.time, "sleep", lambda _: None)
+    inter = _interact(values={"target.name_id": name_id("Supplier")}, frame=None)
+    inter.hid = Mock()
+    inter._candidates = lambda: [Plate(cx=800, cy=350, w=145, colour=RingColour.GREEN)]
+    inter._try_centre = Mock()
+    assert inter.open_on("Supplier", node_map=(0.5, 0.5)) is Result.BLIND
+    inter.hid.click.assert_called_once_with(800, 350)
+    inter._try_centre.assert_not_called()

@@ -168,9 +168,10 @@ class LiveBody:
 
     @staticmethod
     def _result(outcome, detail="") -> Result:
+        ok = outcome.opened if isinstance(outcome, Interacted) else outcome.ok
         status = (SkillOutcome.PREEMPTED if outcome.value in
                   ("bags_full", "service_needed", "died", "blind", "interrupted") else
-                  SkillOutcome.SUCCEEDED if outcome.ok else
+                  SkillOutcome.SUCCEEDED if ok else
                   SkillOutcome.TIMED_OUT if outcome.value == "timeout" else SkillOutcome.ABORTED)
         return Result(status, detail, outcome.value)
 
@@ -360,6 +361,11 @@ class LiveBody:
 
     def _open_merchant(self, name, world, point) -> bool:
         opened = self.interact.open_on(name, node_world=world, node_map=point)
+        if not opened.opened:
+            # Preserve the measured nested failure. Collapsing this to False made a
+            # rejected visible ring indistinguishable from a failed merchant journey.
+            raise BodyFailure(self._result(opened,
+                                           f"{name}: {self.interact.detail or opened.value}"))
         if opened is Interacted.GOSSIP:
             values = self._read()
             identity = values.get("merchant.gossip_name_id") if values else None

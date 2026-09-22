@@ -58,6 +58,9 @@ def merchants(map_id: int, *, items: frozenset[int] = frozenset()) -> tuple[Merc
     stock, and transactions must still be observed on arrival.
     """
     return tuple(Merchant(entry=v["entry"], name=v["name"], map_id=v["map_id"],
-                          world=tuple(v["world"]), items=frozenset(v["items"]))
+                          # Normalize older catalog files too; a dataclass annotation
+                          # does not convert JSON strings into world-yard numbers.
+                          world=tuple(float(value) for value in v["world"]),
+                          items=frozenset(v["items"]))
                  for v in catalog()["vendors"]
                  if v["map_id"] == map_id and items <= set(v["items"]))

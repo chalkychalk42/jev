@@ -48,7 +48,9 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
             "join world_creature_template t on t.VendorTemplateId=v.entry "
             "where t.Entry=? and v.ExtendedCost=0 and v.condition_id=0", (entry, entry))}
         vendors.append({"entry": entry, "name": name, "map_id": map_id,
-                        "world": [x, y, z], "items": sorted(sold)})
+                        # The mirrored world DB stores coordinates as TEXT. Emit
+                        # numeric yards, matching the guide generator's contract.
+                        "world": [float(x), float(y), float(z)], "items": sorted(sold)})
     prices = {str(row[0]): int(row[1]) for row in db.execute(
         "select entry,SellPrice from world_item_template") if row[0] in set(junk)}
     return {"schema": 1, "junk": sorted(set(junk)), "junk_prices": prices, "supplies": supplies,

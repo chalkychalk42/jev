@@ -24,6 +24,8 @@ from jev.persist import atomic_json, file_lock, input_lock_path
 from jev.run.background import Background
 from jev.run.body import LiveBody
 from jev.run.client import FOCUS_QUICK_S, ClientSource, NotRunning, attach, with_travel
+from jev.run.paths import default_learning_store
+from jev.run.screenshots import ScreenshotError, Screenshots
 from jev.run.supervisor import Supervisor
 from jev.run.watchdog import Watchdog, reconnect_client
 from jev.world.state_v1 import StepKind
@@ -51,6 +53,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--client-id", default="slice")
     parser.add_argument("--playhead", type=Path)
     parser.add_argument("--runs-dir", type=Path, default=ROOT / "runs")
+    parser.add_argument("--screenshots", action="store_true",
+                        help="record lossless client screenshots every second for supervised tests")
+    parser.add_argument("--stop-file", type=Path,
+                        help="stop cooperatively when this file exists; the file is never deleted")
     parser.add_argument("--steps", type=int, default=0, help="debug cap on completed guide steps")
     parser.add_argument("--run-for", type=float, default=3600)
     parser.add_argument("--retries", type=int, default=3)
@@ -61,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--route-mode", choices=("full", "supported"), default="full",
                         help="explicitly select the source guide or its executable subset")
     parser.add_argument("--learn", action="store_true", help="grade and train in the background")
-    parser.add_argument("--learning-store", type=Path, default=ROOT / "var/learning")
+    parser.add_argument("--learning-store", type=Path)
     parser.add_argument("--policy-mode", choices=("shadow", "adaptive"), default="shadow",
                         help="adaptive permits evidence-gated canaries and promotion")
     parser.add_argument("--teacher", action="store_true", help="enable bounded Claude subscription queue")
@@ -75,6 +81,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-progress", type=float, default=900)
     parser.add_argument("--reconnect-limit", type=int, default=3)
     args = parser.parse_args(argv)
+    if args.learning_store is None:
+        try:
+            args.learning_store = default_learning_store(ROOT)
+        except ValueError as exc:
+            parser.error(f"{exc} (override: --learning-store PATH)")
     if args.run_for <= 0 or args.timeout <= 0 or args.hunt <= 0 or args.retries < 1 or args.steps < 0:
         parser.error("durations and retries must be positive; steps must be nonnegative")
     if (args.blind_grace <= 0 or args.no_progress <= 0 or args.reconnect_limit < 1
@@ -110,8 +121,13 @@ def main(argv: list[str] | None = None) -> int:
                           "route_exclusions": [asdict(e) for e in route.excluded],
                           "learning": args.learn, "policy_mode": args.policy_mode,
                           "teacher": args.teacher, "reconnect": args.reconnect,
+                          "screenshots": args.screenshots,
+                          "stop_file": str(args.stop_file) if args.stop_file else None,
                           "live_tested": False}, indent=2))
         return 0
+    if args.stop_file is not None and args.stop_file.exists():
+        print(f"operator stop file observed: {args.stop_file}")
+        return 130
     if graph.coord_zone_id is None:
         print("guide has no declared navigation frame; regenerate it before live execution")
         return 2
@@ -129,16 +145,36 @@ def _live(args, graph, memory, route) -> int:
     except NotRunning as exc:
         print(exc)
         return 2
-    recorder = supervisor = background = None
+    recorder = supervisor = background = screenshots = None
+
+    def operator_checkpoint():
+        if args.stop_file is not None and args.stop_file.exists():
+            print(f"operator stop file observed: {args.stop_file}")
+            raise KeyboardInterrupt
+
+    def startup_checkpoint():
+        operator_checkpoint()
+        if screenshots is not None and screenshots.error:
+            raise ScreenshotError(screenshots.error)
+
     try:
-        if not client.focused():
+        startup_checkpoint()
+        if args.screenshots:
+            recorder = Recorder(root=args.runs_dir)
+            # Keep ownership before start: interruption after the thread launches
+            # must still join it before releasing the shared capture handles.
+            screenshots = Screenshots(client.frame, recorder.dir / "screenshots")
+            screenshots.start()
+        startup_checkpoint()
+        if not client.focused(checkpoint=startup_checkpoint):
             raise NotRunning("client is not focused")
         values = client.read()
         if values is None and args.reconnect:
-            result = reconnect_client(client, lambda: None, env_file=args.env_file)
+            result = reconnect_client(client, startup_checkpoint, env_file=args.env_file)
             if result.code != "reconnected":
                 raise NotRunning(result.detail)
             values = client.read()
+        startup_checkpoint()
         if values is None or client.quest_ids() is None:
             raise NotRunning("radio or complete quest log unavailable")
         zones = bounds_by_radio_id(str(ROOT / "data/zones-tbc-243.json"))
@@ -150,7 +186,8 @@ def _live(args, graph, memory, route) -> int:
                     checkpoint=lambda: client.hid.checkpoint() if client.hid.checkpoint else None),
                     arrival_yards=GOSSIP_YARDS, say=print, zones=zones)
         body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt)
-        recorder = Recorder(root=args.runs_dir)
+        if recorder is None:
+            recorder = Recorder(root=args.runs_dir)
         atomic_json(recorder.dir / "route.json", {
             "mode": args.route_mode, "source": route.source_graph_id, "graph": graph.graph_id,
             "graph_digest": hashlib.sha256(json.dumps(graph.model_dump(mode="json"),
@@ -175,23 +212,40 @@ def _live(args, graph, memory, route) -> int:
         background = Background(runtime, runs=args.runs_dir, store=args.learning_store,
                                 learn=args.learn, adaptive=args.policy_mode == "adaptive",
                                 teacher_client=teacher, calls_per_hour=args.teacher_calls_per_hour)
+        if args.learn or args.policy_mode == "adaptive" or args.teacher:
+            print(f"learning store: {args.learning_store}")
         watchdog = Watchdog(blind_grace_s=args.blind_grace, no_progress_s=args.no_progress,
                             reconnect_limit=args.reconnect_limit,
                             reconnect=(lambda checkpoint: reconnect_client(client, checkpoint,
                                                                             env_file=args.env_file))
                             if args.reconnect else None)
+        def housekeeping(state):
+            operator_checkpoint()
+            if screenshots is not None and screenshots.error:
+                supervisor.failure = screenshots.error
+                supervisor.stopped.set()
+                if supervisor.worker is not None:
+                    supervisor.worker.cancel(screenshots.error)
+                return
+            background.poll(state)
+
         supervisor = Supervisor(runtime, body, max_failures=args.retries,
                                 has_focus=client.hid.ready,
                                 focus=lambda checkpoint: client.focused(FOCUS_QUICK_S,
                                                                          checkpoint=checkpoint),
-                                housekeeping=background.poll, watchdog=watchdog)
+                                housekeeping=housekeeping, watchdog=watchdog)
         print(f"recording to {recorder.dir}")
         supervisor.run(args.run_for, max_steps=args.steps)
+        if screenshots is not None:
+            screenshots.close()
+            if screenshots.error:
+                print(f"stopped: {screenshots.error}")
+                return 1
         if supervisor.failure:
             print(f"stopped: {supervisor.failure}")
             return 1
         return 0
-    except NotRunning as exc:
+    except (NotRunning, ScreenshotError) as exc:
         print(exc)
         return 1
     except KeyboardInterrupt:
@@ -200,16 +254,23 @@ def _live(args, graph, memory, route) -> int:
         try:
             if supervisor is not None:
                 supervisor.close()
+            else:
+                client.hid.checkpoint = None
+                client.hid.release_all()
         finally:
             try:
-                if background is not None:
-                    background.close()
+                if screenshots is not None:
+                    screenshots.close()
             finally:
                 try:
-                    if recorder is not None:
-                        recorder.close()
+                    if background is not None:
+                        background.close()
                 finally:
-                    client.close()
+                    try:
+                        if recorder is not None:
+                            recorder.close()
+                    finally:
+                        client.close()
 
 
 if __name__ == "__main__":

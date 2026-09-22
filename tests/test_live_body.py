@@ -82,6 +82,29 @@ def test_unread_health_does_not_start_a_leg():
     b.client.approach.assert_not_called()
 
 
+def test_merchant_failure_preserves_the_interaction_cause():
+    b = body()
+    b.interact = SimpleNamespace(open_on=lambda *args, **kw: Interacted.NOT_VISIBLE,
+                                 detail="selected the right unit, but no ring and plate to aim at")
+    with pytest.raises(BodyFailure) as caught:
+        b._open_merchant("Repairer", (50, 50, 0), (0.5, 0.5))
+    assert caught.value.result.outcome is SkillOutcome.ABORTED
+    assert caught.value.result.code == "not_visible"
+    assert "Repairer: selected the right unit" in caught.value.result.detail
+
+
+def test_blind_merchant_interaction_preempts_without_consuming_a_failed_attempt():
+    b = body()
+    b.interact = SimpleNamespace(open_on=lambda *args, **kw: Interacted.BLIND,
+                                 detail="no captured frame after selecting")
+    with pytest.raises(BodyFailure) as caught:
+        b._open_merchant("Repairer", (50, 50, 0), (0.5, 0.5))
+    result = caught.value.result
+    assert result.outcome is SkillOutcome.PREEMPTED
+    assert result.code == "blind"
+    assert result.detail == "Repairer: no captured frame after selecting"
+
+
 def test_no_food_during_travel_is_a_failure_not_an_endless_preemption():
     b = body()
     b.client.read = lambda: {"vitals.hp": 0.3}

@@ -131,8 +131,14 @@ class Interact:
             return Result.APPROACH_FAILED
 
         wanted = name_id(name)
+        unseen = None
         for plate in self._candidates():
             opened = self._try(plate, wanted)
+            if opened is Result.NOT_VISIBLE:
+                # Identity was confirmed, but the player may hide the selected ring.
+                # Give the existing underfoot fallback its one bounded attempt too.
+                unseen = opened
+                break
             if opened is not None:
                 return opened
 
@@ -146,6 +152,8 @@ class Interact:
             if opened is not None:
                 return opened
 
+        if unseen is not None:
+            return unseen
         if not self.tried:
             self.detail = "no nameplate on screen, and not standing on the node"
             return Result.NOT_VISIBLE
@@ -217,7 +225,12 @@ class Interact:
             return None
 
         frame = self.read_frame()
-        self.sighting = None if frame is None else find(frame)
+        if frame is None:
+            self.detail = "no captured frame after selecting"
+            return Result.BLIND
+        # The radio just identified this plate. Keep that evidence when locating its
+        # body; a larger ring-shaped patch of another colour is not this target.
+        self.sighting = find(frame, plate=plate)
         if self.sighting is None:
             self.detail = "selected the right unit, but no ring and plate to aim at"
             return Result.NOT_VISIBLE

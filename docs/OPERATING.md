@@ -1,15 +1,16 @@
 # Continuous runs and learning
 
-The client has not been opened for this build. These commands distinguish offline
-verification from the later live acceptance run. The run loop, vendor transactions,
-reconnect composition and model promotion still need representative live evidence.
+Live acceptance started on 22 September 2026. Schema 7 deployment, reconnect, camera
+reset, repair, water restocking, concurrent recording and the Windows learner have been exercised. See
+`STATUS.md` for measured outcomes and remaining failures; wiring alone does not prove
+unattended play or improvement.
 
 ## Offline
 
 ```bash
 .venv/bin/python -m jev.run.cli --check --route-mode supported \
   --learn --policy-mode adaptive --teacher --reconnect
-.venv/bin/python -m jev.learn.worker --runs runs --store var/learning --once
+.venv/bin/python -m jev.learn.worker --once
 .venv/bin/pytest
 ```
 
@@ -28,7 +29,7 @@ Legacy guides without a declared frame must be regenerated before live execution
 The worker can run continuously without a game client:
 
 ```bash
-.venv/bin/python -m jev.learn.worker --runs runs --store var/learning
+.venv/bin/python -m jev.learn.worker
 ```
 
 It grades mature observed windows, keeps unfinished tails pending, excludes synthetic
@@ -42,16 +43,16 @@ The first pass on the existing 28 run directories completed without errors but y
 zero eligible examples. Older unlinked or short records do not acquire invented outcome
 credit. No model has been promoted from that corpus.
 
-## Later live acceptance
+## Supervised live acceptance
 
-Install the generated schema 7 addon when client testing is authorized. Follow
+The generated schema 7 addon is installed in the current Windows client. Follow
 [VENDOR.md](VENDOR.md) for regeneration and files; `Supplies.lua` is required by the TOC.
 Schema 6 captures still decode, with new inventory observations explicitly unknown.
 Use Windows Python with the `eyes` and `learn` dependencies installed, the existing
 path sidecar configured, and the intended character selected.
 
 ```text
-python tools/probe_slice.py --route-mode supported --run-for 14400
+python tools/probe_slice.py --route-mode supported --run-for 300 --retries 1 --screenshots --stop-file captures/STOP-test
 ```
 
 This first run uses the scripted floor, records outcomes, and exercises the service and
@@ -60,10 +61,10 @@ screen sequence. Credentials come from `JEV_WOW_ACCOUNT` and `JEV_WOW_PASSWORD` 
 environment or the repo `.env`; environment values take precedence. They are never
 printed by the run CLI. Unknown screens receive no guessed keypresses.
 
-Once ready to collect shadow and teacher evidence, the complete composition is:
+To collect shadow and teacher evidence during the supervised test:
 
 ```text
-python tools/probe_slice.py --route-mode supported --run-for 14400 --learn --policy-mode adaptive --teacher --reconnect
+python tools/probe_slice.py --route-mode supported --run-for 300 --retries 1 --screenshots --stop-file captures/STOP-test --learn --policy-mode shadow --teacher --reconnect
 ```
 
 `--teacher-binary` selects the already authenticated Claude subscription executable;
@@ -88,10 +89,29 @@ regressions restore the prior verified model or the scripted floor.
 ## Files and stops
 
 Each run records `route.json` with the selected graph digest and exclusions, plus the
-existing ticks, decisions, skill results and derived grades. `var/learning/` contains
+existing ticks, decisions, skill results and derived grades. The learning store contains
 immutable candidate artifacts, `registry.json`, worker state, `latest-cycle.json`,
 teacher budget reservations and `live-<client-id>.json`. The live status is a snapshot;
 its timestamp must be checked before treating it as current.
+
+The live command prints its resolved learning store. Linux and native Windows checkouts
+use `var/learning/`. Windows Python running from a UNC checkout uses
+`%LOCALAPPDATA%\Jev\learning\<checkout-name>-<stable-digest>`; for this checkout it is
+`C:\Users\NAS\AppData\Local\Jev\learning\foreverv2-3c309d13f4025150`.
+Windows byte-range locks fail on the WSL UNC share with `EINVAL`, so the live worker,
+registry and teacher budget stay together on a native drive. Locks are never bypassed.
+The standalone learner uses the same checkout and platform defaults. `--learning-store`
+overrides the live default; `--store` overrides the standalone worker's default.
+The repo's earlier Linux store remains separate from the native Windows store. Use Windows
+Python for both entrypoints when continuing the live corpus in the same native store.
+
+During tests, `--screenshots` writes a lossless PNG every second under the run's
+`screenshots/` directory, starting before initial focus and reconnect. `manifest.jsonl` records capture timestamps, missing frames,
+write duration and any skipped slots. Review the sequence while the test runs. Encoding
+and writes run off the input thread; storage failure stops the test. Create the exact
+`--stop-file` path to request cooperative shutdown and input release, including during login. An existing stop
+file prevents attachment; remove it intentionally before another test, or use a new
+path. Ctrl-C uses the same cleanup path.
 
 Playhead replacement is atomic. Completed quest IDs survive graph changes; absence
 from the quest log alone never manufactures historical completion. Non-default client
@@ -104,9 +124,14 @@ retry cycles do not reset that deadline. Stops preserve the playhead, release in
 cancel teacher subprocesses and close recording. Tune `--blind-grace`, `--no-progress`
 and `--reconnect-limit` explicitly if later measurements justify it.
 
+The first serviced wolf run stopped after two approaches landed no hits. Its screenshots
+showed the unit locator pairing a wolf nameplate with yellow grass. Colour and hollow
+shape alone did not identify the ring, and simpler proximity/width gates still produced
+false clicks on the recorded frames. This remains a blocker to unattended wolf progress;
+repair and restocking success do not establish a successful hunt.
+
 Named limitations remain: wandering NPC interaction, focus versus unstick measurement,
-in-combat Holy Light timing, live Windows scheduling and stop acceptance, and the
-pre-existing unverified camera calibration change. Vendor scope is exact starting
+in-combat Holy Light timing and sustained Windows scheduling/stop acceptance. Vendor scope is exact starting
 food/drink and confirmed junk; equipment, ammo/reagents and changing action bars are
 not inferred. A depleted character too weak to reach a supplier can still stop with
 `no_food`. A finished selected graph ends the run. This build does not claim infinite
