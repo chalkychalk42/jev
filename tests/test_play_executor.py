@@ -168,6 +168,25 @@ def test_observed_modal_can_be_dismissed_with_escape_only():
     assert ("tap", "esc") in h.hid.calls
 
 
+@pytest.mark.parametrize("action", [
+    {"kind": "key", "control": "target_next"},
+    {"kind": "click", "button": "left", "intent": "ui", "ui_control": "quest_advance"},
+    {"kind": "skill", "name": "ABORT_WAIT"},
+])
+def test_modal_contract_blocks_other_valid_actions_before_delivery(action):
+    h = Harness()
+    h.values["ui.modal"] = True
+    result = h.run(**action)
+    assert result.code == "interrupted" and not result.delivered and not h.hid.calls
+
+
+def test_modal_contract_does_not_turn_unknown_state_into_escape_authority():
+    h = Harness()
+    h.values["ui.modal"] = None
+    assert h.run(kind="key", control="escape").code == "blind"
+    assert not h.hid.calls
+
+
 def test_unfocused_and_stale_capture_refuse_input():
     h = Harness()
     h.hid.focused = False

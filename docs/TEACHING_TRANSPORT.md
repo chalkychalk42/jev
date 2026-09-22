@@ -43,12 +43,43 @@ was supplied and no action was executed. Local preflight and provider/factory/CL
 also pass. This confirms the supplied key works at the Z.AI endpoint, independently of
 Claude's quota; it does not establish game-playing competence.
 
-Automatic approval review rejected the separate saved-game-image smoke request before
-execution because explicit approval for gameplay images/state going to Z.AI had not been
-established. The owner has been asked for that provider-specific approval. Until it is
-received, no gameplay data is sent to GLM and the gameplay teaching test remains pending.
+Automatic approval review initially rejected the separate saved-game-image smoke request
+because explicit approval for gameplay images/state going to Z.AI had not been established.
+The owner subsequently confirmed the full supervised test, resolving that export block.
+A saved gameplay frame then returned a valid observe reply describing the visible wolf
+in 4.407 seconds, with 5,632 input and 114 output tokens. This probe executed no input.
 The independently authorized local reconnect test succeeded with 21 reviewed one-second
 frames, no missing/skipped frames, and all inputs physically released afterward.
+
+### Supervised acceptance attempt, 22 September 2026
+
+The approved 180-second teaching session `20260922T211913-c2c0e3` stopped after about
+10 seconds: its first model proposal failed the bounded reply contract. No action was
+accepted or executed. All 12 captured frames (11 periodic, one event) were reviewed;
+there were no missing/skipped frames and the largest periodic interval was 1.008 seconds.
+The blocking modal remained visible; wolf-meat progress stayed 0/8.
+
+Saved-scene diagnostics isolated an unsupported UI control, then a valid Escape action
+with the invalid purpose label `capability="key"`. The shared schema now exposes only
+observation and Escape while a modal is observed, matching the executor's existing rule.
+Purpose labels and tap durations are documented explicitly. The model-facing prompt
+omits the local student's numerical image descriptor and references repeated provenance
+once, preserving the full PNG, game state and all 156 configured binding rows. Original
+recordings and fingerprints are unchanged. Comparable modal requests dropped from
+28,080 to 15,877 input tokens, but Flash still failed reply validation.
+
+Eight non-executing saved-scene diagnostic/comparison calls followed the failed live
+attempt. The explicit `glm-4.6v` comparison returned HTTP 429, without a served model or
+token usage; this does not establish the cause of the provider limit. Native function
+calling and enabled-thinking experiments also failed action validation. Neither
+experiment changed production transport. Invalid replies were never coerced into
+actions, and no repeated live input loop was started.
+
+The final read-only check showed character selection and all keys/buttons released.
+The supervised acceptance is **blocked by tutor reply compliance**, not passed. Approach,
+damage, death/loot, quest progress and useful motor learning remain unverified. Claude
+was not called in this attempt. Local evidence includes the run's `supervised-review.json`
+and `captures/teaching/glm-*-replay.json` / `glm-*-experiment.json` files.
 
 ## Claude subscription option
 

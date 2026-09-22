@@ -23,13 +23,14 @@ import shutil
 import subprocess
 import time
 from collections.abc import Callable, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from jev.play.actions import Action
+from jev.play.actions import Action, action_schema, modal_action_allowed
 from jev.play.knowledge import LocalKnowledge
 from jev.teacher.client import ClaudeSubscriptionClient, TeacherResult
 
@@ -65,8 +66,10 @@ action schema. Existing service skills retain their own validated transaction ru
 For missing game knowledge, return a short lookup query instead of an action; retrieval
 uses this installation's generated content and exact-server world/DBC snapshot and may
 explicitly have no answer.
-Echo observation_id exactly. Choose a capability describing this action, and a concise
-rationale citing visible/observed evidence. Do not claim a result before it is observed.
+Echo observation_id exactly. Capability describes the action's purpose, separately from
+action.kind: UI handling uses interact; movement to close range uses approach. key and
+click are action kinds, never capability labels. Choose only a listed capability and
+give a concise rationale citing observed evidence. Do not claim a result before it is observed.
 """
 
 
@@ -74,7 +77,9 @@ class TutorReply(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     observation_id: str = Field(min_length=1, max_length=200)
-    capability: Capability
+    capability: Capability = Field(
+        description="Purpose category, distinct from action.kind. UI handling uses interact; "
+                    "movement to close range uses approach. key and click are not capabilities.")
     action: Action | None
     lookup: str | None = Field(default=None, min_length=1, max_length=240)
     rationale: str = Field(min_length=1, max_length=1200)
@@ -90,8 +95,48 @@ class TutorReply(BaseModel):
         return self
 
 
-def reply_schema() -> dict[str, Any]:
-    return TutorReply.model_json_schema()
+def reply_schema(values: dict | None = None) -> dict[str, Any]:
+    schema = TutorReply.model_json_schema()
+    if (values or {}).get("ui.modal") is True:
+        actions = action_schema(values)
+        schema["$defs"] = actions.pop("$defs")
+        schema["properties"]["action"]["anyOf"] = [actions, {"type": "null"}]
+    return schema
+
+
+def _teacher_observation(observation: dict[str, Any]) -> dict[str, Any]:
+    # These thumbnail channels are a local student's numerical input. The tutor
+    # receives the complete owned PNG, with all game state and capture facts below.
+    return {key: value for key, value in observation.items() if key != "features"}
+
+
+def _teacher_controls(controls: dict[str, Any]) -> dict[str, Any]:
+    """Reference repeated provenance without dropping any binding or control fact."""
+    projected = deepcopy(controls)
+    if "source_references" in projected:
+        return projected  # Never overwrite an existing extension's information.
+    references = {}
+    ids = {}
+    bindings = projected.get("bindings")
+    groups = [bindings.values() if isinstance(bindings, dict) else ()]
+    groups.extend(projected.get(name, ()) for name in ("action_slots", "binding_inventory")
+                  if isinstance(projected.get(name), (list, tuple)))
+    for rows in groups:
+        for row in rows:
+            if not isinstance(row, dict) or "source_ref" in row:
+                continue
+            source = row.get("source")
+            if not isinstance(source, str):
+                continue
+            if source not in ids:
+                source_id = f"s{len(ids)}"
+                ids[source] = source_id
+                references[source_id] = source
+            row["source_ref"] = ids[source]
+            del row["source"]
+    if references:
+        projected["source_references"] = references
+    return projected
 
 
 class VisionClient(Protocol):
@@ -330,12 +375,15 @@ class VisionTeacher:
             ClaudeVisionClient.image_input("", image_png)
         except (OSError, ValueError) as exc:
             return finish("invalid", detail=f"screenshot unavailable: {exc}")
-        base = {"observation": observation, "controls": controls,
+        base = {"observation": _teacher_observation(observation),
+                "controls": _teacher_controls(controls),
                 "knowledge": knowledge if knowledge is not None else (
                     self.knowledge.context(observation) if self.knowledge else {"unknown": "not supplied"}),
                 "recent_action_results": list(recent[-12:]),
                 "reply_contract": {"observation_id": observation_id,
                                    "lookup_available": self.knowledge is not None,
+                                   "capability": {"allowed": list(get_args(Capability))},
+                                   "expected_effect": {"allowed": list(get_args(ExpectedEffect))},
                                    "action_semantics": "exactly one bounded action, then observe"}}
         while True:
             remaining = timeout_s - (time.perf_counter() - started)
@@ -349,7 +397,8 @@ class VisionTeacher:
             call_started = time.perf_counter()
             try:
                 result = await asyncio.wait_for(
-                    self.client.ask_image(prompt, image_png, json_schema=reply_schema(),
+                    self.client.ask_image(prompt, image_png,
+                                          json_schema=reply_schema(observation.get("values")),
                                           timeout_s=remaining), timeout=remaining)
             except asyncio.CancelledError:
                 if self.record_call is not None:
@@ -377,6 +426,10 @@ class VisionTeacher:
             if reply.observation_id != observation_id:
                 return finish("stale", detail="reply observation_id does not match the request")
             if reply.lookup is None:
+                if ((observation.get("values") or {}).get("ui.modal") is True
+                        and not modal_action_allowed(reply.action)):
+                    return finish("invalid", detail="action is unavailable while a blocking modal "
+                                  "is observed; only observe or tap escape is permitted")
                 return finish("ok", reply=reply)
             if self.knowledge is None or len(lookups) >= self.max_lookups:
                 return finish("invalid", detail="teacher exceeded the available local lookup budget")

@@ -3,7 +3,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from jev.play.actions import action_dict, action_schema, parse_action
+from jev.play.actions import action_dict, action_schema, modal_action_allowed, parse_action
 from jev.play.controls import Limits, build_manifest, key_parts
 
 
@@ -59,6 +59,31 @@ def test_schema_exposes_discriminator_and_no_arbitrary_key():
     assert "enter" not in schema["$defs"]["KeyAction"]["properties"]["control"]["enum"]
     assert all(row.get("additionalProperties") is False for row in schema["$defs"].values()
                if row.get("type") == "object")
+
+
+def test_modal_schema_only_advertises_observe_or_escape_and_removes_other_definitions():
+    schema = action_schema({"ui.modal": True})
+    assert set(schema["$defs"]) == {"ObserveAction", "KeyAction"}
+    assert schema["discriminator"]["mapping"] == {
+        "observe": "#/$defs/ObserveAction", "key": "#/$defs/KeyAction"}
+    assert schema["oneOf"] == [{"$ref": ref}
+                               for ref in schema["discriminator"]["mapping"].values()]
+    key = schema["$defs"]["KeyAction"]["properties"]
+    assert key["control"]["const"] == "escape" and "enum" not in key["control"]
+    assert key["duration_s"]["const"] == key["duration_s"]["maximum"] == 0
+    assert action_schema({"ui.modal": False}) == action_schema()
+    assert action_schema({"ui.modal": None}) == action_schema()
+
+
+@pytest.mark.parametrize("action,allowed", [
+    ({"kind": "observe", "wait_s": 0.2}, True),
+    ({"kind": "key", "control": "escape"}, True),
+    ({"kind": "key", "control": "target_next"}, False),
+    ({"kind": "click", "button": "left", "intent": "ui", "ui_control": "quest_advance"}, False),
+    ({"kind": "skill", "name": "ABORT_WAIT"}, False),
+])
+def test_shared_modal_action_policy(action, allowed):
+    assert modal_action_allowed(parse_action(action)) is allowed
 
 
 def test_saved_bindings_override_defaults_and_keep_full_inventory(tmp_path):

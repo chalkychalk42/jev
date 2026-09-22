@@ -14,6 +14,8 @@ Control = Literal[
 ]
 HELD_CONTROLS = frozenset({"move_forward", "move_backward", "turn_left", "turn_right",
                            "strafe_left", "strafe_right"})
+MODAL_KEY_CONTROL = "escape"
+_MODAL_ACTION_DEFINITIONS = {"observe": "ObserveAction", "key": "KeyAction"}
 
 
 class Strict(BaseModel):
@@ -28,7 +30,10 @@ class ObserveAction(Strict):
 class KeyAction(Strict):
     kind: Literal["key"] = "key"
     control: Control
-    duration_s: float = Field(default=0.0, ge=0.0, le=2.0)
+    duration_s: float = Field(
+        default=0.0, ge=0.0, le=2.0,
+        description="Movement and turning require a positive duration. Tap and toggle controls "
+                    "require duration_s=0, including escape.")
 
     @model_validator(mode="after")
     def duration_matches_control(self):
@@ -58,7 +63,9 @@ class ClickAction(Strict):
     y: float | None = Field(default=None, ge=0.0, le=1.0)
     expected_target_id: int | None = Field(default=None, ge=0, le=65534)
     expected_dead: bool = False
-    ui_control: Literal["quest_advance", "gossip_line"] | None = None
+    ui_control: Literal["quest_advance", "gossip_line"] | None = Field(
+        default=None, description="Only painted quest advance or gossip list controls. "
+                                  "UI clicks cannot supply x/y; other UI controls are unavailable.")
     ui_name_id: int | None = Field(default=None, ge=0, le=65534)
 
     @model_validator(mode="after")
@@ -117,5 +124,26 @@ def action_dict(action: Action) -> dict:
     return _ADAPTER.dump_python(action, mode="json", exclude_none=True)
 
 
-def action_schema() -> dict:
-    return _ADAPTER.json_schema()
+def modal_action_allowed(action: Action) -> bool:
+    """The same modal exception governs tutor proposals and actual input delivery."""
+    return isinstance(action, ObserveAction) or (
+        isinstance(action, KeyAction) and action.control == MODAL_KEY_CONTROL
+        and action.duration_s == 0)
+
+
+def action_schema(values: dict | None = None) -> dict:
+    schema = _ADAPTER.json_schema()
+    if (values or {}).get("ui.modal") is not True:
+        return schema
+    refs = {kind: f"#/$defs/{name}" for kind, name in _MODAL_ACTION_DEFINITIONS.items()}
+    schema["oneOf"] = [{"$ref": ref} for ref in refs.values()]
+    schema["discriminator"]["mapping"] = refs
+    schema["$defs"] = {name: schema["$defs"][name]
+                       for name in _MODAL_ACTION_DEFINITIONS.values()}
+    key = schema["$defs"]["KeyAction"]["properties"]
+    key["control"].pop("enum", None)
+    key["control"]["const"] = MODAL_KEY_CONTROL
+    key["duration_s"].update(const=0, maximum=0)
+    schema["description"] = "A blocking modal is observed. Only observe or tap escape " \
+                            "with duration_s=0; no click, movement, or delegated skill is available."
+    return schema

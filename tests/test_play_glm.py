@@ -324,3 +324,24 @@ def test_vision_teacher_preserves_actual_model_and_rejects_stale_observation(mon
     assert result.status == "stale" and not result.ok
     assert result.actual_model == "glm-4.6v-flash-served"
     assert result.requested_model == "glm-api:glm-4.6v-flash"
+
+
+def test_rejected_action_diagnostic_names_known_field_without_echoing_its_value():
+    doc = completion()
+    doc["choices"][0]["message"]["content"] = json.dumps(reply(
+        action={"kind": "click", "button": "left", "intent": "ui", "ui_control": KEY},
+        expected_effect="ui_closed"))
+    result = GLMVisionClient(api_key=KEY).classify_response(json.dumps(doc).encode())
+    assert result.status == "rejected" and result.text is None
+    assert "action.click.ui_control:literal_error" in result.detail
+    assert KEY not in repr(result)
+    assert (result.tokens_in, result.tokens_out) == (123, 45)
+
+
+def test_rejected_extra_field_name_cannot_leak_into_diagnostics():
+    doc = completion()
+    doc["choices"][0]["message"]["content"] = json.dumps(reply(**{KEY: "private"}))
+    result = GLMVisionClient(api_key=KEY).classify_response(json.dumps(doc).encode())
+    assert result.status == "rejected" and result.text is None
+    assert "field:extra_forbidden" in result.detail
+    assert KEY not in repr(result) and "private" not in repr(result)

@@ -32,7 +32,7 @@ flowchart LR
 | Component | Behavior |
 |---|---|
 | `jev/play/actions.py`, `controls.py` | Typed movement, turning, strafe, target selection, action slots, pointer, grounded clicks, camera and existing skills. Account/character binding overrides retain source hashes and uncertainty. |
-| `teacher.py` | Actual embedded PNG input through the existing Claude subscription CLI, typed output, observation identity, bounded knowledge lookups, per-attempt accounting, cancellation and subprocess cleanup. |
+| `teacher.py` | Actual embedded PNG through the selected Claude/GLM transport, typed output, state-dependent modal actions, observation identity, bounded knowledge lookups, per-attempt accounting and cancellation. Teacher prompts preserve all controls/state while omitting local student image features and deduplicating provenance. |
 | `knowledge.py`, `world_knowledge.py` | Guide, objectives, starting abilities, vendors and bounded read-only entity retrieval from the existing world/DBC snapshot. Content fingerprints invalidate incompatible students. |
 | `executor.py` | One input owner, short bounded holds, fresh hover before unit clicks, painted UI control coordinates, focus/state checks and unconditional release. Right-click never establishes facing by assertion. |
 | `observation.py` | Same-capture pixels/radio, shared coordinate conversion, fresh paint evidence, independent observed effects. Movement alone is never credited as closing distance. |

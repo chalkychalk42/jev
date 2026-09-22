@@ -22,6 +22,7 @@ from jev.play.actions import (
     PointerAction,
     SkillAction,
     action_dict,
+    modal_action_allowed,
     parse_action,
 )
 from jev.play.controls import ControlManifest, Limits, build_manifest
@@ -227,7 +228,7 @@ class Executor:
     @staticmethod
     def _state(action: Action, view: GuardState):
         values = view.values
-        if isinstance(action, KeyAction) and action.control == "escape":
+        if modal_action_allowed(action):
             # Esc can close an observed modal, but blind UI state still authorizes nothing.
             if values.get("ui.modal") is None:
                 raise _Refusal("blind", "modal state is unknown")

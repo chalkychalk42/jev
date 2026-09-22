@@ -215,7 +215,20 @@ class GLMVisionClient:
             return TeacherResult(status="abstained", detail="GLM did not supply an action reply", **meta)
         try:
             reply = TutorReply.model_validate(_loads(content))
-        except (ValidationError, ValueError, TypeError, RecursionError):
+        except ValidationError as exc:
+            # Diagnose schema incompatibility without retaining response text, values,
+            # arbitrary extra-field names or exception context that might echo input.
+            fields = {"observation_id", "capability", "action", "lookup", "rationale",
+                      "expected_effect", "kind", "control", "duration_s", "wait_s", "slot",
+                      "button", "intent", "x", "y", "expected_target_id", "expected_dead",
+                      "ui_control", "ui_name_id", "axis", "pixels", "name", "params",
+                      "observe", "key", "action_slot", "pointer", "click", "camera", "skill"}
+            errors = [".".join(str(part) if part in fields else "field" for part in row["loc"])
+                      + ":" + row["type"] for row in exc.errors(include_input=False,
+                        include_context=False, include_url=False)[:6]]
+            return TeacherResult(status="rejected", detail="GLM reply failed bounded tutor validation: "
+                                 + "; ".join(errors), **meta)
+        except (ValueError, TypeError, RecursionError):
             return TeacherResult(status="rejected", detail="GLM reply failed bounded tutor validation",
                                  **meta)
         return TeacherResult(status="ok", text=reply.model_dump_json(), **meta)

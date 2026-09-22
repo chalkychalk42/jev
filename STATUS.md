@@ -1559,3 +1559,44 @@ was used. Gameplay testing can proceed through the configured launcher after app
 VERIFICATION: **1,754 tests passed in 95.91 seconds**, including 108 focused provider,
 factory, launcher and runtime tests. Ruff and `git diff --check` pass. Native Windows
 deployment and the synthetic vision request pass independently.
+
+## 2026-09-22 — Approved supervised attempt; tutor contract blocked gameplay
+
+DID: the owner confirmed the full supervised GLM test, resolving the gameplay-export
+approval block above. A saved gameplay frame produced a valid observation from
+`glm-4.6v-flash` in 4.407 seconds (5,632 input / 114 output tokens). The configured
+180-second live run `20260922T211913-c2c0e3` then stopped after about 10 seconds when its
+first tutor reply failed validation. No gameplay action was accepted or executed.
+
+MEASURED: all 12 live frames were visually reviewed (11 periodic plus one event); no
+missing/skipped captures, maximum periodic gap 1.008 seconds. The pre-existing modal
+remained open, HP/mana stayed full, and quest 33 remained 0/8. The episode is recorded as
+aborted, progress zero and unverified. The motor registry contains no models or promoted
+capabilities. Final read-only capture showed character selection; an independent Windows
+key-state check found every key and mouse button released.
+
+GLOBAL CORRECTIONS: modal action availability is now shared by tutor schema, local reply
+validation and executor: observe or tap Escape. Tap durations and capability-purpose
+semantics are explicit. Teacher prompts retain the complete PNG, game state and all
+configured bindings while omitting the local student's image descriptor and deduplicating
+source strings. Original evidence/fingerprints are unchanged. Comparable modal requests
+fell from 28,080 to 15,877 input tokens. Rejected GLM replies now report allowlisted field
+paths and validation codes without response text or invalid values.
+
+BLOCKER: eight non-executing recorded-scene diagnostics/comparisons confirmed that the
+free Flash model still supplied invalid reply fields (including `capability="key"` for
+an otherwise valid Escape action). An explicitly selected `glm-4.6v` comparison returned
+HTTP 429; the provider-limit cause is unknown. Native function-calling and enabled-thinking
+experiments also failed validation and were not adopted into production. No coercion,
+automatic retry or additional live input loop bypassed those failures. Claude was not
+called. Details are in [TEACHING_TRANSPORT.md](docs/TEACHING_TRANSPORT.md).
+
+NOW: the full gameplay acceptance did **not** complete. Approach, damage, death/loot,
+quest progress and useful teaching remain unverified. The next requirement is a tutor
+that passes the bounded reply contract on real observations; the bot remains stopped.
+
+VERIFICATION: **1,777 tests passed in 96.20 seconds**. Ruff (`jev tools tests`) and
+`git diff --check` pass. Tests cover modal schema/executor agreement, unchanged nonmodal
+behavior, preservation of all configured controls, nonmutation of recordings, invalid
+capability rejection and sanitized diagnostics. No fixture result is claimed as live
+gameplay or learning success.
