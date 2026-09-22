@@ -72,7 +72,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--policy-mode", choices=("shadow", "adaptive"), default="shadow",
                         help="adaptive permits evidence-gated canaries and promotion")
     parser.add_argument("--teacher", action="store_true", help="enable bounded Claude subscription queue")
-    parser.add_argument("--teacher-model", default="sonnet")
+    parser.add_argument("--teacher-model", help="defaults to Sonnet for Claude or GLM-4.6V-Flash for GLM")
+    parser.add_argument("--teacher-provider", choices=("claude", "glm"), default="claude")
+    parser.add_argument("--teacher-base-url", help="explicit official GLM API endpoint")
+    parser.add_argument("--teacher-key-env", default="GLM_API_KEY",
+                        help="credential variable name, never the credential value")
+    parser.add_argument("--teacher-env-file", type=Path, default=ROOT / ".env")
     parser.add_argument("--teacher-binary")
     parser.add_argument("--teacher-calls-per-hour", type=int, default=12)
     parser.add_argument("--play-mode", choices=("off", "teach", "adaptive"), default="off",
@@ -92,6 +97,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-progress", type=float, default=900)
     parser.add_argument("--reconnect-limit", type=int, default=3)
     args = parser.parse_args(argv)
+    from jev.play.providers import model_for
+
+    args.teacher_model = model_for(args.teacher_provider, args.teacher_model)
+    if args.teacher_provider != "claude" and args.play_mode == "off":
+        parser.error("GLM is available for visual playing; select --play-mode teach or adaptive")
     if args.learning_store is None:
         try:
             args.learning_store = default_learning_store(ROOT)
@@ -140,6 +150,8 @@ def main(argv: list[str] | None = None) -> int:
                           "motor_learning": args.play_mode != "off",
                           "motor_handover": args.play_mode == "adaptive",
                           "play_teacher_calls_per_hour": args.play_teacher_calls_per_hour,
+                          "teacher_provider": args.teacher_provider,
+                          "teacher_requested": args.teacher_model,
                           "bindings": [str(path) for path in args.bindings],
                           "world_db": str(args.world_db),
                           "screenshots": args.screenshots,
@@ -218,6 +230,8 @@ def _live(args, graph, memory, route) -> int:
                 body, recorder=recorder, store=args.learning_store, screenshots=screenshots,
                 mode=args.play_mode, teacher_model=args.teacher_model,
                 teacher_binary=args.teacher_binary,
+                teacher_provider=args.teacher_provider, teacher_base_url=args.teacher_base_url,
+                teacher_env_file=args.teacher_env_file, teacher_key_env=args.teacher_key_env,
                 teacher_calls_per_hour=args.play_teacher_calls_per_hour,
                 binding_paths=args.bindings, world_db=args.world_db,
                 config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout))

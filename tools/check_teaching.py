@@ -1,4 +1,4 @@
-"""Offline teaching readiness; an optional single subscription call uses a saved PNG.
+"""Offline teaching readiness; an optional single provider call uses a saved PNG.
 
 This program has no client attachment, focus, capture or input path. The optional smoke
 request only permits an observe reply and never executes it. Default operation makes no
@@ -27,7 +27,8 @@ from jev.play.actions import ObserveAction, action_dict, action_schema  # noqa: 
 from jev.play.controls import build_manifest  # noqa: E402
 from jev.play.knowledge import CONTENT, LocalKnowledge  # noqa: E402
 from jev.play.observation import fingerprint  # noqa: E402
-from jev.play.teacher import ClaudeVisionClient, VisionTeacher, reply_schema  # noqa: E402
+from jev.play.providers import make_vision_client  # noqa: E402
+from jev.play.teacher import VisionTeacher, reply_schema  # noqa: E402
 
 
 def observe_schema() -> dict:
@@ -41,10 +42,15 @@ def observe_schema() -> dict:
     return schema
 
 
-class ObserveOnlyClient(ClaudeVisionClient):
+class ObserveOnlyClient:
+    """The same constrained smoke contract, independent of the chosen transport."""
+
+    def __init__(self, client):
+        self.client, self.model_name = client, client.model_name
+
     async def ask_image(self, prompt, image_png, *, json_schema, timeout_s):
-        return await super().ask_image(prompt, image_png, json_schema=observe_schema(),
-                                       timeout_s=timeout_s)
+        return await self.client.ask_image(prompt, image_png, json_schema=observe_schema(),
+                                           timeout_s=timeout_s)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -54,13 +60,17 @@ def parser() -> argparse.ArgumentParser:
                         help="optional read-only exact-server world/DBC snapshot")
     result.add_argument("--bindings", action="append", type=Path, default=[])
     result.add_argument("--teacher-binary")
-    result.add_argument("--teacher-model", default="sonnet")
+    result.add_argument("--teacher-model")
+    result.add_argument("--teacher-provider", choices=("claude", "glm"), default="claude")
+    result.add_argument("--teacher-base-url")
+    result.add_argument("--teacher-key-env", default="GLM_API_KEY")
+    result.add_argument("--teacher-env-file", type=Path, default=ROOT / ".env")
     result.add_argument("--timeout", type=float, default=30,
                         help="overall deadline for the optional single model call")
     result.add_argument("--transport-check", action="store_true",
-                        help="check CLI flags and sanitized subscription status; no model call")
+                        help="check provider deployment/auth presence; no model call")
     result.add_argument("--smoke-image", type=Path,
-                        help="make one subscription request with this original PNG; never execute input")
+                        help="make one provider request with this original PNG; never execute input")
     result.add_argument("--output", type=Path)
     return result
 
@@ -91,7 +101,8 @@ async def smoke(path: Path, *, client, knowledge, timeout_s: float) -> dict:
                     "goal": "Offline transport verification; choose observe only; no game input will be executed"},
     }
     calls = []
-    teacher = VisionTeacher(client, knowledge=knowledge, max_lookups=0, record_call=calls.append)
+    teacher = VisionTeacher(ObserveOnlyClient(client), knowledge=knowledge, max_lookups=0,
+                            record_call=calls.append)
     controls = {"version": 1, "bindings": {}, "action_slots": [], "skills": [],
                 "allowed_actions": [{"kind": "observe", "wait_s": 0}],
                 "mode": "offline_read_only_transport_check",
@@ -137,7 +148,10 @@ def run(args, *, client=None) -> dict:
                                                         if v["executable"]),
                           "schemas_validated": True},
               "vision_roundtrip_verified": False}
-    client = client or ObserveOnlyClient(binary=args.teacher_binary, model=args.teacher_model)
+    if client is None and (args.transport_check or args.smoke_image):
+        client = make_vision_client(provider=args.teacher_provider, binary=args.teacher_binary,
+                                     model=args.teacher_model, base_url=args.teacher_base_url,
+                                     env_file=args.teacher_env_file, key_env=args.teacher_key_env)
     if args.transport_check:
         report["transport"] = client.preflight()
         report["ok"] &= report["transport"]["ok"]

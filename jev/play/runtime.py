@@ -17,7 +17,8 @@ from jev.play.journal import PlayJournal
 from jev.play.knowledge import LocalKnowledge
 from jev.play.learning import MotorLearner
 from jev.play.observation import LiveObserver, fingerprint
-from jev.play.teacher import ClaudeVisionClient, VisionTeacher
+from jev.play.providers import make_vision_client, model_for
+from jev.play.teacher import VisionTeacher
 from jev.play.world_knowledge import DEFAULT_WORLD_DB
 from jev.run.supervisor import FocusLost, Result
 from jev.teacher.bridge import BudgetClient
@@ -70,12 +71,15 @@ class PlayingBody:
     executes_wait = True
 
     def __init__(self, spine, *, recorder, store: Path, screenshots, mode: str = "teach",
-                 teacher_model: str = "sonnet", teacher_binary: str | None = None,
+                 teacher_model: str | None = None, teacher_binary: str | None = None,
+                 teacher_provider: str = "claude", teacher_base_url: str | None = None,
+                 teacher_env_file: Path | None = None, teacher_key_env: str = "GLM_API_KEY",
                  teacher_calls_per_hour: int = 240, binding_paths=(),
                  config: PlayConfig | None = None, teacher=None, learner=None,
                  start_learning: bool = True, world_db: Path | None = DEFAULT_WORLD_DB):
         if config is not None and mode != config.mode:
             raise ValueError("playing mode and configuration disagree")
+        teacher_model = model_for(teacher_provider, teacher_model)
         self.spine, self.client, self.graph = spine, spine.client, spine.graph
         self.available = spine.available
         self._arm = None
@@ -97,7 +101,9 @@ class PlayingBody:
                                  execute_skill=self._delegate,
                                  invalidate_camera=self.spine.camera.invalidate)
         if teacher is None:
-            transport = ClaudeVisionClient(binary=teacher_binary, model=teacher_model)
+            transport = make_vision_client(
+                provider=teacher_provider, binary=teacher_binary, model=teacher_model,
+                base_url=teacher_base_url, env_file=teacher_env_file, key_env=teacher_key_env)
             budget = BudgetClient(transport, Path(store) / "motor-teacher-budget.sqlite",
                                   calls_per_hour=teacher_calls_per_hour, interval_s=0)
             teacher = VisionTeacher(transport, knowledge=self.knowledge,
@@ -115,6 +121,7 @@ class PlayingBody:
             "controls": self.manifest.to_dict(), "controls_fingerprint": self.controls_fingerprint,
             "knowledge_fingerprint": self.knowledge.fingerprint,
             "teacher_requested": teacher_model, "teacher_calls_per_hour": teacher_calls_per_hour,
+            "teacher_provider": teacher_provider,
             "learning_store": str(self.learner.directory), "live_validated": False,
         })
         if start_learning:

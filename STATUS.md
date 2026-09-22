@@ -1526,3 +1526,36 @@ controller/executor composition with fake input and painted telemetry, continuou
 handover/rollback, subprocess cleanup, the observed quota error, exact SQLite schema
 queries and the modal/combat/loot/service boundaries. Native Windows offline checks passed
 separately; no live test or game screenshot export was performed in this build turn.
+
+## 2026-09-22 — GLM vision connected; gameplay export awaiting approval
+
+DID: added an explicit GLM API transport at the owner's request. Provider selection is
+shared by the normal launcher and readiness/smoke tool. Existing controls, outcome checks,
+input ownership and learning gates are unchanged. The default `glm-4.6v-flash` is listed
+as free in official pricing. API calls have bounded input/output sizes and deadlines,
+cancel cleanly, never silently retry or change models, reject redirects and retain actual
+served-model/token accounting. The supplied credential is only in ignored local dotenv
+storage, protected by file permissions; it is absent from code, launch arguments and Git.
+
+CONNECTION EVIDENCE: one native Windows request sent only a generated colored-shapes PNG
+and synthetic literals to the official Z.AI API. It returned a valid typed observe reply
+from `glm-4.6v-flash` in 2.233 seconds, identified the shapes and reported 1,437 input /
+84 output tokens. No game state/image was included and no game action was executed. The
+key's Z.AI endpoint compatibility is therefore measured, not assumed.
+
+LOCAL LIVE CHECK: the disconnected client successfully reconnected using the existing
+Session under an input lease, stop checkpoint and screenshot recorder. All 21 periodic
+frames were visually reviewed; there were no missing/skipped frames and the maximum
+interval was 1.019 seconds. Final telemetry: level 2, full health/mana, no combat/death,
+13 free bag slots and full durability. The pre-existing disabled Blizzard_TimeManager
+popup is visible and `ui.modal=true`. Independent Windows key-state reads found every
+movement key and mouse button released. No combat or quest-progress test occurred.
+
+BLOCKER: automatic approval review rejected the saved-game-image GLM smoke request before
+execution because the private image/state export to Z.AI needs explicit approval. A
+provider-specific question is pending. No gameplay data was sent to GLM; no workaround
+was used. Gameplay testing can proceed through the configured launcher after approval.
+
+VERIFICATION: **1,754 tests passed in 95.91 seconds**, including 108 focused provider,
+factory, launcher and runtime tests. Ruff and `git diff --check` pass. Native Windows
+deployment and the synthetic vision request pass independently.

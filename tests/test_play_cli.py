@@ -22,7 +22,7 @@ def test_play_check_is_read_only_and_forces_evidence_and_learning(tmp_path, monk
         mock = Mock(side_effect=AssertionError(f"--check invoked {name}"))
         monkeypatch.setattr(cli, name, mock)
         prohibited.append(mock)
-    for name in ("PlayingBody", "ClaudeVisionClient", "VisionTeacher", "MotorLearner", "PlayJournal"):
+    for name in ("PlayingBody", "make_vision_client", "VisionTeacher", "MotorLearner", "PlayJournal"):
         mock = Mock(side_effect=AssertionError(f"--check constructed {name}"))
         monkeypatch.setattr(f"jev.play.runtime.{name}", mock)
         prohibited.append(mock)
@@ -192,3 +192,76 @@ def test_screenshot_failure_stops_playing_worker_before_another_decision(tmp_pat
     worker.cancel.assert_called_once_with("disk full")
     assert "playing poll" not in events
     assert events[-1] == "client closed"
+
+
+@pytest.mark.parametrize("mode", ["teach", "adaptive"])
+def test_glm_check_uses_provider_default_without_credentials_network_or_client(
+        tmp_path, monkeypatch, capsys, mode):
+    graph = route_file(tmp_path)
+    fixture = tmp_path / "fixture.env"
+    fixture.write_text("JEV_TEST_GLM_CREDENTIAL=fixture-private-key\n")
+    monkeypatch.setattr(cli, "ROOT", tmp_path)
+    prohibited = []
+    for target in (
+        "jev.run.cli.attach", "jev.run.cli.input_lock_path", "jev.run.cli.Screenshots",
+        "jev.play.providers.credential", "jev.play.providers.make_vision_client",
+        "jev.play.runtime.make_vision_client", "jev.play.runtime.PlayingBody",
+        "httpx.Client", "httpx.AsyncClient", "subprocess.Popen",
+    ):
+        mock = Mock(side_effect=AssertionError(f"--check invoked {target}"))
+        monkeypatch.setattr(target, mock)
+        prohibited.append(mock)
+    before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
+    assert cli.main([
+        "--check", "--graph", str(graph), "--play-mode", mode, "--teacher",
+        "--teacher-provider", "glm", "--teacher-env-file", str(fixture),
+        "--teacher-key-env", "JEV_TEST_GLM_CREDENTIAL",
+        "--teacher-base-url", "https://open.bigmodel.cn/api/paas/v4",
+        "--learning-store", str(tmp_path / "learning"),
+    ]) == 0
+    output = capsys.readouterr().out
+    report = json.loads(output)
+    assert report["teacher_provider"] == "glm"
+    assert report["teacher_requested"] == "glm-4.6v-flash"
+    assert report["visual_teacher"] and report["screenshots"]
+    assert report["live_tested"] is False
+    assert "fixture-private-key" not in output
+    assert sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*")) == before
+    for mock in prohibited:
+        mock.assert_not_called()
+
+
+def test_glm_requires_visual_play_before_attachment_or_credentials(tmp_path, monkeypatch):
+    graph = route_file(tmp_path)
+    attach = Mock(side_effect=AssertionError("unsupported mode attached client"))
+    read = Mock(side_effect=AssertionError("unsupported mode read credentials"))
+    monkeypatch.setattr(cli, "attach", attach)
+    monkeypatch.setattr("jev.play.providers.credential", read)
+    with pytest.raises(SystemExit) as caught:
+        cli.main(["--check", "--graph", str(graph), "--teacher-provider", "glm", "--teacher"])
+    assert caught.value.code == 2
+    attach.assert_not_called()
+    read.assert_not_called()
+
+
+def test_glm_launch_forwards_explicit_settings_without_a_second_teacher(tmp_path, monkeypatch):
+    graph = route_file(tmp_path)
+    _client, events = fake_live(monkeypatch, tmp_path)
+    arguments, strategic, _body_class = install_playing_launcher(monkeypatch, events)
+    fixture = tmp_path / "fixture.env"
+    fixture.write_text("JEV_TEST_GLM_CREDENTIAL=fixture-private-key\n")
+    assert cli.main([
+        "--graph", str(graph), "--play-mode", "teach", "--teacher",
+        "--teacher-provider", "glm", "--teacher-env-file", str(fixture),
+        "--teacher-key-env", "JEV_TEST_GLM_CREDENTIAL",
+        "--teacher-base-url", "https://open.bigmodel.cn/api/paas/v4",
+        "--runs-dir", str(tmp_path / "runs"),
+        "--learning-store", str(tmp_path / "learning"), "--run-for", "1",
+    ]) == 0
+    assert arguments["teacher_provider"] == "glm"
+    assert arguments["teacher_model"] == "glm-4.6v-flash"
+    assert arguments["teacher_env_file"] == fixture
+    assert arguments["teacher_key_env"] == "JEV_TEST_GLM_CREDENTIAL"
+    assert arguments["teacher_base_url"] == "https://open.bigmodel.cn/api/paas/v4"
+    assert events.count("playing created") == events.count("body created") == 1
+    strategic.assert_not_called()

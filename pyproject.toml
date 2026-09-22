@@ -5,6 +5,7 @@ description = "A guide-directed leveling agent for a private TBC server, that ge
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.7",
+    "httpx>=0.28.1,<1",
 ]
 
 [project.optional-dependencies]

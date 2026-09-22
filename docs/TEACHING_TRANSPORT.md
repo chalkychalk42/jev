@@ -1,5 +1,57 @@
 # Visual teacher transport
 
+## GLM API option
+
+The visual tutor can also use the explicit `--teacher-provider glm` transport. This was
+added at the owner's request after Claude's subscription quota blocked live verification.
+It uses the same observation, bounded-action validation, executor, budget and learning
+records; choosing a provider does not change game controls or outcome rules.
+
+The default GLM model is `glm-4.6v-flash`, an image-capable model listed as free on the
+[official pricing page](https://docs.z.ai/guides/overview/pricing) when checked on
+22 September 2026. It makes one bounded API attempt with thinking disabled and a
+1,024-token output ceiling. There is no automatic paid-model fallback or retry. Model
+identity and actual input/output token usage are recorded when the API supplies them.
+
+Credentials come from the named `GLM_API_KEY` environment variable, or the ignored local
+`.env` file when the environment does not define it. `--teacher-key-env` and
+`--teacher-env-file` configure those sources without placing a key in launch arguments,
+run configuration or Git. The only accepted endpoints are the official Z.AI and BigModel
+HTTPS APIs; redirects are refused. The endpoint must match the key's issuing platform.
+
+```text
+python tools/check_teaching.py --teacher-provider glm --transport-check
+python tools/check_teaching.py --teacher-provider glm --smoke-image SAVED.png --output captures/teaching/glm-smoke.json
+python tools/probe_slice.py --play-mode teach --teacher-provider glm --route-mode supported --screenshots --run-for 60 --reconnect
+```
+
+Z.AI uses `https://api.z.ai/api/paas/v4`; BigModel uses
+`--teacher-base-url https://open.bigmodel.cn/api/paas/v4`. The smoke command sends one
+saved image but cannot send game input. The normal default check makes no API request.
+
+In `teach` mode, the model chooses every action, including requests to run existing
+skills. It is not called for each screenshot or radio tick. In `adaptive` mode, a
+qualified local capability can execute covered actions; novel situations and teacher
+audits still require a model. A new installation has no proven student to replace it.
+
+### GLM connection evidence, 22 September 2026
+
+Native Windows returned a validated reply from `glm-4.6v-flash` in **2.233 seconds**
+using a generated 64×64 image and synthetic literals. It correctly identified the red,
+green and blue shapes; API usage was 1,437 input and 84 output tokens. No gameplay data
+was supplied and no action was executed. Local preflight and provider/factory/CLI tests
+also pass. This confirms the supplied key works at the Z.AI endpoint, independently of
+Claude's quota; it does not establish game-playing competence.
+
+Automatic approval review rejected the separate saved-game-image smoke request before
+execution because explicit approval for gameplay images/state going to Z.AI had not been
+established. The owner has been asked for that provider-specific approval. Until it is
+received, no gameplay data is sent to GLM and the gameplay teaching test remains pending.
+The independently authorized local reconnect test succeeded with 21 reviewed one-second
+frames, no missing/skipped frames, and all inputs physically released afterward.
+
+## Claude subscription option
+
 The visual tutor uses the existing Claude subscription through the native Claude Code
 CLI. `ClaudeVisionClient` sends an actual base64 PNG image block and observation/control
 JSON through `--input-format stream-json`; it requires a final successful result with a

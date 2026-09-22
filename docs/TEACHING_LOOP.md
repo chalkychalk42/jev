@@ -83,6 +83,11 @@ only evidence-qualified student canaries and active capabilities. `--teacher` re
 older strategic suggestion mode when playing mode is off; it does not start a second
 strategic model queue alongside the visual tutor.
 
+`--teacher-provider glm` selects the GLM vision API when Claude quota is unavailable.
+Its default is `glm-4.6v-flash`; credentials stay in environment/ignored dotenv storage.
+Provider selection leaves the guide, controls, guards, observer and learner unchanged.
+See [provider setup and call frequency](TEACHING_TRANSPORT.md).
+
 The motor tutor has its own persistent call budget, default 240 attempts/hour, and a
 30-second decision deadline. Every lookup/model attempt consumes budget, including
 timeouts. These are operational limits, not measured game timing. They can be set with
