@@ -22,6 +22,7 @@ advancing*.
 |---|---|
 | **[ARCHITECTURE.md](ARCHITECTURE.md)** | how it is built, and why it differs from the plan |
 | **[DECISIONS.md](DECISIONS.md)** | every call made, with its reason. Read before proposing an alternative |
+| **[docs/ROADMAP.md](docs/ROADMAP.md)** | current ordered work, evidence gaps and acceptance gates toward sustained improvement |
 | [docs/PLAN.md](docs/PLAN.md) | the original vision |
 | [data/README.md](data/README.md) | what is on disk and where it came from |
 
@@ -39,9 +40,10 @@ of this file on purpose — it goes stale in a day and a stale number in a READM
 small lie you tell yourself every time you read it. `STATUS.md` carries the current one.
 
 The live body has completed individual quest, combat, travel, loot and service checks.
-The shared runtime now composes those methods with tracking and recording; this new
-composition is verified offline and still needs a live acceptance run. See `STATUS.md`
-for the evidence and remaining gaps.
+The shared runtime has now passed supervised Windows repair, water purchase, travel,
+recording and stop checks. Wolf targeting still admits grass as a selection ring and
+blocks sustained quest progress. See `STATUS.md` for measured outcomes and
+[the roadmap](docs/ROADMAP.md) for the remaining build and acceptance sequence.
 
 ```bash
 .venv/bin/python -m jev.run.cli --check  # graph/capability report; never attaches a client
