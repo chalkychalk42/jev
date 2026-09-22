@@ -208,6 +208,23 @@ def test_a_character_that_cannot_be_typed_stops_before_the_password():
     assert hid.typed == ["café"], "typed the password after failing the account"
 
 
+def test_lost_capture_after_typing_account_never_sends_password():
+    hid = _CountingHid()
+    s = Session(hid=hid, read_frame=lambda: None, radio_ok=lambda: False)
+    s._wait = lambda seconds: None
+    assert s._enter_credentials("account", "private") is False
+    assert hid.typed == ["account"] and not hid.taps
+    assert "unreadable" in s.detail
+
+
+def test_reconnect_credentials_file_is_optional_and_environment_wins(tmp_path):
+    path = tmp_path / "fixture.env"
+    path.write_text('JEV_WOW_ACCOUNT="fixture"\nJEV_WOW_PASSWORD=fixture-pass\n')
+    assert credentials({}, path=path) == ("fixture", "fixture-pass")
+    assert credentials({"JEV_WOW_PASSWORD": "environment-pass"}, path=path) == ("fixture", "environment-pass")
+    assert credentials({}, path=tmp_path / "absent") is None
+
+
 def test_a_login_screen_it_recognises_is_never_reported_as_unreadable():
     """The old loop guarded on `not typed_credentials`, so the second look at a login
     screen fell through to "reached a screen this cannot read" - about the one screen it

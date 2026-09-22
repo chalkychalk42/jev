@@ -25,6 +25,7 @@ from jev.perceive.fields import (
     MARKER_L,
     MARKER_R,
     SCHEMA,
+    SCHEMA_FIELDS,
     STEP,
     Field,
     Kind,
@@ -99,7 +100,13 @@ def pack_bits(values: dict[str, Any]) -> str:
 
 def unpack_bits(bits: str) -> dict[str, Any]:
     """Payload bitstring -> field values. Verifies the checksum before believing any of it."""
-    need = sum(f.bits for f in FIELDS) + CHECKSUM_BITS
+    if len(bits) < FIELDS[0].bits:
+        raise DecodeError("short", "missing schema header")
+    version = int(bits[:FIELDS[0].bits], 2)
+    # An unknown header may itself be corrupt. Check the current layout's integrity
+    # before classifying it as a build mismatch, preserving the checksum/schema split.
+    fields = SCHEMA_FIELDS.get(version, FIELDS)
+    need = sum(f.bits for f in fields) + CHECKSUM_BITS
     if len(bits) < need:
         raise DecodeError("short", f"{len(bits)} bits, need {need}")
 
@@ -107,15 +114,15 @@ def unpack_bits(bits: str) -> dict[str, Any]:
     want, got = checksum(payload), int(tail, 2)
     if want != got:
         raise DecodeError("checksum", f"computed {want:#06x}, read {got:#06x}")
+    if version not in SCHEMA_FIELDS:
+        raise DecodeError("schema", f"strip says {version}, decoder is {SCHEMA}")
 
-    values: dict[str, Any] = {}
+    values: dict[str, Any] = {f.name: None for f in FIELDS}
     i = 0
-    for f in FIELDS:
+    for f in fields:
         values[f.name] = decode_field(f, int(payload[i : i + f.bits], 2))
         i += f.bits
 
-    if values["schema"] != SCHEMA:
-        raise DecodeError("schema", f"strip says {values['schema']}, decoder is {SCHEMA}")
     return values
 
 

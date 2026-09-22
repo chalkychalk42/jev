@@ -53,6 +53,8 @@ class Context:
 
     repair_blocked: bool = False
     repair_money: int | None = None
+    supplies_blocked: bool = False
+    supplies_money: int | None = None
 
     def repair_failed(self, money: int | None) -> None:
         self.repair_blocked, self.repair_money = True, money
@@ -62,6 +64,13 @@ class Context:
         return not self.repair_blocked or (
             money is not None and self.repair_money is not None and money > self.repair_money
         )
+
+    def supplies_failed(self, money: int | None) -> None:
+        self.supplies_blocked, self.supplies_money = True, money
+
+    def can_restock(self, money: int | None) -> bool:
+        return not self.supplies_blocked or (
+            money is not None and self.supplies_money is not None and money > self.supplies_money)
 
 
 def _d(intent: Intent, skill: str | None, why: str, confidence: float,
@@ -141,6 +150,12 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is low", 0.65,
                        ("dead", "combat"), service="repair"), True, "service.durability")
 
+    if ((context is None or context.can_restock(b.money_copper))
+            and ((b.food_id is not None and b.food_count == 0)
+                 or (b.drink_id is not None and b.drink_count == 0))):
+        return Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD", "confirmed food or drink is empty",
+                       0.8, ("dead", "combat"), service="supplies"), True, "service.supplies")
+
     return None
 
 
@@ -178,21 +193,24 @@ def _guide(state: State, node: Node | None) -> Plan | None:
         skill = "GRIND_UNTIL"
     if skill is None:
         return None
+    frame = ({"coord_zone_id": node.coord_zone_id} if node.coord_zone_id is not None
+             else {"zone": node.zone})
 
     # Not yet in position: the step's own travel leg comes first.
-    if node.pos is not None and state.pos.mx is not None and state.pos.my is not None:
+    if (node.kind is not StepKind.QUEST_OBJECTIVE and node.pos is not None
+            and state.pos.mx is not None and state.pos.my is not None):
         dx, dy = state.pos.mx - node.pos[0], state.pos.my - node.pos[1]
         if (dx * dx + dy * dy) ** 0.5 > node.r and "TRAVEL_TO" in node.skills:
             return Plan(
                 _d(Intent.REJOIN, "TRAVEL_TO", f"not yet at {node.id}", 0.85,
                    ("dead", "stuck_s>8"), goal=f"travel:{node.id}",
-                   zone=node.zone, x=node.pos[0], y=node.pos[1], r=node.r),
+                   **frame, x=node.pos[0], y=node.pos[1], r=node.r),
                 True, "guide.travel")
 
     return Plan(
         _d(Intent.ADVANCE, skill, f"service step {node.id}", 0.8,
            ("dead", "stuck_s>8"), goal=f"advance:{node.id}",
-           zone=node.zone, step_id=node.id),
+           **frame, step_id=node.id),
         True, "guide.step")
 
 

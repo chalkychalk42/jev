@@ -20,17 +20,24 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from jev.clients import win32
 from jev.clients.capture import Backend, WindowCapture
 from jev.clients.hid import Hid, Humaniser
 from jev.clients.source import blind
 from jev.clients.travel import Outcome, Travel
-from jev.guide.coords import ZoneBounds, map_to_world
+from jev.guide.coords import (
+    ZoneBounds,
+    bounds_by_radio_id,
+    map_to_world,
+    names_by_radio_id,
+    world_to_map,
+)
 from jev.guide.path import PathQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
-from jev.world.state_v1 import SenseFault
+from jev.world.state_v1 import Pos, SenseFault
 
 # Taking the window back: short waits first, doubling, capped.
 #
@@ -74,6 +81,8 @@ class Client:
     travel: Travel | None = field(default=None, init=False)
     query: PathQuery | None = field(default=None, init=False)
     bounds: ZoneBounds | None = field(default=None, init=False)
+    coordinate_zones: dict[int, ZoneBounds] = field(default_factory=dict, init=False)
+    coordinate_names: dict[int, str] = field(default_factory=dict, init=False)
     on_path: Callable[[str], None] | None = field(default=None, init=False)
     # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
     # context and bitmap once and reuses them, so two threads grabbing at the same time
@@ -115,7 +124,34 @@ class Client:
 
     def read(self) -> dict | None:
         r = self.reading()
-        return None if r is None else r.values
+        return None if r is None else self._navigation_values(r.values)
+
+    def _navigation_values(self, raw: dict) -> dict:
+        """One transform for every body reader, state row, and corpse recovery.
+
+        Raw zone identity remains intact. Only coordinates move into the pinned guide
+        frame; an unknown zone or another continent supplies no usable position.
+        """
+        if self.bounds is None:
+            return raw
+        values = dict(raw)
+        actual = self.coordinate_zones.get(raw.get("pos.zone_id"))
+        values["pos.coord_zone_id"] = self.bounds.area_id
+        for xkey, ykey in (("mx", "my"), ("corpse_mx", "corpse_my")):
+            x, y = raw.get(f"pos.{xkey}"), raw.get(f"pos.{ykey}")
+            values[f"pos.raw_{xkey}"], values[f"pos.raw_{ykey}"] = x, y
+            converted = None
+            missing_corpse = xkey == "corpse_mx" and (x, y) == (0, 0)
+            if (actual is not None and actual.map_id == self.bounds.map_id
+                    and x is not None and y is not None and not missing_corpse):
+                if actual == self.bounds:
+                    converted = x, y  # Preserve the measured same-map reader exactly.
+                else:
+                    world = map_to_world(x, y, actual)
+                    if world is not None:
+                        converted = world_to_map(*world, self.bounds)
+            values[f"pos.{xkey}"], values[f"pos.{ykey}"] = converted or (None, None)
+        return values
 
     def frame(self):
         try:
@@ -126,7 +162,7 @@ class Client:
 
     def position(self) -> tuple[float, float] | None:
         v = self.read()
-        if v is None or v.get("pos.mx") is None:
+        if v is None or v.get("pos.mx") is None or v.get("pos.my") is None:
             return None
         return (v["pos.mx"], v["pos.my"])
 
@@ -153,8 +189,17 @@ class Client:
             r = self.reading()
             if r is None:
                 return None
-            return radio_frame.to_state(r, t=time.time(), client_id=self.client_id,
-                                        quests=self.log.complete)
+            state = radio_frame.to_state(r, t=time.time(), client_id=self.client_id,
+                                         quests=self.log.complete)
+            if self.bounds is None:
+                return state
+            values = self._navigation_values(r.values)
+            updates = {name: values.get(f"pos.{name}") for name in (
+                "mx", "my", "corpse_mx", "corpse_my", "coord_zone_id",
+                "raw_mx", "raw_my", "raw_corpse_mx", "raw_corpse_my")}
+            updates["zone"] = self.coordinate_names.get(state.pos.zone_id)
+            return state.model_copy(update={"pos": Pos.model_validate({
+                **state.pos.model_dump(), **updates})})
 
     # -- the one composed action ---------------------------------------------
 
@@ -257,9 +302,14 @@ def attach(client_id: str = "run", *, title: str = "World of Warcraft",
 
 
 def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
-                arrival_yards: float, say: Callable[[str], None] | None = None) -> Client:
+                arrival_yards: float, say: Callable[[str], None] | None = None,
+                zones: dict[int, ZoneBounds] | None = None,
+                zone_names: dict[int, str] | None = None) -> Client:
     """Give a client the ability to walk. Separate because reading needs no planner."""
     client.bounds = bounds
+    zones_path = str(Path(__file__).resolve().parents[2] / "data/zones-tbc-243.json")
+    client.coordinate_zones = bounds_by_radio_id(zones_path) if zones is None else zones
+    client.coordinate_names = names_by_radio_id(zones_path) if zone_names is None else zone_names
     client.query = query
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,

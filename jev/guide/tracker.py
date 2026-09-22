@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from jev.guide.graph import FailEdge, FailWhen, Graph, Node
+from jev.guide.objectives import select_objective
 from jev.world.state_v1 import State, StepKind
 
 
@@ -56,6 +57,7 @@ class StepMemory:
     deaths: int = 0
     attempts: int = 0
     arrived: bool = False
+    route_pos: tuple[float, float] | None = None
     level_at_entry: int | None = None
     xp_at_entry: float | None = None
 
@@ -228,11 +230,18 @@ class Tracker:
         see. Unknown position is not off route — a blind character is not a lost one, and
         treating it as lost would fire the moment a loading screen blanked the readout.
         """
-        if node.pos is None or state.pos.mx is None or state.pos.my is None:
+        pos = route_destination(state, node)
+        if pos != self.memory.route_pos:
+            # A second requirement is a new travel leg. Being away from the first
+            # camp while walking to the second is expected, not a navigation failure.
+            self.memory.arrived = False
+            self.memory.off_route_since = None
+            self.memory.route_pos = pos
+        if pos is None or state.pos.mx is None or state.pos.my is None:
             self.memory.off_route_since = None
             return 0.0
 
-        dx, dy = state.pos.mx - node.pos[0], state.pos.my - node.pos[1]
+        dx, dy = state.pos.mx - pos[0], state.pos.my - pos[1]
         dist = (dx * dx + dy * dy) ** 0.5
 
         if dist <= node.r:
@@ -268,6 +277,17 @@ class Tracker:
 # --------------------------------------------------------------------------- predicates
 
 
+def route_destination(state: State, node: Node) -> tuple[float, float] | None:
+    """The currently selected requirement's pin, shared by tracking and recorded state."""
+    if (node.coord_zone_id is not None and state.pos.coord_zone_id is not None
+            and node.coord_zone_id != state.pos.coord_zone_id):
+        return None
+    if node.kind is StepKind.QUEST_OBJECTIVE and node.objective_targets:
+        selection = select_objective(node, state.quests)
+        return selection.target.pos if selection.target is not None else None
+    return node.pos
+
+
 def _quest_in_log(state: State, node: Node | None) -> bool:
     """Is this node's quest in the log? `False` also for an unread log — see below."""
     if node is None or node.quest_id is None or state.quests is None:
@@ -290,14 +310,20 @@ def _quest_complete(state: State, node: Node) -> bool:
         if q.quest_id == node.quest_id:
             if q.complete is not None:
                 return q.complete
+            if node.objective_targets:
+                # The radio paints at most three counters and skips noncounter event
+                # text. Only the client completion flag proves a structured quest is
+                # wholly done; visible full counters may omit a fourth requirement.
+                return False
             return bool(q.objectives) and all(o.done for o in q.objectives)
     return False
 
 
 def _in_radius(state: State, node: Node) -> bool:
-    if node.pos is None or state.pos.mx is None or state.pos.my is None:
+    pos = route_destination(state, node)
+    if pos is None or state.pos.mx is None or state.pos.my is None:
         return False
-    dx, dy = state.pos.mx - node.pos[0], state.pos.my - node.pos[1]
+    dx, dy = state.pos.mx - pos[0], state.pos.my - pos[1]
     return (dx * dx + dy * dy) ** 0.5 <= node.r
 
 

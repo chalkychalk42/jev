@@ -58,11 +58,14 @@ class Body(Protocol):
 
 class Worker:
     def __init__(self, body: Body, arm: Armed | None, state: State, *,
-                 focus: Callable[[Callable[[], None]], bool] | None = None):
-        if arm is None and focus is None:
+                 focus: Callable[[Callable[[], None]], bool] | None = None,
+                 maintenance: Callable[[Callable[[], None]], Result] | None = None):
+        if arm is None and focus is None and maintenance is None:
             raise ValueError("a game worker needs an armed skill")
         self.body, self.arm = body, arm
+        self.state = state
         self.focus = focus
+        self.maintenance = maintenance
         self.reason = ""
         self.cancelled = threading.Event()
         self.done = threading.Event()
@@ -82,7 +85,9 @@ class Worker:
     def _run(self, state: State) -> None:
         try:
             self.checkpoint()
-            if self.focus is not None:
+            if self.maintenance is not None:
+                self.result = self.maintenance(self.checkpoint)
+            elif self.focus is not None:
                 restored = self.focus(self.checkpoint)
                 self.result = Result(SkillOutcome.SUCCEEDED if restored else SkillOutcome.ABORTED,
                                      "focus restored" if restored else "client refused focus after backoff",
@@ -137,11 +142,15 @@ class Supervisor:
     def __init__(self, runtime: ClientRuntime, body: Body,
                  *, say: Callable[[str], None] = print, max_failures: int = 3,
                  has_focus: Callable[[], bool] | None = None,
-                 focus: Callable[[Callable[[], None]], bool] | None = None):
+                 focus: Callable[[Callable[[], None]], bool] | None = None,
+                 housekeeping: Callable[[State], None] | None = None,
+                 watchdog=None):
         if (has_focus is None) != (focus is None):
             raise ValueError("focus observation and restoration must be supplied together")
         self.runtime, self.body, self.say = runtime, body, say
         self.has_focus, self.focus = has_focus, focus
+        self.housekeeping, self.watchdog = housekeeping, watchdog
+        self._housekeeping_failed = False
         self.runtime.available_skills = body.available
         self.body.policy_context = runtime.policy_context
         self.worker: Worker | None = None
@@ -159,7 +168,21 @@ class Supervisor:
             worker, self.worker = self.worker, None
             worker.thread.join()
             result = worker.result or Result(SkillOutcome.ABORTED, "worker returned no result", "error")
-            if worker.focus is not None:
+            model_fault = (worker.arm is not None and worker.arm.rule.startswith("learned:")
+                           and result.code in {"error", "unsupported"})
+            if model_fault and self.runtime.policy_failed:
+                try:
+                    self.runtime.policy_failed(worker.state, result.detail or result.code)
+                except Exception:
+                    self.runtime.learned = None
+            if worker.maintenance is not None:
+                self.say(f"session: {result.detail}")
+                if self.watchdog:
+                    self.watchdog.completed(now)
+                if result.code in {"credentials", "error"}:
+                    self.failure = result.detail or result.code
+                    self.stopped.set()
+            elif worker.focus is not None:
                 self.say(f"focus: {result.detail}")
                 if result.outcome is not SkillOutcome.SUCCEEDED:
                     self.failure = result.detail or "focus restoration interrupted"
@@ -168,7 +191,10 @@ class Supervisor:
                 self.runtime.finish(result.outcome, result.detail, state=state)
                 self.say(f"{worker.arm.decision.skill}: {result.code or result.outcome.value} {result.detail}")
                 if result.code == "too_poor":
-                    self.runtime.policy_context.repair_failed(state.bags.money_copper)
+                    if worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
+                        self.runtime.policy_context.supplies_failed(state.bags.money_copper)
+                    else:
+                        self.runtime.policy_context.repair_failed(state.bags.money_copper)
                 key = worker.arm.step_id, worker.arm.decision.skill
                 if result.outcome is SkillOutcome.SUCCEEDED:
                     self.failures.pop(key, None)
@@ -176,7 +202,8 @@ class Supervisor:
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if self.failures[key] >= self.max_failures:
                         exhausted = key, result.detail
-            if result.code in {"error", "unsupported", "no_food", "refused"}:
+            if (result.code in {"error", "unsupported", "no_food", "refused"}
+                    and not model_fault and worker.maintenance is None):
                 self.failure = result.detail or result.code
                 self.stopped.set()
 
@@ -185,6 +212,20 @@ class Supervisor:
                   and not self.stopped.is_set())
         record = now >= self.next_record
         state = self.runtime.tick(choose=choose, record=record, state=state)
+        if self.watchdog:
+            self.watchdog.observe(state, now)
+            if self.watchdog.failure:
+                self.failure = self.watchdog.failure
+                self.stopped.set()
+                if self.worker:
+                    self.worker.cancel(self.failure)
+        if self.housekeeping is not None:
+            try:
+                self.housekeeping(state)
+            except Exception as exc:
+                if not self._housekeeping_failed:
+                    self.say(f"background maintenance unavailable: {type(exc).__name__}: {exc}")
+                self._housekeeping_failed = True
         # Give the tracker's on_fail edge first refusal; stop only if it cannot rejoin.
         if exhausted and self.runtime.tracker.step_id == exhausted[0][0]:
             self.failure = f"{exhausted[0]}: {self.max_failures} failed attempts; {exhausted[1]}"
@@ -196,7 +237,7 @@ class Supervisor:
             self.next_record = now + 0.5
         if choose:
             self.next_coach = now + 0.5
-        if self.worker and self.worker.focus is None:
+        if self.worker and self.worker.arm is not None:
             if self.runtime._tracker_event in {"fail", "rejoin_or_skip"}:
                 self.worker.completion_observed = False
             if (self.runtime._tracker_event == "advance"
@@ -220,6 +261,11 @@ class Supervisor:
             # Raising the already-bound window sends no game keys. Keep recording while
             # the existing focus backoff runs, even if another window hides the radio.
             self.worker = Worker(self.body, None, state, focus=self.focus)
+            self.worker.thread.start()
+        elif (self.worker is None and not self.stopped.is_set() and self.watchdog
+              and (maintenance := self.watchdog.maintenance(now)) is not None):
+            self.runtime.finish(SkillOutcome.PREEMPTED, "session reconnect")
+            self.worker = Worker(self.body, None, state, maintenance=maintenance)
             self.worker.thread.start()
         elif (self.worker is None and choose and not self.stopped.is_set() and self.runtime.armed
               and self.runtime.armed.decision.skill not in (None, "IDLE", "ABORT_WAIT")):
@@ -252,7 +298,7 @@ class Supervisor:
                 pass
             self.worker.thread.join()
             result = self.worker.result
-            if result and self.worker.focus is None and result.outcome is not SkillOutcome.PREEMPTED:
+            if result and self.worker.arm is not None and result.outcome is not SkillOutcome.PREEMPTED:
                 self.runtime.finish(result.outcome, result.detail)
             self.worker = None
         self.body.release()

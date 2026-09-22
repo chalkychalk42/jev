@@ -207,6 +207,9 @@ local function paint()
     -- Once per frame, before any getter runs: every quest field in this paint has
     -- to describe the same log entry, or the decoder assembles a chimera.
     JevRadioHelpers.advanceQuestSlot()
+    -- One inventory/merchant snapshot per paint keeps every field on the same row.
+    -- Unsupported stock APIs yield unknown telemetry without freezing the radio.
+    pcall(JevRadioHelpers.snapshotInventory)
 
     ENV.SEQ = (ENV.SEQ + 1) % 256
 

@@ -15,13 +15,14 @@ Units, decided once so nobody has to ask again
              Confirmed against this server's own source, mangos-tbc Object.cpp:
              GetNearPoint2dAt advances x += d*cos(a), y += d*sin(a), and GetAngle is
              atan2(dy, dx) with no negation. DO NOT negate dy.
-* map position -> `mx`, `my` in 0..1, relative to the *current zone's* map. This is what
-             GetPlayerMapPosition returns and the only position a 2.4.3 addon can know.
-             A percentage means nothing without the zone it is a percentage of, so `zone_id`
-             travels with it always.
-* world position -> yards (x, y, z), DERIVED from (zone_id, mx, my) via the client's own
-             WorldMapArea.dbc bounds. `None` until something derives it. Navmesh work needs
-             it; the addon cannot supply it.
+* map position -> raw `mx`, `my` are 0..1 on the current zone map. A composed client
+             normalizes them into its declared `coord_zone_id` frame and retains
+             `raw_mx`, `raw_my` plus the actual radio `zone_id`. Normalized fractions
+             can extend outside a map rectangle; they are not clamped or relabelled.
+* world position -> yards (x, y, z), DERIVED from mx/my using WorldMapArea bounds for
+             coord_zone_id when declared, or the radio zone_id otherwise. Height is
+             still unknown until measured; converting XY never invents Z. Navmesh work
+             needs world coordinates; the addon cannot supply them directly.
 * screen coordinates -> pixels, origin top-left of the game window
 
 Unknown is not a negative fact
@@ -39,9 +40,9 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # Explicit navigation frames; old version-1 rows remain readable.
 
 # A tri-state observation: True, False, or None for "not observed".
 Tri = bool | None
@@ -161,20 +162,40 @@ class Char(Frozen):
 
 
 class Pos(Frozen):
-    """Map-relative position. `zone_id` is mandatory context for `mx`/`my`."""
+    """Observed region plus an explicitly declared coordinate frame.
 
-    zone_id: int | None = None        # WorldMapArea row; the tables both sides generate from
+    Without coord_zone_id, mx/my are the radio's current-map fractions. The composed
+    client may normalize them to the guide's area-ID frame; raw_mx/raw_my and the
+    original radio zone_id remain available so a city is never relabelled as its parent.
+    Normalized fractions may extend outside the pinned map's rectangle.
+    """
+
+    zone_id: int | None = None        # Actual radio map-file hash; see bounds_by_radio_id
+    coord_zone_id: int | None = None  # Area ID whose WorldMapArea bounds define mx/my
     zone: str | None = None           # human label, for prompts and logs only
     sub: str | None = None            # subzone text
-    mx: Fraction | None = None        # 0..1 across the zone map
-    my: Fraction | None = None
+    mx: FiniteFloat | None = None
+    my: FiniteFloat | None = None
+    raw_mx: Fraction | None = None
+    raw_my: Fraction | None = None
     facing: float | None = None       # radians; see module docstring, do not negate dy
     indoors: Tri = None
     # Where the body is, in the same space as mx/my. Painted only while dead or a ghost,
     # and the single thing that turns a corpse run from a guess into a walk.
-    corpse_mx: Fraction | None = None
-    corpse_my: Fraction | None = None
+    corpse_mx: FiniteFloat | None = None
+    corpse_my: FiniteFloat | None = None
+    raw_corpse_mx: Fraction | None = None
+    raw_corpse_my: Fraction | None = None
     world: tuple[float, float, float] | None = None  # yards; derived, see docstring
+
+    @model_validator(mode="after")
+    def _raw_coordinates_stay_fractional(self):
+        if self.coord_zone_id is None and any(
+            value is not None and not 0 <= value <= 1
+            for value in (self.mx, self.my, self.corpse_mx, self.corpse_my)
+        ):
+            raise ValueError("map coordinates outside 0..1 need a declared normalized frame")
+        return self
 
     @property
     def corpse(self) -> tuple[float, float] | None:
@@ -243,10 +264,28 @@ class Target(Frozen):
     tapped_by_other: Tri = None
 
 
+class InventorySlot(Frozen):
+    """One painted bag slot, never represented as a complete inventory snapshot."""
+
+    bag: int = Field(ge=0, le=4)
+    slot: int = Field(ge=1)
+    item_id: int | None = Field(default=None, ge=0)  # 0 positively empty; None unread
+    count: int | None = Field(default=None, ge=0)
+    quality: int | None = Field(default=None, ge=0)
+    locked: Tri = None
+
+
 class Bags(Frozen):
     free: int | None = Field(default=None, ge=0)
     durability_min: Fraction | None = None   # worst equipped slot
     money_copper: int | None = Field(default=None, ge=0)
+    food_id: int | None = Field(default=None, ge=1)
+    food_count: int | None = Field(default=None, ge=0)
+    drink_id: int | None = Field(default=None, ge=1)
+    drink_count: int | None = Field(default=None, ge=0)
+    inventory_revision: int | None = Field(default=None, ge=0)
+    inventory_total: int | None = Field(default=None, ge=0)
+    slot: InventorySlot | None = None
 
 
 class Ui(Frozen):
@@ -266,6 +305,9 @@ class Objective(Frozen):
     text: str
     have: int = 0
     need: int = 1
+    # The original zero-based radio/leaderboard slot. Missing counters must not shift
+    # later objectives onto an earlier generated target.
+    counter_index: int | None = Field(default=None, ge=0)
 
     @property
     def done(self) -> bool:

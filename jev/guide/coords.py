@@ -132,6 +132,30 @@ def bounds_by_radio_id(zones_json: str) -> dict[int, ZoneBounds]:
     return out
 
 
+@lru_cache(maxsize=2)
+def names_by_radio_id(zones_json: str) -> dict[int, str]:
+    """Exact map-file names corresponding to the radio's observed region identity."""
+    import json
+
+    from jev.perceive.radio_frame import zone_id
+
+    entries = json.loads(pathlib.Path(zones_json).read_text(encoding="utf-8"))["zones"]
+    return {zone_id(e["name"]): e["name"] for e in entries}
+
+
+def navigation_frame(coord_zone_id: int | None, observed_zone: int | None,
+                     zones: dict[int, ZoneBounds]) -> ZoneBounds | None:
+    """Pin to the declared guide frame even when startup occurs inside another region."""
+    actual = zones.get(observed_zone)
+    if actual is None:
+        return None
+    frame = (next((b for b in zones.values() if b.area_id == coord_zone_id), None)
+             if coord_zone_id is not None else actual)
+    if frame is None or frame.degenerate or frame.map_id != actual.map_id:
+        return None
+    return frame
+
+
 def to_yards(dmx: float, dmy: float, bounds: ZoneBounds) -> tuple[float, float]:
     """A map-space delta in yards, along the map's own axes.
 

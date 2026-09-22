@@ -25,6 +25,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
 import numpy as np
 
@@ -126,6 +127,7 @@ class Session:
     radio_ok: Callable[[], bool]
     window_origin: tuple[int, int] = (0, 0)
     window_size: tuple[int, int] = (1600, 900)
+    checkpoint: Callable[[], None] | None = None
 
     typed_credentials: bool = field(default=False, init=False)
     enters: int = field(default=0, init=False)
@@ -138,7 +140,20 @@ class Session:
     entered_world: int = field(default=0, init=False)
 
     def stage(self) -> Stage:
+        if self.checkpoint:
+            self.checkpoint()
         return stage(self.read_frame(), self.radio_ok())
+
+    def _wait(self, seconds: float) -> None:
+        if self.checkpoint is None:
+            time.sleep(seconds)
+            return
+        while seconds > 0:
+            self.checkpoint()
+            interval = min(0.1, seconds)
+            time.sleep(interval)
+            seconds -= interval
+        self.checkpoint()
 
     def _screen(self, at: tuple[float, float]) -> tuple[int, int]:
         ox, oy = self.window_origin
@@ -173,7 +188,7 @@ class Session:
                 if not self._enter_credentials(account, password):
                     return False
                 self.typed_credentials = True
-                time.sleep(6.0)
+                self._wait(6.0)
                 continue
 
             if current is Stage.CHARACTER:
@@ -182,7 +197,7 @@ class Session:
                 # the list here would mean measuring list rows nobody has looked at yet.
                 self.hid.click(*self._screen(ENTER_WORLD))
                 self.entered_world += 1
-                time.sleep(6.0)
+                self._wait(6.0)
                 continue
 
             # **Nothing is pressed at a screen this cannot read.**
@@ -233,48 +248,62 @@ class Session:
         if frame is not None and _is_red_button(frame, OKAY_BUTTON):
             self.dismissed_dialog = True
             self.hid.click(*self._screen(OKAY_BUTTON))
-            time.sleep(0.6)
+            self._wait(0.6)
 
         self.hid.click(*self._screen(ACCOUNT_FIELD))
-        time.sleep(0.3)
+        self._wait(0.3)
         self.hid.chord("ctrl", "a")
         if not self.hid.type_text(account):
             self.unsendable = list(self.hid.unsendable)
             self.detail = (f"could not type the account name: {self.unsendable!r}"
                            if self.unsendable else self.hid.detail)
             return False
-        time.sleep(0.4)
+        self._wait(0.4)
 
         # Look before tabbing. An empty box here means the click missed and the rest of
         # the sequence would type a password into whatever Tab happens to reach.
         frame = self.read_frame()
-        if frame is not None and not _has_text(frame, ACCOUNT_FIELD):
+        if frame is None:
+            self.detail = "account field confirmation unreadable; password was not sent"
+            return False
+        if not _has_text(frame, ACCOUNT_FIELD):
             self.detail = ("clicked the account field and typed, and the field is still "
                            "empty; the click is not landing on the box")
             self.unknown_frame = frame
             return False
 
         self.hid.tap("tab")
-        time.sleep(0.2)
+        self._wait(0.2)
         if not self.hid.type_text(password):
             self.unsendable = list(self.hid.unsendable)
             self.detail = "could not type the password"
             # Leave the form rather than submitting half a password.
             self.hid.chord("ctrl", "a")
             return False
-        time.sleep(0.2)
+        self._wait(0.2)
         self.hid.tap("enter")
         self.enters += 1
         return True
 
 
-def credentials(env: dict[str, str] | None = None) -> tuple[str, str] | None:
+def credentials(env: dict[str, str] | None = None, *, path: Path | None = None) -> tuple[str, str] | None:
     """Account and password from the environment. `None` when unset.
 
     Never a default, never a literal in this file. `.env` is gitignored and this
     repository is public.
     """
-    src = env if env is not None else os.environ
+    src: dict[str, str] = {}
+    if path is not None and path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            src[key.strip().removeprefix("export ")] = value
+    src.update(env if env is not None else os.environ)
     account, password = src.get("JEV_WOW_ACCOUNT"), src.get("JEV_WOW_PASSWORD")
     if not account or not password:
         return None

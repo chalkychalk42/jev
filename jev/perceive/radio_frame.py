@@ -43,6 +43,7 @@ from jev.world.state_v1 import (
     Char,
     Classification,
     Flags,
+    InventorySlot,
     Pos,
     PowerType,
     Quest,
@@ -832,15 +833,25 @@ def to_state(reading: RadioReading, *, t: float, client_id: str,
         in_melee=v["target.in_melee"],
     )
 
-    # The wire carries silver: 21 bits of copper would not reach level 40's mount, and
-    # nothing above System 1 has ever needed the last two digits. The copper the model
-    # wants is therefore exact to a silver and no finer, which is worth knowing before
-    # anyone writes a test that expects a vendor price to reconcile.
+    # Schema 7 carries exact copper for merchant transaction verification. Historical
+    # readings without it retain their original silver precision; the vendor executor
+    # never uses that fallback as evidence for a transaction.
     silver = v["bags.money_silver"]
+    copper = v.get("bags.money_copper")
+    slot = None
+    if v.get("inventory.bag") is not None and v.get("inventory.slot") is not None:
+        slot = InventorySlot(bag=v["inventory.bag"], slot=v["inventory.slot"],
+                             item_id=v.get("inventory.item_id"),
+                             count=v.get("inventory.count"), quality=v.get("inventory.quality"),
+                             locked=v.get("inventory.locked"))
     bags = Bags(
         free=v["bags.free"],
         durability_min=v["bags.durability_min"],
-        money_copper=silver * 100 if silver is not None else None,
+        money_copper=copper if copper is not None else silver * 100 if silver is not None else None,
+        food_id=v.get("bags.food_id"), food_count=v.get("bags.food_count"),
+        drink_id=v.get("bags.drink_id"), drink_count=v.get("bags.drink_count"),
+        inventory_revision=v.get("inventory.revision"), inventory_total=v.get("inventory.total"),
+        slot=slot,
     )
 
     error_id = v["ui.error_id"]

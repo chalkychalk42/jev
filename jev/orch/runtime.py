@@ -34,7 +34,7 @@ from jev.coach import policy as scripted
 from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
-from jev.guide.graph import Graph
+from jev.guide.graph import Graph, Node
 from jev.guide.objectives import progress
 from jev.guide.tracker import Event, Tracker
 from jev.guide.tracker import Verdict as TrackVerdict
@@ -89,7 +89,7 @@ class Armed:
 
 # A teacher is optional and is only ever asked, never awaited. `ask` enqueues and returns
 # immediately; `take` returns an answer if one has arrived since.
-AskFn = Callable[[State, str], None]
+AskFn = Callable[[State, str], bool | None]
 TakeFn = Callable[[str], Decision | TeacherReply | None]
 
 
@@ -103,6 +103,11 @@ class ClientRuntime:
     ask: AskFn | None = None
     take: TakeFn | None = None
     shadow: Callable[[State], tuple[str | None, str | None, float]] | None = None
+    shadow_model: Callable[[], str | None] | None = None
+    learned: Callable[[State, Node | None, frozenset[str]], Decision | None] | None = None
+    policy_model: Callable[[], str | None] | None = None
+    policy_failed: Callable[[State, str], None] | None = None
+    validate_action: Callable[[Decision, str | None], str | None] | None = None
 
     available_skills: frozenset[str] = NAMES
     keys_down: Callable[[], list[str]] | None = None
@@ -257,7 +262,10 @@ class ClientRuntime:
         node = self.graph.get(self.tracker.step_id)
         if node is None:
             return state
+        from jev.guide.tracker import route_destination
+
         mem = self.tracker.memory
+        destination = route_destination(state, node)
         return with_key(state.model_copy(update={
             "guide": state.guide.model_copy(update={
                 "graph_id": self.graph.graph_id,
@@ -265,7 +273,7 @@ class ClientRuntime:
                 "kind": node.kind,
                 "progress": progress(state.quests, node.quest_id).fraction,
                 "age_s": state.t - mem.entered_at,
-                "on_route": (None if node.pos is None or state.pos.mx is None or state.pos.my is None
+                "on_route": (None if destination is None or state.pos.mx is None or state.pos.my is None
                              else mem.off_route_since is None),
                 "deaths_on_step": mem.deaths,
                 "attempts": mem.attempts,
@@ -289,6 +297,8 @@ class ClientRuntime:
                                            abort_if=["new_guide"], confidence=1,
                                            why="guide finished"), True, "guide.finished")
         preempt = floor.rule.startswith("preempt.")
+        protected = preempt or floor.rule.startswith(("service.", "recover.", "fight.")) or floor.rule in (
+            "sense.blind", "guide.finished")
         if self.take is not None:
             try:
                 answer, key = self._collect(state)
@@ -299,35 +309,50 @@ class ClientRuntime:
                 if isinstance(answer, TeacherReply):
                     artifacts = [a.model_dump(mode="json") for a in answer.artifacts]
                     answer = answer.decision
-                check = (verify(answer, state, self.available_skills) if answer is not None
+                check = (self._verify(answer, state) if answer is not None
                          else Verdict.refuse("no_action", "artifacts only; no immediate action"))
                 stale = self._is_stale(state, key)
                 if stale:
                     check = Verdict.refuse("stale", "situation changed while the teacher was answering")
                     self.counters.teacher_stale += 1
-                elif preempt:
-                    check = Verdict.refuse("preempt", floor.decision.why)
                 elif floor.rule in ("sense.blind", "guide.finished"):
                     check = Verdict.refuse(floor.rule, floor.decision.why)
+                elif protected:
+                    check = Verdict.refuse("preempt", floor.decision.why)
                 decision_id = self._record_applied(state, answer, key, check=check, artifacts=artifacts)
                 if check.ok:
                     self.counters.teacher_applied += 1
                     return answer, ArmedBy.TEACHER, "teacher", decision_id
                 self.counters.rejected += 1
 
-        if scripted.wants_teacher(floor):
+        if scripted.wants_teacher(floor) or (state.guide.attempts and floor.rule.startswith("guide.")):
             self.counters.unresolved += 1
             self._record_unresolved(state, floor)
             if self.ask is not None and state.situation_key:
                 try:
-                    self.ask(state, state.situation_key)
-                    self.counters.escalated += 1
+                    queued = self.ask(state, state.situation_key)
+                    self.counters.escalated += int(queued is not False)
                 except Exception:
                     pass  # optional queue failure never removes the scripted floor
 
+        if self.learned is not None and not protected:
+            try:
+                candidate = self.learned(state, node, self.available_skills)
+                if candidate is not None:
+                    check = self._verify(candidate, state)
+                    model = self.policy_model() if self.policy_model else None
+                    if check.ok and model:
+                        return candidate, ArmedBy.POLICY, f"learned:{model}", ""
+                    self.counters.rejected += 1
+                    if self.policy_failed:
+                        self.policy_failed(state, f"verifier: {check.rule}: {check.reason}")
+            except Exception:
+                # Optional inference and registry faults never remove the scripted floor.
+                pass
+
         plan = floor.decision
         by = ArmedBy.S1_PREEMPT if preempt else ArmedBy.POLICY
-        check = verify(plan, state, self.available_skills)
+        check = self._verify(plan, state)
         if not check.ok:
             self.counters.rejected += 1
             self._record_decision(state, plan, by, floor.rule, check)
@@ -337,6 +362,14 @@ class ClientRuntime:
             return plan, by, "unavailable", ""
         return plan, by, floor.rule, ""
 
+    def _verify(self, plan: Decision, state: State) -> Verdict:
+        check = verify(plan, state, self.available_skills)
+        if check.ok and plan.skill is not None and self.validate_action:
+            reason = self.validate_action(plan, state.guide.step_id)
+            if reason:
+                return Verdict.refuse("body_contract", reason)
+        return check
+
     def _record_decision(self, state: State, plan: Decision, by: ArmedBy, rule: str,
                          check: Verdict | None = None) -> str:
         check = check or Verdict.accept()
@@ -345,7 +378,8 @@ class ClientRuntime:
         self.recorder.decision(DecisionRow(
             run_id=self.recorder.run_id, decision_id=decision_id,
             tick_id=self.recorder._tick_id + 1, t=state.t, client_id=self.client_id,
-            situation_key=state.situation_key or "", author=by, model=f"scripted:{rule}",
+            situation_key=state.situation_key or "", author=by,
+            model=rule.removeprefix("learned:") if rule.startswith("learned:") else f"scripted:{rule}",
             intent=plan.intent.value, skill=plan.skill, params=dict(plan.params),
             confidence=plan.confidence, why=plan.why,
             status="ok" if check.ok else "rejected",
@@ -497,9 +531,11 @@ class ClientRuntime:
         # No model is an explicit abstention, the same contract as cold_start.predict.
         intent = skill = None
         confidence = 0.0
+        model = None
         if self.shadow is not None:
             try:
                 intent, skill, confidence = self.shadow(state)
+                model = self.shadow_model() if self.shadow_model else None
             except Exception:
                 intent, skill, confidence = None, None, 0.0
         arm = self.armed
@@ -518,6 +554,7 @@ class ClientRuntime:
             decision_id=arm.decision_id if arm else None,
             keys=self.keys_down() if self.keys_down is not None else [],
             shadow_intent=intent, shadow_skill=skill, shadow_confidence=confidence,
+            shadow_model=model,
             tracker_event=self._tracker_event, tracker_from=self._tracker_from,
         ))
 

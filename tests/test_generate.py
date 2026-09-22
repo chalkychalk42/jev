@@ -184,3 +184,73 @@ def test_a_cluster_is_pulled_by_drop_chance_not_by_headcount():
                      [{"px": r["px"], "py": 0.0, "pz": 0.0} for r in
                       many_but_stingy + few_but_generous])
     assert plain.x > 500.0
+
+
+def test_every_protect_frontier_counter_has_its_own_required_creature(human):
+    node = next(n for n in human.nodes
+                if n.quest_id == 52 and n.kind is StepKind.QUEST_OBJECTIVE)
+    first, second = node.objective_targets
+    assert (first.kind, first.required_id, first.required_count, first.counter_index) == ("kill", 118, 8, 0)
+    assert (second.kind, second.required_id, second.required_count, second.counter_index) == ("kill", 822, 5, 1)
+    assert first.target_name == "Prowler"
+    assert second.target_name == "Young Forest Bear"
+    assert first.world != second.world
+    assert first.world == node.world  # Existing first-camp geometry stays the same.
+
+
+@pytest.mark.parametrize("quest_id", [54, 3905, 61, 84, 106, 107, 114, 59, 71])
+def test_acceptance_supplied_delivery_items_do_not_generate_a_hunt(human, quest_id):
+    node = next(n for n in human.nodes
+                if n.quest_id == quest_id and n.kind is StepKind.QUEST_OBJECTIVE)
+    taker = next(n for n in human.nodes
+                 if n.quest_id == quest_id and n.kind is StepKind.QUEST_TURNIN)
+    assert len(node.objective_targets) == 1
+    target = node.objective_targets[0]
+    assert target.kind == "delivery"
+    assert target.world == taker.world == node.world
+    assert target.blocked_reason is None
+
+
+@pytest.mark.parametrize(("quest_id", "trigger_id"), [(62, 88), (76, 87)])
+def test_exploration_quests_expose_the_actual_server_trigger(human, quest_id, trigger_id):
+    from jev.guide.coords import _as_float
+
+    node = next(n for n in human.nodes
+                if n.quest_id == quest_id and n.kind is StepKind.QUEST_OBJECTIVE)
+    target, = node.objective_targets
+    db = WorldDB(DB)
+    try:
+        row = db.con.execute("select * from dbc_AreaTrigger where id = ?", (trigger_id,)).fetchone()
+    finally:
+        db.close()
+    assert target.kind == "explore" and target.required_id == trigger_id
+    assert target.world == tuple(_as_float(row[f"c{i}"]) for i in (2, 3, 4))
+    assert target.counter_index is None and target.target_name is None
+
+
+@pytest.mark.parametrize(("quest_id", "item_id"), [(11, 782), (46, 780)])
+def test_random_spawn_entry_loot_sources_are_not_reported_missing(human, quest_id, item_id):
+    node = next(n for n in human.nodes
+                if n.quest_id == quest_id and n.kind is StepKind.QUEST_OBJECTIVE)
+    target, = node.objective_targets
+    db = WorldDB(DB)
+    try:
+        assert not db.con.execute("select 1 from world_creature where id = ? limit 1",
+                                  (target.target_id,)).fetchone()
+        assert db.con.execute("select 1 from world_creature_spawn_entry where entry = ? limit 1",
+                              (target.target_id,)).fetchone()
+        loot = db.con.execute(
+            "select 1 from world_creature_template t join world_creature_loot_template l "
+            "on l.entry = t.LootId where t.Entry = ? and l.item = ?",
+            (target.target_id, item_id),
+        ).fetchone()
+    finally:
+        db.close()
+    assert loot
+    assert target.kind == "loot" and target.required_id == item_id
+    assert target.world is not None and target.blocked_reason is None
+
+
+def test_prerequisite_metadata_keeps_milly_chain_connected(human):
+    manifest = next(n for n in human.nodes if n.quest_id == 3905)
+    assert manifest.quest_prerequisites == ((3904,),)

@@ -67,7 +67,7 @@ class QuestLog:
 
         objectives = tuple(
             Objective(text="", have=values[f"quests.o{i}_have"],
-                      need=values[f"quests.o{i}_need"])
+                      need=values[f"quests.o{i}_need"], counter_index=i)
             for i in range(3)
             if values.get(f"quests.o{i}_have") is not None
             and values.get(f"quests.o{i}_need") is not None

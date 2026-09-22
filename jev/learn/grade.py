@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from bisect import bisect_right
 from collections import defaultdict
 from dataclasses import asdict, dataclass, fields, replace
 from itertools import pairwise
@@ -55,6 +56,11 @@ def grade_run(directory: str | Path, *, window_s: float = 60.0,
         clients[(row.run_id, row.client_id)].append(row)
     for rows in clients.values():
         rows.sort(key=lambda r: (r.t, r.tick_id))
+        if len({row.tick_id for row in rows}) != len(rows):
+            raise ValueError("duplicate tick identity within a run/client")
+    tick_indices = {key: {row.tick_id: i for i, row in enumerate(rows)}
+                    for key, rows in clients.items()}
+    times = {key: [row.t for row in rows] for key, rows in clients.items()}
     output = []
     skills_path = directory / "skills.jsonl"
     failed = {(r.get("run_id"), r.get("decision_id")) for r in read(skills_path)
@@ -66,10 +72,11 @@ def grade_run(directory: str | Path, *, window_s: float = 60.0,
         if identity in seen:
             raise ValueError(f"duplicate decision identity: {identity}")
         seen.add(identity)
-        rows = clients[(decision.run_id, decision.client_id)]
-        start = next((i for i, r in enumerate(rows)
-                      if r.tick_id == decision.tick_id
-                      and r.decision_id == decision.decision_id), None)
+        client = (decision.run_id, decision.client_id)
+        rows = clients[client]
+        start = tick_indices.get(client, {}).get(decision.tick_id)
+        if start is not None and rows[start].decision_id != decision.decision_id:
+            start = None
         if (start is None or decision.status != "ok" or not decision.intent
                 or decision.intent == "escalate"):
             report.unapplied += 1
@@ -78,7 +85,7 @@ def grade_run(directory: str | Path, *, window_s: float = 60.0,
         if baseline.t != decision.t:
             raise ValueError(f"decision timestamp disagrees with its tick: {identity}")
         deadline = decision.t + window_s
-        window = [r for r in rows[start:] if r.t <= deadline]
+        window = rows[start:bisect_right(times[client], deadline)]
         covered = bool(rows and rows[-1].t >= deadline)
         gap = any(b.t - a.t > max_gap_s for a, b in pairwise(window))
         gap = gap or deadline - window[-1].t > max_gap_s

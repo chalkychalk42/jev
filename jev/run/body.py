@@ -20,11 +20,12 @@ from jev.clients.loot import Loot
 from jev.clients.recover import Recover
 from jev.clients.repair import Repair
 from jev.clients.rest import Rest
+from jev.clients.vendor import Vendor
 from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
-from jev.guide.coords import map_to_world
+from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph
-from jev.guide.objectives import progress
+from jev.guide.objectives import progress, select_objective, target_progress
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import list_lines, name_id
@@ -33,6 +34,7 @@ from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role
 from jev.world.state_v1 import PowerType, State, StepKind
+from jev.world.vendor import merchants, supplies_for
 
 
 class LiveBody:
@@ -41,6 +43,7 @@ class LiveBody:
         "TRAVEL_TO": "_travel", "ACCEPT_QUEST": "_quest", "TURNIN_QUEST": "_quest",
         "GRIND_UNTIL": "_hunt", "COMBAT_PROFILE": "_fight",
         "LOOT": "_loot", "EAT_DRINK": "_rest", "VENDOR_REPAIR": "_repair",
+        "BAG_MAKE_SPACE": "_vendor", "BUY_AMMO_REAGENT_FOOD": "_vendor",
         "RELEASE_SPIRIT": "_release", "CORPSE_RUN": "_recover",
         "IDLE": "_wait", "ABORT_WAIT": "_wait",
     }
@@ -123,7 +126,10 @@ class LiveBody:
 
     def _parameters(self) -> str | None:
         """Execute only requests this composition can honour, without silently retargeting."""
-        decision, node = self.arm.decision, self._node()
+        return self.validate(self.arm.decision, self.arm.step_id)
+
+    def validate(self, decision, step_id: str | None) -> str | None:
+        node = self.graph.get(step_id or "")
         if decision.intent in (Intent.SKIP, Intent.ESCALATE):
             return f"body cannot execute intent {decision.intent}"
         kinds = {"ACCEPT_QUEST": {StepKind.QUEST_ACCEPT},
@@ -132,10 +138,18 @@ class LiveBody:
         if decision.skill in kinds and (node is None or node.kind not in kinds[decision.skill]):
             return f"{decision.skill} does not match the armed guide step"
         expected = {"zone": node.zone, "step_id": node.id} if node else {}
+        if node and node.coord_zone_id is not None:
+            expected["coord_zone_id"] = node.coord_zone_id
+            if self.client.bounds.area_id != node.coord_zone_id:
+                return "body and guide use different map coordinate frames"
         if decision.skill == "TRAVEL_TO" and node and node.pos:
             expected.update(x=node.pos[0], y=node.pos[1], r=node.r)
         if decision.skill == "VENDOR_REPAIR":
             expected["service"] = "repair"
+        if decision.skill == "BAG_MAKE_SPACE":
+            expected["service"] = "bags"
+        if decision.skill == "BUY_AMMO_REAGENT_FOOD":
+            expected["service"] = "supplies"
         for key, value in decision.params.items():
             if key == "profile" and decision.skill == "COMBAT_PROFILE" and value in ("default", "panic"):
                 continue  # Fight's measured health branch owns panic within the rotation.
@@ -223,7 +237,8 @@ class LiveBody:
         with self.client._capturing:
             log = self.client.log.complete
         value = progress(log, node.quest_id if node else None)
-        if value.first_incomplete is not None and value.first_incomplete > 0:
+        if (node and not node.objective_targets and value.first_incomplete is not None
+                and value.first_incomplete > 0):
             raise Unsupported("next objective needs its own generated target; this graph places only the first")
         return value
 
@@ -239,11 +254,34 @@ class LiveBody:
                 or node.kind not in (StepKind.QUEST_OBJECTIVE, StepKind.GRIND)
                 or node.map_id != self.client.bounds.map_id):
             return Result(SkillOutcome.ABORTED, "no supported objective destination", "unsupported")
-        if node.target_kind != "creature" or not node.target_name:
-            return Result(SkillOutcome.ABORTED, "objective needs a supported creature target; objects need their own locator", "unsupported")
+        destination = node
         progress_reader = self._progress
         def complete_reader():
             return self._quest_progress().complete
+        if node.kind is StepKind.QUEST_OBJECTIVE and node.objective_targets:
+            self._quest_ids()
+            with self.client._capturing:
+                log = self.client.log.complete
+            selection = select_objective(node, log)
+            if selection.complete is True:
+                return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
+            if selection.target is None:
+                code = "blind" if log is None else "unsupported"
+                return Result(SkillOutcome.PREEMPTED if log is None else SkillOutcome.ABORTED,
+                              selection.reason or "objective unavailable", code)
+            destination = selection.target
+            def selected_progress():
+                self._quest_ids()
+                with self.client._capturing:
+                    return target_progress(self.client.log.complete, node.quest_id, destination)
+            def progress_reader():
+                value = selected_progress()
+                return (1, 1) if value.complete is True and value.have is None else (value.have, value.need)
+            def complete_reader():
+                return selected_progress().complete
+        if (destination.target_kind != "creature" or not destination.target_name
+                or destination.world is None or destination.map_id != self.client.bounds.map_id):
+            return Result(SkillOutcome.ABORTED, "objective needs a supported creature target; objects need their own locator", "unsupported")
         if node.kind is StepKind.GRIND:
             target = self.arm.decision.params.get("until_level")
             if not isinstance(target, int):
@@ -257,8 +295,8 @@ class LiveBody:
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
                     is_complete=complete_reader, service_needed=self._service_needed)
-        outcome = hunt.run(node.world, node.hunt_yards or DEFAULT_HUNT_YARDS,
-                           name_id(node.target_name),
+        outcome = hunt.run(destination.world, destination.hunt_yards or DEFAULT_HUNT_YARDS,
+                           name_id(destination.target_name),
                            timeout_s=self.hunt_timeout)
         return self._result(outcome, hunt.detail)
 
@@ -289,6 +327,48 @@ class LiveBody:
     def _repair(self, state) -> Result:
         return self._result(self.repair.run(), self.repair.detail)
 
+    def _vendor(self, state) -> Result:
+        values, here = self._read(), self._position()
+        if values is None or here is None:
+            return Result(SkillOutcome.PREEMPTED, "vendor position or inventory unread", "blind")
+        supplies = ()
+        if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
+            supplies = tuple(s for s in supplies_for(values.get("char.class_id"), values.get("char.race_id"))
+                             if getattr(state.bags, f"{s.role.lower()}_count", None) == 0
+                             and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id)
+            if not supplies:
+                return Result(SkillOutcome.ABORTED, "no confirmed empty supported food/drink slot", "unsupported")
+        wanted = {s.item_id for s in supplies}
+        candidates = [m for m in merchants(self.client.bounds.map_id)
+                      if (not wanted or wanted & m.items)
+                      and (point := world_to_map(*m.world[:2], self.client.bounds)) is not None
+                      and all(0 <= value <= 1 for value in point)]
+        if not candidates:
+            return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
+        world = map_to_world(*here, self.client.bounds)
+        merchant = min(candidates, key=lambda m: math.dist(m.world[:2], world))
+        def visit():
+            return self._open_merchant(merchant.name, merchant.world,
+                                       world_to_map(*merchant.world[:2], self.client.bounds))
+        vendor = Vendor(self.client.hid, self._read, visit, self.client.origin, self.client.size)
+        outcome = vendor.run(expected_name=merchant.name,
+                             supplies=tuple(s for s in supplies if s.item_id in merchant.items),
+                             min_free=1 if supplies else 6,
+                             timeout_s=self.travel_timeout + 120)
+        return self._result(outcome, vendor.detail or
+                            f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
+
+    def _open_merchant(self, name, world, point) -> bool:
+        opened = self.interact.open_on(name, node_world=world, node_map=point)
+        if opened is Interacted.GOSSIP:
+            values = self._read()
+            identity = values.get("merchant.gossip_name_id") if values else None
+            if identity is None or not self.chooser.run_id(identity).ok:
+                return False
+            values = self._read()
+            return bool(values and values.get("ui.vendor") is True)
+        return opened is Interacted.VENDOR
+
     def _visit_repairer(self) -> bool:
         here = self._position()
         if here is None:
@@ -300,8 +380,7 @@ class LiveBody:
         if not candidates:
             return False
         node = min(candidates, key=lambda n: math.dist(n.world[:2], world))
-        return self.interact.open_on(node.target_name,
-                                     node_world=node.world, node_map=node.pos).opened
+        return self._open_merchant(node.target_name, node.world, node.pos)
 
     def _corpse_walk(self, point) -> bool:
         wx, wy = map_to_world(*point, self.client.bounds)

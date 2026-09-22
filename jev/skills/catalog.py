@@ -159,10 +159,10 @@ _SKILLS: tuple[Skill, ...] = (
     Skill("STUCK_RECOVER", "jump, strafe, back up, repath", 45.0,
           success=lambda s: True, pre=_alive),
 
-    Skill("BAG_MAKE_SPACE", "destroy greys when no vendor is near", 30.0,
-          success=lambda s: s.bags.free is not None and s.bags.free >= 2, pre=_alive),
+    Skill("BAG_MAKE_SPACE", "visit a merchant and sell confirmed unneeded junk", 360.0,
+          success=JUDGED_ELSEWHERE, pre=_alive),
 
-    Skill("BUY_AMMO_REAGENT_FOOD", "restock consumables", 120.0,
+    Skill("BUY_AMMO_REAGENT_FOOD", "restock exact supported food and drink", 360.0,
           success=JUDGED_ELSEWHERE, pre=_alive),
 
     Skill("MOUNT_UP", "mount, if we have one and may use it", 15.0,

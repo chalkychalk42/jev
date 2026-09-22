@@ -76,12 +76,16 @@ TICKS_SCHEMA = pa.schema([
     ("state", _json_str()),
     ("situation_key", pa.string()),
     ("armed_skill", pa.string()),
+    ("armed_intent", pa.string()),
     ("armed_by", pa.string()),
     ("keys", pa.list_(pa.string())),
     ("shadow_intent", pa.string()),
     ("shadow_skill", pa.string()),
     ("shadow_confidence", pa.float64()),
+    ("shadow_model", pa.string()),
     ("decision_id", pa.string()),
+    ("tracker_event", pa.string()),
+    ("tracker_from", pa.string()),
     (EXTRA, pa.string()),
 ])
 
@@ -107,6 +111,7 @@ DECISIONS_SCHEMA = pa.schema([
     ("tokens_out", pa.int64()),
     ("cache_hit", pa.bool_()),
     ("dedup_of", pa.string()),
+    ("escalated_from", pa.string()),
     ("artifacts", _json_str()),
     (EXTRA, pa.string()),
 ])
@@ -115,6 +120,7 @@ GRADES_SCHEMA = pa.schema([
     ("run_id", pa.string()),
     ("decision_id", pa.string()),
     ("tick_id", pa.int64()),
+    ("t", pa.float64()),
     ("window_s", pa.float64()),
     ("outcome", pa.string()),
     ("step_advanced", pa.bool_()),
@@ -127,10 +133,27 @@ GRADES_SCHEMA = pa.schema([
     (EXTRA, pa.string()),
 ])
 
+SKILLS_SCHEMA = pa.schema([
+    ("run_id", pa.string()),
+    ("client_id", pa.string()),
+    ("t", pa.float64()),
+    ("tick_id", pa.int64()),
+    ("skill", pa.string()),
+    ("armed_by", pa.string()),
+    ("outcome", pa.string()),
+    ("duration_s", pa.float64()),
+    ("situation_key", pa.string()),
+    ("step_id", pa.string()),
+    ("detail", pa.string()),
+    ("decision_id", pa.string()),
+    (EXTRA, pa.string()),
+])
+
 SCHEMAS: dict[Stream, pa.Schema] = {
     Stream.TICKS: TICKS_SCHEMA,
     Stream.DECISIONS: DECISIONS_SCHEMA,
     Stream.GRADES: GRADES_SCHEMA,
+    Stream.SKILLS: SKILLS_SCHEMA,
 }
 
 

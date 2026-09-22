@@ -273,7 +273,7 @@ class ClaudeSubscriptionClient:
 
         try:
             out, err = await asyncio.wait_for(proc.communicate(), timeout=limit)
-        except TimeoutError:
+        except (TimeoutError, asyncio.CancelledError) as exc:
             # Kill, then reap. Skipping the wait leaves a zombie holding pipes, and after a
             # few hundred questions that is the farm out of file descriptors rather than an
             # obvious teacher bug.
@@ -281,6 +281,11 @@ class ClaudeSubscriptionClient:
                 proc.kill()
             with contextlib.suppress(Exception):
                 await proc.wait()
+            if isinstance(exc, asyncio.CancelledError):
+                # Bridge shutdown cancels the queue. Cancellation must stop the paid
+                # child just as timeout does, then propagate so the queue records its
+                # transport cancellation and resolves every pending requester.
+                raise
             return TeacherResult(
                 status="timeout",
                 model=self.model_name,

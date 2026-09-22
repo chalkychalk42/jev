@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 6                                    # bump when the field table changes shape
+SCHEMA = 7                                    # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -60,7 +60,10 @@ rather than swept for.
 "whichever is showing" and two quest hand-ins look identical to a camera.
 5: `char.class_id` and `char.race_id` carry the **game's** ids rather than a compact table
 of our own, because the combat profiles are keyed by the game's numbering and ours agreed
-with it only for human paladins."""
+with it only for human paladins.
+6: corpse position and extended UI observations.
+7: precise copper, cycling inventory/merchant rows and exact starting-supply counts.
+Old schema 6 reads remain supported, with all new observations unknown."""
 
 # Quantisation step: nibble n renders as n * STEP, so 15 -> 255 exactly.
 STEP = 255 // (LEVELS - 1)                    # 17
@@ -355,9 +358,58 @@ FIELDS: tuple[Field, ...] = (
           "as above; all twelve ready is the normal out-of-combat state"),
     Field("bars.gcd", 8, Kind.FRAC, "return GCD_FRAC()"),
     _tri("bars.casting", "return tri(CASTING())"),
+
+    # Inventory rows rotate per paint; zero item ID means positively empty. Unknown
+    # identity, quality, coordinates or transaction evidence must never authorize input.
+    Field("bags.money_copper", 31, Kind.UINT, "return GetMoney()"),
+    Field("inventory.revision", 16, Kind.UINT, "return INVENTORY('revision')"),
+    Field("inventory.ordinal", 8, Kind.UINT, "return INVENTORY('ordinal')"),
+    Field("inventory.total", 8, Kind.UINT, "return INVENTORY('total')"),
+    Field("inventory.bag", 3, Kind.UINT, "return INVENTORY('bag')"),
+    Field("inventory.slot", 6, Kind.UINT, "return INVENTORY('slot')"),
+    Field("inventory.item_id", 20, Kind.UINT, "return INVENTORY('item_id')"),
+    Field("inventory.count", 12, Kind.UINT, "return INVENTORY('count')"),
+    Field("inventory.quality", 4, Kind.UINT, "return INVENTORY('quality')"),
+    Field("inventory.locked", 2, Kind.TRI, "return INVENTORY('locked')"),
+    Field("inventory.x", 11, Kind.FRAC, "return INVENTORY('x')"),
+    Field("inventory.y", 11, Kind.FRAC, "return INVENTORY('y')"),
+    Field("inventory.open_x", 11, Kind.FRAC, "return INVENTORY('open_x')"),
+    Field("inventory.open_y", 11, Kind.FRAC, "return INVENTORY('open_y')"),
+    Field("merchant.name_id", 16, Kind.UINT, "return MERCHANT('name_id')"),
+    Field("merchant.ready", 2, Kind.TRI, "return MERCHANT('ready')",
+          "stock buy tab, empty cursor, no modifiers and not in single-item repair mode"),
+    Field("merchant.page", 8, Kind.UINT, "return MERCHANT('page')"),
+    Field("merchant.total", 12, Kind.UINT, "return MERCHANT('total')"),
+    Field("merchant.index", 12, Kind.UINT, "return MERCHANT('index')"),
+    Field("merchant.item_id", 20, Kind.UINT, "return MERCHANT('item_id')"),
+    Field("merchant.quantity", 12, Kind.UINT, "return MERCHANT('quantity')"),
+    Field("merchant.price", 31, Kind.UINT, "return MERCHANT('price')"),
+    Field("merchant.stock", 12, Kind.UINT, "return MERCHANT('stock')"),
+    Field("merchant.unlimited", 2, Kind.TRI, "return MERCHANT('unlimited')"),
+    Field("merchant.extended", 2, Kind.TRI, "return MERCHANT('extended')"),
+    Field("merchant.owned", 16, Kind.UINT, "return MERCHANT('owned')"),
+    Field("merchant.x", 11, Kind.FRAC, "return MERCHANT('x')"),
+    Field("merchant.y", 11, Kind.FRAC, "return MERCHANT('y')"),
+    Field("merchant.prev_x", 11, Kind.FRAC, "return MERCHANT('prev_x')"),
+    Field("merchant.prev_y", 11, Kind.FRAC, "return MERCHANT('prev_y')"),
+    Field("merchant.next_x", 11, Kind.FRAC, "return MERCHANT('next_x')"),
+    Field("merchant.next_y", 11, Kind.FRAC, "return MERCHANT('next_y')"),
+    Field("bags.food_id", 20, Kind.UINT, "return SUPPLY('food_id')"),
+    Field("bags.food_count", 16, Kind.UINT, "return SUPPLY('food_count')"),
+    Field("bags.drink_id", 20, Kind.UINT, "return SUPPLY('drink_id')"),
+    Field("bags.drink_count", 16, Kind.UINT, "return SUPPLY('drink_count')"),
+    Field("merchant.gossip_name_id", 16, Kind.UINT, "return VENDOR_GOSSIP_ID()",
+          "unique stock gossip option of type vendor; unknown on absent/ambiguous branches"),
+
 )
 
 # --------------------------------------------------------------------------- layout
+
+# Schema 7 only appended fields. This explicit historical shape keeps existing screen
+# captures and installed schema-6 addons readable without inventing merchant telemetry.
+# Preserve this prefix when adding future schemas; migrations are declared, not guessed.
+SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS}
+assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

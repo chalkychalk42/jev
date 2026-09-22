@@ -23,11 +23,37 @@ import pathlib
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from jev.world.state_v1 import StepKind
 
-GRAPH_SCHEMA = 2
+GRAPH_SCHEMA = 3
+
+
+class ObjectiveTarget(BaseModel):
+    """One source requirement and its destination, never inferred from display prose.
+
+    ``source_slot`` is one-based in quest_template. ``counter_index`` is zero-based in
+    GetQuestLogLeaderBoard; absent means this requirement cannot safely be joined to a
+    painted counter. A missing location/action remains an explicit capability gap.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["kill", "loot", "interact", "delivery", "explore", "spell", "event"]
+    required_id: int | None = None
+    required_count: int | None = Field(default=None, ge=1)
+    source_slot: int | None = Field(default=None, ge=1, le=4)
+    counter_index: int | None = Field(default=None, ge=0)
+    target_id: int | None = None
+    target_name: str | None = None
+    target_kind: Literal["creature", "gameobject"] | None = None
+    pos: tuple[float, float] | None = None
+    world: tuple[float, float, float] | None = None
+    map_id: int | None = None
+    coord_zone_id: int | None = None
+    hunt_yards: float | None = None
+    blocked_reason: str | None = None
 
 
 class FailWhen(StrEnum):
@@ -76,6 +102,7 @@ class Node(BaseModel):
     pos: tuple[float, float] | None = None
     world: tuple[float, float, float] | None = None
     map_id: int | None = None
+    coord_zone_id: int | None = None  # Area ID defining pos, independent of the quest's zone
     r: float = 0.03                    # arrival radius, in map fractions
 
     # How far a kill objective's mobs are spread, in **yards**, from the spawn cluster
@@ -89,6 +116,10 @@ class Node(BaseModel):
     hunt_yards: float | None = None
 
     quest_id: int | None = None
+    # Alternative prerequisite groups. Every quest in one group must be rewarded;
+    # any group suffices (the server's positive prevQuests/exclusive-group semantics).
+    quest_prerequisites: tuple[tuple[int, ...], ...] = ()
+    route_blocked_reason: str | None = None
     # The quest's name as the client shows it, when this step has a quest.
     #
     # Carried as a fact rather than parsed back out of `objectives[0]`, because a gossip
@@ -101,6 +132,7 @@ class Node(BaseModel):
     # must never be dispatched to the creature nameplate/ring locator.
     target_name: str | None = None
     target_kind: Literal["creature", "gameobject"] | None = None
+    objective_targets: tuple[ObjectiveTarget, ...] = ()
     objectives: tuple[str, ...] = ()
 
     requires: tuple[str, ...] = ()
@@ -124,6 +156,7 @@ class Graph(BaseModel):
     graph_id: str
     schema_version: int = GRAPH_SCHEMA
     faction: str
+    coord_zone_id: int | None = None  # All generated node fractions use this pinned area map
     nodes: tuple[Node, ...]
     entry: str
 
@@ -135,6 +168,14 @@ class Graph(BaseModel):
             raise ValueError(f"duplicate node ids: {sorted(set(dupes))[:5]}")
         if self.entry not in ids:
             raise ValueError(f"entry {self.entry!r} is not a node")
+        for node in self.nodes:
+            if (self.coord_zone_id is not None and node.coord_zone_id is not None
+                    and self.coord_zone_id != node.coord_zone_id):
+                raise ValueError(f"node {node.id} uses a different coordinate frame from its graph")
+            for target in node.objective_targets:
+                if (target.coord_zone_id is not None and node.coord_zone_id is not None
+                        and target.coord_zone_id != node.coord_zone_id):
+                    raise ValueError(f"objective on {node.id} uses a different coordinate frame")
 
         dangling: list[str] = []
         for n in self.nodes:

@@ -87,6 +87,7 @@ class TickRow:
     shadow_intent: str | None = None
     shadow_skill: str | None = None
     shadow_confidence: float | None = None
+    shadow_model: str | None = None
 
     decision_id: str | None = None   # set when this tick is the one a decision acted on
     tracker_event: str | None = None

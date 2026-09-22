@@ -36,6 +36,11 @@ local castingByEvent = false -- fallback for clients without UnitCastingInfo
 local inWorld = false        -- SetMapToCurrentZone before the world exists is an error, not a no-op
 local mapDirty = true        -- the world map may not be showing the zone we are standing in
 local mapTrusted = false     -- GetPlayerMapPosition/GetMapInfo answer about the right zone
+local inventoryRevision = 0
+local inventoryCursor = 0
+local inventorySnapshot = {}
+local merchantSnapshot = {}
+local supplySnapshot = {}
 
 -- --------------------------------------------------------------------- scalar helpers
 
@@ -395,6 +400,147 @@ local function ADVANCE_BUTTON(axis)
     return nil
 end
 
+-- Inventory and merchant rows are observations of stock UI, never commands. Slot IDs
+-- come from the visible button's GetID and its container's GetID, not visual ordering:
+-- stock ContainerFrame deliberately reverses item-button order on screen.
+-- Checked against Blizzard 2.4.3 FrameXML ContainerFrame.lua / MerchantFrame.lua:
+-- https://github.com/MOUZU/Blizzard-WoW-Interface/tree/master/2.4.3/FrameXML
+local function itemID(link)
+    if type(link) ~= "string" then return nil end
+    return tonumber(string.match(link, "item:(%d+)"))
+end
+
+local function point(btn, axis)
+    if not btn or not btn.IsVisible or not btn:IsVisible() then return nil end
+    if btn.IsEnabled and btn:IsEnabled() == 0 then return nil end
+    local x, y = btn:GetCenter()
+    if not x or not y then return nil end
+    local ratio = btn:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    if axis == "x" then return x * ratio / UIParent:GetWidth() end
+    return 1 - y * ratio / UIParent:GetHeight()
+end
+
+local function snapshotInventory()
+    inventorySnapshot, merchantSnapshot, supplySnapshot = {}, {}, {}
+    if not GetContainerNumSlots or not GetContainerItemInfo or not GetContainerItemLink then
+        return
+    end
+    local slots, owned, complete = {}, {}, true
+    for bag = 0, 4 do
+        local size = GetContainerNumSlots(bag)
+        if not size then return end
+        for slot = 1, size do
+            local texture, count, locked, quality = GetContainerItemInfo(bag, slot)
+            local id = itemID(GetContainerItemLink(bag, slot))
+            if texture and not id then complete = false end
+            if not texture then id, count = 0, 0 end
+            if id and id > 0 and count then owned[id] = (owned[id] or 0) + count end
+            slots[#slots + 1] = { bag = bag, slot = slot, item_id = id,
+                count = count, quality = quality, locked = tri(locked) }
+        end
+    end
+    inventoryCursor = inventoryCursor + 1
+    local ordinal = (#slots > 0) and ((inventoryCursor - 1) % #slots + 1) or 0
+    local row = slots[ordinal] or {}
+    row.ordinal, row.total, row.revision = ordinal, #slots, inventoryRevision
+    local container
+    for i = 1, (NUM_CONTAINER_FRAMES or 13) do
+        local candidate = _G["ContainerFrame" .. i]
+        if candidate and candidate.IsVisible and candidate:IsVisible()
+            and candidate:GetID() == row.bag then
+            container = candidate
+            for j = 1, (MAX_CONTAINER_ITEMS or 36) do
+                local btn = _G["ContainerFrame" .. i .. "Item" .. j]
+                if btn and btn.GetID and btn:GetID() == row.slot then
+                    row.x, row.y = point(btn, "x"), point(btn, "y")
+                    break
+                end
+            end
+            break
+        end
+    end
+    -- Only paint an opener when that specific bag is currently closed. The body
+    -- rechecks before clicking so a toggle never closes a bag it meant to open.
+    if row.bag and not container then
+        local opener = row.bag == 0 and _G["MainMenuBarBackpackButton"]
+            or _G["CharacterBag" .. (row.bag - 1) .. "Slot"]
+        row.open_x, row.open_y = point(opener, "x"), point(opener, "y")
+    end
+    inventorySnapshot = row
+    local class = CLASS_ID[select(2, UnitClass("player"))]
+    local race = RACE_ID[select(2, UnitRace("player"))]
+    local profile = JevRadioSupplies and JevRadioSupplies[tostring(race) .. ":" .. tostring(class)]
+    if profile and complete then
+        for role, id in pairs(profile) do
+            supplySnapshot[role .. "_id"] = id
+            supplySnapshot[role .. "_count"] = owned[id] or 0
+        end
+    end
+    if not MerchantFrame or not MerchantFrame:IsVisible() or MerchantFrame.selectedTab ~= 1 then
+        return
+    end
+    local merchant = { name_id = nameid(UnitName("NPC")), page = MerchantFrame.page,
+                       total = GetMerchantNumItems and GetMerchantNumItems() }
+    if GetCursorInfo and IsShiftKeyDown and IsControlKeyDown and IsAltKeyDown and InRepairMode then
+        merchant.ready = tri(GetCursorInfo() == nil and tri(IsShiftKeyDown()) == 1
+            and tri(IsControlKeyDown()) == 1 and tri(IsAltKeyDown()) == 1
+            and tri(InRepairMode()) == 1)
+    end
+    merchant.prev_x = point(_G["MerchantPrevPageButton"], "x")
+    merchant.prev_y = point(_G["MerchantPrevPageButton"], "y")
+    merchant.next_x = point(_G["MerchantNextPageButton"], "x")
+    merchant.next_y = point(_G["MerchantNextPageButton"], "y")
+    local display = (inventoryCursor - 1) % (MERCHANT_ITEMS_PER_PAGE or 10) + 1
+    local button = _G["MerchantItem" .. display .. "ItemButton"]
+    if button and button.IsVisible and button:IsVisible() and button.GetID then
+        local index = button:GetID()
+        local _, _, price, quantity, available, _, extended = GetMerchantItemInfo(index)
+        local id = itemID(GetMerchantItemLink(index))
+        merchant.index, merchant.item_id = index, id
+        merchant.price, merchant.quantity = price, quantity
+        if available and available >= 0 then merchant.stock = available end
+        merchant.unlimited = tri(available == -1)
+        merchant.extended = tri(extended)
+        merchant.owned = (complete and id) and (owned[id] or 0) or nil
+        merchant.x, merchant.y = point(button, "x"), point(button, "y")
+    end
+    merchantSnapshot = merchant
+end
+
+local function INVENTORY(key) return inventorySnapshot[key] end
+local function MERCHANT(key) return merchantSnapshot[key] end
+local function SUPPLY(key) return supplySnapshot[key] end
+
+local function VENDOR_GOSSIP_ID()
+    -- Stock 2.4.3 GossipFrameOptionsUpdate receives (localized text, icon type)
+    -- pairs from GetGossipOptions. The semantic type identifies the vendor; the
+    -- existing list reader carries its displayed text hash and coordinates.
+    if not GossipFrame or not GossipFrame:IsVisible() or not GetGossipOptions then return nil end
+    local options = { GetGossipOptions() }
+    local found, optionID
+    for i = 1, #options, 2 do
+        if options[i + 1] == "vendor" then
+            if found then return nil end  -- two vendor branches need a further choice
+            local text = plain(options[i])
+            if not text or text == "" then return nil end
+            found = nameid(text)
+            optionID = (i + 1) / 2
+        end
+    end
+    if not found then return nil end
+    -- A vendor beyond the five lines on the wire is unselectable. Bind the observed
+    -- semantic option to its actual visible stock button before exposing the hash;
+    -- another option with the same text is not evidence of this vendor branch.
+    for i = 1, 5 do
+        local btn = _G["GossipTitleButton" .. i]
+        if btn and btn:IsVisible() and btn.type == "Gossip" and btn:GetID() == optionID
+            and nameid(plain(btn:GetText())) == found then
+            return found
+        end
+    end
+    return nil
+end
+
 -- --------------------------------------------------------------------- quests
 
 -- The log is painted one entry per frame.
@@ -601,6 +747,7 @@ watcher:RegisterEvent("ZONE_CHANGED")
 watcher:RegisterEvent("ZONE_CHANGED_INDOORS")
 watcher:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 watcher:RegisterEvent("QUEST_LOG_UPDATE")
+watcher:RegisterEvent("BAG_UPDATE")
 watcher:RegisterEvent("UI_ERROR_MESSAGE")
 watcher:RegisterEvent("UNIT_SPELLCAST_START")
 watcher:RegisterEvent("UNIT_SPELLCAST_STOP")
@@ -622,9 +769,12 @@ watcher:SetScript("OnEvent", function(self, event, a1)
         if type(p1) == "string" then
             lastError = errorIndex[p1] or 1   -- 1 = "other": something failed, we just do not model it
         end
+    elseif ev == "BAG_UPDATE" then
+        inventoryRevision = (inventoryRevision + 1) % 65535
     elseif ev == "QUEST_LOG_UPDATE" then
         questHash = nil                       -- recomputed lazily; the log can fire this several times a second
     elseif ev == "PLAYER_ENTERING_WORLD" then
+        inventoryRevision = (inventoryRevision + 1) % 65535
         inWorld = true
         mapDirty = true
         mapTrusted = false
@@ -703,6 +853,11 @@ JevRadioHelpers = {
     CLASSIFICATION_ID = CLASSIFICATION_ID,
     UI_ERRORS = UI_ERRORS,
     syncMap = syncMap,
+    snapshotInventory = snapshotInventory,
+    INVENTORY = INVENTORY,
+    MERCHANT = MERCHANT,
+    SUPPLY = SUPPLY,
+    VENDOR_GOSSIP_ID = VENDOR_GOSSIP_ID,
     buildErrorIndex = buildErrorIndex,
     SEQ = 0,
 }

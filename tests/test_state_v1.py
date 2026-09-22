@@ -24,6 +24,15 @@ def test_a_target_nobody_read_is_not_an_absent_target():
     assert Target(has=False).has is False
 
 
+def test_version_one_corpus_stays_readable_while_new_states_name_version_two():
+    old = {"schema_version": 1, "t": 10, "client_id": "recorded",
+           "pos": {"zone_id": 123, "mx": 0.4, "my": 0.5}}
+    restored = State.model_validate(old)
+    assert restored.schema_version == 1 and restored.pos.coord_zone_id is None
+    assert State.model_validate_json(restored.model_dump_json()) == restored
+    assert State(t=0, client_id="new").schema_version == 2
+
+
 def test_state_is_immutable(state: State):
     import pydantic
     import pytest

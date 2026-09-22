@@ -14,7 +14,38 @@ if STATE.visiblePanel then
     local panel = CreateFrame("Frame", STATE.visiblePanel)
     function panel:IsVisible() return STATE.panelHidden ~= 1 end
 end
+if STATE.inventoryFixture then
+    local function button(name, id, x, y, visible)
+        local b = CreateFrame("Button", name)
+        function b:GetID() return id end
+        function b:IsVisible() return visible ~= false end
+        function b:IsEnabled() return 1 end
+        function b:GetCenter() return x, y end
+        return b
+    end
+    button("ContainerFrame1", 0, 0, 0)
+    -- Deliberately reversed screen order, as stock TBC does. ID, not ordinal, wins.
+    button("ContainerFrame1Item2", 1, 1400, 400, STATE.bagHidden ~= 1)
+    button("ContainerFrame1Item1", 2, 1350, 400)
+    if STATE.bagHidden then
+        function ContainerFrame1:IsVisible() return false end
+        button("MainMenuBarBackpackButton", 0, 1500, 25)
+    end
+    button("MerchantFrame", 0, 0, 0)
+    MerchantFrame.selectedTab = STATE.buyback and 2 or 1
+    MerchantFrame.page = 1
+    button("MerchantItem1ItemButton", 1, 150, 600)
+end
+if STATE.vendorGossip then
+    local b = CreateFrame("Button", "GossipTitleButton2")
+    b.type = "Gossip"
+    function b:GetID() return STATE.wrongGossipID and 1 or 2 end
+    function b:GetText() return "|cffffffffBrowse my wares.|r" end
+    function b:IsVisible() return STATE.vendorLineHidden ~= 1 end
+    function b:GetCenter() return 200, 300 end
+end
 
+dofile("addons/JevRadio/Supplies.lua")
 dofile("addons/JevRadio/Helpers.lua")
 dofile("addons/JevRadio/Fields.lua")
 dofile("addons/JevRadio/JevRadio.lua")

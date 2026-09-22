@@ -48,10 +48,8 @@ failure that happened inside our own process — the question never left the bui
 `DecisionRow.why` says which one it was. Five values everything understands beat six that
 only this module does. `Answer.dropped` tells a live caller apart without the schema change.
 
-Known gap: `DecisionRow` has no column for artifacts, and it is owned by
-`jev.learn.episode`. So the row records artifact kinds and targets in `why`, and the
-payloads travel on the `Answer` to whatever promotes skills and patches the graph. When
-that store lands, promotion is its job — the queue's job is to ask, verify and record.
+Artifact payloads are retained in every DecisionRow, including refused or stale actions.
+They are proposals for review; receiving text never installs code or changes the graph.
 """
 
 from __future__ import annotations
@@ -615,6 +613,7 @@ class TeacherQueue:
             tokens_out=result.tokens_out if result else None,
             cache_hit=cache_hit,
             dedup_of=dedup_of,
+            artifacts=[a.model_dump(mode="json") for a in reply.artifacts] if reply else [],
         )
         self._emit(row)
 

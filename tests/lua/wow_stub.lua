@@ -144,7 +144,42 @@ function GetTime() return pick("time", 1000.0) end
 -- ---------------------------------------------------------------- bags, bars, quests
 
 function GetContainerNumFreeSlots(bag) return pick("freePerBag", 2), nil end
-function GetContainerNumSlots(bag) return 16 end
+function GetContainerNumSlots(bag)
+    if STATE.inventoryFixture then return bag == 0 and 2 or 0 end
+    return 16
+end
+function GetContainerItemInfo(bag, slot)
+    if STATE.inventoryFixture and bag == 0 then
+        if slot == 1 then
+            return "texture", pick("itemCount", 2), pick("itemLocked", false), pick("itemQuality", 0)
+        end
+        if slot == 2 and STATE.foodCount then return "food", STATE.foodCount, nil, 1 end
+    end
+    return nil
+end
+function GetContainerItemLink(bag, slot)
+    if STATE.inventoryFixture and bag == 0 then
+        if slot == 1 and not STATE.itemUnread then return "|Hitem:7073:0:0:0|h[Broken Fang]|h" end
+        if slot == 2 and STATE.foodCount then return "|Hitem:2070:0:0:0|h[Darnassian Bleu]|h" end
+    end
+    return nil
+end
+function GetMerchantNumItems() return pick("merchantTotal", 1) end
+function GetCursorInfo() return pick("cursorType", nil) end
+function IsShiftKeyDown() return pick("shiftHeld", nil) end
+function IsControlKeyDown() return nil end
+function IsAltKeyDown() return nil end
+function InRepairMode() return pick("repairMode", nil) end
+function GetGossipOptions()
+    if STATE.duplicateVendor then return "First shop", "vendor", "Second shop", "vendor" end
+    if STATE.vendorGossip then return "Other option", "gossip", "|cffffffffBrowse my wares.|r", "vendor" end
+    return "Other option", "gossip"
+end
+function GetMerchantItemInfo(index)
+    return "Darnassian Bleu", "texture", pick("offerPrice", 25), 5, -1, 1,
+        pick("extendedCost", nil)
+end
+function GetMerchantItemLink(index) return "|Hitem:2070:0:0:0|h[Darnassian Bleu]|h" end
 function GetInventoryItemDurability(slot)
     if slot == 16 then return pick("dur", 90), 100 end
     return nil

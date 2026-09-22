@@ -115,15 +115,16 @@ class Pretend:
     def _state(self, *, dead: bool = False, combat: bool = False) -> State:
         n = self.node
         quests = tuple(
-            Quest(quest_id=q, title=f"q{q}", objectives=(
-                Objective(text="do it", have=self.progress.get(q, 0), need=10),))
+            Quest(quest_id=q, title=f"q{q}", complete=self.progress.get(q, 0) >= 10,
+                  objectives=(Objective(text="do it", have=self.progress.get(q, 0),
+                                        need=10, counter_index=0),))
             for q in sorted(self.accepted)
         )
         return State(
             t=self.t, client_id="sim",
             char=Char(name="Sim", cls="mage", faction="alliance",
                       level=self.level, xp_pct=min(0.99, self.xp)),
-            pos=Pos(zone=n.zone, zone_id=n.zone_id,
+            pos=Pos(zone=n.zone, zone_id=n.zone_id, coord_zone_id=n.coord_zone_id,
                     mx=n.pos[0] if n.pos else 0.5, my=n.pos[1] if n.pos else 0.5,
                     facing=0.0, indoors=False),
             vitals=Vitals(hp=0.0 if dead else self.hp, power=0.8,

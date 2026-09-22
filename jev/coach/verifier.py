@@ -22,7 +22,7 @@ TRAVELLING = frozenset({"TRAVEL_TO", "FOLLOW_PATH", "HEARTH", "FLIGHT_PATH", "BO
 
 # Skills that talk to an NPC and therefore need a living character in front of one.
 SOCIAL = frozenset({"VENDOR_REPAIR", "TRAIN_CLASS", "ACCEPT_QUEST", "TURNIN_QUEST",
-                    "GOSSIP_PICK", "BUY_AMMO_REAGENT_FOOD"})
+                    "GOSSIP_PICK", "BUY_AMMO_REAGENT_FOOD", "BAG_MAKE_SPACE"})
 
 Rule = Callable[[Decision, State, frozenset[str]], Verdict]
 
@@ -38,6 +38,12 @@ def _skill_exists(d: Decision, s: State, catalog: frozenset[str]) -> Verdict:
 
 
 def _zone_matches(d: Decision, s: State, catalog: frozenset[str]) -> Verdict:
+    coordinate_zone = d.params.get("coord_zone_id")
+    if coordinate_zone is not None:
+        if type(coordinate_zone) is not int or coordinate_zone <= 0:
+            return Verdict.refuse("coordinate_frame", "coordinate frame must be an area ID")
+        if s.pos.coord_zone_id is not None and coordinate_zone != s.pos.coord_zone_id:
+            return Verdict.refuse("coordinate_frame", "plan and observation use different map coordinate frames")
     want = d.params.get("zone")
     if want is None or d.skill in TRAVELLING:
         return Verdict.accept()

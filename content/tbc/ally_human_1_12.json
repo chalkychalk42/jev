@@ -1,7 +1,8 @@
 {
   "graph_id": "alli_human_1_12",
-  "schema_version": 2,
+  "schema_version": 3,
   "faction": "alliance",
+  "coord_zone_id": 12,
   "nodes": [
     {
       "id": "alli_human_1_12_grind_elwynn_0",
@@ -22,13 +23,17 @@
         25.52829195375312
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 63.502919878276884,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": null,
       "target_name": "Stonetusk Boar",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "grind Stonetusk Boar"
       ],
@@ -63,13 +68,17 @@
         59.09460714307882
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 91.38131231664363,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": null,
       "target_name": "Rockhide Boar",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "grind Rockhide Boar"
       ],
@@ -104,13 +113,17 @@
         58.34370040893555
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 54,
       "target_name": "Corina Steele",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "vendor at Corina Steele"
       ],
@@ -146,13 +159,17 @@
         56.658599853515625
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 66,
       "target_name": "Tharynn Bouden",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "vendor at Tharynn Bouden"
       ],
@@ -188,13 +205,17 @@
         58.427101135253906
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 74,
       "target_name": "Kurran Steele",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "vendor at Kurran Steele"
       ],
@@ -230,13 +251,17 @@
         82.03140258789062
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 78,
       "target_name": "Janos Hammerknuckle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "vendor at Janos Hammerknuckle"
       ],
@@ -272,13 +297,17 @@
         57.14590072631836
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 151,
       "target_name": "Brog Hamfist",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "vendor at Brog Hamfist"
       ],
@@ -314,13 +343,17 @@
         82.03140258789062
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 152,
       "target_name": "Brother Danil",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "vendor at Brother Danil"
       ],
@@ -356,13 +389,17 @@
         58.34370040893555
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 54,
       "target_name": "Corina Steele",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "repair at Corina Steele"
       ],
@@ -398,13 +435,17 @@
         58.427101135253906
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 74,
       "target_name": "Kurran Steele",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "repair at Kurran Steele"
       ],
@@ -440,13 +481,17 @@
         82.03140258789062
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 78,
       "target_name": "Janos Hammerknuckle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "repair at Janos Hammerknuckle"
       ],
@@ -482,13 +527,17 @@
         81.99819946289062
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 190,
       "target_name": "Dermot Johns",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "repair at Dermot Johns"
       ],
@@ -524,13 +573,17 @@
         38.73550033569336
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 896,
       "target_name": "Veldan Lightfoot",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "repair at Veldan Lightfoot"
       ],
@@ -566,13 +619,17 @@
         90.51029968261719
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 959,
       "target_name": "Morley Eberlein",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "repair at Morley Eberlein"
       ],
@@ -608,13 +665,17 @@
         95.53170013427734
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 2879,
       "target_name": "Karrina Mekenda",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "train at Karrina Mekenda"
       ],
@@ -650,13 +711,17 @@
         95.53170013427734
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 5515,
       "target_name": "Einris Brightspear",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "train at Einris Brightspear"
       ],
@@ -692,13 +757,17 @@
         95.53170013427734
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 5516,
       "target_name": "Ulfir Ironbeard",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "train at Ulfir Ironbeard"
       ],
@@ -734,13 +803,17 @@
         102.5780029296875
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 5517,
       "target_name": "Thorfin Stoneshield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "train at Thorfin Stoneshield"
       ],
@@ -776,13 +849,17 @@
         57.0458984375
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 295,
       "target_name": "Innkeeper Farley",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "hearth at Innkeeper Farley"
       ],
@@ -818,13 +895,17 @@
         97.98639678955078
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 6740,
       "target_name": "Innkeeper Allison",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "hearth at Innkeeper Allison"
       ],
@@ -860,13 +941,17 @@
         109.6989974975586
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "",
       "npc_id": 352,
       "target_name": "Dungar Longdrink",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "flight at Dungar Longdrink"
       ],
@@ -902,13 +987,17 @@
         83.44660186767578
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 783,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "A Threat Within",
       "npc_id": 823,
       "target_name": "Deputy Willem",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept A Threat Within"
       ],
@@ -962,13 +1051,17 @@
         82.02230072021484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 783,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "A Threat Within",
       "npc_id": 197,
       "target_name": "Marshal McBride",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in A Threat Within"
       ],
@@ -1022,13 +1115,21 @@
         82.02230072021484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 7,
+      "quest_prerequisites": [
+        [
+          783
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Kobold Camp Cleanup",
       "npc_id": 197,
       "target_name": "Marshal McBride",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Kobold Camp Cleanup"
       ],
@@ -1082,13 +1183,45 @@
         83.54340387159779
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 49.136004290527495,
       "quest_id": 7,
+      "quest_prerequisites": [
+        [
+          783
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Kobold Camp Cleanup",
       "npc_id": null,
       "target_name": "Kobold Vermin",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "kill",
+          "required_id": 6,
+          "required_count": 10,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 6,
+          "target_name": "Kobold Vermin",
+          "target_kind": "creature",
+          "pos": [
+            0.4924505997076012,
+            0.3626581837526662
+          ],
+          "world": [
+            -8778.985477570564,
+            -173.7972904328377,
+            83.54340387159779
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 49.136004290527495,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Kill 10 Kobold Vermin, then return to Marshal McBride."
       ],
@@ -1142,13 +1275,21 @@
         82.02230072021484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 7,
+      "quest_prerequisites": [
+        [
+          783
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Kobold Camp Cleanup",
       "npc_id": 197,
       "target_name": "Marshal McBride",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Kobold Camp Cleanup"
       ],
@@ -1202,13 +1343,21 @@
         83.44660186767578
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 5261,
+      "quest_prerequisites": [
+        [
+          783
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Eagan Peltskinner",
       "npc_id": 823,
       "target_name": "Deputy Willem",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Eagan Peltskinner"
       ],
@@ -1262,13 +1411,21 @@
         80.9719009399414
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 5261,
+      "quest_prerequisites": [
+        [
+          783
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Eagan Peltskinner",
       "npc_id": 196,
       "target_name": "Eagan Peltskinner",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Eagan Peltskinner"
       ],
@@ -1322,13 +1479,21 @@
         80.9719009399414
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 33,
+      "quest_prerequisites": [
+        [
+          5261
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Wolves Across the Border",
       "npc_id": 196,
       "target_name": "Eagan Peltskinner",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Wolves Across the Border"
       ],
@@ -1382,13 +1547,45 @@
         81.86018524169921
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 89.71135995921618,
       "quest_id": 33,
+      "quest_prerequisites": [
+        [
+          5261
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Wolves Across the Border",
       "npc_id": null,
       "target_name": "Young Wolf",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 750,
+          "required_count": 8,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 299,
+          "target_name": "Young Wolf",
+          "target_kind": "creature",
+          "pos": [
+            0.4847007687611846,
+            0.4455711768073772
+          ],
+          "world": [
+            -8970.894482421874,
+            -146.89891948699952,
+            81.86018524169921
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 89.71135995921618,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 8 pieces of Tough Wolf Meat to Eagan Peltskinner outside Northshire Abbey."
       ],
@@ -1442,13 +1639,21 @@
         80.9719009399414
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 33,
+      "quest_prerequisites": [
+        [
+          5261
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Wolves Across the Border",
       "npc_id": 196,
       "target_name": "Eagan Peltskinner",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Wolves Across the Border"
       ],
@@ -1502,13 +1707,21 @@
         82.02230072021484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 15,
+      "quest_prerequisites": [
+        [
+          7
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Investigate Echo Ridge",
       "npc_id": 197,
       "target_name": "Marshal McBride",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Investigate Echo Ridge"
       ],
@@ -1562,13 +1775,45 @@
         86.36963772243924
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 62.07866467609233,
       "quest_id": 15,
+      "quest_prerequisites": [
+        [
+          7
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Investigate Echo Ridge",
       "npc_id": null,
       "target_name": "Kobold Worker",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "kill",
+          "required_id": 257,
+          "required_count": 10,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 257,
+          "target_name": "Kobold Worker",
+          "target_kind": "creature",
+          "pos": [
+            0.48889816755174337,
+            0.34572920591376066
+          ],
+          "world": [
+            -8739.801953125,
+            -161.46739078097875,
+            86.36963772243924
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 62.07866467609233,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Kill 10 Kobold Workers, then report back to Marshal McBride."
       ],
@@ -1622,13 +1867,21 @@
         82.02230072021484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 15,
+      "quest_prerequisites": [
+        [
+          7
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Investigate Echo Ridge",
       "npc_id": 197,
       "target_name": "Marshal McBride",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Investigate Echo Ridge"
       ],
@@ -1682,13 +1935,21 @@
         82.02230072021484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 21,
+      "quest_prerequisites": [
+        [
+          15
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Skirmish at Echo Ridge",
       "npc_id": 197,
       "target_name": "Marshal McBride",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Skirmish at Echo Ridge"
       ],
@@ -1742,13 +2003,45 @@
         87.28341583251954
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 45.717913670459396,
       "quest_id": 21,
+      "quest_prerequisites": [
+        [
+          15
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Skirmish at Echo Ridge",
       "npc_id": null,
       "target_name": "Kobold Laborer",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "kill",
+          "required_id": 80,
+          "required_count": 12,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 80,
+          "target_name": "Kobold Laborer",
+          "target_kind": "creature",
+          "pos": [
+            0.48866704412039136,
+            0.28343445705367565
+          ],
+          "world": [
+            -8595.6155859375,
+            -160.6651998901367,
+            87.28341583251954
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 45.717913670459396,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Kill 12 Kobold Laborers, then return to Marshal McBride at Northshire Abbey."
       ],
@@ -1802,13 +2095,21 @@
         82.02230072021484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 21,
+      "quest_prerequisites": [
+        [
+          15
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Skirmish at Echo Ridge",
       "npc_id": 197,
       "target_name": "Marshal McBride",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Skirmish at Echo Ridge"
       ],
@@ -1862,13 +2163,21 @@
         82.02230072021484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 54,
+      "quest_prerequisites": [
+        [
+          21
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Report to Goldshire",
       "npc_id": 197,
       "target_name": "Marshal McBride",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Report to Goldshire"
       ],
@@ -1913,22 +2222,54 @@
         8
       ],
       "pos": [
-        0.4892262190437007,
-        0.4160606176952939
+        0.4210544335950263,
+        0.6592705978947173
       ],
       "world": [
-        -8902.58984375,
-        -162.6060028076172,
-        82.02230072021484
+        -9465.51953125,
+        74.00689697265625,
+        56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 54,
+      "quest_prerequisites": [
+        [
+          21
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Report to Goldshire",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Marshal Dughan",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 745,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 240,
+          "target_name": "Marshal Dughan",
+          "target_kind": "creature",
+          "pos": [
+            0.4210544335950263,
+            0.6592705978947173
+          ],
+          "world": [
+            -9465.51953125,
+            74.00689697265625,
+            56.778499603271484
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Take Marshal McBride's Documents to Marshal Dughan in Goldshire."
       ],
@@ -1960,7 +2301,7 @@
       "xp_est": 450,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Marshal McBride",
+      "notes": "Marshal Dughan",
       "source": "generated"
     },
     {
@@ -1982,13 +2323,21 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 54,
+      "quest_prerequisites": [
+        [
+          21
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Report to Goldshire",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Report to Goldshire"
       ],
@@ -2042,13 +2391,21 @@
         83.44660186767578
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 18,
+      "quest_prerequisites": [
+        [
+          783
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Brotherhood of Thieves",
       "npc_id": 823,
       "target_name": "Deputy Willem",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Brotherhood of Thieves"
       ],
@@ -2102,13 +2459,45 @@
         73.36943388821786
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 62.63456419125976,
       "quest_id": 18,
+      "quest_prerequisites": [
+        [
+          783
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Brotherhood of Thieves",
       "npc_id": null,
       "target_name": "Defias Thug",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 752,
+          "required_count": 12,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 38,
+          "target_name": "Defias Thug",
+          "target_kind": "creature",
+          "pos": [
+            0.5385476622072417,
+            0.48645871016743103
+          ],
+          "world": [
+            -9065.532072368422,
+            -333.79250777395146,
+            73.36943388821786
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 62.63456419125976,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 12 Red Burlap Bandanas to Deputy Willem outside the Northshire Abbey."
       ],
@@ -2162,13 +2551,21 @@
         83.44660186767578
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 18,
+      "quest_prerequisites": [
+        [
+          783
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Brotherhood of Thieves",
       "npc_id": 823,
       "target_name": "Deputy Willem",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Brotherhood of Thieves"
       ],
@@ -2222,13 +2619,21 @@
         83.44660186767578
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 3903,
+      "quest_prerequisites": [
+        [
+          33
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Milly Osworth",
       "npc_id": 823,
       "target_name": "Deputy Willem",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Milly Osworth"
       ],
@@ -2282,13 +2687,21 @@
         81.77780151367188
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 3903,
+      "quest_prerequisites": [
+        [
+          33
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Milly Osworth",
       "npc_id": 9296,
       "target_name": "Milly Osworth",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Milly Osworth"
       ],
@@ -2342,13 +2755,21 @@
         81.77780151367188
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 3904,
+      "quest_prerequisites": [
+        [
+          3903
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Milly's Harvest",
       "npc_id": 9296,
       "target_name": "Milly Osworth",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Milly's Harvest"
       ],
@@ -2402,13 +2823,45 @@
         73.45717945098878
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 31.5070558922551,
       "quest_id": 3904,
+      "quest_prerequisites": [
+        [
+          3903
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Milly's Harvest",
       "npc_id": null,
       "target_name": "Milly's Harvest",
       "target_kind": "gameobject",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 11119,
+          "required_count": 8,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 161557,
+          "target_name": "Milly's Harvest",
+          "target_kind": "gameobject",
+          "pos": [
+            0.5395806180381673,
+            0.4886523878617784
+          ],
+          "world": [
+            -9070.609521484375,
+            -337.3777252197266,
+            73.45717945098878
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 31.5070558922551,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 8 crates of Milly's Harvest to Milly Osworth at Northshire Abbey."
       ],
@@ -2462,13 +2915,21 @@
         81.77780151367188
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 3904,
+      "quest_prerequisites": [
+        [
+          3903
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Milly's Harvest",
       "npc_id": 9296,
       "target_name": "Milly Osworth",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Milly's Harvest"
       ],
@@ -2522,13 +2983,21 @@
         81.77780151367188
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 3905,
+      "quest_prerequisites": [
+        [
+          3904
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Grape Manifest",
       "npc_id": 9296,
       "target_name": "Milly Osworth",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Grape Manifest"
       ],
@@ -2573,22 +3042,54 @@
         7
       ],
       "pos": [
-        0.5069234091743746,
-        0.39346483931492454
+        0.4947119315236704,
+        0.4158618946700459
       ],
       "world": [
-        -8850.2900390625,
-        -224.02999877929688,
-        81.77780151367188
+        -8902.1298828125,
+        -181.64599609375,
+        113.23999786376953
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 3905,
+      "quest_prerequisites": [
+        [
+          3904
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Grape Manifest",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Brother Neals",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 11125,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 952,
+          "target_name": "Brother Neals",
+          "target_kind": "creature",
+          "pos": [
+            0.4947119315236704,
+            0.4158618946700459
+          ],
+          "world": [
+            -8902.1298828125,
+            -181.64599609375,
+            113.23999786376953
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring the Grape Manifest to Brother Neals in Northshire Abbey."
       ],
@@ -2620,7 +3121,7 @@
       "xp_est": 360,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Milly Osworth",
+      "notes": "Brother Neals",
       "source": "generated"
     },
     {
@@ -2642,13 +3143,21 @@
         113.23999786376953
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 3905,
+      "quest_prerequisites": [
+        [
+          3904
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Grape Manifest",
       "npc_id": 952,
       "target_name": "Brother Neals",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Grape Manifest"
       ],
@@ -2702,13 +3211,21 @@
         83.44660186767578
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 6,
+      "quest_prerequisites": [
+        [
+          18
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Bounty on Garrick Padfoot",
       "npc_id": 823,
       "target_name": "Deputy Willem",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Bounty on Garrick Padfoot"
       ],
@@ -2762,13 +3279,45 @@
         72.83180236816406
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 6,
+      "quest_prerequisites": [
+        [
+          18
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Bounty on Garrick Padfoot",
       "npc_id": null,
       "target_name": "Garrick Padfoot",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 182,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 103,
+          "target_name": "Garrick Padfoot",
+          "target_kind": "creature",
+          "pos": [
+            0.5751701381764457,
+            0.48254802578589473
+          ],
+          "world": [
+            -9056.48046875,
+            -460.90301513671875,
+            72.83180236816406
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 15.0,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Kill Garrick Padfoot and bring his head to Deputy Willem at Northshire Abbey."
       ],
@@ -2822,13 +3371,21 @@
         83.44660186767578
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 6,
+      "quest_prerequisites": [
+        [
+          18
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Bounty on Garrick Padfoot",
       "npc_id": 823,
       "target_name": "Deputy Willem",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Bounty on Garrick Padfoot"
       ],
@@ -2882,13 +3439,17 @@
         32.68579864501953
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 16,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Give Gerard a Drink",
       "npc_id": 255,
       "target_name": "Gerard Tiller",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Give Gerard a Drink"
       ],
@@ -2942,13 +3503,41 @@
         87.1994937939793
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 50.45328561425518,
       "quest_id": 16,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Give Gerard a Drink",
       "npc_id": null,
       "target_name": "Kobold Worker",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 159,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 257,
+          "target_name": "Kobold Worker",
+          "target_kind": "creature",
+          "pos": [
+            0.49185728056608713,
+            0.2831617112409104
+          ],
+          "world": [
+            -8594.984293113821,
+            -171.73797862745027,
+            87.1994937939793
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 50.45328561425518,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "complete objectives"
       ],
@@ -3002,13 +3591,17 @@
         32.68579864501953
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 16,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Give Gerard a Drink",
       "npc_id": 255,
       "target_name": "Gerard Tiller",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Give Gerard a Drink"
       ],
@@ -3062,13 +3655,17 @@
         88.41929626464844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 2158,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Rest and Relaxation",
       "npc_id": 6774,
       "target_name": "Falkhaan Isenstrider",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Rest and Relaxation"
       ],
@@ -3122,13 +3719,17 @@
         57.0458984375
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 2158,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Rest and Relaxation",
       "npc_id": 295,
       "target_name": "Innkeeper Farley",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Rest and Relaxation"
       ],
@@ -3182,13 +3783,17 @@
         57.049400329589844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 60,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Kobold Candles",
       "npc_id": 253,
       "target_name": "William Pestle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Kobold Candles"
       ],
@@ -3242,13 +3847,41 @@
         20.90058547920651
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 55.28752610054466,
       "quest_id": 60,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Kobold Candles",
       "npc_id": null,
       "target_name": "Kobold Tunneler",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 772,
+          "required_count": 8,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 475,
+          "target_name": "Kobold Tunneler",
+          "target_kind": "creature",
+          "pos": [
+            0.40089695566201117,
+            0.8056584369519125
+          ],
+          "world": [
+            -9804.346336082175,
+            143.97014165807653,
+            20.90058547920651
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 55.28752610054466,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 8 Large Candles to William Pestle in Goldshire."
       ],
@@ -3302,13 +3935,17 @@
         57.049400329589844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 60,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Kobold Candles",
       "npc_id": 253,
       "target_name": "William Pestle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Kobold Candles"
       ],
@@ -3362,13 +3999,21 @@
         57.049400329589844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 61,
+      "quest_prerequisites": [
+        [
+          60
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Shipment to Stormwind",
       "npc_id": 253,
       "target_name": "William Pestle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Shipment to Stormwind"
       ],
@@ -3413,22 +4058,54 @@
         10
       ],
       "pos": [
-        0.43317486518161635,
-        0.6570154501878165
+        0.26216143907941547,
+        0.3966621282434361
       ],
       "world": [
-        -9460.2998046875,
-        31.938899993896484,
-        57.049400329589844
+        -8857.6904296875,
+        625.4979858398438,
+        96.17279815673828
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 61,
+      "quest_prerequisites": [
+        [
+          60
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Shipment to Stormwind",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Morgan Pestle",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 957,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 279,
+          "target_name": "Morgan Pestle",
+          "target_kind": "creature",
+          "pos": [
+            0.26216143907941547,
+            0.3966621282434361
+          ],
+          "world": [
+            -8857.6904296875,
+            625.4979858398438,
+            96.17279815673828
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring William's Shipment to Morgan Pestle in the Stormwind Trade District."
       ],
@@ -3460,7 +4137,7 @@
       "xp_est": 630,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "William Pestle",
+      "notes": "Morgan Pestle",
       "source": "generated"
     },
     {
@@ -3482,13 +4159,21 @@
         96.17279815673828
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 61,
+      "quest_prerequisites": [
+        [
+          60
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Shipment to Stormwind",
       "npc_id": 279,
       "target_name": "Morgan Pestle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Shipment to Stormwind"
       ],
@@ -3542,13 +4227,17 @@
         56.597999572753906
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 47,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Gold Dust Exchange",
       "npc_id": 241,
       "target_name": "Remy \"Two Times\"",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Gold Dust Exchange"
       ],
@@ -3602,13 +4291,41 @@
         20.90058547920651
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 55.28752610054466,
       "quest_id": 47,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Gold Dust Exchange",
       "npc_id": null,
       "target_name": "Kobold Tunneler",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 773,
+          "required_count": 10,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 475,
+          "target_name": "Kobold Tunneler",
+          "target_kind": "creature",
+          "pos": [
+            0.40089695566201117,
+            0.8056584369519125
+          ],
+          "world": [
+            -9804.346336082175,
+            143.97014165807653,
+            20.90058547920651
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 55.28752610054466,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 10 Gold Dust to Remy \"Two Times\" in Goldshire.  Gold Dust is gathered from Kobolds in Elwynn Forest."
       ],
@@ -3662,13 +4379,17 @@
         56.597999572753906
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 47,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Gold Dust Exchange",
       "npc_id": 241,
       "target_name": "Remy \"Two Times\"",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Gold Dust Exchange"
       ],
@@ -3722,19 +4443,23 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 62,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "The Fargodeep Mine",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept The Fargodeep Mine"
       ],
       "requires": [],
       "next": [
-        "alli_human_1_12_62_the_fargodeep_mine_turnin"
+        "alli_human_1_12_62_the_fargodeep_mine_do"
       ],
       "on_fail": [
         {
@@ -3764,6 +4489,94 @@
       "source": "generated"
     },
     {
+      "id": "alli_human_1_12_62_the_fargodeep_mine_do",
+      "kind": "quest_objective",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        4,
+        10
+      ],
+      "pos": [
+        0.40563505136941613,
+        0.8225918123582094
+      ],
+      "world": [
+        -9843.5400390625,
+        127.5250015258789,
+        5.369800090789795
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 15.0,
+      "quest_id": 62,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "The Fargodeep Mine",
+      "npc_id": null,
+      "target_name": "exploration trigger",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "explore",
+          "required_id": 88,
+          "required_count": null,
+          "source_slot": null,
+          "counter_index": null,
+          "target_id": 88,
+          "target_name": null,
+          "target_kind": null,
+          "pos": [
+            0.40563505136941613,
+            0.8225918123582094
+          ],
+          "world": [
+            -9843.5400390625,
+            127.5250015258789,
+            5.369800090789795
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
+      "objectives": [
+        "Explore the Fargodeep Mine, then return to Marshal Dughan in Goldshire."
+      ],
+      "requires": [],
+      "next": [
+        "alli_human_1_12_62_the_fargodeep_mine_turnin"
+      ],
+      "on_fail": [
+        {
+          "when": "timeout_s",
+          "goto": "alli_human_1_12_grind_elwynn_0",
+          "value": 600.0
+        },
+        {
+          "when": "deaths_on_step",
+          "goto": "alli_human_1_12_grind_elwynn_0",
+          "value": 3.0
+        },
+        {
+          "when": "quest_missing",
+          "goto": "alli_human_1_12_grind_elwynn_0",
+          "value": null
+        }
+      ],
+      "skills": [
+        "TRAVEL_TO",
+        "GRIND_UNTIL"
+      ],
+      "xp_est": 630,
+      "timeout_s": 600.0,
+      "skippable": false,
+      "notes": "exploration trigger",
+      "source": "generated"
+    },
+    {
       "id": "alli_human_1_12_62_the_fargodeep_mine_turnin",
       "kind": "quest_turnin",
       "zone": "Elwynn",
@@ -3782,13 +4595,17 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 62,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "The Fargodeep Mine",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in The Fargodeep Mine"
       ],
@@ -3842,13 +4659,17 @@
         47.83789825439453
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 83,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Red Linen Goods",
       "npc_id": 278,
       "target_name": "Sara Timberlain",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Red Linen Goods"
       ],
@@ -3902,13 +4723,41 @@
         53.85141719471324
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 47.706365614733514,
       "quest_id": 83,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Red Linen Goods",
       "npc_id": null,
       "target_name": "Defias Bandit",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 1019,
+          "required_count": 6,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 116,
+          "target_name": "Defias Bandit",
+          "target_kind": "creature",
+          "pos": [
+            0.301890562750234,
+            0.6373179364733006
+          ],
+          "world": [
+            -9414.708274147728,
+            487.6048223322088,
+            53.85141719471324
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 47.706365614733514,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 6 Red Linen Bandanas to Sara Timberlain at the Eastvale Logging Camp."
       ],
@@ -3962,13 +4811,17 @@
         47.83789825439453
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 83,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Red Linen Goods",
       "npc_id": 278,
       "target_name": "Sara Timberlain",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Red Linen Goods"
       ],
@@ -4022,19 +4875,27 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 76,
+      "quest_prerequisites": [
+        [
+          62
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "The Jasperlode Mine",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept The Jasperlode Mine"
       ],
       "requires": [],
       "next": [
-        "alli_human_1_12_76_the_jasperlode_mine_turnin"
+        "alli_human_1_12_76_the_jasperlode_mine_do"
       ],
       "on_fail": [
         {
@@ -4064,6 +4925,98 @@
       "source": "generated"
     },
     {
+      "id": "alli_human_1_12_76_the_jasperlode_mine_do",
+      "kind": "quest_objective",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        4,
+        13
+      ],
+      "pos": [
+        0.6016830720964106,
+        0.4915601782684769
+      ],
+      "world": [
+        -9077.33984375,
+        -552.9249877929688,
+        60.347599029541016
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 15.0,
+      "quest_id": 76,
+      "quest_prerequisites": [
+        [
+          62
+        ]
+      ],
+      "route_blocked_reason": null,
+      "title": "The Jasperlode Mine",
+      "npc_id": null,
+      "target_name": "exploration trigger",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "explore",
+          "required_id": 87,
+          "required_count": null,
+          "source_slot": null,
+          "counter_index": null,
+          "target_id": 87,
+          "target_name": null,
+          "target_kind": null,
+          "pos": [
+            0.6016830720964106,
+            0.4915601782684769
+          ],
+          "world": [
+            -9077.33984375,
+            -552.9249877929688,
+            60.347599029541016
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
+      "objectives": [
+        "Explore the Jasperlode Mine, then report back to Marshal Dughan in Goldshire."
+      ],
+      "requires": [],
+      "next": [
+        "alli_human_1_12_76_the_jasperlode_mine_turnin"
+      ],
+      "on_fail": [
+        {
+          "when": "timeout_s",
+          "goto": "alli_human_1_12_grind_elwynn_0",
+          "value": 600.0
+        },
+        {
+          "when": "deaths_on_step",
+          "goto": "alli_human_1_12_grind_elwynn_0",
+          "value": 3.0
+        },
+        {
+          "when": "quest_missing",
+          "goto": "alli_human_1_12_grind_elwynn_0",
+          "value": null
+        }
+      ],
+      "skills": [
+        "TRAVEL_TO",
+        "GRIND_UNTIL"
+      ],
+      "xp_est": 900,
+      "timeout_s": 600.0,
+      "skippable": false,
+      "notes": "exploration trigger",
+      "source": "generated"
+    },
+    {
       "id": "alli_human_1_12_76_the_jasperlode_mine_turnin",
       "kind": "quest_turnin",
       "zone": "Elwynn",
@@ -4082,13 +5035,21 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 76,
+      "quest_prerequisites": [
+        [
+          62
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "The Jasperlode Mine",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in The Jasperlode Mine"
       ],
@@ -4142,13 +5103,17 @@
         36.64860153198242
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 85,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Lost Necklace",
       "npc_id": 246,
       "target_name": "\"Auntie\" Bernice Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Lost Necklace"
       ],
@@ -4202,13 +5167,17 @@
         32.59510040283203
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 85,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Lost Necklace",
       "npc_id": 247,
       "target_name": "Billy Maclure",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Lost Necklace"
       ],
@@ -4262,13 +5231,21 @@
         32.59510040283203
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 86,
+      "quest_prerequisites": [
+        [
+          85
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Pie for Billy",
       "npc_id": 247,
       "target_name": "Billy Maclure",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Pie for Billy"
       ],
@@ -4322,13 +5299,45 @@
         48.40559593836466
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 89.93820045528682,
       "quest_id": 86,
+      "quest_prerequisites": [
+        [
+          85
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Pie for Billy",
       "npc_id": null,
       "target_name": "Rockhide Boar",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 769,
+          "required_count": 4,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 524,
+          "target_name": "Rockhide Boar",
+          "target_kind": "creature",
+          "pos": [
+            0.5905059571896561,
+            0.7618645240583554
+          ],
+          "world": [
+            -9702.981689453127,
+            -514.1310857137045,
+            48.40559593836466
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 89.93820045528682,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 4 Chunks of Boar Meat to Auntie Bernice Stonefield at the Stonefield's Farm."
       ],
@@ -4382,13 +5391,21 @@
         36.64860153198242
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 86,
+      "quest_prerequisites": [
+        [
+          85
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Pie for Billy",
       "npc_id": 246,
       "target_name": "\"Auntie\" Bernice Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Pie for Billy"
       ],
@@ -4442,13 +5459,21 @@
         36.64860153198242
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 84,
+      "quest_prerequisites": [
+        [
+          86
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Back to Billy",
       "npc_id": 246,
       "target_name": "\"Auntie\" Bernice Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Back to Billy"
       ],
@@ -4493,22 +5518,54 @@
         9
       ],
       "pos": [
-        0.3448594411169024,
-        0.8425261367189099
+        0.431317011767215,
+        0.857215607731718
       ],
       "world": [
-        -9889.6796875,
-        338.4670104980469,
-        36.64860153198242
+        -9923.6796875,
+        38.38719940185547,
+        32.59510040283203
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 84,
+      "quest_prerequisites": [
+        [
+          86
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Back to Billy",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Billy Maclure",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 962,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 247,
+          "target_name": "Billy Maclure",
+          "target_kind": "creature",
+          "pos": [
+            0.431317011767215,
+            0.857215607731718
+          ],
+          "world": [
+            -9923.6796875,
+            38.38719940185547,
+            32.59510040283203
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring the Pork Belly Pie to Billy Maclure at the Maclure Vineyards."
       ],
@@ -4540,7 +5597,7 @@
       "xp_est": 540,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "\"Auntie\" Bernice Stonefield",
+      "notes": "Billy Maclure",
       "source": "generated"
     },
     {
@@ -4562,13 +5619,21 @@
         32.59510040283203
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 84,
+      "quest_prerequisites": [
+        [
+          86
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Back to Billy",
       "npc_id": 247,
       "target_name": "Billy Maclure",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Back to Billy"
       ],
@@ -4622,13 +5687,17 @@
         35.25310134887695
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 106,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Young Lovers",
       "npc_id": 251,
       "target_name": "Maybell Maclure",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Young Lovers"
       ],
@@ -4673,22 +5742,50 @@
         9
       ],
       "pos": [
-        0.43154237547755137,
-        0.8962378904474981
+        0.2983959591273062,
+        0.8599677739603643
       ],
       "world": [
-        -10014.0,
-        37.60499954223633,
-        35.25310134887695
+        -9930.0498046875,
+        499.7340087890625,
+        32.52040100097656
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 106,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Young Lovers",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Tommy Joe Stonefield",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 1208,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 252,
+          "target_name": "Tommy Joe Stonefield",
+          "target_kind": "creature",
+          "pos": [
+            0.2983959591273062,
+            0.8599677739603643
+          ],
+          "world": [
+            -9930.0498046875,
+            499.7340087890625,
+            32.52040100097656
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Give Maybell's Love Letter to Tommy Joe Stonefield."
       ],
@@ -4720,7 +5817,7 @@
       "xp_est": 540,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Maybell Maclure",
+      "notes": "Tommy Joe Stonefield",
       "source": "generated"
     },
     {
@@ -4742,13 +5839,17 @@
         32.52040100097656
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 106,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Young Lovers",
       "npc_id": 252,
       "target_name": "Tommy Joe Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Young Lovers"
       ],
@@ -4802,13 +5903,21 @@
         32.52040100097656
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 111,
+      "quest_prerequisites": [
+        [
+          106
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Speak with Gramma",
       "npc_id": 252,
       "target_name": "Tommy Joe Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Speak with Gramma"
       ],
@@ -4862,13 +5971,21 @@
         37.82440185546875
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 111,
+      "quest_prerequisites": [
+        [
+          106
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Speak with Gramma",
       "npc_id": 248,
       "target_name": "Gramma Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Speak with Gramma"
       ],
@@ -4922,13 +6039,21 @@
         37.82440185546875
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 107,
+      "quest_prerequisites": [
+        [
+          111
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Note to William",
       "npc_id": 248,
       "target_name": "Gramma Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Note to William"
       ],
@@ -4973,22 +6098,54 @@
         9
       ],
       "pos": [
-        0.3494254981154688,
-        0.8386162295533626
+        0.43317486518161635,
+        0.6570154501878165
       ],
       "world": [
-        -9880.6298828125,
-        322.6189880371094,
-        37.82440185546875
+        -9460.2998046875,
+        31.938899993896484,
+        57.049400329589844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 107,
+      "quest_prerequisites": [
+        [
+          111
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Note to William",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "William Pestle",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 1252,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 253,
+          "target_name": "William Pestle",
+          "target_kind": "creature",
+          "pos": [
+            0.43317486518161635,
+            0.6570154501878165
+          ],
+          "world": [
+            -9460.2998046875,
+            31.938899993896484,
+            57.049400329589844
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Take Gramma Stonefield's Note to William Pestle."
       ],
@@ -5020,7 +6177,7 @@
       "xp_est": 540,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Gramma Stonefield",
+      "notes": "William Pestle",
       "source": "generated"
     },
     {
@@ -5042,13 +6199,21 @@
         57.049400329589844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 107,
+      "quest_prerequisites": [
+        [
+          111
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Note to William",
       "npc_id": 253,
       "target_name": "William Pestle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Note to William"
       ],
@@ -5102,13 +6267,21 @@
         57.049400329589844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 112,
+      "quest_prerequisites": [
+        [
+          107
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Collecting Kelp",
       "npc_id": 253,
       "target_name": "William Pestle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Collecting Kelp"
       ],
@@ -5162,13 +6335,45 @@
         58.26917399192343
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 83.14134293797791,
       "quest_id": 112,
+      "quest_prerequisites": [
+        [
+          107
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Collecting Kelp",
       "npc_id": null,
       "target_name": "Murloc",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 1256,
+          "required_count": 4,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 285,
+          "target_name": "Murloc",
+          "target_kind": "creature",
+          "pos": [
+            0.5390272335794973,
+            0.6663779059260061
+          ],
+          "world": [
+            -9481.96998565051,
+            -335.4570200394611,
+            58.26917399192343
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 83.14134293797791,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 4 Crystal Kelp Fronds to William Pestle in Goldshire."
       ],
@@ -5222,13 +6427,21 @@
         57.049400329589844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 112,
+      "quest_prerequisites": [
+        [
+          107
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Collecting Kelp",
       "npc_id": 253,
       "target_name": "William Pestle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Collecting Kelp"
       ],
@@ -5282,13 +6495,21 @@
         57.049400329589844
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 114,
+      "quest_prerequisites": [
+        [
+          112
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "The Escape",
       "npc_id": 253,
       "target_name": "William Pestle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept The Escape"
       ],
@@ -5333,22 +6554,54 @@
         10
       ],
       "pos": [
-        0.43317486518161635,
-        0.6570154501878165
+        0.43154237547755137,
+        0.8962378904474981
       ],
       "world": [
-        -9460.2998046875,
-        31.938899993896484,
-        57.049400329589844
+        -10014.0,
+        37.60499954223633,
+        35.25310134887695
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 114,
+      "quest_prerequisites": [
+        [
+          112
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "The Escape",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Maybell Maclure",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 1257,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 251,
+          "target_name": "Maybell Maclure",
+          "target_kind": "creature",
+          "pos": [
+            0.43154237547755137,
+            0.8962378904474981
+          ],
+          "world": [
+            -10014.0,
+            37.60499954223633,
+            35.25310134887695
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Take the Invisibility Liquor to Maybell Maclure."
       ],
@@ -5380,7 +6633,7 @@
       "xp_est": 630,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "William Pestle",
+      "notes": "Maybell Maclure",
       "source": "generated"
     },
     {
@@ -5402,13 +6655,21 @@
         35.25310134887695
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 114,
+      "quest_prerequisites": [
+        [
+          112
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "The Escape",
       "npc_id": 251,
       "target_name": "Maybell Maclure",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in The Escape"
       ],
@@ -5462,13 +6723,21 @@
         32.59510040283203
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 87,
+      "quest_prerequisites": [
+        [
+          84
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Goldtooth",
       "npc_id": 247,
       "target_name": "Billy Maclure",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Goldtooth"
       ],
@@ -5522,13 +6791,45 @@
         12.820199966430664
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 87,
+      "quest_prerequisites": [
+        [
+          84
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Goldtooth",
       "npc_id": null,
       "target_name": "Goldtooth",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 981,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 327,
+          "target_name": "Goldtooth",
+          "target_kind": "creature",
+          "pos": [
+            0.4171374492290068,
+            0.7802730901599193
+          ],
+          "world": [
+            -9745.58984375,
+            87.60209655761719,
+            12.820199966430664
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 15.0,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring Bernice's Necklace to \"Auntie\" Bernice Stonefield at the Stonefield Farm."
       ],
@@ -5582,13 +6883,21 @@
         36.64860153198242
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 87,
+      "quest_prerequisites": [
+        [
+          84
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Goldtooth",
       "npc_id": 246,
       "target_name": "\"Auntie\" Bernice Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Goldtooth"
       ],
@@ -5642,13 +6951,17 @@
         41.18550109863281
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 5545,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "A Bundle of Trouble",
       "npc_id": 10616,
       "target_name": "Supervisor Raelen",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept A Bundle of Trouble"
       ],
@@ -5702,13 +7015,41 @@
         63.36484282357352
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 58.98751412632714,
       "quest_id": 5545,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "A Bundle of Trouble",
       "npc_id": null,
       "target_name": "Bundle of Wood",
       "target_kind": "gameobject",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 13872,
+          "required_count": 8,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 176793,
+          "target_name": "Bundle of Wood",
+          "target_kind": "gameobject",
+          "pos": [
+            0.8215617312804545,
+            0.6059172025970089
+          ],
+          "world": [
+            -9342.02866908482,
+            -1316.087149483817,
+            63.36484282357352
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 58.98751412632714,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 8 Bundles of Wood to Raelen at the Eastvale Logging Camp."
       ],
@@ -5762,13 +7103,17 @@
         41.18550109863281
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 5545,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "A Bundle of Trouble",
       "npc_id": 10616,
       "target_name": "Supervisor Raelen",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in A Bundle of Trouble"
       ],
@@ -5822,13 +7167,17 @@
         36.333099365234375
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 176,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Wanted:  \"Hogger\"",
       "npc_id": 68,
       "target_name": "Wanted Poster",
       "target_kind": "gameobject",
+      "objective_targets": [],
       "objectives": [
         "accept Wanted:  \"Hogger\""
       ],
@@ -5882,13 +7231,41 @@
         37.7100248336792
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 43.4475556047555,
       "quest_id": 176,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Wanted:  \"Hogger\"",
       "npc_id": null,
       "target_name": "Hogger",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 1931,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 448,
+          "target_name": "Hogger",
+          "target_kind": "creature",
+          "pos": [
+            0.2614670055280004,
+            0.9227114048030216
+          ],
+          "world": [
+            -10075.275146484375,
+            627.9082489013672,
+            37.7100248336792
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 43.4475556047555,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Slay the gnoll Hogger and bring his Huge Gnoll Claw to Marshal Dughan."
       ],
@@ -5942,13 +7319,17 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 176,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Wanted:  \"Hogger\"",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Wanted:  \"Hogger\""
       ],
@@ -6002,13 +7383,17 @@
         36.550498962402344
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 88,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Princess Must Die!",
       "npc_id": 244,
       "target_name": "Ma Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Princess Must Die!"
       ],
@@ -6062,13 +7447,41 @@
         39.61920166015625
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 88,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Princess Must Die!",
       "npc_id": null,
       "target_name": "Princess",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 1006,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 330,
+          "target_name": "Princess",
+          "target_kind": "creature",
+          "pos": [
+            0.6966372180896707,
+            0.7925217698753614
+          ],
+          "world": [
+            -9773.9404296875,
+            -882.4949951171875,
+            39.61920166015625
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 15.0,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Kill Princess, grab her collar, then bring it back to Ma Stonefield at the Stonefield Farm."
       ],
@@ -6122,13 +7535,17 @@
         36.550498962402344
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 88,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Princess Must Die!",
       "npc_id": 244,
       "target_name": "Ma Stonefield",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Princess Must Die!"
       ],
@@ -6182,13 +7599,17 @@
         36.935699462890625
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 11,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Riverpaw Gnoll Bounty",
       "npc_id": 963,
       "target_name": "Deputy Rainer",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Riverpaw Gnoll Bounty"
       ],
@@ -6233,22 +7654,50 @@
         13
       ],
       "pos": [
-        0.24233248359498058,
-        0.7444826935872375
+        0.6790265915726216,
+        0.41120936200115304
       ],
       "world": [
-        -9662.75,
-        694.3209838867188,
-        36.935699462890625
+        -8891.361209753788,
+        -821.3714470140861,
+        71.420830004143
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 15.0,
+      "hunt_yards": 64.86969204877164,
       "quest_id": 11,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Riverpaw Gnoll Bounty",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Riverpaw Runt",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 782,
+          "required_count": 8,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 97,
+          "target_name": "Riverpaw Runt",
+          "target_kind": "creature",
+          "pos": [
+            0.6790265915726216,
+            0.41120936200115304
+          ],
+          "world": [
+            -8891.361209753788,
+            -821.3714470140861,
+            71.420830004143
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 64.86969204877164,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 8 Painted Gnoll Armbands to Deputy Rainer at the Barracks."
       ],
@@ -6280,7 +7729,7 @@
       "xp_est": 900,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Deputy Rainer",
+      "notes": "Riverpaw Runt",
       "source": "generated"
     },
     {
@@ -6302,13 +7751,17 @@
         36.935699462890625
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 11,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Riverpaw Gnoll Bounty",
       "npc_id": 963,
       "target_name": "Deputy Rainer",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Riverpaw Gnoll Bounty"
       ],
@@ -6362,13 +7815,21 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 239,
+      "quest_prerequisites": [
+        [
+          76
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Westbrook Garrison Needs Help!",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Westbrook Garrison Needs Help!"
       ],
@@ -6422,13 +7883,21 @@
         36.935699462890625
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 239,
+      "quest_prerequisites": [
+        [
+          76
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Westbrook Garrison Needs Help!",
       "npc_id": 963,
       "target_name": "Deputy Rainer",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Westbrook Garrison Needs Help!"
       ],
@@ -6482,13 +7951,17 @@
         56.597999572753906
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 40,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "A Fishy Peril",
       "npc_id": 241,
       "target_name": "Remy \"Two Times\"",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept A Fishy Peril"
       ],
@@ -6542,13 +8015,17 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 40,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "A Fishy Peril",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in A Fishy Peril"
       ],
@@ -6602,13 +8079,21 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 35,
+      "quest_prerequisites": [
+        [
+          40
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Further Concerns",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Further Concerns"
       ],
@@ -6662,13 +8147,21 @@
         41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 35,
+      "quest_prerequisites": [
+        [
+          40
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Further Concerns",
       "npc_id": 261,
       "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Further Concerns"
       ],
@@ -6722,13 +8215,21 @@
         41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 37,
+      "quest_prerequisites": [
+        [
+          35
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Find the Lost Guards",
       "npc_id": 261,
       "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Find the Lost Guards"
       ],
@@ -6782,13 +8283,21 @@
         67.19100189208984
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 37,
+      "quest_prerequisites": [
+        [
+          35
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Find the Lost Guards",
       "npc_id": 55,
       "target_name": "A half-eaten body",
       "target_kind": "gameobject",
+      "objective_targets": [],
       "objectives": [
         "turn in Find the Lost Guards"
       ],
@@ -6842,13 +8351,21 @@
         67.19100189208984
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 45,
+      "quest_prerequisites": [
+        [
+          37
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Discover Rolf's Fate",
       "npc_id": 55,
       "target_name": "A half-eaten body",
       "target_kind": "gameobject",
+      "objective_targets": [],
       "objectives": [
         "accept Discover Rolf's Fate"
       ],
@@ -6902,13 +8419,21 @@
         73.4312973022461
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 45,
+      "quest_prerequisites": [
+        [
+          37
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Discover Rolf's Fate",
       "npc_id": 56,
       "target_name": "Rolf's corpse",
       "target_kind": "gameobject",
+      "objective_targets": [],
       "objectives": [
         "turn in Discover Rolf's Fate"
       ],
@@ -6962,13 +8487,21 @@
         73.4312973022461
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 71,
+      "quest_prerequisites": [
+        [
+          45
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Report to Thomas",
       "npc_id": 56,
       "target_name": "Rolf's corpse",
       "target_kind": "gameobject",
+      "objective_targets": [],
       "objectives": [
         "accept Report to Thomas"
       ],
@@ -7013,22 +8546,54 @@
         13
       ],
       "pos": [
-        0.5256653257161925,
-        0.6625424536653988
+        0.7397263102051674,
+        0.7217919838253802
       ],
       "world": [
-        -9473.092513020832,
-        -289.08006591796874,
-        59.76198043823242
+        -9610.23046875,
+        -1032.050048828125,
+        41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 71.02129080476632,
+      "hunt_yards": 15.0,
       "quest_id": 71,
+      "quest_prerequisites": [
+        [
+          45
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Report to Thomas",
       "npc_id": null,
-      "target_name": "Murloc Streamrunner",
+      "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 735,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 261,
+          "target_name": "Guard Thomas",
+          "target_kind": "creature",
+          "pos": [
+            0.7397263102051674,
+            0.7217919838253802
+          ],
+          "world": [
+            -9610.23046875,
+            -1032.050048828125,
+            41.30580139160156
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Deliver Rolf and Malakai's Medallions to Guard Thomas at the eastern Elwynn bridge."
       ],
@@ -7060,7 +8625,7 @@
       "xp_est": 900,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Murloc Streamrunner",
+      "notes": "Guard Thomas",
       "source": "generated"
     },
     {
@@ -7082,13 +8647,21 @@
         41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 71,
+      "quest_prerequisites": [
+        [
+          45
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Report to Thomas",
       "npc_id": 261,
       "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Report to Thomas"
       ],
@@ -7142,13 +8715,21 @@
         41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 39,
+      "quest_prerequisites": [
+        [
+          71
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Deliver Thomas' Report",
       "npc_id": 261,
       "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Deliver Thomas' Report"
       ],
@@ -7202,13 +8783,21 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 39,
+      "quest_prerequisites": [
+        [
+          71
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Deliver Thomas' Report",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Deliver Thomas' Report"
       ],
@@ -7262,13 +8851,17 @@
         41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 46,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Bounty on Murlocs",
       "npc_id": 261,
       "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Bounty on Murlocs"
       ],
@@ -7313,22 +8906,50 @@
         13
       ],
       "pos": [
-        0.7397263102051674,
-        0.7217919838253802
+        0.7894227556219228,
+        0.4591834746193568
       ],
       "world": [
-        -9610.23046875,
-        -1032.050048828125,
-        41.30580139160156
+        -9002.401275634766,
+        -1204.5381240844727,
+        70.47106552124023
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 15.0,
+      "hunt_yards": 39.156552831364706,
       "quest_id": 46,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Bounty on Murlocs",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Murloc Forager",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 780,
+          "required_count": 8,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 46,
+          "target_name": "Murloc Forager",
+          "target_kind": "creature",
+          "pos": [
+            0.7894227556219228,
+            0.4591834746193568
+          ],
+          "world": [
+            -9002.401275634766,
+            -1204.5381240844727,
+            70.47106552124023
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 39.156552831364706,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Bring 8 Torn Murloc Fins to Guard Thomas at the east Elwynn bridge."
       ],
@@ -7360,7 +8981,7 @@
       "xp_est": 900,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Guard Thomas",
+      "notes": "Murloc Forager",
       "source": "generated"
     },
     {
@@ -7382,13 +9003,17 @@
         41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 46,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Bounty on Murlocs",
       "npc_id": 261,
       "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Bounty on Murlocs"
       ],
@@ -7442,13 +9067,17 @@
         41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 52,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Protect the Frontier",
       "npc_id": 261,
       "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Protect the Frontier"
       ],
@@ -7502,13 +9131,64 @@
         75.47291506253757
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 69.04759339808528,
       "quest_id": 52,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Protect the Frontier",
       "npc_id": null,
       "target_name": "Prowler",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "kill",
+          "required_id": 118,
+          "required_count": 8,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 118,
+          "target_name": "Prowler",
+          "target_kind": "creature",
+          "pos": [
+            0.7389091548984119,
+            0.39668721609228763
+          ],
+          "world": [
+            -8857.748497596154,
+            -1029.213839017428,
+            75.47291506253757
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 69.04759339808528,
+          "blocked_reason": null
+        },
+        {
+          "kind": "kill",
+          "required_id": 822,
+          "required_count": 5,
+          "source_slot": 2,
+          "counter_index": 1,
+          "target_id": 822,
+          "target_name": "Young Forest Bear",
+          "target_kind": "creature",
+          "pos": [
+            0.620243029717583,
+            0.7834811379783329
+          ],
+          "world": [
+            -9753.01513671875,
+            -617.343505859375,
+            40.59776655832926
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 73.10680274041836,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Kill 8 Prowlers and 5 Young Forest Bears, and then return to Guard Thomas at the east Elwynn bridge."
       ],
@@ -7562,13 +9242,17 @@
         41.30580139160156
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 52,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Protect the Frontier",
       "npc_id": 261,
       "target_name": "Guard Thomas",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Protect the Frontier"
       ],
@@ -7622,13 +9306,21 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 59,
+      "quest_prerequisites": [
+        [
+          39
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Cloth and Leather Armor",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Cloth and Leather Armor"
       ],
@@ -7673,22 +9365,54 @@
         13
       ],
       "pos": [
-        0.4210544335950263,
-        0.6592705978947173
+        0.7945748094841407,
+        0.6878892450339285
       ],
       "world": [
-        -9465.51953125,
-        74.00689697265625,
-        56.778499603271484
+        -9531.759765625,
+        -1222.4200439453125,
+        47.83789825439453
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 59,
+      "quest_prerequisites": [
+        [
+          39
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Cloth and Leather Armor",
       "npc_id": null,
-      "target_name": null,
-      "target_kind": null,
+      "target_name": "Sara Timberlain",
+      "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "delivery",
+          "required_id": 748,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 278,
+          "target_name": "Sara Timberlain",
+          "target_kind": "creature",
+          "pos": [
+            0.7945748094841407,
+            0.6878892450339285
+          ],
+          "world": [
+            -9531.759765625,
+            -1222.4200439453125,
+            47.83789825439453
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": null,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Give Sara Timberlain the Stormwind Armor Marker."
       ],
@@ -7720,7 +9444,7 @@
       "xp_est": 900,
       "timeout_s": 600.0,
       "skippable": false,
-      "notes": "Marshal Dughan",
+      "notes": "Sara Timberlain",
       "source": "generated"
     },
     {
@@ -7742,13 +9466,21 @@
         47.83789825439453
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 59,
+      "quest_prerequisites": [
+        [
+          39
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Cloth and Leather Armor",
       "npc_id": 278,
       "target_name": "Sara Timberlain",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Cloth and Leather Armor"
       ],
@@ -7802,13 +9534,21 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 147,
+      "quest_prerequisites": [
+        [
+          123
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Manhunt",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Manhunt"
       ],
@@ -7862,13 +9602,45 @@
         39.857398986816406
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.06,
       "hunt_yards": 15.0,
       "quest_id": 147,
+      "quest_prerequisites": [
+        [
+          123
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Manhunt",
       "npc_id": null,
       "target_name": "Morgan the Collector",
       "target_kind": "creature",
+      "objective_targets": [
+        {
+          "kind": "loot",
+          "required_id": 2239,
+          "required_count": 1,
+          "source_slot": 1,
+          "counter_index": 0,
+          "target_id": 473,
+          "target_name": "Morgan the Collector",
+          "target_kind": "creature",
+          "pos": [
+            0.710936098133068,
+            0.8064809021265895
+          ],
+          "world": [
+            -9806.25,
+            -932.1240234375,
+            39.857398986816406
+          ],
+          "map_id": 0,
+          "coord_zone_id": 12,
+          "hunt_yards": 15.0,
+          "blocked_reason": null
+        }
+      ],
       "objectives": [
         "Find and kill \"the Collector\"  then return to Marshal Dughan with The Collector's Ring."
       ],
@@ -7922,13 +9694,21 @@
         56.778499603271484
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 147,
+      "quest_prerequisites": [
+        [
+          123
+        ]
+      ],
+      "route_blocked_reason": null,
       "title": "Manhunt",
       "npc_id": 240,
       "target_name": "Marshal Dughan",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Manhunt"
       ],
@@ -7982,13 +9762,17 @@
         36.43330001831055
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 109,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Report to Gryan Stoutmantle",
       "npc_id": 233,
       "target_name": "Farmer Saldean",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "accept Report to Gryan Stoutmantle"
       ],
@@ -8039,13 +9823,17 @@
         60.70130157470703
       ],
       "map_id": 0,
+      "coord_zone_id": 12,
       "r": 0.03,
       "hunt_yards": null,
       "quest_id": 109,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
       "title": "Report to Gryan Stoutmantle",
       "npc_id": 234,
       "target_name": "Gryan Stoutmantle",
       "target_kind": "creature",
+      "objective_targets": [],
       "objectives": [
         "turn in Report to Gryan Stoutmantle"
       ],

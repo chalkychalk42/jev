@@ -8,7 +8,7 @@ System 1   33-50 ms   scripted     free       move, face, swing, loot, eat
 Tracker    250 ms     predicates   free       step done? off route? timed out?
 Coach      0.2-2 Hz   policy       free       arm a skill, move the playhead
 Teacher    queued     Claude/GLM   expensive  resolve ambiguity, write skills
-Learner    nightly    training     free       grade, retrain, promote
+Learner    background training    free       grade, evaluate, canary, promote
 ```
 
 The teacher never presses a key and is never on the hot path. It answers the small
@@ -49,9 +49,11 @@ for the evidence and remaining gaps.
 ```
 
 On Windows, `python tools/probe_slice.py` remains the live entry point and delegates to
-`jev.run.cli`. It attaches the client and can send input. The teacher is optional; this
-entry point uses the scripted floor. Synthetic and replay examples are excluded from
-the training dataset by default.
+`jev.run.cli`. It attaches the client and can send input. It uses the scripted floor by
+default; optional background learning, shadow/adaptive policy and the bounded teacher
+queue share the same runtime. Synthetic and replay examples are excluded from training
+by default. [Operating instructions](docs/OPERATING.md) cover the explicit supported
+route, evidence gates, reconnect, files and remaining live acceptance work.
 
 ### Platform split
 The brain is pure Python and runs anywhere. Capture and input are Windows-only — they

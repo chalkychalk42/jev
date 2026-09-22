@@ -63,6 +63,10 @@ class ChooseListLine:
     detail: str = field(default="", init=False)
 
     def run(self, title: str, *, settle_s: float = 1.2) -> Chose:
+        return self.run_id(name_id(title), settle_s=settle_s, label=title)
+
+    def run_id(self, wanted: int, *, settle_s: float = 1.2, label: str | None = None) -> Chose:
+        """The same list composition with an identity positively painted by the addon."""
         self.clicked = self.line = None
         self.detail = ""
 
@@ -74,7 +78,6 @@ class ChooseListLine:
             self.detail = "no gossip or greeting list is showing"
             return Chose.NO_LIST
 
-        wanted = name_id(title)
         matches = [line for line in before if line.name_id == wanted]
         if not matches:
             # Positions as well as hashes: a hash that matches nothing is either the
@@ -83,10 +86,10 @@ class ChooseListLine:
             seen = ", ".join(f"#{ln.index} {ln.name_id} at ({ln.x:.3f},{ln.y:.3f})"
                              for ln in before)
             self.detail = (f"{len(before)} line(s), none hashing to {wanted} for "
-                           f"{title!r}: {seen}")
+                           f"{label!r}: {seen}")
             return Chose.NO_MATCH
         if len(matches) > 1:
-            self.detail = f"{len(matches)} lines answer to {title!r}; refusing to guess"
+            self.detail = f"{len(matches)} lines answer to {label or wanted!r}; refusing to guess"
             return Chose.AMBIGUOUS
 
         self.line = matches[0]

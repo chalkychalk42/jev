@@ -32,7 +32,6 @@ from jev.perceive.fields import (
     MARKER_L,
     MARKER_R,
     PAYLOAD_CELLS,
-    SCHEMA,
     STEP,
     Kind,
     layout,
@@ -732,7 +731,7 @@ def test_the_toc_loads_helpers_before_the_painter():
     unknown on a strip that otherwise looks healthy."""
     toc = (ADDON / "JevRadio.toc").read_text(encoding="utf-8").splitlines()
     files = [line.strip() for line in toc if line.strip().endswith(".lua")]
-    assert files == ["Helpers.lua", "Fields.lua", "JevRadio.lua"]
+    assert files == ["Supplies.lua", "Helpers.lua", "Fields.lua", "JevRadio.lua"]
     assert "## Interface: 20400" in "\n".join(toc)
 
 
@@ -879,7 +878,8 @@ def test_the_strip_reads_from_a_real_client_frame():
     reading = radio_frame.read(frame)
     assert reading.ok, f"{reading.fault}: {reading.detail}"
     v = reading.values
-    assert v["schema"] == SCHEMA, "the fixture and the field table must agree"
+    assert v["schema"] == 6, "historical fixture decodes through the explicit schema-6 layout"
+    assert v["bags.money_copper"] is None and v["inventory.item_id"] is None
     assert 1 <= v["char.level"] <= 70
     assert 0.0 <= v["pos.mx"] <= 1.0 and 0.0 <= v["pos.my"] <= 1.0
     assert v["vitals.hp_max"] > 0
@@ -959,7 +959,8 @@ def test_a_ghost_reads_its_own_corpse_off_the_strip():
     reading = radio_frame.read(frame)
     assert reading.ok, f"{reading.fault}: {reading.detail}"
     v = reading.values
-    assert v["schema"] == SCHEMA
+    assert v["schema"] == 6
+    assert v["bags.food_count"] is None
     assert v["vitals.ghost"] is True
     assert v["vitals.hp"] < 0.1
     assert 0.0 < v["pos.corpse_mx"] < 1.0 and 0.0 < v["pos.corpse_my"] < 1.0

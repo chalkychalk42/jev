@@ -27,7 +27,10 @@ from __future__ import annotations
 
 import json
 import pathlib
+from contextlib import suppress
 from dataclasses import dataclass
+
+from jev.persist import atomic_json
 
 DEFAULT_PATH = pathlib.Path("var/playhead.json")
 
@@ -82,13 +85,9 @@ def save(graph_id: str, step_id: str | None = None,
          completed: frozenset[int] | set[int] = frozenset(),
          path: pathlib.Path = DEFAULT_PATH) -> None:
     """Write the position. Best effort: failing to remember must not fail the run."""
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"graph_id": graph_id, "step_id": step_id,
-                                    "completed": sorted(completed)}, indent=1),
-                        encoding="utf-8")
-    except OSError:
-        pass
+    with suppress(OSError):
+        atomic_json(path, {"graph_id": graph_id, "step_id": step_id,
+                           "completed": sorted(completed)})
 
 
 def with_completed(remembered: Remembered, quest_id: int) -> Remembered:

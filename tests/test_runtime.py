@@ -31,7 +31,7 @@ GRAPH = "content/tbc/ally_human_1_12.json"
 def _at(node, t: float, **kw) -> State:
     """A healthy character standing on a node."""
     base = dict(
-        pos=Pos(zone=node.zone, zone_id=node.zone_id,
+        pos=Pos(zone=node.zone, zone_id=node.zone_id, coord_zone_id=node.coord_zone_id,
                 mx=node.pos[0] if node.pos else 0.5,
                 my=node.pos[1] if node.pos else 0.5),
         vitals=Vitals(hp=1.0, power=1.0, dead=False, ghost=False, combat=False),
@@ -68,8 +68,9 @@ def test_a_quest_is_accepted_worked_and_turned_in(tmp_path):
     qid = accept.quest_id
 
     def with_quest(node, t, have, need=10, present=True):
-        quests = ((Quest(quest_id=qid, title="q",
-                         objectives=(Objective(text="kill", have=have, need=need),)),)
+        quests = ((Quest(quest_id=qid, title="q", complete=have >= need,
+                         objectives=(Objective(text="kill", have=have, need=need,
+                                               counter_index=0),)),)
                   if present else ())
         return _at(node, t, quests=quests)
 

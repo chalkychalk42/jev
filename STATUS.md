@@ -1255,3 +1255,72 @@ wandering-NPC, idle-disconnect and in-combat Holy Light measurements remain open
 
 Verification: **751 tests passed in 79.56 s**, including the real navmesh checks and all
 new threaded continuity/focus cases. Ruff (`jev tools tests`) and `git diff --check` pass.
+
+## 2026-09-22 — build the unattended composition and evidence-gated learning
+
+DID: implemented the requested inventory, route, supervision, background learning,
+teacher connection and promotion/rollback work. The client remained closed. No addon
+installation, external teacher call, live soak or live promotion was performed.
+
+- Schema 7 paints exact money, inventory slots, supply counts, merchant offers/pages,
+  stock button coordinates and unique vendor gossip identity. Schema 6 captures still
+  decode with new observations unknown. The vendor uses Interact and the existing list
+  chooser, sells only generated non-quest junk, buys exact starting food/drink, and
+  requires inventory plus copper evidence for transactions. No equipment destruction,
+  guessed buttons or action-bar changes. Unaffordable supplies are bounded by observed
+  purse changes. Full bags yield service between pulls after looting.
+- Schema 3 guide generation retains each objective's source requirement, target and
+  verified radio counter. Hunt selects the current incomplete target; the tracker follows
+  that target's camp and requires explicit overall completion for structured quests.
+  Delivery facts and dependency groups are generated from the local DB. The explicit
+  supported derivative contains 99 nodes / 31 quest chains, with 14 quest chains and
+  unsupported service branches excluded in a manifest. Exclusions never become rewards.
+- Navigation declares its coordinate frame. Player and corpse observations from another
+  region are converted through measured WorldMapArea bounds into the graph frame;
+  actual region and raw fractions remain recorded. This fixes Elwynn/Stormwind boundary
+  interpretation without changing the proven planner/follower. Unknown regions and other
+  continents provide no usable position. New State rows declare schema 2; schema 1 corpus
+  remains readable. Live guides lacking a declared frame are refused before attachment.
+- Atomic playhead replacement, separate non-default client memories, a shared per-user
+  input lease, cooperative SIGTERM/interrupt cleanup, and bounded reconnect through the
+  measured Session composition. The watchdog measures quest/XP progress, not movement
+  or retry/rib playhead churn. Its last permitted reconnect can finish before exhaustion.
+  Unknown login screens receive no guessed input; lost account-field confirmation never
+  sends a password.
+- A periodic learner grades mature windows, splits whole runs, trains immutable versioned
+  candidates, evaluates exact graph revisions and brackets, records distinct shadow model
+  identity, and supports bounded canaries, evidence-gated promotion and rollback. Unknown
+  life/XP, synthetic future windows, duplicate identities and mixed model control cannot
+  manufacture positive credit. Death edges and earned tracker advances are counted once.
+  Default activation requires independent windows, multiple runs and observed progress;
+  full promotion additionally requires fresh model-attributed improvement.
+- The optional teacher bridge uses the existing subscription transport off-thread, a
+  persistent call budget and the current graph context. All artifact payloads survive
+  refusal/staleness in decision records. The body contract verifies actions before arming.
+  Cancellation kills and reaps the teacher subprocess. Proposals never install code.
+  Optional model loading, registry writes and status persistence run off the supervisor
+  thread. Setup failure leaves the scripted floor running; failed models are quarantined
+  immediately and queued rollback is drained on shutdown.
+
+NOW: the complete offline composition and operating commands are documented in
+`docs/OPERATING.md`; vendor provenance and regeneration are in `docs/VENDOR.md`.
+The all-flags `--check` reports 31 supported quests with no missing executor or target
+inside that selected derivative, and performs no capture, input, credential read,
+training or subscription call. An actual learner pass over all 28 existing run directories
+reported no errors and zero eligible examples. A repeated unchanged pass grades zero
+runs, publishes no candidate and performs no promotion; missing historical evidence
+was not repaired by invented labels.
+
+NEXT / named limits: install the new addon and perform Windows/live acceptance only when
+the operator permits opening the client. Observe inventory service, reconnect, graph
+continuity and input release during the soak before claiming unattended operation.
+Wandering-NPC interaction, focus versus unstick, in-combat Holy Light timing, unsupported
+gameobjects/exploration/training/travel services, and depleted-character supply access
+remain named limitations. The pre-existing camera calibration edit and `look_tmp.py`
+were preserved and excluded from this batch. Measured ongoing improvement remains a
+future outcome, never an assumption of the software being wired.
+
+Verification: **927 tests passed in 85.32 s**. Ruff (`jev tools tests`),
+`git diff --check`, graph regeneration identity, real Lua addon execution and the
+all-flags offline readiness check pass. Regenerated wire: 112 fields / 1035 payload
+bits, 12×9 grid. All code verification remained offline.

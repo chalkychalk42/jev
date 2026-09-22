@@ -12,6 +12,7 @@
 # Fields.lua before Helpers.lua would still load -- the getters resolve names at call
 # time -- but JevRadio.lua genuinely cannot build the getter environment before Helpers
 # has produced it.
+Supplies.lua
 Helpers.lua
 Fields.lua
 JevRadio.lua

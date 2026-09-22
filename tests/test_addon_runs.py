@@ -162,3 +162,64 @@ def test_the_addon_only_touches_a_small_api_surface():
 def test_quest_completion_is_a_positive_one_not_lua_truthiness(flag, complete):
     values = radio.unpack(payload(paint({"questComplete": flag}))[:PAYLOAD_CELLS])
     assert values["quests.slot_complete"] is complete
+
+
+def test_inventory_identity_exact_copper_and_supply_counts_survive_lua_wire():
+    values = radio.unpack(payload(paint({"inventoryFixture": True, "money": 91234,
+                                         "class": "PALADIN", "foodCount": 7}))[:PAYLOAD_CELLS])
+    assert values["bags.money_copper"] == 91234
+    assert values["inventory.item_id"] == 7073
+    assert values["inventory.bag"] == 0 and values["inventory.slot"] == 1
+    assert values["inventory.ordinal"] == 1 and values["inventory.total"] == 2
+    assert values["inventory.quality"] == 0 and values["inventory.count"] == 2
+    assert values["inventory.locked"] is False
+    assert values["inventory.x"] == pytest.approx(1400 / 1600, abs=0.001)
+    assert values["inventory.y"] == pytest.approx(1 - 400 / 900, abs=0.001)
+    assert values["bags.food_id"] == 2070 and values["bags.food_count"] == 7
+    assert values["bags.drink_id"] == 159 and values["bags.drink_count"] == 0
+
+
+def test_uncached_item_is_unknown_and_invalidates_exact_supply_counts():
+    values = radio.unpack(payload(paint({"inventoryFixture": True, "itemUnread": True,
+                                         "class": "PALADIN"}))[:PAYLOAD_CELLS])
+    assert values["inventory.item_id"] is None
+    assert values["bags.food_count"] is None and values["bags.drink_count"] is None
+
+
+def test_closed_bag_has_only_observed_opener_and_buyback_has_no_offer():
+    values = radio.unpack(payload(paint({"inventoryFixture": True, "bagHidden": True,
+                                         "buyback": True}))[:PAYLOAD_CELLS])
+    assert values["inventory.x"] is None
+    assert values["inventory.open_x"] == pytest.approx(1500 / 1600, abs=0.001)
+    assert values["merchant.item_id"] is None and values["merchant.name_id"] is None
+
+
+def test_stock_merchant_offer_has_identity_price_quantity_and_owned_total():
+    values = radio.unpack(payload(paint({"inventoryFixture": True, "foodCount": 7,
+                                         "offerPrice": 24}))[:PAYLOAD_CELLS])
+    assert values["merchant.item_id"] == 2070
+    assert values["merchant.quantity"] == 5 and values["merchant.price"] == 24
+    assert values["merchant.unlimited"] is True and values["merchant.extended"] is False
+    assert values["merchant.owned"] == 7
+    assert values["merchant.x"] == pytest.approx(150 / 1600, abs=0.001)
+    assert values["merchant.ready"] is True
+
+
+@pytest.mark.parametrize("change", [{"shiftHeld": True}, {"cursorType": "item"},
+                                    {"repairMode": True}])
+def test_merchant_cursor_modifiers_and_repair_mode_are_observed(change):
+    values = radio.unpack(payload(paint({"inventoryFixture": True, **change}))[:PAYLOAD_CELLS])
+    assert values["merchant.ready"] is False
+
+
+def test_vendor_gossip_uses_semantic_type_and_the_same_normalized_text_hash():
+    from jev.perceive.radio_frame import name_id
+
+    values = radio.unpack(payload(paint({"visiblePanel": "GossipFrame",
+                                         "vendorGossip": True}))[:PAYLOAD_CELLS])
+    assert values["merchant.gossip_name_id"] == name_id("Browse my wares.")
+    for extra in ({"duplicateVendor": True}, {}, {"vendorGossip": True, "panelHidden": True},
+                  {"vendorGossip": True, "wrongGossipID": True},
+                  {"vendorGossip": True, "vendorLineHidden": True}):
+        values = radio.unpack(payload(paint({"visiblePanel": "GossipFrame", **extra}))[:PAYLOAD_CELLS])
+        assert values["merchant.gossip_name_id"] is None

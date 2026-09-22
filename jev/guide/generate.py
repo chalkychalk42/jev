@@ -26,8 +26,8 @@ import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
 
-from jev.guide.coords import ZoneBounds, load_bounds, on_map, world_to_map
-from jev.guide.graph import FailEdge, FailWhen, Graph, Node
+from jev.guide.coords import ZoneBounds, _as_float, load_bounds, on_map, world_to_map
+from jev.guide.graph import FailEdge, FailWhen, Graph, Node, ObjectiveTarget
 from jev.world.state_v1 import StepKind
 
 # Race bitmasks are `1 << (ChrRaces.id - 1)`. RequiredRaces == 0 means every race.
@@ -107,6 +107,18 @@ class QuestRow:
     objectives: str
     req_counts: tuple[int, ...]
     xp_est: int
+    special_flags: int = 0
+
+
+@dataclass(frozen=True)
+class Requirement:
+    kind: str
+    required_id: int | None = None
+    required_count: int | None = None
+    source_slot: int | None = None
+    counter_index: int | None = None
+    spawn: Spawn | None = None
+    blocked_reason: str | None = None
 
 
 # How many of each service NPC to record per zone.
@@ -249,7 +261,7 @@ class WorldDB:
         rows = self.con.execute(
             f"""
             select entry, Title, QuestLevel, MinLevel, ZoneOrSort, PrevQuestId, NextQuestId,
-                   Objectives, RequiredRaces,
+                   Objectives, RequiredRaces, SpecialFlags,
                    ReqCreatureOrGOCount1, ReqCreatureOrGOCount2,
                    ReqCreatureOrGOCount3, ReqCreatureOrGOCount4,
                    ReqItemCount1, ReqItemCount2, ReqItemCount3, ReqItemCount4
@@ -277,6 +289,7 @@ class WorldDB:
                 zone_or_sort=r["ZoneOrSort"], prev_quest=r["PrevQuestId"] or 0,
                 next_quest=r["NextQuestId"] or 0, objectives=r["Objectives"] or "",
                 req_counts=counts, xp_est=max(0, r["QuestLevel"]) * 90,
+                special_flags=r["SpecialFlags"] or 0,
             ))
         return out
 
@@ -329,45 +342,146 @@ class WorldDB:
 
     def objective_spawn(self, quest_id: int, zones: tuple[ZoneBounds, ...] = (),
                         home: ZoneBounds | None = None) -> Spawn | None:
-        """Where the objective actually happens.
+        """Compatibility accessor for the first structured requirement's destination."""
+        requirements = self.requirements(quest_id, zones, home)
+        return requirements[0].spawn if requirements else None
 
-        A kill objective's node belongs where the mobs are, not where the quest was
-        taken. Uses the first required creature's densest spawn area: with ten wolves in
-        a field, the centroid of that field is a place you can stand, unlike the centroid
-        of an NPC's several spawns.
+    def prerequisites(self, quest_id: int) -> tuple[tuple[tuple[int, ...], ...], str | None]:
+        """The server's prerequisite alternatives, including reverse NextQuestId edges.
 
-        The returned spawn carries the group's **spread**, which is what was missing. A
-        hunt with no idea how big a camp is borrows the node's arrival radius instead, and
-        that is in map fractions.
+        Grounded in ObjectMgr::LoadQuests and Player::SatisfyQuestPreviousQuest.
+        Active-quest (negative) prerequisites need a parallel-quest plan, which this
+        sequential spine cannot honour; keep that limitation explicit.
         """
-        r = self.con.execute(
-            "select ReqCreatureOrGOId1 as a, ReqItemId1 as item "
-            "from world_quest_template where entry = ?",
-            (quest_id,),
+        row = self.con.execute(
+            "select PrevQuestId from world_quest_template where entry = ?", (quest_id,),
         ).fetchone()
-        if r and (not r["a"] or r["a"] <= 0) and r["item"]:
-            # "Bring me eight of these" rather than "kill eight of those". The work still
-            # happens somewhere, and the somewhere is wherever the thing that drops it
-            # lives - so follow the item into the loot tables instead of giving up and
-            # falling back to the quest giver.
-            #
-            # Quest 33 wants Tough Wolf Meat and its node was placed on Eagan Peltskinner
-            # with a fifteen yard disk, because nothing here looked past
-            # ReqCreatureOrGOId1. The bot hunted the man who wanted the wolves.
-            return self._drops(r["item"], zones, home)
-        if not r or not r["a"] or r["a"] <= 0:
-            return None
+        previous = [row[0]] if row and row[0] else []
+        previous += [r[0] if r[1] > 0 else -r[0] for r in self.con.execute(
+            "select entry, NextQuestId from world_quest_template where abs(NextQuestId) = ?",
+            (quest_id,),
+        )]
+        groups = []
+        negative = False
+        for qid in dict.fromkeys(previous):
+            if qid < 0:
+                negative = True
+                continue
+            prior = self.con.execute(
+                "select ExclusiveGroup, NextQuestId from world_quest_template where entry = ?",
+                (qid,),
+            ).fetchone()
+            if not prior:
+                groups.append((qid,))
+                continue
+            if prior[0] < 0 and not (row[0] and prior[1] != row[0]):
+                groups.append(tuple(r[0] for r in self.con.execute(
+                    "select entry from world_quest_template where ExclusiveGroup = ? order by entry",
+                    (prior[0],),
+                )))
+            else:
+                groups.append((qid,))
+        blocked = "requires an active predecessor quest; sequential route cannot hold it" if negative and not groups else None
+        return tuple(dict.fromkeys(groups)), blocked
+
+    def requirements(self, quest_id: int, zones: tuple[ZoneBounds, ...] = (),
+                     home: ZoneBounds | None = None) -> tuple[Requirement, ...]:
+        """Every requirement with its own DB destination and named unsupported cases.
+
+        A single objective family preserves the server's slot order. Mixed item and
+        creature families are deliberately not joined positionally: the radio carries
+        client leaderboard indices, not the source family or required item identity.
+        """
+        row = self.con.execute("select * from world_quest_template where entry = ?",
+                               (quest_id,)).fetchone()
+        if row is None:
+            return ()
+        creatures = [i for i in range(1, 5)
+                     if row[f"ReqCreatureOrGOId{i}"] or row[f"ReqSpellCast{i}"]]
+        items = [i for i in range(1, 5) if row[f"ReqItemId{i}"]]
+        mixed = bool(creatures and items)
+        extra_event = bool((row["SpecialFlags"] or 0) & 2)
+        blocked_counter = ("mixed objective families need painted counter identity" if mixed else
+                           "event and counters need painted counter identity" if extra_event else None)
+        result: list[Requirement] = []
+        for index, slot in enumerate(creatures):
+            entry = row[f"ReqCreatureOrGOId{slot}"]
+            spell = row[f"ReqSpellCast{slot}"]
+            kind = "spell" if spell else "kill" if entry > 0 else "interact"
+            spawn = self._creature_cluster(entry) if entry > 0 else self.object_spawn(-entry)
+            blocked = blocked_counter
+            if spell:
+                blocked = f"requires quest spell {spell}; no quest-spell executor"
+            elif spawn is None:
+                blocked = f"no {'creature' if entry > 0 else 'gameobject'} spawn for requirement {entry}"
+            result.append(Requirement(kind=kind, required_id=abs(entry),
+                                      required_count=row[f"ReqCreatureOrGOCount{slot}"] or 1,
+                                      source_slot=slot, counter_index=None if blocked_counter else index,
+                                      spawn=spawn, blocked_reason=blocked))
+        for index, slot in enumerate(items):
+            item_id, count = row[f"ReqItemId{slot}"], row[f"ReqItemCount{slot}"] or 1
+            supplied = (item_id == row["SrcItemId"] and (row["SrcItemCount"] or 1) >= count)
+            spawn = self.taker(quest_id) if supplied else self._drops(item_id, zones, home)
+            kind = "delivery" if supplied else "loot"
+            blocked = blocked_counter
+            if spawn is None and not supplied:
+                vendor = self.con.execute("select 1 from world_npc_vendor where item = ? limit 1",
+                                          (item_id,)).fetchone()
+                blocked = (f"quest item {item_id} requires purchase; no quest-item purchase executor"
+                           if vendor else f"no supported source for quest item {item_id}")
+            result.append(Requirement(kind=kind, required_id=item_id, required_count=count,
+                                      source_slot=slot, counter_index=None if blocked_counter else index,
+                                      spawn=spawn, blocked_reason=blocked))
+        if extra_event:
+            # These DBC columns are raw float bits, exactly like WorldMapArea. Their
+            # layout is AreaTriggerEntry in this server's DBCStructure.h.
+            triggers = self.con.execute(
+                "select a.* from dbc_AreaTrigger a join world_areatrigger_involvedrelation r "
+                "on a.id = r.id where r.quest = ? order by a.id", (quest_id,),
+            ).fetchall()
+            if len(triggers) == 1 and not (creatures or items):
+                trigger = triggers[0]
+                spawn = Spawn(trigger["id"], "exploration trigger", trigger["c1"],
+                              *(_as_float(trigger[f"c{i}"]) for i in (2, 3, 4)))
+                result.append(Requirement("explore", required_id=trigger["id"], spawn=spawn))
+            else:
+                result.append(Requirement("event", blocked_reason=
+                                          "quest event requires a measured interaction or route"))
+        return tuple(result)
+
+    def _creature_cluster(self, entry: int) -> Spawn | None:
         rows = self.con.execute(
             "select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py, "
             "cast(c.position_z as real) pz, t.Name "
             "from world_creature c join world_creature_template t on t.Entry = c.id "
-            "where c.id = ?", (r["a"],),
+            "where c.id = ? order by c.guid", (entry,),
         ).fetchall()
         if not rows:
+            # Randomized creature spawns keep c.id == 0; possible identities live in
+            # creature_spawn_entry or spawn_group_entry. These are real source pins,
+            # not an excuse to expand an established camp or invent a wander search.
+            rows = self.con.execute(
+                self._random_creatures_cte() +
+                " select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py, "
+                "cast(c.position_z as real) pz, t.Name "
+                "from random_creatures e join world_creature c on c.guid = e.guid "
+                "join world_creature_template t on t.Entry = e.entry "
+                "where e.entry = ? order by c.guid", (entry,),
+            ).fetchall()
+        if not rows:
             return None
-        m = rows[0]["map"]
-        same = [x for x in rows if x["map"] == m]
-        return _cluster(r["a"], same[0]["Name"] or "mobs", m, same)
+        map_id = rows[0]["map"]
+        same = [r for r in rows if r["map"] == map_id]
+        return _cluster(entry, same[0]["Name"] or "mobs", map_id, same)
+
+    @staticmethod
+    def _random_creatures_cte() -> str:
+        return (
+            "with random_creatures as (select guid, entry from world_creature_spawn_entry "
+            "union select s.Guid, e.Entry from world_spawn_group_spawn s "
+            "join world_spawn_group_entry e on e.Id = s.Id "
+            "join world_spawn_group g on g.Id = s.Id where g.Type = 0)"
+        )
 
     def _drops(self, item_id: int, zones: tuple[ZoneBounds, ...] = (),
                home: ZoneBounds | None = None) -> Spawn | None:
@@ -415,6 +529,19 @@ class WorldDB:
             """,
             (item_id,),
         ).fetchall()]
+        if not rows:
+            rows = [dict(r) for r in self.con.execute(
+                self._random_creatures_cte() + """
+                select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py,
+                       cast(c.position_z as real) pz, t.Name, t.Entry,
+                       abs(l.ChanceOrQuestChance) as chance, 'creature' as kind
+                from world_creature_loot_template l
+                join world_creature_template t on t.LootId = l.entry
+                join random_creatures e on e.entry = t.Entry
+                join world_creature c on c.guid = e.guid
+                where l.item = ? order by c.guid, t.Entry
+                """, (item_id,),
+            ).fetchall()]
         for r in rows:
             # A zero here means "always" in some rows and "unset" in others; either way a
             # spawn that is in the table drops the thing, so it votes.
@@ -601,6 +728,8 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
     # positionless node says which of the two things happened — no spawn at all, or a
     # spawn we could not map — because they need different fixes.
     unplaced: set[int] = set()
+    coordinate_bounds = next((db.bounds[z] for z in zone_ids
+                              if z in db.bounds and not db.bounds[z].degenerate), None)
 
     def place(spawn: Spawn | None, zone_id: int) -> tuple[tuple[float, float] | None,
                                                           tuple[float, float, float] | None,
@@ -629,6 +758,10 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
                 continue
             frac = world_to_map(spawn.x, spawn.y, b)
             if frac is not None and on_map(*frac):
+                # Every node in one guide uses one declared frame. Actual client zone
+                # changes (e.g. Elwynn -> Stormwind) must not change its coordinate units.
+                if coordinate_bounds is not None and coordinate_bounds.map_id == spawn.map_id:
+                    frac = world_to_map(spawn.x, spawn.y, coordinate_bounds)
                 return frac, world, spawn.map_id
         unplaced.add(spawn.npc_id)
         return None, world, spawn.map_id
@@ -714,7 +847,31 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             unplaceable.append(f"{q.quest_id} {q.title}")
             continue
 
-        needs_objective = any(c > 0 for c in q.req_counts)
+        requirements = db.requirements(q.quest_id, zones_in_scope, db.bounds.get(zid))
+        prerequisites, route_blocked = db.prerequisites(q.quest_id)
+        if taker is None:
+            route_blocked = route_blocked or "no spawned quest turn-in target in the source database"
+        quest_metadata = {"quest_prerequisites": prerequisites,
+                          "route_blocked_reason": route_blocked}
+        targets = []
+        for requirement in requirements:
+            frac, world, map_id = place(requirement.spawn, zid)
+            spawn = requirement.spawn
+            blocked = requirement.blocked_reason
+            if blocked is None and spawn is not None and frac is None:
+                blocked = "objective destination is outside this guide's supported maps"
+            targets.append(ObjectiveTarget(
+                kind=requirement.kind, required_id=requirement.required_id,
+                required_count=requirement.required_count,
+                source_slot=requirement.source_slot, counter_index=requirement.counter_index,
+                target_id=spawn.npc_id if spawn else None,
+                target_name=spawn.name if spawn and requirement.kind != "explore" else None,
+                target_kind=spawn.kind if spawn and requirement.kind != "explore" else None,
+                pos=frac, world=world, map_id=map_id,
+                coord_zone_id=coordinate_bounds.area_id if coordinate_bounds else None,
+                hunt_yards=hunt_yards(spawn) if requirement.kind in ("kill", "loot") else None,
+                blocked_reason=blocked,
+            ))
 
         gfrac, gworld, gmap = place(giver, zid)
         nodes.append(Node(
@@ -723,6 +880,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             npc_id=giver.npc_id if giver else None,
             target_name=giver.name if giver else None, target_kind=giver.kind if giver else None,
             title=q.title,
+            **quest_metadata,
             objectives=(f"accept {q.title}",),
             skills=("TRAVEL_TO", "ACCEPT_QUEST"), timeout_s=240.0,
             xp_est=q.xp_est,
@@ -730,13 +888,14 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         ))
         chain.append(f"{base}_accept")
 
-        if needs_objective:
-            mobs = db.objective_spawn(q.quest_id, zones_in_scope, db.bounds.get(zid))
+        if requirements:
+            mobs = requirements[0].spawn
             ofrac, oworld, omap = place(mobs or giver, zid)
             nodes.append(Node(
                 id=f"{base}_do", kind=StepKind.QUEST_OBJECTIVE, zone=zname, zone_id=zid,
                 level=band, pos=ofrac, world=oworld, map_id=omap, quest_id=q.quest_id,
                 title=q.title, hunt_yards=hunt_yards(mobs),
+                objective_targets=tuple(targets), **quest_metadata,
                 target_name=mobs.name if mobs else None, target_kind=mobs.kind if mobs else None,
                 objectives=tuple(filter(None, [q.objectives[:120]])) or ("complete objectives",),
                 skills=("TRAVEL_TO", "GRIND_UNTIL"), timeout_s=600.0,
@@ -759,6 +918,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             target_name=(taker or giver).name if (taker or giver) else None,
             target_kind=(taker or giver).kind if (taker or giver) else None,
             title=q.title,
+            **quest_metadata,
             objectives=(f"turn in {q.title}",),
             skills=("TRAVEL_TO", "TURNIN_QUEST"), timeout_s=240.0, xp_est=q.xp_est,
             notes=_note(taker or giver, tfrac, "turn-in"),
@@ -813,8 +973,11 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         if n.pos is None and n.kind is not StepKind.GRIND else n
         for n in wired
     )
+    coordinate_id = coordinate_bounds.area_id if coordinate_bounds else None
+    final = tuple(n.model_copy(update={"coord_zone_id": coordinate_id}) for n in final)
     entry = chain[0] if chain else (final[0].id if final else "")
     if unplaceable:
         print(f"  dropped {len(unplaceable)} quest(s) with no giver spawn on this server: "
               + ", ".join(unplaceable[:6]) + ("..." if len(unplaceable) > 6 else ""))
-    return Graph(graph_id=graph_id, faction=faction, nodes=final, entry=entry)
+    return Graph(graph_id=graph_id, faction=faction, nodes=final, entry=entry,
+                 coord_zone_id=coordinate_id)
