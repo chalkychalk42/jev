@@ -50,6 +50,14 @@ def test_accept_completes_when_the_quest_reaches_the_log():
     assert v.event is Event.ADVANCE and v.goto == "do"
 
 
+def test_a_skippable_quest_still_earns_completion_when_its_predicate_succeeds():
+    graph = _graph()
+    nodes = tuple(n.model_copy(update={"skippable": True}) for n in graph.nodes)
+    tracker = Tracker(graph.model_copy(update={"nodes": nodes}), "accept")
+    tracker.enter("accept", _s())
+    assert tracker.tick(_with_quest()).completed
+
+
 def test_an_objective_completes_on_counts_not_on_arrival():
     tr = Tracker(_graph(), "do")
     tr.enter("do", _with_quest())

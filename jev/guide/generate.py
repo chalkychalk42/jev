@@ -68,6 +68,7 @@ class Spawn:
     # for a camp it is how big the camp is, which is the only honest thing to search once
     # the mobs standing on the node have been killed.
     spread: float = 0.0
+    kind: str = "creature"
 
 
 # Spawn clustering, in yards. A cell wide enough that one camp lands in one or two
@@ -291,7 +292,7 @@ class WorldDB:
         if not r:
             return None
         return Spawn(object_id, r["name"] or f"object{object_id}", r["map"],
-                     r["px"], r["py"], r["pz"])
+                     r["px"], r["py"], r["pz"], kind="gameobject")
 
     def giver(self, quest_id: int) -> Spawn | None:
         """Who or what offers this quest.
@@ -394,7 +395,7 @@ class WorldDB:
             """
             select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py,
                    cast(c.position_z as real) pz, t.Name, t.Entry,
-                   abs(l.ChanceOrQuestChance) as chance
+                   abs(l.ChanceOrQuestChance) as chance, 'creature' as kind
             from world_creature_loot_template l
             join world_creature_template t on t.LootId = l.entry
             join world_creature c on c.id = t.Entry
@@ -406,7 +407,7 @@ class WorldDB:
             """
             select g.map, cast(g.position_x as real) px, cast(g.position_y as real) py,
                    cast(g.position_z as real) pz, t.name as Name, t.entry as Entry,
-                   abs(l.ChanceOrQuestChance) as chance
+                   abs(l.ChanceOrQuestChance) as chance, 'gameobject' as kind
             from world_gameobject_loot_template l
             join world_gameobject_template t on t.data1 = l.entry and t.type = 3
             join world_gameobject g on g.id = t.entry
@@ -450,8 +451,9 @@ class WorldDB:
             for r in near:
                 names[r["Name"]] = names.get(r["Name"], 0) + 1
             best = max(names, key=lambda n: names[n])
-            spawn = Spawn(near[0]["Entry"], best or "mobs", m,
-                          spawn.x, spawn.y, spawn.z, spread=spawn.spread)
+            chosen = next(r for r in near if r["Name"] == best)
+            spawn = Spawn(chosen["Entry"], best or "mobs", m,
+                          spawn.x, spawn.y, spawn.z, spread=spawn.spread, kind=chosen["kind"])
         return spawn
 
     # -- services ------------------------------------------------------------
@@ -645,6 +647,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
                 level=(level_min, level_max), pos=frac, world=world, map_id=map_id,
                 r=0.06,   # a rib is a loop you walk, not a point you stand on
                 hunt_yards=hunt_yards(spawn),
+                target_name=spawn.name, target_kind=spawn.kind,
                 objectives=(f"grind {spawn.name}",),
                 skills=("GRIND_UNTIL",), timeout_s=900.0, skippable=True,
                 notes=f"{count} spawns of {spawn.name} clustered here; route not recorded",
@@ -670,6 +673,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
                     id=f"{prefix}_{kind.value}_{_slug(zname, 12)}_{i}",
                     kind=kind, zone=zname, zone_id=zid, level=(level_min, level_max),
                     pos=frac, world=world, map_id=map_id, npc_id=spawn.npc_id,
+                    target_name=spawn.name, target_kind=spawn.kind,
                     objectives=(f"{kind.value} at {spawn.name}",),
                     skills=("TRAVEL_TO", skill), skippable=True,
                     notes=f"{spawn.name}; route not recorded",
@@ -717,6 +721,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             id=f"{base}_accept", kind=StepKind.QUEST_ACCEPT, zone=zname, zone_id=zid,
             level=band, pos=gfrac, world=gworld, map_id=gmap, quest_id=q.quest_id,
             npc_id=giver.npc_id if giver else None,
+            target_name=giver.name if giver else None, target_kind=giver.kind if giver else None,
             title=q.title,
             objectives=(f"accept {q.title}",),
             skills=("TRAVEL_TO", "ACCEPT_QUEST"), timeout_s=240.0,
@@ -732,8 +737,9 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
                 id=f"{base}_do", kind=StepKind.QUEST_OBJECTIVE, zone=zname, zone_id=zid,
                 level=band, pos=ofrac, world=oworld, map_id=omap, quest_id=q.quest_id,
                 title=q.title, hunt_yards=hunt_yards(mobs),
+                target_name=mobs.name if mobs else None, target_kind=mobs.kind if mobs else None,
                 objectives=tuple(filter(None, [q.objectives[:120]])) or ("complete objectives",),
-                skills=("TRAVEL_TO", "COMBAT_PROFILE", "LOOT"), timeout_s=600.0,
+                skills=("TRAVEL_TO", "GRIND_UNTIL"), timeout_s=600.0,
                 r=0.06, xp_est=q.xp_est,
                 notes=_note(mobs or giver, ofrac, "objective"),
                 # Escape edges are filled in by the wiring pass below, which is the
@@ -750,6 +756,8 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             id=f"{base}_turnin", kind=StepKind.QUEST_TURNIN, zone=zname, zone_id=zid,
             level=band, pos=tfrac, world=tworld, map_id=tmap, quest_id=q.quest_id,
             npc_id=(taker or giver).npc_id if (taker or giver) else None,
+            target_name=(taker or giver).name if (taker or giver) else None,
+            target_kind=(taker or giver).kind if (taker or giver) else None,
             title=q.title,
             objectives=(f"turn in {q.title}",),
             skills=("TRAVEL_TO", "TURNIN_QUEST"), timeout_s=240.0, xp_est=q.xp_est,

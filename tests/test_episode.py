@@ -42,6 +42,15 @@ def test_level_progress_is_monotone_across_a_ding():
     assert level_progress(after) > level_progress(before), "xp_pct alone resets at a ding"
 
 
+def test_unread_xp_is_not_an_empty_xp_bar():
+    before = State(t=0, client_id="c", char=Char(level=2, xp_pct=None))
+    after = State(t=60, client_id="c", char=Char(level=2, xp_pct=0.8))
+    assert level_progress(before) is None
+    result = grade(_decision("run"), [_tick("run", 1, before), _tick("run", 2, after)])
+    assert result.level_progress_delta == 0
+    assert not result.good
+
+
 def test_step_advance_leads_the_reward():
     """Rewarding xp alone teaches grinding in place; the step has to lead."""
     advanced = reward(step_advanced=True, level_progress_delta=0.0, died=False,

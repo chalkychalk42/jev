@@ -7,6 +7,9 @@ is a build artifact, so those tests skip without it rather than pretending.
 from __future__ import annotations
 
 import pathlib
+import sys
+import threading
+import time
 
 import pytest
 
@@ -58,6 +61,52 @@ def test_a_missing_sidecar_is_unavailable_not_a_crash():
     assert result.status is PathStatus.UNAVAILABLE
     assert "no sidecar" in result.detail
     q.close()
+
+
+@pytest.mark.parametrize("phase", ["startup", "query"])
+def test_a_silent_sidecar_has_a_real_deadline_and_can_restart(tmp_path, phase):
+    script = tmp_path / "sidecar.py"
+    script.write_text('import time\n' + (
+        'print(\'{"ready":true}\', flush=True)\n' if phase == "query" else '')
+        + 'time.sleep(30)\n')
+    q = MmapQuery(script, tmp_path, launcher=(sys.executable,), timeout_s=0.15)
+    started = time.monotonic()
+    try:
+        result = q.path(0, COURTYARD, MCBRIDE)
+        assert result.status is PathStatus.UNAVAILABLE
+        assert "did not answer" in result.detail
+        assert time.monotonic() - started < 3
+        script.write_text('print(\'{"ready":true}\', flush=True)\n'
+                          'input()\nprint(\'{"status":"nopath"}\', flush=True)\n')
+        assert q.path(0, COURTYARD, MCBRIDE).status is PathStatus.NOPATH
+    finally:
+        q.close()
+
+
+def test_a_cancelled_sidecar_releases_the_waiting_body(tmp_path):
+    from jev.run.supervisor import Cancelled
+
+    script = tmp_path / "sidecar.py"
+    script.write_text('import time\nprint(\'{"ready":true}\', flush=True)\ntime.sleep(30)\n')
+    cancelled = threading.Event()
+
+    def checkpoint():
+        if cancelled.is_set():
+            raise Cancelled("operator stop")
+
+    q = MmapQuery(script, tmp_path, launcher=(sys.executable,), timeout_s=10,
+                  checkpoint=checkpoint)
+    timer = threading.Timer(0.15, cancelled.set)
+    timer.start()
+    started = time.monotonic()
+    try:
+        with pytest.raises(Cancelled, match="operator stop"):
+            q.path(0, COURTYARD, MCBRIDE)
+        assert time.monotonic() - started < 3
+        assert all(proc.poll() is not None for proc in q._procs.values())
+    finally:
+        timer.cancel()
+        q.close()
 
 
 def test_recorded_routes_are_a_seam_with_nothing_behind_them_yet():

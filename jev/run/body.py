@@ -1,0 +1,304 @@
+"""Catalog skills composed from the body that already passed the live slice.
+
+This module selects no guide step and writes no parallel decision stream. It executes
+the runtime's arm, using the existing planner, locator, quest UI, Fight, Loot and Rest.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Callable
+from typing import ClassVar
+
+from jev.clients.advance import AdvanceQuestFrame, Goal
+from jev.clients.camera import Camera
+from jev.clients.choose import ChooseListLine
+from jev.clients.fight import Fight
+from jev.clients.interact import Interact
+from jev.clients.interact import Result as Interacted
+from jev.clients.loot import Loot
+from jev.clients.recover import Recover
+from jev.clients.repair import Repair
+from jev.clients.rest import Rest
+from jev.coach.schema import Intent
+from jev.guide.coords import map_to_world
+from jev.guide.graph import Graph
+from jev.guide.objectives import progress
+from jev.learn.episode import SkillOutcome
+from jev.orch.runtime import Armed
+from jev.perceive.radio_frame import list_lines, name_id
+from jev.run.client import Client
+from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
+from jev.run.supervisor import BodyFailure, Cancelled, Result, Unsupported
+from jev.world.combat import HEAL_OUT_OF_COMBAT, Role
+from jev.world.state_v1 import PowerType, State, StepKind
+
+
+class LiveBody:
+    # Every entry has an executor. The verifier receives exactly this capability set.
+    HANDLERS: ClassVar[dict[str, str]] = {
+        "TRAVEL_TO": "_travel", "ACCEPT_QUEST": "_quest", "TURNIN_QUEST": "_quest",
+        "GRIND_UNTIL": "_hunt", "COMBAT_PROFILE": "_fight",
+        "LOOT": "_loot", "EAT_DRINK": "_rest", "VENDOR_REPAIR": "_repair",
+        "RELEASE_SPIRIT": "_release", "CORPSE_RUN": "_recover",
+        "IDLE": "_wait", "ABORT_WAIT": "_wait",
+    }
+    available = frozenset(HANDLERS)
+
+    def __init__(self, client: Client, graph: Graph, *, travel_timeout: float = 180,
+                 hunt_timeout: float = 600, say: Callable[[str], None] = print):
+        if client.bounds is None or client.travel is None:
+            raise ValueError("body needs the composed planner and follower")
+        self.client, self.graph = client, graph
+        self.travel_timeout, self.hunt_timeout, self.say = travel_timeout, hunt_timeout, say
+        self.travelling = False
+        self.checkpoint: Callable[[], None] = lambda: None
+        self.arm: Armed | None = None
+        ox, oy = client.origin
+        w, h = client.size
+        # Reader checkpoints stop loops which aren't currently sending keys as well.
+        self.interact = Interact(hid=client.hid, bounds=client.bounds, read=self._read,
+                                 read_frame=self._frame, read_pos=self._position,
+                                 window_centre=(ox + w // 2, oy + h // 2),
+                                 window_origin=client.origin, approach=self._approach)
+        self.advance = AdvanceQuestFrame(hid=client.hid, read=self._read,
+                                        quest_ids=self._quest_ids,
+                                        window_origin=client.origin, window_size=client.size)
+        self.chooser = ChooseListLine(hid=client.hid, read=self._reading,
+                                      window_origin=client.origin, window_size=client.size)
+        self.fight = Fight(hid=client.hid, read=self._read, read_frame=self._frame,
+                           window_origin=client.origin, window_centre_x=w // 2)
+        self.rest = Rest(hid=client.hid, read=self._read)
+        self.loot = Loot(hid=client.hid, read=self._read, read_frame=self._frame,
+                         window_origin=client.origin)
+        self.repair = Repair(hid=client.hid, read=self._read, visit=self._visit_repairer,
+                             window_origin=client.origin, window_size=client.size)
+        self.recover = Recover(hid=client.hid, read=self._read, walk_to=self._corpse_walk,
+                               window_origin=client.origin, window_size=client.size)
+        camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
+        self.interact.level = self.fight.level = self.loot.level = camera.level
+        client.travel.read_pos = self._position
+
+    def _read(self):
+        self.checkpoint()
+        return self.client.read()
+
+    def _reading(self):
+        self.checkpoint()
+        return self.client.reading()
+
+    def _frame(self):
+        self.checkpoint()
+        return self.client.frame()
+
+    def _position(self):
+        self.checkpoint()
+        return self.client.position()
+
+    def _quest_ids(self):
+        self.checkpoint()
+        return self.client.quest_ids(tries=1)
+
+    def execute(self, arm: Armed, state: State, checkpoint: Callable[[], None]) -> Result:
+        self.arm, self.checkpoint = arm, checkpoint
+        self.client.hid.checkpoint = checkpoint
+        handler = self.HANDLERS.get(arm.decision.skill)
+        if handler is None:
+            return Result(SkillOutcome.ABORTED, f"no executor for {arm.decision.skill}", "unsupported")
+        error = self._parameters()
+        if error:
+            return Result(SkillOutcome.ABORTED, error, "unsupported")
+        if not self.client.hid.ready():
+            return Result(SkillOutcome.ABORTED, "client is not focused", "refused")
+        return getattr(self, handler)(state)
+
+    def _parameters(self) -> str | None:
+        """Execute only requests this composition can honour, without silently retargeting."""
+        decision, node = self.arm.decision, self._node()
+        if decision.intent in (Intent.SKIP, Intent.ESCALATE):
+            return f"body cannot execute intent {decision.intent}"
+        kinds = {"ACCEPT_QUEST": {StepKind.QUEST_ACCEPT},
+                 "TURNIN_QUEST": {StepKind.QUEST_TURNIN},
+                 "GRIND_UNTIL": {StepKind.GRIND, StepKind.QUEST_OBJECTIVE}}
+        if decision.skill in kinds and (node is None or node.kind not in kinds[decision.skill]):
+            return f"{decision.skill} does not match the armed guide step"
+        expected = {"zone": node.zone, "step_id": node.id} if node else {}
+        if decision.skill == "TRAVEL_TO" and node and node.pos:
+            expected.update(x=node.pos[0], y=node.pos[1], r=node.r)
+        if decision.skill == "VENDOR_REPAIR":
+            expected["service"] = "repair"
+        for key, value in decision.params.items():
+            if key == "profile" and decision.skill == "COMBAT_PROFILE" and value in ("default", "panic"):
+                continue  # Fight's measured health branch owns panic within the rotation.
+            if (key == "until_level" and decision.skill == "GRIND_UNTIL" and node
+                    and node.kind is StepKind.GRIND and type(value) is int and value > 0):
+                continue
+            if key not in expected or value != expected[key]:
+                return f"unsupported {decision.skill} parameter: {key}={value!r}"
+        return None
+
+    def release(self) -> None:
+        self.client.hid.release_all()
+        if self.client.hid.keys_down() or self.client.hid.held_buttons:
+            raise RuntimeError("input release was refused; held inputs remain")
+        self.client.hid.checkpoint = None
+
+    @staticmethod
+    def _result(outcome, detail="") -> Result:
+        status = (SkillOutcome.SUCCEEDED if outcome.ok else
+                  SkillOutcome.TIMED_OUT if outcome.value == "timeout" else SkillOutcome.ABORTED)
+        return Result(status, detail, outcome.value)
+
+    def _node(self):
+        return self.graph.get(self.arm.step_id) if self.arm else None
+
+    def _approach(self, world) -> bool:
+        self.checkpoint()
+        v = self._read()
+        if v is None:
+            raise Cancelled("cannot observe travel readiness")
+        ghost = v.get("vitals.ghost") is True
+        if not ghost:
+            if v.get("vitals.dead") is True:
+                raise Cancelled("dead before travel")
+            if v.get("vitals.combat") is True:
+                raise Cancelled("combat before travel")
+            hp = v.get("vitals.hp")
+            if hp is None:
+                raise Cancelled("health unread before travel")
+            if hp < HEAL_OUT_OF_COMBAT and not self.fight.top_up():
+                rested = self.rest.until(0.9)
+                if not rested.ok:
+                    raise BodyFailure(self._result(rested, f"not fit to travel: {self.rest.detail}"))
+        self.travelling = True
+        try:
+            return self.client.approach(world, timeout_s=self.travel_timeout)
+        finally:
+            self.travelling = False
+
+    def _travel(self, state) -> Result:
+        node = self._node()
+        if node is None or node.world is None or node.map_id != self.client.bounds.map_id:
+            return Result(SkillOutcome.ABORTED, "step has no supported map destination", "unsupported")
+        ok = self._approach(node.world)
+        return Result(SkillOutcome.SUCCEEDED if ok else SkillOutcome.ABORTED,
+                      "", "arrived" if ok else "unreachable")
+
+    def _quest(self, state) -> Result:
+        node = self._node()
+        if node is None or node.quest_id is None or node.npc_id is None or node.world is None:
+            return Result(SkillOutcome.ABORTED, "quest has no placed NPC", "unsupported")
+        if node.target_kind != "creature" or not node.target_name:
+            return Result(SkillOutcome.ABORTED, "quest target needs a supported creature identity", "unsupported")
+        opened = self.interact.open_on(node.target_name, node_world=node.world, node_map=node.pos)
+        if not opened.opened:
+            return Result(SkillOutcome.ABORTED, self.interact.detail, opened.value)
+        reading = self._reading()
+        is_list = (reading is not None and reading.values
+                   and reading.values.get("ui.advance_x") is None and list_lines(reading))
+        if opened is Interacted.GOSSIP or is_list:
+            chose = self.chooser.run(node.title)
+            if not chose.ok:
+                return self._result(chose, self.chooser.detail)
+        with self.client._capturing:
+            self.client.log.reset()
+        goal = Goal.HELD if node.kind is StepKind.QUEST_ACCEPT else Goal.CLEARED
+        outcome = self.advance.run(node.quest_id, goal)
+        return self._result(outcome, self.advance.detail)
+
+    def _quest_progress(self):
+        node = self._node()
+        self._quest_ids()
+        with self.client._capturing:
+            log = self.client.log.complete
+        value = progress(log, node.quest_id if node else None)
+        if value.first_incomplete is not None and value.first_incomplete > 0:
+            raise Unsupported("next objective needs its own generated target; this graph places only the first")
+        return value
+
+    def _progress(self):
+        value = self._quest_progress()
+        if value.complete is True and value.have is None:
+            return 1, 1  # a positive complete flag, including objectives with no counter
+        return value.have, value.need
+
+    def _hunt(self, state) -> Result:
+        node = self._node()
+        if (node is None or node.world is None
+                or node.kind not in (StepKind.QUEST_OBJECTIVE, StepKind.GRIND)
+                or node.map_id != self.client.bounds.map_id):
+            return Result(SkillOutcome.ABORTED, "no supported objective destination", "unsupported")
+        if node.target_kind != "creature" or not node.target_name:
+            return Result(SkillOutcome.ABORTED, "objective needs a supported creature target; objects need their own locator", "unsupported")
+        progress_reader = self._progress
+        def complete_reader():
+            return self._quest_progress().complete
+        if node.kind is StepKind.GRIND:
+            target = self.arm.decision.params.get("until_level")
+            if not isinstance(target, int):
+                return Result(SkillOutcome.ABORTED, "grind arm has no level predicate", "unsupported")
+            def progress_reader():
+                values = self._read()
+                return (values.get("char.level") if values else None), target
+            def complete_reader():
+                level, needed = progress_reader()
+                return None if level is None else level >= needed
+        hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
+                    approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
+                    is_complete=complete_reader)
+        outcome = hunt.run(node.world, node.hunt_yards or DEFAULT_HUNT_YARDS,
+                           name_id(node.target_name),
+                           timeout_s=self.hunt_timeout)
+        return self._result(outcome, hunt.detail)
+
+    def _fight(self, state) -> Result:
+        outcome = self.fight.run(None)
+        if outcome.ok:
+            self.loot.run(progress=self._progress)
+        return self._result(outcome, self.fight.detail)
+
+    def _loot(self, state) -> Result:
+        return self._result(self.loot.run(progress=self._progress), self.loot.detail)
+
+    def _rest(self, state) -> Result:
+        if state.vitals.power_type is PowerType.MANA and state.vitals.power is not None and state.vitals.power < 0.35:
+            return self._result(self.rest.until(0.75, role=Role.DRINK), self.rest.detail)
+        if self.fight.top_up():
+            return Result(SkillOutcome.SUCCEEDED, "health topped up", "healthy")
+        return self._result(self.rest.until(0.9), self.rest.detail)
+
+    def _repair(self, state) -> Result:
+        return self._result(self.repair.run(), self.repair.detail)
+
+    def _visit_repairer(self) -> bool:
+        here = self._position()
+        if here is None:
+            return False
+        world = map_to_world(*here, self.client.bounds)
+        candidates = [n for n in self.graph.nodes if n.kind is StepKind.REPAIR
+                      and n.world is not None and n.map_id == self.client.bounds.map_id
+                      and n.target_kind == "creature" and n.target_name]
+        if not candidates:
+            return False
+        node = min(candidates, key=lambda n: math.dist(n.world[:2], world))
+        return self.interact.open_on(node.target_name,
+                                     node_world=node.world, node_map=node.pos).opened
+
+    def _corpse_walk(self, point) -> bool:
+        wx, wy = map_to_world(*point, self.client.bounds)
+        placed = [n for n in self.graph.nodes if n.world is not None
+                  and n.map_id == self.client.bounds.map_id]
+        if not placed:
+            return False
+        z = min(placed, key=lambda n: math.dist(n.world[:2], (wx, wy))).world[2]
+        return self._approach((wx, wy, z))
+
+    def _recover(self, state) -> Result:
+        # Recover reads painted corpse coordinates. No guessed quest-node corpse.
+        return self._result(self.recover.run(self.recover.corpse), self.recover.detail)
+
+    def _release(self, state) -> Result:
+        return self._result(self.recover.run(release_only=True), self.recover.detail)
+
+    def _wait(self, state) -> Result:
+        return Result(SkillOutcome.SUCCEEDED)

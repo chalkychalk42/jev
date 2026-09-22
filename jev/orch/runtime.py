@@ -31,11 +31,13 @@ from dataclasses import dataclass, field
 
 from jev.clients.source import Source
 from jev.coach import policy as scripted
-from jev.coach.schema import Decision, Intent, Verdict
+from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
 from jev.guide.graph import Graph
+from jev.guide.objectives import progress
 from jev.guide.tracker import Event, Tracker
+from jev.guide.tracker import Verdict as TrackVerdict
 from jev.learn.episode import (
     DecisionRow,
     Recorder,
@@ -54,6 +56,7 @@ class Counters:
 
     ticks: int = 0
     advances: int = 0
+    rejoins_or_skips: int = 0
     fails: int = 0
     deaths: int = 0
     off_route: int = 0
@@ -79,12 +82,15 @@ class Armed:
     by: ArmedBy
     at: float
     rule: str
+    decision_id: str = ""
+    step_id: str | None = None
+    situation_key: str = ""
 
 
 # A teacher is optional and is only ever asked, never awaited. `ask` enqueues and returns
 # immediately; `take` returns an answer if one has arrived since.
 AskFn = Callable[[State, str], None]
-TakeFn = Callable[[str], Decision | None]
+TakeFn = Callable[[str], Decision | TeacherReply | None]
 
 
 @dataclass
@@ -96,7 +102,20 @@ class ClientRuntime:
 
     ask: AskFn | None = None
     take: TakeFn | None = None
-    shadow: Callable[[State], tuple[str, str | None, float]] | None = None
+    shadow: Callable[[State], tuple[str | None, str | None, float]] | None = None
+
+    available_skills: frozenset[str] = NAMES
+    keys_down: Callable[[], list[str]] | None = None
+    policy_context: scripted.Context = field(default_factory=scripted.Context)
+    completed: set[int] = field(default_factory=set)
+    start_step: str | None = None
+    on_progress: Callable[[str, set[int]], None] | None = None
+    last_state: State | None = field(default=None, init=False)
+    _was_dead: bool = field(default=False, init=False)
+    _decision_seq: int = field(default=0, init=False)
+    _tracker_event: str = field(default="none", init=False)
+    _tracker_from: str | None = field(default=None, init=False)
+    finished: bool = field(default=False, init=False)
 
     counters: Counters = field(default_factory=Counters)
     armed: Armed | None = None
@@ -128,46 +147,90 @@ class ClientRuntime:
 
     # -- the tick ------------------------------------------------------------
 
-    def tick(self) -> State:
-        state = with_key(self.source.read())
+    def tick(self, *, choose: bool = True, record: bool = True, state: State | None = None) -> State:
+        """Track every observation; choose only when the body can accept a new skill.
+
+        The live supervisor calls this at 4 Hz, chooses at up to 2 Hz, and records at
+        2 Hz plus events. A blocking body never blocks these clocks.
+        """
+        state = self.source.read() if state is None else state
+        if state.client_id != self.client_id:
+            raise ValueError(f"source client {state.client_id!r} != runtime {self.client_id!r}")
         self.counters.ticks += 1
         if not state.sense.addon_ok:
             self.counters.blind_ticks += 1
-
         if not self._entered:
-            self.tracker.enter(self.graph.entry, state)
+            start = self.start_step if self.graph.get(self.start_step or "") is not None else None
+            self.tracker = Tracker.resume(self.graph, state, start=start,
+                                          completed=frozenset(self.completed))
             self._entered = True
 
-        node_before = self.graph.get(self.tracker.step_id)
-        verdict = self.tracker.tick(state)
+        before = self.tracker.step_id
+        completed_before = set(self.completed)
+        verdict = TrackVerdict(Event.NONE) if self.finished else self.tracker.tick(state)
+        self._tracker_event, self._tracker_from = verdict.event.value, before
+        if verdict.event is Event.ADVANCE and not verdict.completed:
+            self._tracker_event = "rejoin_or_skip"
         self._apply(verdict, state)
-
-        node = self.graph.get(self.tracker.step_id) or node_before
+        node = self.graph.get(self.tracker.step_id)
         state = self._with_guide(state, verdict)
+        record = record or verdict.event in (Event.ADVANCE, Event.FAIL, Event.DEATH)
+        # Persist only tracker-witnessed progress, never a caller's guessed completion.
+        if self.on_progress is not None and (before != self.tracker.step_id
+                                            or completed_before != self.completed or self.last_state is None):
+            self.on_progress(self.tracker.step_id, set(self.completed))
 
-        plan, by, rule = self._choose(state, node)
+        if choose:
+            plan, by, rule, decision_id = self._choose(state, node)
+            if not self._same_arm(plan, by, state.guide.step_id):
+                self._close_armed(state, plan, by)
+                if not decision_id:
+                    decision_id = self._record_decision(state, plan, by, rule)
+                self.armed = Armed(plan, by, state.t, rule, decision_id,
+                                   state.guide.step_id, state.situation_key or "")
+            elif decision_id:
+                # A new accepted teacher answer is a new decision even if its action
+                # agrees with the previous one; retain the body's original start time.
+                self.armed.decision_id = decision_id
+            record = True
 
-        check = verify(plan, state, NAMES)
-        if not check.ok:
-            # A refusal is never a reason to stop. Fall to the floor, which is always
-            # valid, and record that the refusal happened.
-            self.counters.rejected += 1
-            fallback = scripted.decide(state, node)
-            plan, by, rule = fallback.decision, ArmedBy.POLICY, f"rejected:{check.rule}"
-
-        self._close_armed(state, plan)
-        self.armed = Armed(plan, by, state.t, rule)
-        self._record(state, plan, by)
+        self.last_state = state
+        if record:
+            self._record(state)
         return state
+
+    def _same_arm(self, plan: Decision, by: ArmedBy, step_id: str | None) -> bool:
+        prev = self.armed
+        return bool(prev and prev.by == by and prev.step_id == step_id
+                    and prev.decision.skill == plan.skill
+                    and prev.decision.intent == plan.intent
+                    and prev.decision.goal == plan.goal
+                    and prev.decision.params == plan.params)
+
+    def finish(self, outcome: SkillOutcome, detail: str = "", *, state: State | None = None) -> None:
+        """The body reports its measured outcome once, against the original arm."""
+        if self.armed is not None and self.last_state is not None:
+            self._skill_result(state or self.last_state, outcome, detail)
+            if (outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
+                    and self.armed.step_id == self.tracker.step_id):
+                self.tracker.memory.attempts += 1
+        self.armed = None
 
     # -- internals -----------------------------------------------------------
 
     def _apply(self, verdict, state: State) -> None:
         match verdict.event:
             case Event.ADVANCE:
-                self.counters.advances += 1
+                self.counters.advances += int(verdict.completed)
+                self.counters.rejoins_or_skips += int(not verdict.completed)
+                node = self.graph.get(self.tracker.step_id)
+                if (verdict.completed and node is not None and node.kind.value == "quest_turnin"
+                        and node.quest_id is not None):
+                    self.completed.add(node.quest_id)
                 if verdict.goto:
                     self.tracker.enter(verdict.goto, state)
+                else:
+                    self.finished = True
             case Event.FAIL:
                 self.counters.fails += 1
                 if verdict.goto:
@@ -177,13 +240,16 @@ class ClientRuntime:
                     rejoin = node.next[0] if node and node.next else None
                     self.tracker.enter(verdict.goto, state, rejoin_to=rejoin)
             case Event.DEATH:
-                # Counted once per death, not once per tick spent dead — otherwise a long
-                # corpse run reads as a hundred deaths and the eval board panics.
-                if self.armed is None or self.armed.rule != "preempt.dead":
+                if not self._was_dead:
                     self.counters.deaths += 1
-                self.tracker.memory.deaths += 1
+                    self.tracker.memory.deaths += 1
             case Event.OFF_ROUTE:
                 self.counters.off_route += 1
+        dead = state.vitals.dead is True or state.vitals.ghost is True
+        if dead:
+            self._was_dead = True
+        elif state.vitals.dead is False and state.vitals.ghost is False:
+            self._was_dead = False
 
     def _with_guide(self, state: State, verdict) -> State:
         """Put the playhead on the state, so the recorded row and the situation key agree
@@ -197,105 +263,125 @@ class ClientRuntime:
                 "graph_id": self.graph.graph_id,
                 "step_id": node.id,
                 "kind": node.kind,
+                "progress": progress(state.quests, node.quest_id).fraction,
                 "age_s": state.t - mem.entered_at,
-                "on_route": verdict.event is not Event.OFF_ROUTE,
+                "on_route": (None if node.pos is None or state.pos.mx is None or state.pos.my is None
+                             else mem.off_route_since is None),
                 "deaths_on_step": mem.deaths,
                 "attempts": mem.attempts,
             }),
         }))
 
-    def _choose(self, state: State, node) -> tuple[Decision, ArmedBy, str]:
-        """The floor first, then an upgrade if one happens to be waiting.
-
-        Order matters: the scripted plan is computed unconditionally so that there is
-        always something to arm, and the teacher's answer only ever replaces it. There is
-        no path through this function that produces nothing.
-        """
-        plan = scripted.decide(state, node)
-
+    def _choose(self, state: State, node) -> tuple[Decision, ArmedBy, str, str]:
+        floor = scripted.decide(state, node, context=self.policy_context)
+        if node is not None and node.kind.value == "grind" and floor.decision.skill == "GRIND_UNTIL":
+            entered = self.tracker.memory.level_at_entry
+            floor = scripted.Plan(floor.decision.model_copy(update={"params": {
+                **floor.decision.params, "until_level": entered + 1 if entered is not None else node.level[1],
+            }}), floor.confident, floor.rule)
+        if not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5:
+            floor = scripted.Plan(Decision(goal="wait:blind", intent=Intent.WAIT, skill=None,
+                                           abort_if=["senses_restored"], confidence=0,
+                                           why="no trustworthy observation; release inputs"),
+                                  False, "sense.blind")
+        elif self.finished:
+            floor = scripted.Plan(Decision(goal="wait:finished", intent=Intent.WAIT, skill=None,
+                                           abort_if=["new_guide"], confidence=1,
+                                           why="guide finished"), True, "guide.finished")
+        preempt = floor.rule.startswith("preempt.")
         if self.take is not None:
-            answer, key = self._collect(state)
+            try:
+                answer, key = self._collect(state)
+            except Exception:
+                answer, key = None, ""
             if answer is not None:
-                # Record it either way — a late answer's *artifacts* are the part worth
-                # having, and they are about the step rather than this tick, so they do
-                # not go stale (`DECISIONS.md` V11). The measured round trip is ~52 s
-                # against a 60 s situation bin, so this is the common case, not an edge
-                # one, and discarding the whole reply would throw away the durable half
-                # to avoid acting on the perishable half.
+                artifacts = []
+                if isinstance(answer, TeacherReply):
+                    artifacts = [a.model_dump(mode="json") for a in answer.artifacts]
+                    answer = answer.decision
+                check = (verify(answer, state, self.available_skills) if answer is not None
+                         else Verdict.refuse("no_action", "artifacts only; no immediate action"))
                 stale = self._is_stale(state, key)
-                self._record_applied(state, answer, key, stale=stale)
                 if stale:
+                    check = Verdict.refuse("stale", "situation changed while the teacher was answering")
                     self.counters.teacher_stale += 1
-                else:
+                elif preempt:
+                    check = Verdict.refuse("preempt", floor.decision.why)
+                elif floor.rule in ("sense.blind", "guide.finished"):
+                    check = Verdict.refuse(floor.rule, floor.decision.why)
+                decision_id = self._record_applied(state, answer, key, check=check, artifacts=artifacts)
+                if check.ok:
                     self.counters.teacher_applied += 1
-                    return answer, ArmedBy.TEACHER, "teacher"
+                    return answer, ArmedBy.TEACHER, "teacher", decision_id
+                self.counters.rejected += 1
 
-        if scripted.wants_teacher(plan):
+        if scripted.wants_teacher(floor):
             self.counters.unresolved += 1
-            # Write it down. The in-process counter is for this client's own dashboard;
-            # the corpus is what the eval board and every later analysis actually read,
-            # and an unresolved tick that exists only in memory is a headline metric that
-            # reports zero for a run full of them.
-            self._record_unresolved(state, plan)
+            self._record_unresolved(state, floor)
             if self.ask is not None and state.situation_key:
-                # Enqueue and move on. This is the only contact with the teacher in the
-                # hot loop, and it does not block.
-                self.ask(state, state.situation_key)
-                self.counters.escalated += 1
+                try:
+                    self.ask(state, state.situation_key)
+                    self.counters.escalated += 1
+                except Exception:
+                    pass  # optional queue failure never removes the scripted floor
 
-        by = ArmedBy.S1_PREEMPT if plan.rule.startswith("preempt.") else ArmedBy.POLICY
-        return plan.decision, by, plan.rule
+        plan = floor.decision
+        by = ArmedBy.S1_PREEMPT if preempt else ArmedBy.POLICY
+        check = verify(plan, state, self.available_skills)
+        if not check.ok:
+            self.counters.rejected += 1
+            self._record_decision(state, plan, by, floor.rule, check)
+            plan = Decision(goal="wait:unavailable", intent=Intent.WAIT, skill=None,
+                            abort_if=["state_changed"], confidence=1.0,
+                            why=f"{check.rule}: {check.reason}"[:280])
+            return plan, by, "unavailable", ""
+        return plan, by, floor.rule, ""
 
-    def _close_armed(self, state: State, next_plan: Decision) -> None:
-        """Judge the skill that was running, before replacing it.
+    def _record_decision(self, state: State, plan: Decision, by: ArmedBy, rule: str,
+                         check: Verdict | None = None) -> str:
+        check = check or Verdict.accept()
+        self._decision_seq += 1
+        decision_id = f"{self.recorder.run_id}:d{self._decision_seq}"
+        self.recorder.decision(DecisionRow(
+            run_id=self.recorder.run_id, decision_id=decision_id,
+            tick_id=self.recorder._tick_id + 1, t=state.t, client_id=self.client_id,
+            situation_key=state.situation_key or "", author=by, model=f"scripted:{rule}",
+            intent=plan.intent.value, skill=plan.skill, params=dict(plan.params),
+            confidence=plan.confidence, why=plan.why,
+            status="ok" if check.ok else "rejected",
+            verifier_verdict="ok" if check.ok else check.rule, verifier_reason=check.reason,
+        ))
+        return decision_id
 
-        Nothing else can answer this. Skills armed by the tracker or by a System 1
-        preempt — which is most of them — write no decision row, so joining decisions to
-        grades leaves them permanently ungraded and PLAN §10's retirement rule has no
-        rate to compute. The skill's own success predicate is the judge, which is why
-        every skill is required to declare one.
-        """
+    def _close_armed(self, state: State, next_plan: Decision, by: ArmedBy) -> None:
         prev = self.armed
         if prev is None or prev.decision.skill is None:
             return
-        if prev.decision.skill == next_plan.skill:
-            return                                  # still running; nothing has ended
-
         skill = get_skill(prev.decision.skill)
-        duration = state.t - prev.at
-
-        if skill is not None and not judges_itself(skill):
-            # This skill ends on something only the tracker knows. Calling that a failure
-            # would retire the whole travel and questing half of the catalog for never
-            # succeeding at a question it was never asked.
-            outcome = SkillOutcome.UNKNOWN
-        elif skill is not None and skill.success(state):
-            outcome = SkillOutcome.SUCCEEDED
-        elif skill is not None and duration >= skill.timeout_s:
-            outcome = SkillOutcome.TIMED_OUT
-        elif next_plan.skill and self.armed and self.armed.rule.startswith("preempt."):
-            # Interrupted by something more urgent. Not a failure of the skill: counting
-            # it as one would retire exactly the skills that run in dangerous places.
+        if by is ArmedBy.S1_PREEMPT:
             outcome = SkillOutcome.PREEMPTED
+        elif skill is not None and judges_itself(skill) and skill.success(state):
+            outcome = SkillOutcome.SUCCEEDED
+        elif skill is not None and state.t - prev.at >= skill.timeout_s:
+            outcome = SkillOutcome.TIMED_OUT
+        elif skill is not None and not judges_itself(skill):
+            outcome = SkillOutcome.UNKNOWN
         else:
             outcome = SkillOutcome.ABORTED
+        self._skill_result(state, outcome, prev.rule)
 
+    def _skill_result(self, state: State, outcome: SkillOutcome, detail: str) -> None:
+        prev = self.armed
+        if prev is None or prev.decision.skill is None:
+            return
         self.counters.skills_closed += 1
-        if outcome is SkillOutcome.SUCCEEDED:
-            self.counters.skills_succeeded += 1
-
+        self.counters.skills_succeeded += int(outcome is SkillOutcome.SUCCEEDED)
         self.recorder.skill_result(SkillResultRow(
-            run_id=self.recorder.run_id,
-            client_id=self.client_id,
-            t=state.t,
-            tick_id=self.recorder._tick_id,
-            skill=prev.decision.skill,
-            armed_by=prev.by,
-            outcome=outcome,
-            duration_s=duration,
-            situation_key=state.situation_key or "",
-            step_id=self.tracker.step_id,
-            detail=prev.rule,
+            run_id=self.recorder.run_id, client_id=self.client_id, t=state.t,
+            tick_id=self.recorder._tick_id, skill=prev.decision.skill, armed_by=prev.by,
+            outcome=outcome, duration_s=max(0.0, state.t - prev.at),
+            situation_key=prev.situation_key, step_id=prev.step_id, detail=detail,
+            decision_id=prev.decision_id,
         ))
 
     def _record_unresolved(self, state: State, plan: scripted.Plan) -> str:
@@ -330,7 +416,7 @@ class ClientRuntime:
             self._asked_at.setdefault(state.situation_key, state.t)
         return decision_id
 
-    def _collect(self, state: State) -> tuple[Decision | None, str]:
+    def _collect(self, state: State) -> tuple[Decision | TeacherReply | None, str]:
         """Look for an answer under the current bucket, then under any we asked about.
 
         Oldest question first, so a backlog drains in the order it was created rather
@@ -357,10 +443,11 @@ class ClientRuntime:
         inventing one would silently drop every cached and shared answer in the farm.
         """
         asked_at = self._asked_at.get(key)
-        return asked_at is not None and (state.t - asked_at) > self.stale_after_s
+        return (key != state.situation_key
+                or (asked_at is not None and (state.t - asked_at) > self.stale_after_s))
 
-    def _record_applied(self, state: State, answer: Decision, key: str,
-                        *, stale: bool = False) -> None:
+    def _record_applied(self, state: State, answer: Decision | None, key: str,
+                        *, check: Verdict, artifacts: list[dict]) -> str:
         """A teacher answer, linked back to the escalation that asked for it.
 
         `escalated_from` is what lets the board count questions rather than reconstruct
@@ -368,9 +455,10 @@ class ClientRuntime:
         one client escalates the same bucket twice on a tick.
         """
         self._escalations += 1
+        decision_id = f"{self.recorder.run_id}:a{self._escalations}"
         self.recorder.decision(DecisionRow(
             run_id=self.recorder.run_id,
-            decision_id=f"{self.recorder.run_id}:a{self._escalations}",
+            decision_id=decision_id,
             tick_id=self.recorder._tick_id + 1,
             t=state.t,
             client_id=self.client_id,
@@ -381,18 +469,20 @@ class ClientRuntime:
             situation_key=key,
             author=ArmedBy.TEACHER,
             model="teacher",
-            intent=answer.intent.value,
-            skill=answer.skill,
-            params=dict(answer.params),
-            confidence=answer.confidence,
+            intent=answer.intent.value if answer else None,
+            skill=answer.skill if answer else None,
+            params=dict(answer.params) if answer else {},
+            confidence=answer.confidence if answer else None,
+            artifacts=artifacts,
             # A stale answer is recorded as `rejected`, the same status the verifier uses
             # for a well-formed reply that may not be acted on. Its artifacts are still
             # good — they describe the step, not the tick — and a later pass promotes them
             # from this row.
-            status="rejected" if stale else "ok",
-            why=(f"stale by {state.t - self._asked_at.get(key, state.t):.0f}s; "
-                 f"artifacts kept, action discarded — {answer.why}")[:280]
-                 if stale else answer.why,
+            status="ok" if check.ok else "rejected",
+            verifier_verdict="ok" if check.ok else check.rule,
+            verifier_reason=check.reason,
+            why=(("artifacts kept, action discarded; " if check.rule == "stale" else "")
+                 + (answer.why if answer else "artifacts only"))[:280],
             # `None` is honest here: an answer for a bucket this client never asked
             # about is unsolicited — a cache hit, or another client's question — and
             # claiming a link would invent one.
@@ -401,26 +491,34 @@ class ClientRuntime:
         # Answered, one way or the other. Leaving it outstanding would have every later
         # tick re-collect the same reply.
         self._asked_at.pop(key, None)
+        return decision_id
 
-    def _record(self, state: State, plan: Decision, by: ArmedBy) -> None:
+    def _record(self, state: State) -> None:
+        # No model is an explicit abstention, the same contract as cold_start.predict.
         intent = skill = None
-        confidence = None
+        confidence = 0.0
         if self.shadow is not None:
-            intent, skill, confidence = self.shadow(state)
-
+            try:
+                intent, skill, confidence = self.shadow(state)
+            except Exception:
+                intent, skill, confidence = None, None, 0.0
+        arm = self.armed
+        state = state.model_copy(update={"control": state.control.model_copy(update={
+            "armed_skill": arm.decision.skill if arm else None,
+            "armed_by": arm.by if arm else ArmedBy.TRACKER,
+            "armed_at": arm.at if arm else None,
+        })})
         self.recorder.tick(TickRow(
-            run_id=self.recorder.run_id,
-            tick_id=self.recorder.next_tick_id(),
-            t=state.t,
-            client_id=self.client_id,
-            state=state.model_dump(mode="json"),
+            run_id=self.recorder.run_id, tick_id=self.recorder.next_tick_id(),
+            t=state.t, client_id=self.client_id, state=state.model_dump(mode="json"),
             situation_key=state.situation_key or "",
-            armed_skill=plan.skill,
-            armed_intent=plan.intent.value,
-            armed_by=by,
-            shadow_intent=intent,
-            shadow_skill=skill,
-            shadow_confidence=confidence,
+            armed_skill=arm.decision.skill if arm else None,
+            armed_intent=arm.decision.intent.value if arm else None,
+            armed_by=arm.by if arm else ArmedBy.TRACKER,
+            decision_id=arm.decision_id if arm else None,
+            keys=self.keys_down() if self.keys_down is not None else [],
+            shadow_intent=intent, shadow_skill=skill, shadow_confidence=confidence,
+            tracker_event=self._tracker_event, tracker_from=self._tracker_from,
         ))
 
     # -- driving -------------------------------------------------------------

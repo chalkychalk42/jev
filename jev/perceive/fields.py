@@ -239,7 +239,7 @@ FIELDS: tuple[Field, ...] = (
     _tri("ui.trainer", "return tri(ClassTrainerFrame and ClassTrainerFrame:IsVisible())"),
     _tri("ui.mail", "return tri(MailFrame and MailFrame:IsVisible())"),
     _tri("ui.modal", "return tri(MODAL_UP())",
-         "any StaticPopup is up; the world is obstructed and travel must not move"),
+         "a blocking popup or stock menu is up; travel and mouse-look must not move"),
     Field("ui.error_id", 6, Kind.ENUM, "return LAST_ERROR()",
           "index into the shared UI-error enum, cleared after it is painted once"),
 

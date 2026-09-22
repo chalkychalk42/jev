@@ -76,6 +76,21 @@ def test_the_addon_loads_and_paints_without_raising():
     assert len(cells) >= GRID_COLS, "nothing was painted"
 
 
+@pytest.mark.parametrize("panel", ["GameMenuFrame", "OptionsFrame", "InterfaceOptionsFrame",
+                                  "VideoOptionsFrame", "AudioOptionsFrame", "KeyBindingFrame",
+                                  "AddonList", "ScriptErrorsFrame", "StaticPopup1"])
+def test_blocking_panels_survive_the_real_lua_wire_round_trip(panel):
+    values = radio.unpack(payload(paint({"visiblePanel": panel}))[:PAYLOAD_CELLS])
+    assert values["ui.modal"] is True
+    hidden = radio.unpack(payload(paint({"visiblePanel": panel, "panelHidden": True}))[:PAYLOAD_CELLS])
+    assert hidden["ui.modal"] is False
+
+
+def test_a_quest_panel_is_not_a_blocking_menu():
+    values = radio.unpack(payload(paint({"visiblePanel": "QuestFrame"}))[:PAYLOAD_CELLS])
+    assert values["ui.modal"] is False
+
+
 def test_the_calibration_row_is_what_the_decoder_expects():
     """Both sides read this row from the same generated table, so a mismatch here means
     the generator and the addon have drifted."""
@@ -141,3 +156,9 @@ def test_the_addon_only_touches_a_small_api_surface():
     for forbidden in ("UseAction", "CastSpellByName", "MoveForwardStart", "SetCVar",
                       "TurnLeftStart", "JumpOrAscendStart", "RunBinding", "SendChatMessage"):
         assert forbidden not in src, f"the addon calls {forbidden}, which actuates"
+
+
+@pytest.mark.parametrize(("flag", "complete"), [(1, True), (0, False), (-1, False)])
+def test_quest_completion_is_a_positive_one_not_lua_truthiness(flag, complete):
+    values = radio.unpack(payload(paint({"questComplete": flag}))[:PAYLOAD_CELLS])
+    assert values["quests.slot_complete"] is complete

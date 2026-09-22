@@ -317,3 +317,38 @@ Not "build twelve modules". One vertical slice, fully instrumented:
 > pipeline running throughout.
 
 Everything after that is content.
+
+### Current composition and evidence boundary — 22 Sep 2026
+
+`jev.orch.runtime.ClientRuntime` owns the tracker, guide enrichment, situation key,
+verification, accepted decisions, teacher artifacts and shadow records. Both simulation
+and live execution use that runtime. `tools/probe_slice.py` delegates to `jev.run.cli`;
+there is no second policy loop in the probe.
+
+`jev.run.supervisor.Supervisor` samples/tracks on a 250 ms target, chooses at up to 2 Hz
+when the body is free, and records at 2 Hz plus decision/progress/death events. These are
+scheduling targets, not a measured live throughput claim. One worker owns the existing
+body methods and all input; the next worker starts only after the previous one releases
+its keys and mouse buttons. Cancellation is checked at input and perception boundaries,
+and sidecar reads have real deadlines. The teacher queue is optional and never awaited.
+Blind perception releases input and waits for fresh evidence. Unsupported actions and
+exhausted attempts end with a named reason.
+
+`jev.run.body.LiveBody` composes the existing Travel, Interact, ChooseListLine,
+AdvanceQuestFrame, Fight, Hunt, Rest, Loot, Repair and Recover. Its executor catalog is
+the runtime verifier's capability set. Graph schema 2 supplies typed target names/kinds
+from the server DB; human prose is not a targeting interface. Object interaction and
+later objectives without their own generated target remain explicit capability gaps.
+Geometry and the proven navigation/interaction constants are preserved by this work.
+
+Every accepted arm retains its decision ID, originating step/key and start time through
+execution. Outcomes link back to that arm. Tracker completion is distinct from failed
+edges, skips and timed rib rejoins. `jev.learn.grade` joins applied decisions to observed
++60-second windows; gaps, unread windows and short closed tails cannot earn positive
+labels. JSONL is authoritative, grades are replaceable derivatives, and dataset joins
+include the run ID. Synthetic/replay observations are excluded by default. Teacher
+artifacts are recorded for review, never auto-installed by the live body.
+
+The responsive synthetic slice exercises this whole recording/grading seam with zero
+teacher calls. It proves integration offline. It does not prove the new composition on
+Windows, real input/capture latency, model promotion, or unattended levelling.

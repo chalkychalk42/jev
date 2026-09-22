@@ -103,6 +103,7 @@ class Hunt:
     journal: Journal | None = None
     observe: Callable[[], object | None] | None = None
     step_id: str | None = None
+    is_complete: Callable[[], bool | None] | None = None
 
     kills: int = field(default=0, init=False)
     _outdoors: bool | None = field(default=None, init=False)
@@ -133,7 +134,9 @@ class Hunt:
                 return Hunted.DIED
 
             have, need = self.progress()
-            if need is not None and have is not None and have >= need:
+            complete = (self.is_complete() if self.is_complete is not None else
+                        need is not None and have is not None and have >= need)
+            if complete is True:
                 self.say(f"  objective complete: {have}/{need}")
                 return Hunted.DONE
 

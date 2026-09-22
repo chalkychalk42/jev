@@ -76,6 +76,9 @@ class ReplaySource:
                 raise ValueError("replay is empty")
             return self._last
         self._last = State.model_validate(row["state"])
+        self._last = self._last.model_copy(update={
+            "sense": self._last.sense.model_copy(update={"source": StateSource.REPLAY}),
+        })
         return self._last
 
     def close(self) -> None:

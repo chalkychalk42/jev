@@ -24,11 +24,13 @@ from dataclasses import dataclass, field
 from jev.clients import win32
 from jev.clients.capture import Backend, WindowCapture
 from jev.clients.hid import Hid, Humaniser
+from jev.clients.source import blind
 from jev.clients.travel import Outcome, Travel
 from jev.guide.coords import ZoneBounds, map_to_world
 from jev.guide.path import PathQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
+from jev.world.state_v1 import SenseFault
 
 # Taking the window back: short waits first, doubling, capped.
 #
@@ -65,6 +67,7 @@ class Client:
     cap: WindowCapture
     origin: tuple[int, int]
     size: tuple[int, int]
+    client_id: str = "run"
     log: QuestLog = field(default_factory=QuestLog)
     _seq: int | None = field(default=None, init=False)
     _seq_at: float = field(default=0.0, init=False)
@@ -92,12 +95,12 @@ class Client:
         for _ in range(tries):
             with self._capturing:
                 r = radio_frame.read(self.cap.grab().rgb)
-            if r.ok:
-                self._note_seq(r.values.get("seq"))
-                if self.frozen_for() > STALE_AFTER_S:
-                    return None
-                self.log.observe(r.values)
-                return r
+                if r.ok:
+                    self._note_seq(r.values.get("seq"))
+                    if self.frozen_for() > STALE_AFTER_S:
+                        return None
+                    self.log.observe(r.values)
+                    return r
             time.sleep(0.05)
         return None
 
@@ -146,11 +149,12 @@ class Client:
         `to_state` will not call one frame a log and is right not to, so the accumulated
         one is handed in. Without this the tracker sees an empty log on every tick.
         """
-        r = self.reading()
-        if r is None:
-            return None
-        return radio_frame.to_state(r, t=time.time(), client_id="run",
-                                    quests=self.log.complete)
+        with self._capturing:
+            r = self.reading()
+            if r is None:
+                return None
+            return radio_frame.to_state(r, t=time.time(), client_id=self.client_id,
+                                        quests=self.log.complete)
 
     # -- the one composed action ---------------------------------------------
 
@@ -239,6 +243,7 @@ def attach(client_id: str = "run", *, title: str = "World of Warcraft",
         cap=WindowCapture(hwnd, backend=backend),
         origin=(ox, oy),
         size=(w, h),
+        client_id=client_id,
     )
 
 
@@ -251,3 +256,23 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards)
     return client
+
+
+@dataclass
+class ClientSource:
+    """Expose the body's existing capture/log assembly through the runtime Source seam."""
+
+    client: Client
+
+    def read(self):
+        try:
+            state = self.client.state()
+        except Exception:
+            state = None
+        if state is not None:
+            return state
+        fault = SenseFault.STALE if self.client.frozen_for() > STALE_AFTER_S else SenseFault.NOT_FOUND
+        return blind(time.time(), self.client.client_id, fault)
+
+    def close(self) -> None:
+        self.client.close()

@@ -89,6 +89,8 @@ class TickRow:
     shadow_confidence: float | None = None
 
     decision_id: str | None = None   # set when this tick is the one a decision acted on
+    tracker_event: str | None = None
+    tracker_from: str | None = None
 
 
 @dataclass(frozen=True)
@@ -201,6 +203,7 @@ class SkillResultRow:
     situation_key: str
     step_id: str | None = None
     detail: str | None = None
+    decision_id: str | None = None
 
     @property
     def counts_toward_rate(self) -> bool:
@@ -219,9 +222,9 @@ class SkillResultRow:
 def level_progress(state: State) -> float | None:
     """A single monotone scalar for progress. `xp_pct` alone resets at every ding."""
     lvl, pct = state.char.level, state.char.xp_pct
-    if lvl is None:
+    if lvl is None or pct is None:
         return None
-    return lvl + (pct or 0.0)
+    return lvl + pct
 
 
 def reward(
@@ -266,7 +269,10 @@ def grade(
 
     died = any(s.vitals.dead is True or s.vitals.ghost is True for s in states)
     steps = [s.guide.step_id for s in states if s.guide.step_id]
-    step_advanced = bool(steps) and steps[-1] != steps[0]
+    tracked = any(t.tracker_event is not None for t in window)
+    # A fail edge also changes step_id. It is not successful completion.
+    step_advanced = (any(t.tracker_event == "advance" for t in window[1:]) if tracked
+                     else bool(steps) and steps[-1] != steps[0])
 
     progress = [p for p in (level_progress(s) for s in states) if p is not None]
     delta = (progress[-1] - progress[0]) if len(progress) >= 2 else 0.0
@@ -274,7 +280,7 @@ def grade(
     off_route_s = _duration_where(window, states, lambda s: s.guide.on_route is False)
     stuck_s = _duration_where(window, states, lambda s: s.control.s1_mode == "stuck")
 
-    if run_ended and not (step_advanced or died):
+    if run_ended:
         outcome = Outcome.ABANDONED
     elif died:
         outcome = Outcome.DIED
@@ -310,7 +316,9 @@ def grade(
         reward=r,
         # An abandoned window is not evidence, so it is never an example. A decision that
         # was never actually executed is not evidence about the decision either.
-        good=(outcome is not Outcome.ABANDONED and decision.status == "ok" and r > 0.0),
+        good=(outcome not in (Outcome.ABANDONED, Outcome.DIED, Outcome.STUCK)
+              and stuck_s <= 15.0 and decision.status == "ok"
+              and decision.intent != "escalate" and r > 0.0),
     )
 
 

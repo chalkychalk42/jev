@@ -10,6 +10,10 @@ local overrides = loadstring(os.getenv("JEV_STATE") or "return {}")
 if overrides then
     for k, v in pairs(overrides() or {}) do STATE[k] = v end
 end
+if STATE.visiblePanel then
+    local panel = CreateFrame("Frame", STATE.visiblePanel)
+    function panel:IsVisible() return STATE.panelHidden ~= 1 end
+end
 
 dofile("addons/JevRadio/Helpers.lua")
 dofile("addons/JevRadio/Fields.lua")

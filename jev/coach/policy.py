@@ -32,7 +32,8 @@ from dataclasses import dataclass
 from jev.coach.schema import Decision, Intent
 from jev.guide.graph import Node
 from jev.skills.catalog import NAMES
-from jev.world.state_v1 import State
+from jev.world.combat import HEAL_OUT_OF_COMBAT
+from jev.world.state_v1 import PowerType, State, StepKind
 
 # Below this, a decision is worth a teacher call if one is affordable. Above it, asking
 # would be spending a rate-limited resource on something already known.
@@ -44,6 +45,23 @@ class Plan:
     decision: Decision
     confident: bool
     rule: str          # which priority fired, so the log says why rather than what
+
+
+@dataclass
+class Context:
+    """Measured service outcomes that remain true between observations."""
+
+    repair_blocked: bool = False
+    repair_money: int | None = None
+
+    def repair_failed(self, money: int | None) -> None:
+        self.repair_blocked, self.repair_money = True, money
+
+    def can_repair(self, money: int | None) -> bool:
+        # An unknown purse cannot establish that an unaffordable repair became payable.
+        return not self.repair_blocked or (
+            money is not None and self.repair_money is not None and money > self.repair_money
+        )
 
 
 def _d(intent: Intent, skill: str | None, why: str, confidence: float,
@@ -127,7 +145,8 @@ def _recover(state: State) -> Plan | None:
     if v.combat is True:
         return None
     hp, power = v.hp, v.power
-    if (hp is not None and hp < 0.55) or (power is not None and power < 0.35):
+    low_mana = v.power_type is PowerType.MANA and power is not None and power < 0.35
+    if (hp is not None and hp < HEAL_OUT_OF_COMBAT) or low_mana:
         return Plan(_d(Intent.SERVICE, "EAT_DRINK", "out of combat and low; recover first",
                        0.8, ("dead", "combat")), True, "recover.eat")
     return None
@@ -136,19 +155,10 @@ def _recover(state: State) -> Plan | None:
 def _fight(state: State) -> Plan | None:
     if state.vitals.combat is not True:
         return None
-    if state.target.has is not True:
-        # In combat with nothing selected. This is mechanical — name-target the step's
-        # mobs, or take the nearest hostile plate — so it is armed with confidence rather
-        # than escalated. Marking it uncertain sent 42% of a simulated run to the teacher
-        # to be told "pick a target", which is the precise waste a rate-limited teacher
-        # cannot absorb.
-        return Plan(_d(Intent.ADVANCE, "ACQUIRE_TARGET", "in combat with nothing selected",
-                       0.8, ("dead", "no_combat", "has_target")), True,
-                    "fight.acquire")
-    if state.target.in_melee is False:
-        return Plan(_d(Intent.SERVICE, "APPROACH_TARGET", "target is out of reach", 0.8,
-                       ("dead", "no_combat")), True, "fight.approach")
-    return Plan(_d(Intent.SERVICE, "COMBAT_PROFILE", "target in reach; run the rotation",
+    # Fight already owns acquisition, closing, facing and the rotation. Splitting its
+    # phases into separate arms would put the old duel-range heuristic back in charge
+    # and interrupt a proven engagement whenever the target moves.
+    return Plan(_d(Intent.SERVICE, "COMBAT_PROFILE", "in combat; defend with the full rotation",
                    0.85, ("dead", "no_combat"), profile="default"), True, "fight.rotation")
 
 
@@ -157,7 +167,11 @@ def _guide(state: State, node: Node | None) -> Plan | None:
     if node is None:
         return None
 
-    skill = next((s for s in node.skills if s in NAMES), None)
+    skill = next((s for s in node.skills if s in NAMES and s != "TRAVEL_TO"), None)
+    if skill is None and "TRAVEL_TO" in node.skills:
+        skill = "TRAVEL_TO"
+    if node.kind in (StepKind.QUEST_OBJECTIVE, StepKind.GRIND):
+        skill = "GRIND_UNTIL"
     if skill is None:
         return None
 
@@ -212,7 +226,7 @@ def _derate(plan: Plan) -> Plan:
                 False, plan.rule + "+blind")
 
 
-def decide(state: State, node: Node | None = None) -> Plan:
+def decide(state: State, node: Node | None = None, *, context: Context | None = None) -> Plan:
     """Always returns a usable plan. Never raises, never returns None.
 
     `confident=False` marks a tick worth a teacher call *if one is affordable*. It does
@@ -221,9 +235,12 @@ def decide(state: State, node: Node | None = None) -> Plan:
     """
     # Safety first, and safety is not derated: a preempt fires on a positive observation
     # (`is True`), so if one matched, something was read.
-    for tier in (preempt, _service, _recover, _fight):
+    for tier in (preempt, _fight, _service, _recover):
         plan = tier(state)
         if plan is not None:
+            if (plan.decision.skill == "VENDOR_REPAIR" and context is not None
+                    and not context.can_repair(state.bags.money_copper)):
+                continue
             return plan
 
     plan = _guide(state, node) or _fallback(state)

@@ -42,6 +42,8 @@ from enum import StrEnum
 
 
 class Recovered(StrEnum):
+    RELEASED = "released"        # ghost positively observed after releasing
+    NOT_RELEASED = "not_released"
     ALIVE = "alive"                # back on our feet
     NOT_DEAD = "not_dead"          # nothing to do
     NO_BUTTON = "no_button"        # dead, but no popup painted to press
@@ -51,7 +53,7 @@ class Recovered(StrEnum):
 
     @property
     def ok(self) -> bool:
-        return self is Recovered.ALIVE
+        return self in (Recovered.ALIVE, Recovered.RELEASED)
 
 
 def _painted(values: dict | None) -> tuple[float, float] | None:
@@ -82,7 +84,7 @@ class Recover:
     detail: str = field(default="", init=False)
 
     def run(self, corpse: tuple[float, float] | None = None, *,
-            settle_s: float = 3.0, tries: int = 20) -> Recovered:
+            settle_s: float = 3.0, tries: int = 20, release_only: bool = False) -> Recovered:
         """Release, walk back, and get up. Reports where it stopped.
 
         `corpse` is for the case this skill cannot recover from on its own: a character
@@ -97,7 +99,8 @@ class Recover:
         if v is None:
             return Recovered.BLIND
         if v.get("vitals.dead") is not True and v.get("vitals.ghost") is not True:
-            return Recovered.NOT_DEAD
+            return (Recovered.NOT_DEAD if v.get("vitals.dead") is False
+                    and v.get("vitals.ghost") is False else Recovered.BLIND)
 
         self.corpse = _painted(v) or self.corpse
         if v.get("vitals.ghost") is not True:
@@ -116,6 +119,12 @@ class Recover:
             if after is not None:
                 # Releasing is what makes the corpse a corpse; ask again now that it is.
                 self.corpse = _painted(after) or self.corpse
+            if release_only:
+                return (Recovered.RELEASED if after and after.get("vitals.ghost") is True
+                        else Recovered.NOT_RELEASED)
+
+        if release_only:
+            return Recovered.RELEASED
 
         if self.corpse is None:
             self.detail = ("a ghost with no corpse position; it auto-released before "
@@ -129,7 +138,7 @@ class Recover:
             v = self.read()
             if v is None:
                 return Recovered.BLIND
-            if v.get("vitals.dead") is not True and v.get("vitals.ghost") is not True:
+            if v.get("vitals.dead") is False and v.get("vitals.ghost") is False:
                 return Recovered.ALIVE
             self.corpse = _painted(v) or self.corpse
             self._press(v)

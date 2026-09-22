@@ -21,12 +21,13 @@ from __future__ import annotations
 import json
 import pathlib
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from jev.world.state_v1 import StepKind
 
-GRAPH_SCHEMA = 1
+GRAPH_SCHEMA = 2
 
 
 class FailWhen(StrEnum):
@@ -96,6 +97,10 @@ class Node(BaseModel):
     # formatted into a sentence and thrown away.
     title: str = ""
     npc_id: int | None = None
+    # Explicit DB facts. Display notes are not a targeting contract, and a crate
+    # must never be dispatched to the creature nameplate/ring locator.
+    target_name: str | None = None
+    target_kind: Literal["creature", "gameobject"] | None = None
     objectives: tuple[str, ...] = ()
 
     requires: tuple[str, ...] = ()

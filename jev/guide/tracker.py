@@ -68,6 +68,7 @@ class Verdict:
     # Off-route seconds accumulated, so the reward function does not have to
     # re-derive what the tracker already measured.
     off_route_s: float = 0.0
+    completed: bool = False  # a predicate succeeded; a timed-out rib rejoin did not
 
 
 @dataclass
@@ -173,7 +174,7 @@ class Tracker:
 
         if _predicate(state, node, self.memory):
             return Verdict(Event.ADVANCE, goto=self._exit_of(node),
-                           reason=f"{node.kind} satisfied")
+                           reason=f"{node.kind} satisfied", completed=node.kind is not StepKind.SKIPPABLE_GATE)
 
         fail = self._match_fail(state, node, age)
         if fail is not None:
@@ -287,8 +288,8 @@ def _quest_log_readable(state: State) -> bool:
 def _quest_complete(state: State, node: Node) -> bool:
     for q in state.quests or ():
         if q.quest_id == node.quest_id:
-            if q.complete is True:
-                return True
+            if q.complete is not None:
+                return q.complete
             return bool(q.objectives) and all(o.done for o in q.objectives)
     return False
 
@@ -312,7 +313,8 @@ def _predicate(state: State, node: Node, mem: StepMemory) -> bool:
         case StepKind.QUEST_TURNIN:
             # Gone from the log, having once been in it. Without the memory this reads
             # as complete before the quest was ever accepted.
-            return mem.quest_was_in_log and not _quest_in_log(state, node)
+            return (_quest_log_readable(state) and mem.quest_was_in_log
+                    and not _quest_in_log(state, node))
 
         case StepKind.TRAVEL | StepKind.HEARTH | StepKind.FLIGHT | StepKind.BOAT:
             return _in_radius(state, node)

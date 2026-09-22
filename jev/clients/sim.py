@@ -34,6 +34,9 @@ from jev.world.state_v1 import (
     Ui,
     Vitals,
 )
+from jev.world.state_v1 import (
+    Source as StateSource,
+)
 
 
 class Pretend:
@@ -67,7 +70,7 @@ class Pretend:
 
         # Perception outages happen, and the coach has rules for them.
         if r < self.trouble / 3:
-            return blind(self.t, "sim", SenseFault.CHECKSUM)
+            return blind(self.t, "sim", SenseFault.CHECKSUM, StateSource.SYNTHETIC)
 
         if self.dead_for > 0:
             self.dead_for -= 1
@@ -134,7 +137,7 @@ class Pretend:
                           hp=max(0.0, 1.0 - self.rng.random()),
                           reaction=Reaction.HOSTILE, attacking_me=True,
                           in_melee=True) if combat else Target(has=False),
-            sense=Sense(addon_ok=True, vision_conf=1.0),
+            sense=Sense(addon_ok=True, vision_conf=1.0, source=StateSource.SYNTHETIC),
         )
 
     def close(self) -> None:

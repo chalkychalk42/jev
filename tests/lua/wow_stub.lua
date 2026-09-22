@@ -155,7 +155,7 @@ function GetActionCooldown(slot) return 0, 0, 1 end
 
 function GetNumQuestLogEntries() return pick("questCount", 1), pick("questCount", 1) end
 function GetQuestLogTitle(i)
-    return "Kobold Camp Cleanup", 3, 0, nil, nil, nil, nil, pick("questId", 7)
+    return "Kobold Camp Cleanup", 3, 0, nil, nil, nil, pick("questComplete", false), pick("questId", 7)
 end
 function GetNumQuestLeaderBoards(i) return 1 end
 function GetQuestLogLeaderBoard(j, i)

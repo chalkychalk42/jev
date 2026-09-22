@@ -58,7 +58,7 @@ import numpy as np
 from jev.coach.situation import _age, _bags, _deaths, _durability, _health, _progress, _tri
 from jev.eval.counters import bracket_of
 from jev.learn.episode import Stream, read
-from jev.world.state_v1 import ArmedBy, Classification, State, StepKind
+from jev.world.state_v1 import ArmedBy, Classification, Source, State, StepKind
 
 # --------------------------------------------------------------------------- authors
 
@@ -261,11 +261,12 @@ class Dropped:
     no_tick: int = 0
     unparsable_state: int = 0
     no_intent: int = 0
+    synthetic: int = 0
 
     def total(self) -> int:
         return (
             self.no_grade + self.not_good + self.wrong_author
-            + self.no_tick + self.unparsable_state + self.no_intent
+            + self.no_tick + self.unparsable_state + self.no_intent + self.synthetic
         )
 
 
@@ -318,6 +319,7 @@ def build_from_rows(
     grades: Sequence[Mapping[str, Any]],
     *,
     authors: Iterable[str | ArmedBy] = DEFAULT_AUTHORS,
+    include_synthetic: bool = False,
 ) -> Dataset:
     """Join the three streams into examples. The outcome filter is not optional.
 
@@ -330,23 +332,23 @@ def build_from_rows(
         (t.get("run_id"), t.get("client_id"), t.get("tick_id")): t
         for t in ticks
     }
-    by_decision = {g.get("decision_id"): g for g in grades}
+    by_decision = {(g.get("run_id"), g.get("decision_id")): g for g in grades}
 
     examples: list[Example] = []
-    no_grade = not_good = wrong_author = no_tick = unparsable = no_intent = 0
+    no_grade = not_good = wrong_author = no_tick = unparsable = no_intent = synthetic = 0
 
     for d in decisions:
         author = str(d.get("author") or "")
         if author not in wanted:
             wrong_author += 1
             continue
-        g = by_decision.get(d.get("decision_id"))
+        g = by_decision.get((d.get("run_id"), d.get("decision_id")))
         if g is None:
             # A decision with no grade is not an example. Absence of an outcome is not a
             # good outcome, and a live run always has a tail of ungraded decisions.
             no_grade += 1
             continue
-        if not g.get("good"):
+        if not g.get("good") or d.get("status", "ok") != "ok" or d.get("intent") == "escalate":
             not_good += 1
             continue
         intent = d.get("intent")
@@ -360,6 +362,9 @@ def build_from_rows(
         state = _parse_state(tick.get("state"))
         if state is None:
             unparsable += 1
+            continue
+        if not include_synthetic and state.sense.source in (Source.SYNTHETIC, Source.REPLAY):
+            synthetic += 1
             continue
 
         examples.append(
@@ -389,6 +394,7 @@ def build_from_rows(
             no_tick=no_tick,
             unparsable_state=unparsable,
             no_intent=no_intent,
+            synthetic=synthetic,
         ),
     )
 
@@ -425,7 +431,8 @@ def load_streams(run_dir: str | pathlib.Path) -> tuple[list[dict], list[dict], l
     out: list[list[dict]] = []
     for stream in (Stream.TICKS, Stream.DECISIONS, Stream.GRADES):
         pq_path, jsonl_path = d / f"{stream.value}.parquet", d / f"{stream.value}.jsonl"
-        if pq_path.exists():
+        if pq_path.exists() and (not jsonl_path.exists()
+                                or pq_path.stat().st_mtime_ns >= jsonl_path.stat().st_mtime_ns):
             out.append(read_parquet(pq_path))
         elif jsonl_path.exists():
             out.append(read(jsonl_path))
@@ -438,6 +445,7 @@ def build(
     run_dirs: Iterable[str | pathlib.Path],
     *,
     authors: Iterable[str | ArmedBy] = DEFAULT_AUTHORS,
+    include_synthetic: bool = False,
 ) -> Dataset:
     """Build across many runs. Rows are keyed by run, so mixing runs is safe."""
     ticks: list[dict] = []
@@ -448,4 +456,5 @@ def build(
         ticks += t
         decisions += dec
         grades += g
-    return build_from_rows(ticks, decisions, grades, authors=authors)
+    return build_from_rows(ticks, decisions, grades, authors=authors,
+                           include_synthetic=include_synthetic)

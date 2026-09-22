@@ -115,6 +115,8 @@ class Hid:
         self.unsendable: list[str] = []
         self.detail = ""
         self.held: set[str] = set()
+        self.held_buttons: set[bool] = set()
+        self.checkpoint: Callable[[], None] | None = None
 
     # -- guards --------------------------------------------------------------
 
@@ -126,6 +128,8 @@ class Hid:
         return win32.is_foreground(self.hwnd)
 
     def _guard(self) -> bool:
+        if self.checkpoint is not None:
+            self.checkpoint()
         if self.ready():
             return True
         self.refused += 1
@@ -157,11 +161,13 @@ class Hid:
         return ok
 
     def key_up(self, key: str) -> bool:
-        if not self._guard():
+        # Releasing an input we own must survive cancellation and focus loss.
+        if key not in self.held and not self.ready():
             return False
         ok = win32.send_inputs([self._key_event(key, up=True)]) == 1
         self.sent += int(ok)
-        self.held.discard(key)     # discarded either way; a failed release is not a hold
+        if ok:
+            self.held.discard(key)
         return ok
 
     def keys_down(self) -> list[str]:
@@ -182,8 +188,10 @@ class Hid:
         """
         if not self.key_down(key):
             return False
-        self._sleep(self.h.hold())
-        ok = self.key_up(key)
+        try:
+            self._sleep(self.h.hold())
+        finally:
+            ok = self.key_up(key)
         self._sleep(self.h.gap())
         return ok
 
@@ -206,6 +214,8 @@ class Hid:
         try:
             deadline = time.perf_counter() + seconds
             while time.perf_counter() < deadline:
+                if not self._guard():
+                    return False
                 if on_tick is not None:
                     on_tick()
                 time.sleep(min(tick_s, max(0.0, deadline - time.perf_counter())))
@@ -224,17 +234,22 @@ class Hid:
 
     def release_all(self) -> None:
         """Let go of everything that moves. Cheap, and worth calling on any abort path."""
-        for key in self.MOVEMENT_KEYS:
+        for key in set(self.MOVEMENT_KEYS) | self.held:
             self.key_up(key)
+        for right in tuple(self.held_buttons):
+            self.button(False, right=right)
 
     def chord(self, modifier: str, key: str) -> bool:
         """Modifier plus key, with the modifier genuinely held around it."""
         if not self.key_down(modifier):
             return False
-        self._sleep(self.h.gap())
-        ok = self.tap(key)
-        self._sleep(self.h.gap())
-        return self.key_up(modifier) and ok
+        try:
+            self._sleep(self.h.gap())
+            ok = self.tap(key)
+            self._sleep(self.h.gap())
+        finally:
+            released = self.key_up(modifier)
+        return released and ok
 
     def type_text(self, text: str) -> bool:
         """Type a line. Used by tooling; the bot itself does not talk.
@@ -325,6 +340,8 @@ class Hid:
         path = bezier((start.x, start.y), (x, y),
                       steps or self.h.rng.randint(8, 18), self.h.rng)
         for px, py in path:
+            if not self._guard():
+                return False
             ax, ay = self._abs(px, py)
             mi = win32.MOUSEINPUT(dx=ax, dy=ay, mouseData=0,
                                   dwFlags=win32.MOUSEEVENTF_MOVE | win32.MOUSEEVENTF_ABSOLUTE,
@@ -341,7 +358,9 @@ class Hid:
         gesture: a right button held while the mouse moves is mouse-look, and the client
         reads it as camera control rather than as a click on whatever is underneath.
         """
-        if not self._guard():
+        if down and not self._guard():
+            return False
+        if not down and right not in self.held_buttons and not self.ready():
             return False
         if right:
             flag = win32.MOUSEEVENTF_RIGHTDOWN if down else win32.MOUSEEVENTF_RIGHTUP
@@ -349,9 +368,14 @@ class Hid:
             flag = win32.MOUSEEVENTF_LEFTDOWN if down else win32.MOUSEEVENTF_LEFTUP
         mi = win32.MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flag,
                               time=0, dwExtraInfo=None)
-        win32.send_inputs([win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)])
-        self.sent += 1
-        return True
+        ok = win32.send_inputs([win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)]) == 1
+        self.sent += int(ok)
+        if ok:
+            if down:
+                self.held_buttons.add(right)
+            else:
+                self.held_buttons.discard(right)
+        return ok
 
     def move_by(self, dx: int, dy: int, step_px: int = 10) -> bool:
         """Relative mouse movement, in small steps.
@@ -367,6 +391,8 @@ class Hid:
         sy = 0 if dy == 0 else (1 if dy > 0 else -1)
         left = max(abs(dx), abs(dy))
         while left > 0:
+            if not self._guard():
+                return False
             take = min(step_px, left)
             mi = win32.MOUSEINPUT(dx=sx * take, dy=sy * take, mouseData=0,
                                   dwFlags=win32.MOUSEEVENTF_MOVE, time=0,
@@ -382,16 +408,14 @@ class Hid:
             return False
         if not self._guard():
             return False
-        down = win32.MOUSEEVENTF_RIGHTDOWN if right else win32.MOUSEEVENTF_LEFTDOWN
-        up = win32.MOUSEEVENTF_RIGHTUP if right else win32.MOUSEEVENTF_LEFTUP
-        for flag in (down, up):
-            mi = win32.MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flag,
-                                  time=0, dwExtraInfo=None)
-            win32.send_inputs([win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)])
+        if not self.button(True, right=right):
+            return False
+        try:
             self._sleep(self.h.hold() / 2)
-        self.sent += 2
+        finally:
+            ok = self.button(False, right=right)
         self._sleep(self.h.gap())
-        return True
+        return ok
 
 
 def bezier(start: tuple[int, int], end: tuple[int, int], steps: int,

@@ -297,7 +297,8 @@ def test_an_unresolved_tick_reaches_the_corpus_not_just_the_counter(tmp_path):
     rt.run(ticks=6, period_s=0)
 
     assert rt.counters.unresolved > 0
-    decisions = read(rt.recorder.dir / "decisions.jsonl")
+    decisions = [d for d in read(rt.recorder.dir / "decisions.jsonl")
+                 if d["intent"] == "escalate"]
     assert len(decisions) == rt.counters.unresolved
     assert all(d["intent"] == "escalate" for d in decisions)
     assert all(d["situation_key"] for d in decisions)
@@ -362,7 +363,9 @@ def test_a_healthy_run_writes_few_decision_rows(tmp_path):
 
     decisions = read(rt.recorder.dir / "decisions.jsonl")
     ticks = read(rt.recorder.dir / "ticks.jsonl")
-    assert len(decisions) / len(ticks) < 0.2, "escalating on a fifth of ticks is the signal"
+    escalations = [d for d in decisions if d["intent"] == "escalate"]
+    assert len(escalations) / len(ticks) < 0.2, "escalating on a fifth of ticks is the signal"
+    assert any(d["intent"] != "escalate" for d in decisions), "ordinary choices need labels too"
 
 
 def test_a_skill_armed_mechanically_still_gets_an_outcome(tmp_path):
@@ -478,7 +481,7 @@ def test_a_late_answer_keeps_its_artifacts_and_loses_its_action(tmp_path):
     assert any("artifacts kept" in (r["why"] or "") for r in rows)
 
 
-def test_an_answer_inside_the_window_is_acted_on(tmp_path):
+def test_an_answer_inside_the_window_still_needs_current_perception(tmp_path):
     from jev.coach.schema import Decision, Intent
 
     answer = Decision(goal="g", intent=Intent.GRIND_RIB, skill="GRIND_UNTIL",
@@ -491,7 +494,9 @@ def test_an_answer_inside_the_window_is_acted_on(tmp_path):
         q.now = state.t
         rt.tick()
 
-    assert rt.counters.teacher_applied > 0
+    assert rt.counters.teacher_applied == 0
+    replies = [r for r in read(rt.recorder.dir / "decisions.jsonl") if r["author"] == "teacher"]
+    assert replies and all(r["verifier_verdict"] == "sense.blind" for r in replies)
     assert rt.counters.teacher_stale == 0
 
 
@@ -514,7 +519,8 @@ def test_an_answer_is_found_even_though_the_bucket_moved(tmp_path):
 
     assert len(set(keys)) > 1, "the key should re-bin as the step ages"
     assert q.delivered, "no answer was ever collected"
-    assert rt.counters.teacher_applied + rt.counters.teacher_stale == len(q.delivered)
+    replies = [r for r in read(rt.recorder.dir / "decisions.jsonl") if r["author"] == "teacher"]
+    assert len(replies) == len(q.delivered)
 
 
 def test_an_unsolicited_answer_is_never_stale(tmp_path):

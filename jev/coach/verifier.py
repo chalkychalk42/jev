@@ -28,7 +28,7 @@ Rule = Callable[[Decision, State, frozenset[str]], Verdict]
 
 
 def _skill_exists(d: Decision, s: State, catalog: frozenset[str]) -> Verdict:
-    if d.intent is Intent.WAIT:
+    if d.intent is Intent.WAIT and d.skill is None:
         return Verdict.accept()
     if not d.skill:
         return Verdict.refuse("skill_exists", f"intent {d.intent} needs a skill")

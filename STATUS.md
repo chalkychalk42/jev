@@ -1138,3 +1138,71 @@ lives in `perceive/` by design. Three are not:
 
 `bags.durability_min` was on this list until tonight and cost an evening, which is the
 argument for keeping the sweep rather than the finding.
+
+## 2026-09-22 — shared live runtime and outcome pipeline, verified offline
+
+DID: continued the audits in @thread:thr_qpngriby9g and @thread:thr_vgjejbyrey with the
+client deliberately unopened. The confirmed body methods remain the execution layer.
+
+- `jev.run.cli` and `Supervisor` now connect the real Client readers and LiveBody to
+  `ClientRuntime`. The old probe entry point delegates to this composition. Tracking,
+  coaching and recording have separate schedules; one worker owns all input. Exceptions,
+  blindness, modal panels, death, travel interrupted by combat and catalog timeouts take
+  named paths through cancellation and input release. Unimplemented capabilities and
+  exhausted attempts stop explicitly. A timeout counts as a failed attempt; no-food
+  during travel preparation cannot turn into an endless preemption loop.
+- LiveBody reuses Travel/Detour, Interact, ChooseListLine, AdvanceQuestFrame, Fight, Hunt,
+  Rest, Loot, Repair and Recover. Combat uses Fight's full acquisition/closing/rotation
+  method. Repair selects the nearest same-map generated creature using world yards and
+  remembers an unaffordable purse until observed money growth. Recovery separates
+  release from corpse travel and retains an observed corpse position. No new camera,
+  turning, locator or hunt-radius calibration was introduced.
+- Guide schema 2 adds exact target name and creature/gameobject kind from the local
+  server database. Regenerating the 141-node human graph preserved every existing node
+  ID, coordinate, radius, quest ID, edge and timeout. Objective hints now request the
+  composed hunt skill. Quest progress consumes all painted counters and respects the
+  explicit completion flag. An unread quest log cannot complete a turn-in. Skips and
+  timed-out rib rejoins cannot claim completed-step reward.
+- Ticks carry client identity, guide, situation key, applied decision ID, held keys and
+  shadow output (explicit abstention when no model exists). Skill results preserve the
+  originating arm's ID, step, key and duration. Rejected/stale/blind/preempted teacher
+  proposals cannot be attributed to the fallback; artifact-only replies remain recorded.
+  The live CLI leaves teacher calls off and runs the scripted floor.
+- `python -m jev.learn.grade <run-dir> --closed` derives +60-second outcome grades with
+  applied-decision joins, observation coverage and run/client isolation. Incomplete
+  windows, failed executions, deaths and long stuck intervals cannot produce positive
+  examples. Unknown XP is not zero XP. Dataset joins include run identity and prefer
+  current JSONL over stale parquet; synthetic/replayed states are excluded by default.
+  Existing diagnostic runs were not rewritten or relabelled.
+- HID tracks confirmed key/button ownership and permits releases through cancellation
+  or focus loss. Planner startup/query pipe reads now enforce their configured timeout,
+  propagate cooperative cancellation and dispose failed subprocesses. Tests use real
+  local subprocesses for silent startup/query/restart and cancellation, plus the actual
+  Detour sidecar and extracted mmaps for the established Northshire routes.
+- The paint-only addon reports visible stock menu/options panels through existing
+  `ui.modal`, and quest completion checks `isComplete == 1` (Lua zero is truthy).
+  Radio schema remains 6. Lua → pixels → Python decoder tests cover these changes.
+
+NOW: the responsive offline slice executes accept → kill ten → turn-in through the
+shared runtime and worker, then produces three positive synthetic examples through the
+grader/dataset. The default live dataset correctly contains none of them. Zero teacher
+calls. This is integration evidence, not live success or a promoted policy.
+
+Verification: full suite **733 passed in 78.96 s**, including real navmesh checks; a
+subsequent saved-playhead compatibility fix passed the **46-test** runtime/episode/grade
+group, including its new regression test. Ruff (`jev tools tests`) and `git diff --check`
+are clean. Addon field regeneration leaves the wire layout unchanged. `--check` runs
+without attaching capture or input. The existing `camera.py` edit and `look_tmp.py`
+scratch file were left as found.
+
+NEXT / named gaps: Windows capture/input scheduling and cooperative stops need live
+acceptance when the operator chooses to open the client. The prior camera edit remains
+unverified after the options-menu contamination; it was preserved, not recalibrated.
+The updated addon must be installed/reloaded before live modal evidence is available.
+The graph still places only the first objective target, so a later incomplete objective
+stops explicitly. Gameobjects need their own confirmed locator. Training, hearth,
+flight, bag selling/making space and restocking lack composed executors; `--check`
+reports graph catalog and target gaps without attaching a client. Broken-and-broke
+equipment is still a real resource deadlock. Facing remains unknown under V17/V29, and
+the earlier corpse-run spin remains unexplained. Live outcome collection and measured
+student promotion remain ahead; this work does not claim unattended 1–12 coverage.

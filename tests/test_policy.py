@@ -9,7 +9,7 @@ from jev.coach.schema import Intent
 from jev.coach.verifier import verify
 from jev.guide.graph import Graph
 from jev.skills.catalog import NAMES
-from jev.world.state_v1 import Bags, Pos, Sense, State, Target, Ui, Vitals
+from jev.world.state_v1 import Bags, Pos, PowerType, Sense, State, Target, Ui, Vitals
 
 
 def _s(**kw) -> State:
@@ -121,7 +121,7 @@ def test_an_open_loot_window_outranks_combat():
         (_s(bags=Bags(free=0, durability_min=1.0)), "BAG_MAKE_SPACE"),
         (_s(vitals=Vitals(hp=0.3, combat=False)), "EAT_DRINK"),
         (_s(vitals=Vitals(combat=True), target=Target(has=True, in_melee=False)),
-         "APPROACH_TARGET"),
+         "COMBAT_PROFILE"),
         (_s(vitals=Vitals(combat=True), target=Target(has=True, in_melee=True)),
          "COMBAT_PROFILE"),
     ],
@@ -135,6 +135,14 @@ def test_unknown_bags_do_not_trigger_a_service_run():
     same situation recurs forever."""
     plan = decide(_s(bags=Bags(free=None, durability_min=None)))
     assert plan.decision.skill != "VENDOR_REPAIR"
+
+
+@pytest.mark.parametrize("power_type", [None, PowerType.RAGE, PowerType.ENERGY])
+def test_only_known_mana_can_need_a_drink(power_type):
+    state = _s(vitals=Vitals(hp=1, combat=False, power=0, power_type=power_type))
+    assert decide(state).decision.skill != "EAT_DRINK"
+    mana = state.model_copy(update={"vitals": state.vitals.model_copy(update={"power_type": PowerType.MANA})})
+    assert decide(mana).decision.skill == "EAT_DRINK"
 
 
 def test_the_guide_step_is_used_once_nothing_is_urgent():

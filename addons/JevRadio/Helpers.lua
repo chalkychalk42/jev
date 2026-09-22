@@ -459,7 +459,7 @@ local function QUEST_SLOT_COMPLETE()
     local q = focusQuest()
     if q == nil then return nil end
     local _, _, _, _, _, _, isComplete = GetQuestLogTitle(q)
-    return isComplete and 1 or false
+    return isComplete == 1 and 1 or false
 end
 
 local function rebuildQuestHash()
@@ -579,6 +579,15 @@ local function MODAL_UP()
     for i = 1, n do
         local f = _G["StaticPopup" .. i]
         if f and f:IsVisible() then return true end
+    end
+    -- These stock panels capture input without creating a StaticPopup. In particular,
+    -- GameMenuFrame blocks mouse-look, so a camera calibration behind it is invalid.
+    local panels = {"GameMenuFrame", "OptionsFrame", "InterfaceOptionsFrame",
+                    "VideoOptionsFrame", "AudioOptionsFrame", "KeyBindingFrame",
+                    "AddonList", "ScriptErrorsFrame"}
+    for _, name in ipairs(panels) do
+        local f = _G[name]
+        if f and f.IsVisible and f:IsVisible() then return true end
     end
     return false
 end

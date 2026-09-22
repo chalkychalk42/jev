@@ -38,8 +38,20 @@ function are all testable with no client, no capture and no network. A count is 
 of this file on purpose — it goes stale in a day and a stale number in a README is a
 small lie you tell yourself every time you read it. `STATUS.md` carries the current one.
 
-**Nothing drives the game yet.** The brain is built and simulated; capture and input are
-not written. See `STATUS.md` for exactly where the line is.
+The live body has completed individual quest, combat, travel, loot and service checks.
+The shared runtime now composes those methods with tracking and recording; this new
+composition is verified offline and still needs a live acceptance run. See `STATUS.md`
+for the evidence and remaining gaps.
+
+```bash
+.venv/bin/python -m jev.run.cli --check  # graph/capability report; never attaches a client
+.venv/bin/python -m jev.learn.grade runs/<run-id> --closed  # derive outcome grades
+```
+
+On Windows, `python tools/probe_slice.py` remains the live entry point and delegates to
+`jev.run.cli`. It attaches the client and can send input. The teacher is optional; this
+entry point uses the scripted floor. Synthetic and replay examples are excluded from
+the training dataset by default.
 
 ### Platform split
 The brain is pure Python and runs anywhere. Capture and input are Windows-only — they
@@ -57,7 +69,8 @@ jev/learn/      episode store, grading, distillation
 jev/guide/      GuideGraph generation, tracker, recorder
 jev/skills/     skill catalog, combat profiles, paths
 jev/clients/    window binding, capture, HID
-jev/orch/       supervisor
+jev/orch/       shared coach/tracker runtime and decision recording
+jev/run/        live client composition, body worker, supervisor, CLI
 jev/eval/       dashboard counters
 addons/JevRadio state painted into pixels; Fields.lua is generated, never edited
 tools/          codegen and one-off scripts

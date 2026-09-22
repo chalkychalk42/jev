@@ -137,10 +137,16 @@ def test_the_default_is_not_the_nodes_arrival_radius():
 
     assert 15.0 <= DEFAULT_HUNT_YARDS <= 50.0
     # Neither the engine nor the thing that calls it may reach for the arrival radius.
-    for path in ("jev/run/hunt.py", "tools/probe_slice.py"):
-        code = pathlib.Path(path).read_text(encoding="utf-8")
-        assert "node.r" not in code, f"{path} is reaching for the arrival radius again"
-    assert "hunt_yards" in pathlib.Path("tools/probe_slice.py").read_text(encoding="utf-8")
+    import inspect
+
+    from jev.run.body import LiveBody
+
+    # The shared body also validates travel parameters, where node.r is legitimate.
+    # Guard the hunt executor itself and the whole hunting engine.
+    for code in (pathlib.Path("jev/run/hunt.py").read_text(encoding="utf-8"),
+                 inspect.getsource(LiveBody._hunt)):
+        assert "node.r" not in code, "hunting is reaching for the arrival radius again"
+    assert "hunt_yards" in pathlib.Path("jev/run/body.py").read_text(encoding="utf-8")
 
 
 def test_the_generated_objective_carries_a_camp_sized_disk():

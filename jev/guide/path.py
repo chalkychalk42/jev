@@ -36,9 +36,12 @@ from __future__ import annotations
 
 import json
 import pathlib
+import queue
 import subprocess
 import sys
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -93,10 +96,14 @@ class MmapQuery:
     """
 
     def __init__(self, binary: str | pathlib.Path, mmaps_dir: str | pathlib.Path,
-                 timeout_s: float = 60.0, launcher: tuple[str, ...] = ()) -> None:
+                 timeout_s: float = 60.0, launcher: tuple[str, ...] = (),
+                 checkpoint: Callable[[], None] | None = None) -> None:
+        if timeout_s <= 0:
+            raise ValueError("sidecar timeout must be positive")
         self.binary = str(binary)
         self.mmaps_dir = str(mmaps_dir)
         self.timeout_s = timeout_s
+        self.checkpoint = checkpoint
         # A prefix to run the sidecar somewhere else. The client is a Windows process and
         # the navmesh, the tiles and the compiler all live on the Linux side, so the
         # planner is reached through `wsl.exe` rather than cross-compiled. Planning is a
@@ -105,6 +112,54 @@ class MmapQuery:
         self.launcher = tuple(launcher)
         self._procs: dict[int, subprocess.Popen] = {}
         self._lock = threading.Lock()
+
+    @staticmethod
+    def _dispose(proc: subprocess.Popen, *, close_stdout: bool = True) -> None:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait(timeout=5)
+        reader = getattr(proc, "_jev_reader", None)
+        close_stdout = close_stdout and (reader is None or not reader.is_alive())
+        for stream in (proc.stdin, proc.stdout if close_stdout else None):
+            if stream is not None:
+                stream.close()
+
+    def _readline(self, proc: subprocess.Popen) -> str:
+        # Windows pipes cannot be passed to select(). A single bounded reader works on
+        # both sides of the WSL boundary; cancellation kills the process to unblock it.
+        reply: queue.Queue = queue.Queue(maxsize=1)
+
+        def read():
+            try:
+                reply.put(proc.stdout.readline())
+            except Exception as exc:
+                reply.put(exc)
+
+        reader = threading.Thread(target=read, name="jevpath-read", daemon=True)
+        proc._jev_reader = reader
+        reader.start()
+        deadline = time.monotonic() + self.timeout_s
+        try:
+            while True:
+                if self.checkpoint is not None:
+                    self.checkpoint()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(f"sidecar did not answer within {self.timeout_s:g}s")
+                try:
+                    value = reply.get(timeout=min(0.05, remaining))
+                except queue.Empty:
+                    continue
+                if isinstance(value, Exception):
+                    raise value
+                return value
+        except BaseException:
+            self._dispose(proc, close_stdout=False)
+            raise
+        finally:
+            reader.join(timeout=1)
+            if proc.poll() is not None and not reader.is_alive():
+                proc.stdout.close()
 
     def _proc(self, map_id: int) -> subprocess.Popen | None:
         with self._lock:
@@ -125,15 +180,18 @@ class MmapQuery:
                 stderr=subprocess.DEVNULL, text=True, bufsize=1,
                 creationflags=flags,
             )
-            ready = proc.stdout.readline()
+            ready = self._readline(proc)
             if '"ready"' not in ready:
-                proc.kill()
+                self._dispose(proc)
                 return None
             self._procs[map_id] = proc
             return proc
 
     def path(self, map_id: int, start: Point, end: Point) -> Path:
-        proc = self._proc(map_id)
+        try:
+            proc = self._proc(map_id)
+        except (OSError, ValueError) as exc:
+            return Path(PathStatus.UNAVAILABLE, source="mmap", detail=str(exc))
         if proc is None:
             return Path(PathStatus.UNAVAILABLE, source="mmap",
                         detail=f"no sidecar at {self.binary} for map {map_id}")
@@ -144,8 +202,8 @@ class MmapQuery:
                     f"{end[0]:.3f} {end[1]:.3f} {end[2]:.3f}\n"
                 )
                 proc.stdin.flush()
-                line = proc.stdout.readline()
-        except (BrokenPipeError, ValueError) as exc:
+                line = self._readline(proc)
+        except (OSError, ValueError) as exc:
             return Path(PathStatus.UNAVAILABLE, source="mmap", detail=str(exc))
 
         if not line:
@@ -169,8 +227,7 @@ class MmapQuery:
     def close(self) -> None:
         with self._lock:
             for proc in self._procs.values():
-                if proc.poll() is None:
-                    proc.terminate()
+                self._dispose(proc)
             self._procs.clear()
 
 

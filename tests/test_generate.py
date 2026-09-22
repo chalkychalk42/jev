@@ -140,6 +140,20 @@ def test_an_item_that_only_drops_from_crates_still_places_its_objective(human):
     assert node.world is not None
     assert node.world != giver.world, "the objective is standing on the quest giver"
     assert "Harvest" in node.notes, node.notes
+    assert node.target_kind == "gameobject"
+    assert "Harvest" in node.target_name
+    assert giver.target_kind == "creature"
+    assert giver.target_name == "Milly Osworth"
+
+
+def test_hunt_targets_have_structured_names_separate_from_guide_prose(human):
+    wolves = next(n for n in human.nodes
+                  if n.quest_id == 33 and n.kind is StepKind.QUEST_OBJECTIVE)
+    assert wolves.target_kind == "creature"
+    assert wolves.target_name == "Young Wolf"
+    assert wolves.skills == ("TRAVEL_TO", "GRIND_UNTIL")
+    ribs = [n for n in human.nodes if n.kind is StepKind.GRIND]
+    assert ribs and all(n.target_name and n.target_kind == "creature" for n in ribs)
 
 
 def test_a_camp_is_allowed_to_be_bigger_than_fifty_yards(human):
