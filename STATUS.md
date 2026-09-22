@@ -1390,3 +1390,56 @@ Standalone Windows `python -m jev.learn.worker --once`, with no path overrides, 
 processed the same 34 runs without errors, regrading unchanged data or promoting a model.
 A final read-only client capture confirmed full health, no combat, 100% durability and
 ten waters; Win32 reported all movement keys and both mouse buttons released.
+
+## 2026-09-22 — Nested evidence and measured targeting boundary
+
+DID: continued roadmap package 1 through shared recording/input components. Worker
+dispatch now freezes arm/decision/controller/step attribution, and nested Hunt, Fight,
+Interact, Loot, Rest, recovery and merchant observations go to `executions.jsonl`.
+They create no extra strategic ticks, decisions or skill results. Recorder writes are
+serialized; parquet includes the new stream and older recordings remain readable.
+Worker completion follows cleanup even if recording fails. See
+[execution evidence](docs/EXECUTION_EVIDENCE.md) for the remaining acceptance gaps.
+
+- HID counts only events Windows accepts. Partial pointer movement stops before a click;
+  camera calibration propagates failed drags/releases while preserving its measured
+  2000/500 geometry. Every cleanup release is attempted despite device/recording errors,
+  then failures or remaining owned inputs are surfaced to every caller.
+- Schema 8 appends five paint-only cursor fields, preserving the schema 6/7 prefixes and
+  the existing 12×9 grid. `Targeting.probe` only moves the pointer and classifies a fresh
+  paint after arrival. Shared post-action freshness also serves diagnostic selection.
+  It is deliberately not enabled as production body-click permission.
+- The diagnostic CLI records bounded probes with a stop file, input lease and 1 Hz
+  screenshots. Shared event capture adds explicit pre/post images under the same lock
+  and manifest, rather than attributing the nearest periodic image to an action.
+- The actual stock client uses `ScriptErrors` for `message()` and script errors;
+  `MODAL_UP` had checked nonexistent `ScriptErrorsFrame`. The shared frame-name correction
+  is supported by the installed FrameXML and real Lua painter tests. After deployment,
+  a supervised reload verified `ui.modal=true` with the visible error dialog; reviewed
+  dismissal returned it to false. No error-text-specific dismissal was added.
+
+LIVE EVIDENCE: `captures/targeting/wolf-hover-1` proves the native nameplate and visible
+body points can both report `cursor.has/is_target/world=true`. Another MATCH accompanied
+a same-sequence image where the wolf had moved and the point was visibly on terrain;
+the reason is unproven. `wolf-hover-2` adds an observed empty-world negative and UI
+negative, but its other-wolf proposals missed, so same-name negative acceptance remains
+unmeasured. These are ownership observations, not evidence of a hit, body click, empty
+corpse or reliable engagement. No combat loop or learning promotion was run.
+
+Across the eight bounded startup/diagnostic sessions, 102 images were retained: 70
+periodic and 32 explicit event frames, with no missing/skipped slots and a maximum
+periodic gap of 1.075 seconds. Screens were reviewed during testing; the initial
+unrecognized startup screen and subsequent obstructing dialog stopped dependent work.
+Final read-only verification found schema 8, full health, full durability, 948 copper,
+no combat/death/ghost/modal, and all movement keys and both mouse buttons physically up.
+
+The annotated [target corpus](docs/TARGET_LOCALIZATION_CORPUS.md) and
+[hover measurements](docs/HOVER.md) retain the failed hypotheses. Returning every current
+ring/plate pair can recover some frames, but others have no valid proposal because the
+ring is fragmented or clipped. Reliable shared body localization remains the blocker;
+neither a fixed plate drop nor hover equality alone closes it.
+
+Verification: **1,119 tests passed**, including concurrent/nested recorder lifecycle,
+actual primitive composition, old corpus/parquet compatibility, Lua wire execution,
+historical schemas, partial input failure, cleanup failure, event capture and freshness.
+Ruff (`jev tools tests`), generated-addon identity and `git diff --check` pass.

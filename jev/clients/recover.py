@@ -40,6 +40,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from jev.run.evidence import event, traced
+
 
 class Recovered(StrEnum):
     RELEASED = "released"        # ghost positively observed after releasing
@@ -83,6 +85,7 @@ class Recover:
     corpse: tuple[float, float] | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
 
+    @traced("recovery")
     def run(self, corpse: tuple[float, float] | None = None, *,
             settle_s: float = 3.0, tries: int = 20, release_only: bool = False) -> Recovered:
         """Release, walk back, and get up. Reports where it stopped.
@@ -94,8 +97,11 @@ class Recover:
         """
         self.corpse = corpse           # the caller's guess, until the strip says better
         self.detail = ""
+        event("recovery.request", data={"caller_corpse": corpse,
+                                         "release_only": release_only, "tries": tries})
 
         v = self.read()
+        self._observe(v)
         if v is None:
             return Recovered.BLIND
         if v.get("vitals.dead") is not True and v.get("vitals.ghost") is not True:
@@ -116,6 +122,7 @@ class Recover:
                 return Recovered.NO_BUTTON
             time.sleep(settle_s)
             after = self.read()
+            self._observe(after)
             if after is not None:
                 # Releasing is what makes the corpse a corpse; ask again now that it is.
                 self.corpse = _painted(after) or self.corpse
@@ -131,11 +138,13 @@ class Recover:
                            "anything recorded where it fell")
             return Recovered.NO_CORPSE
         if self.walk_to is not None:
+            event("corpse.approach", data={"destination": self.corpse})
             self.walk_to(self.corpse)
 
         # At the corpse the game offers the same kind of popup again.
         for _ in range(tries):
             v = self.read()
+            self._observe(v)
             if v is None:
                 return Recovered.BLIND
             if v.get("vitals.dead") is False and v.get("vitals.ghost") is False:
@@ -154,5 +163,15 @@ class Recover:
             return False
         ox, oy = self.window_origin
         w, h = self.window_size
+        event("recovery.click", data={"point": [ox + round(fx * w), oy + round(fy * h)],
+                                      "dead": values.get("vitals.dead"),
+                                      "ghost": values.get("vitals.ghost")})
         self.hid.click(ox + round(fx * w), oy + round(fy * h))
         return True
+
+    @staticmethod
+    def _observe(values: dict | None) -> None:
+        event("recovery.observed", code="blind" if values is None else "readable",
+              data={} if values is None else {key: values.get(key) for key in (
+                  "vitals.dead", "vitals.ghost", "pos.mx", "pos.my",
+                  "pos.corpse_mx", "pos.corpse_my", "ui.advance_x", "ui.advance_y")})

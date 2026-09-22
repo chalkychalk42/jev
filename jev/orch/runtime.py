@@ -85,6 +85,7 @@ class Armed:
     decision_id: str = ""
     step_id: str | None = None
     situation_key: str = ""
+    arm_id: str = ""
 
 
 # A teacher is optional and is only ever asked, never awaited. `ask` enqueues and returns
@@ -118,6 +119,7 @@ class ClientRuntime:
     last_state: State | None = field(default=None, init=False)
     _was_dead: bool = field(default=False, init=False)
     _decision_seq: int = field(default=0, init=False)
+    _arm_seq: int = field(default=0, init=False)
     _tracker_event: str = field(default="none", init=False)
     _tracker_from: str | None = field(default=None, init=False)
     finished: bool = field(default=False, init=False)
@@ -191,8 +193,10 @@ class ClientRuntime:
                 self._close_armed(state, plan, by)
                 if not decision_id:
                     decision_id = self._record_decision(state, plan, by, rule)
+                self._arm_seq += 1
                 self.armed = Armed(plan, by, state.t, rule, decision_id,
-                                   state.guide.step_id, state.situation_key or "")
+                                   state.guide.step_id, state.situation_key or "",
+                                   f"{self.recorder.run_id}:{self.client_id}:arm{self._arm_seq}")
             elif decision_id:
                 # A new accepted teacher answer is a new decision even if its action
                 # agrees with the previous one; retain the body's original start time.
@@ -416,6 +420,7 @@ class ClientRuntime:
             outcome=outcome, duration_s=max(0.0, state.t - prev.at),
             situation_key=prev.situation_key, step_id=prev.step_id, detail=detail,
             decision_id=prev.decision_id,
+            arm_id=prev.arm_id or None,
         ))
 
     def _record_unresolved(self, state: State, plan: scripted.Plan) -> str:
@@ -552,6 +557,7 @@ class ClientRuntime:
             armed_intent=arm.decision.intent.value if arm else None,
             armed_by=arm.by if arm else ArmedBy.TRACKER,
             decision_id=arm.decision_id if arm else None,
+            arm_id=(arm.arm_id or None) if arm else None,
             keys=self.keys_down() if self.keys_down is not None else [],
             shadow_intent=intent, shadow_skill=skill, shadow_confidence=confidence,
             shadow_model=model,

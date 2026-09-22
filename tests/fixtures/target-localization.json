@@ -1,0 +1,807 @@
+{
+  "schema_version": 1,
+  "annotation_date": "2026-09-22",
+  "coordinate_convention": "Pixel xyxy rectangles, minimum inclusive and maximum exclusive, origin at top left of the original 1600x900 frame. Manual boundaries are approximate, not pixel masks.",
+  "annotation_method": "Manual visual review of the original full frames and enlarged coordinate-grid crops, independent of locator outputs. Radio facts are decoded from each original frame.",
+  "limits": [
+    "Body extents are necessary localization bounds, not validated game hitboxes; background and occluders can fall inside them.",
+    "Visible body cores are conservative observed model regions, not proof that any specific click connected.",
+    "Ring extent bounds visible arc pixels, including empty space inside the ellipse; it is not an inferred full ellipse.",
+    "All wolf frames come from one failed engagement sequence and must remain one independence group, not split into training and validation.",
+    "Historical NPC fixtures are references, not independent live acceptance outcomes.",
+    "PNG run sources are currently ignored local artifacts and are not supplied by a fresh clone. Sources must be vendored or restored before replay.",
+    "No real corpse fixture was found; corpse targeting remains a required new measurement."
+  ],
+  "cases": [
+    {
+      "id": "merchant_selected",
+      "source": {
+        "path": "tests/fixtures/live-dermot-targeted.npz",
+        "array_key": "frame",
+        "sha256": "55e55750b75a78912407883e14dccceea8916ae5d90eac791470e0129bbd1758",
+        "frame_sha256": "54bb7f5450381b67f25fddb21436b126927b624358e79eddc6ef2a269687222d",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "dermot-service-20260922"
+      },
+      "identity": "Dermot Johns",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 58389,
+          "target.hp": 1.0,
+          "target.level": 5,
+          "target.reaction": 5,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": true
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          963,
+          425,
+          1035,
+          564
+        ],
+        "visible_body_cores": [
+          [
+            989,
+            479,
+            1018,
+            515
+          ]
+        ],
+        "visible_ring_extent": [
+          968,
+          558,
+          1036,
+          575
+        ],
+        "health_bar_extent": [
+          927,
+          393,
+          1073,
+          403
+        ],
+        "negative_regions": [
+          {
+            "kind": "one_pixel_nameplate_border",
+            "extent": [
+              972,
+              391,
+              1009,
+              392
+            ]
+          }
+        ],
+        "notes": [
+          "Dermot is behind a stall pole; another NPC health bar covers part of his chest.",
+          "The yellow 37x1 border at x972..1008,y391 is not a health-bar surface."
+        ]
+      }
+    },
+    {
+      "id": "merchant_thin_ring",
+      "source": {
+        "path": "tests/fixtures/live-dermot-thin-ring.npz",
+        "array_key": "frame",
+        "sha256": "1d0e85405c4bb0d468f98ae925cbf2c3fe72ce490dd96967752ba6bd5e20ad5f",
+        "frame_sha256": "9f6635c2f6f9abdbd7ed7787613824162dc5eb1a1c32de40d547811813da8194",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "dermot-service-20260922"
+      },
+      "identity": "Dermot Johns",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 58389,
+          "target.hp": 1.0,
+          "target.level": 5,
+          "target.reaction": 5,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": true
+        }
+      },
+      "annotation": {
+        "target_visibility": "partially_occluded",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          960,
+          416,
+          1038,
+          557
+        ],
+        "visible_body_cores": [
+          [
+            990,
+            475,
+            1018,
+            507
+          ]
+        ],
+        "visible_ring_extent": [
+          970,
+          558,
+          1037,
+          570
+        ],
+        "health_bar_extent": [
+          925,
+          386,
+          1076,
+          396
+        ],
+        "negative_regions": [],
+        "notes": [
+          "Stall and player hide the sides of the green selection ellipse; visible front arc is thin.",
+          "Body extent includes occluded areas; cores identify only clear model pixels."
+        ]
+      }
+    },
+    {
+      "id": "merchant_other_bars_faded",
+      "source": {
+        "path": "tests/fixtures/live-dermot-unselected.npz",
+        "array_key": "frame",
+        "sha256": "a2e3c5c1efef69542b7dd2c32b20cd569a62ede5d6a45daf23b371e1ceebf975",
+        "frame_sha256": "24bdddbf4e7d7287ba3287cb06956235bbe9fd7de4595494c0a3fedbf3b5d482",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "dermot-service-20260922"
+      },
+      "identity": "Brother Danil",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 32883,
+          "target.hp": 1.0,
+          "target.level": 5,
+          "target.reaction": 5,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": true
+        }
+      },
+      "annotation": {
+        "target_visibility": "partially_occluded",
+        "living_bracket_expectation": "bracket_or_abstain",
+        "body_extent": [
+          753,
+          384,
+          792,
+          500
+        ],
+        "visible_body_cores": [
+          [
+            766,
+            405,
+            782,
+            435
+          ]
+        ],
+        "visible_ring_extent": [
+          740,
+          492,
+          826,
+          512
+        ],
+        "health_bar_extent": [
+          700,
+          360,
+          846,
+          371
+        ],
+        "negative_regions": [],
+        "notes": [
+          "Brother Danil is the radio target. Dermot is visible at the stall but has a faded bar.",
+          "Player body occludes Brother Danil below the chest and splits the visible ring.",
+          "A faded bar around x997,y400 cannot borrow Brother Danil's ring."
+        ]
+      }
+    },
+    {
+      "id": "friendly_name_without_health_bar",
+      "source": {
+        "path": "tests/fixtures/live-friendly-targeted.npz",
+        "array_key": "before",
+        "sha256": "b2732b75f36396aaff36300ab23f5a75d53cb31b177ad5323cfe1681365aeb12",
+        "frame_sha256": "eaec526db87a76bdcab0b5e7daea44790e6d6ee889cd605253f8edd64446d1fd",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "mcbride-historical"
+      },
+      "identity": "Marshal McBride",
+      "radio": {
+        "fault": "checksum",
+        "facts": {}
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "abstain",
+        "body_extent": [
+          771,
+          389,
+          825,
+          502
+        ],
+        "visible_body_cores": [
+          [
+            786,
+            414,
+            807,
+            438
+          ]
+        ],
+        "visible_ring_extent": [
+          754,
+          489,
+          842,
+          510
+        ],
+        "health_bar_extent": null,
+        "negative_regions": [],
+        "notes": [
+          "Visible green words are a unit name, not a nameplate health bar.",
+          "The current decoder reports checksum failure on this historical capture; selected identity is visual/historical, not newly decoded."
+        ]
+      }
+    },
+    {
+      "id": "distant_target_other_health_bars",
+      "source": {
+        "path": "tests/fixtures/live-hostile-targeted.npz",
+        "array_key": "frame",
+        "sha256": "bdebc2b7a8c2758037cd9ecbbae5b4812090adf4d169503dc91b83eff630f367",
+        "frame_sha256": "c586a86412e5dabf8e5f86e9918be6fa685322a8f84be5e709d483ee6045feb3",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": true,
+        "independence_group": "kobold-historical"
+      },
+      "identity": "Kobold Vermin",
+      "radio": {
+        "fault": "checksum",
+        "facts": {}
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "abstain",
+        "body_extent": [
+          948,
+          289,
+          973,
+          320
+        ],
+        "visible_body_cores": [
+          [
+            955,
+            301,
+            967,
+            311
+          ]
+        ],
+        "visible_ring_extent": [
+          935,
+          312,
+          986,
+          323
+        ],
+        "health_bar_extent": null,
+        "negative_regions": [],
+        "notes": [
+          "The distant selected kobold has name text and a ring but no health bar. The two health bars on the left belong to other kobolds.",
+          "The current decoder reports checksum failure on this historical capture; selected identity is visual/historical, not newly decoded."
+        ]
+      }
+    },
+    {
+      "id": "selected_target_not_in_view",
+      "source": {
+        "path": "runs/20260922T131407-487841/screenshots/000053-20260922T121501.647108Z.png",
+        "array_key": null,
+        "sha256": "a1ff107bd213826430fb447a202cca85da83cd08060982d9b604f5eb95d63eb8",
+        "frame_sha256": "ebe27d8e4fb3aa9c4a24e6edb233a15a56bde8e3ccf033f790ea2f24511f9b69",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": false,
+        "independence_group": "wolf-run-20260922",
+        "screenshot_index": 53,
+        "captured_at": 1790079301.647108
+      },
+      "identity": "Brother Danil",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 32883,
+          "target.hp": 1.0,
+          "target.level": 5,
+          "target.reaction": 5,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": false
+        }
+      },
+      "annotation": {
+        "target_visibility": "not_visible",
+        "living_bracket_expectation": "abstain",
+        "body_extent": null,
+        "visible_body_cores": [],
+        "visible_ring_extent": null,
+        "health_bar_extent": null,
+        "negative_regions": [],
+        "notes": [
+          "The decoded target remains Brother Danil. The world view shows trees, terrain and distant wolves, with no visible corresponding merchant.",
+          "A large yellow grass component at the right is not a target ring; no living-body localization is justified."
+        ]
+      }
+    },
+    {
+      "id": "wolf_distant_grass_distractor",
+      "source": {
+        "path": "runs/20260922T131407-487841/screenshots/000061-20260922T121509.632648Z.png",
+        "array_key": null,
+        "sha256": "47e61c7900f11734c7f6cc185a1918205c78dc767a956069be6fd03cf5258c2d",
+        "frame_sha256": "8a78c12713115b86ef80124ea92bc157406691341f81c30fcde7d9eb589414ef",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": false,
+        "independence_group": "wolf-run-20260922",
+        "screenshot_index": 61,
+        "captured_at": 1790079309.6326475
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.level": 1,
+          "target.reaction": 4,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": false
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          980,
+          339,
+          1065,
+          375
+        ],
+        "visible_body_cores": [
+          [
+            1000,
+            347,
+            1020,
+            357
+          ]
+        ],
+        "visible_ring_extent": [
+          979,
+          365,
+          1062,
+          386
+        ],
+        "health_bar_extent": [
+          924,
+          324,
+          1070,
+          336
+        ],
+        "negative_regions": [
+          {
+            "kind": "grass_below_target",
+            "extent": [
+              1080,
+              450,
+              1240,
+              730
+            ]
+          }
+        ],
+        "notes": [
+          "The visible yellow/orange ring is oblique. Broad yellow terrain far below the wolf must not be paired to its plate.",
+          "This is an observation of the rendered model, not evidence that a particular click connected."
+        ]
+      }
+    },
+    {
+      "id": "wolf_side_pose_grass_distractor",
+      "source": {
+        "path": "runs/20260922T131407-487841/screenshots/000064-20260922T121512.645698Z.png",
+        "array_key": null,
+        "sha256": "3b6a14d1f8fc8304d343e5231081e642b3b66a7e16ad0a6b8afa4db84dce6de7",
+        "frame_sha256": "c85891d179b254c94b73bad2be0167aad57ff89fa13dedebd34477bffe946641",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": false,
+        "independence_group": "wolf-run-20260922",
+        "screenshot_index": 64,
+        "captured_at": 1790079312.6456978
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.level": 1,
+          "target.reaction": 4,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": false
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          1115,
+          316,
+          1220,
+          369
+        ],
+        "visible_body_cores": [
+          [
+            1158,
+            328,
+            1180,
+            343
+          ]
+        ],
+        "visible_ring_extent": [
+          1144,
+          357,
+          1205,
+          373
+        ],
+        "health_bar_extent": [
+          1117,
+          294,
+          1263,
+          304
+        ],
+        "negative_regions": [
+          {
+            "kind": "grass_below_target",
+            "extent": [
+              1240,
+              450,
+              1350,
+              730
+            ]
+          }
+        ],
+        "notes": [
+          "A narrow bright front arc is visible below the walking wolf. Tall grass overlaps its tail and lower legs."
+        ]
+      }
+    },
+    {
+      "id": "wolf_ring_and_body_split_by_grass",
+      "source": {
+        "path": "runs/20260922T131407-487841/screenshots/000067-20260922T121515.642306Z.png",
+        "array_key": null,
+        "sha256": "e2a6be9f6e5177531675977f91482c5cf9239024c4256ae10d4fd7fab9e1ca1d",
+        "frame_sha256": "54066454f1e7ec1a0ab88159d4671056fa10bd99d1868bf6cbdae0f6eddb618b",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": false,
+        "independence_group": "wolf-run-20260922",
+        "screenshot_index": 67,
+        "captured_at": 1790079315.6423063
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.level": 1,
+          "target.reaction": 4,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": false
+        }
+      },
+      "annotation": {
+        "target_visibility": "partially_occluded",
+        "living_bracket_expectation": "bracket_or_abstain",
+        "body_extent": [
+          1366,
+          309,
+          1482,
+          367
+        ],
+        "visible_body_cores": [
+          [
+            1453,
+            326,
+            1468,
+            338
+          ],
+          [
+            1380,
+            333,
+            1394,
+            341
+          ]
+        ],
+        "visible_ring_extent": [
+          1366,
+          353,
+          1492,
+          376
+        ],
+        "health_bar_extent": [
+          1358,
+          278,
+          1505,
+          289
+        ],
+        "negative_regions": [],
+        "notes": [
+          "Foreground blades around x1425..1450 split both body and ring; the ring is visibly real even though a connected-component threshold can discard its fragments.",
+          "The body midpoint can lie on foreground grass. Visible extent alone does not certify a clickable location."
+        ]
+      }
+    },
+    {
+      "id": "wolf_red_ring_yellow_health_bar",
+      "source": {
+        "path": "runs/20260922T131407-487841/screenshots/000090-20260922T121538.627916Z.png",
+        "array_key": null,
+        "sha256": "61029eb1d993e6c25c8889d4165f39545efeec28c6486a0c064265fc242cb084",
+        "frame_sha256": "3084dd0a7d95f666fb49b93bc1acf6888523bfa34f5cdb925d4e2d9927e100b0",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": false,
+        "independence_group": "wolf-run-20260922",
+        "screenshot_index": 90,
+        "captured_at": 1790079338.6279163
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.level": 1,
+          "target.reaction": 4,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": true
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          1262,
+          346,
+          1405,
+          417
+        ],
+        "visible_body_cores": [
+          [
+            1282,
+            365,
+            1312,
+            383
+          ]
+        ],
+        "visible_ring_extent": [
+          1238,
+          406,
+          1386,
+          430
+        ],
+        "health_bar_extent": [
+          1236,
+          299,
+          1382,
+          309
+        ],
+        "negative_regions": [],
+        "notes": [
+          "The selection arc is visibly red/orange while the health-bar surface remains yellow.",
+          "Radio target reaction is 4, hp is full, in_melee is true and combat is false; ring colour does not prove combat or a hit."
+        ]
+      }
+    },
+    {
+      "id": "wolf_near_front_pose",
+      "source": {
+        "path": "runs/20260922T131407-487841/screenshots/000096-20260922T121544.655141Z.png",
+        "array_key": null,
+        "sha256": "8c5fda3ec64bab40d00ec8b37d133713878b8782b907c8f37f6702d736947f36",
+        "frame_sha256": "f51339aa5dcfd35ac88d25061abde09af9c19d7f8878691949226204e35c91ed",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": false,
+        "independence_group": "wolf-run-20260922",
+        "screenshot_index": 96,
+        "captured_at": 1790079344.6551414
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.level": 1,
+          "target.reaction": 4,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": true
+        }
+      },
+      "annotation": {
+        "target_visibility": "visible",
+        "living_bracket_expectation": "bracket",
+        "body_extent": [
+          1438,
+          462,
+          1570,
+          608
+        ],
+        "visible_body_cores": [
+          [
+            1483,
+            493,
+            1513,
+            521
+          ]
+        ],
+        "visible_ring_extent": [
+          1368,
+          569,
+          1600,
+          629
+        ],
+        "health_bar_extent": [
+          1425,
+          372,
+          1571,
+          382
+        ],
+        "negative_regions": [],
+        "notes": [
+          "Near frontal wolf has a large body and red/orange ring. The full plate-to-feet gap is much larger than in distant frames.",
+          "Rightmost ring arc is clipped by the image edge; foreground grass hides part of the left side."
+        ]
+      }
+    },
+    {
+      "id": "wolf_clipped_by_frame_and_tooltip",
+      "source": {
+        "path": "runs/20260922T131407-487841/screenshots/000100-20260922T121548.638664Z.png",
+        "array_key": null,
+        "sha256": "8acf60fc769bb5a6772199307256b7a00f7cf2234368c1c2d3ef633ede36f274",
+        "frame_sha256": "701699c4a8ca8e05f1035ba570163e761fedd11802fd8e060e1f21a950464552",
+        "shape": [
+          900,
+          1600,
+          3
+        ],
+        "tracked_source": false,
+        "independence_group": "wolf-run-20260922",
+        "screenshot_index": 100,
+        "captured_at": 1790079348.6386638
+      },
+      "identity": "Young Wolf",
+      "radio": {
+        "fault": "none",
+        "facts": {
+          "vitals.combat": false,
+          "target.has": true,
+          "target.name_id": 2864,
+          "target.hp": 1.0,
+          "target.level": 1,
+          "target.reaction": 4,
+          "target.classification": 1,
+          "target.attacking_me": false,
+          "target.in_melee": true
+        }
+      },
+      "annotation": {
+        "target_visibility": "clipped",
+        "living_bracket_expectation": "bracket_or_abstain",
+        "body_extent": [
+          1478,
+          580,
+          1600,
+          746
+        ],
+        "visible_body_cores": [
+          [
+            1510,
+            625,
+            1540,
+            650
+          ]
+        ],
+        "visible_ring_extent": [
+          1376,
+          712,
+          1600,
+          824
+        ],
+        "health_bar_extent": [
+          1426,
+          469,
+          1573,
+          480
+        ],
+        "negative_regions": [],
+        "notes": [
+          "The body extends beyond the right edge; the ring extends beyond the right edge and behind the tooltip/action-bar interface.",
+          "Only the visible extents are annotated. No complete ellipse centre is inferred from the missing pixels."
+        ]
+      }
+    }
+  ]
+}

@@ -16,6 +16,7 @@ from jev.perceive.fields import (
     CALIBRATION_SWATCHES,
     FIELDS,
     GRID_COLS,
+    SCHEMA_FIELDS,
     Kind,
     checksum,
     layout,
@@ -42,6 +43,30 @@ def test_layout_fits_the_grid():
     assert lay["payload_cells"] <= (lay["rows"] - lay["calibration_rows"]) * lay["cols"]
     assert lay["spare_bits"] >= 0
     assert len(radio.calibration_row()) == GRID_COLS
+
+
+@pytest.mark.parametrize(("version", "field_count", "payload_bits"), [(6, 75, 582), (7, 112, 1035)])
+def test_historical_schema_prefixes_keep_their_checksum_boundary(version, field_count, payload_bits):
+    fields = SCHEMA_FIELDS[version]
+    assert len(fields) == field_count
+    assert sum(f.bits for f in fields) == payload_bits
+    values = {f.name: _boundaries(f)[-1] for f in fields}
+    values["schema"] = version
+    bits = "".join(format(radio.encode_field(f, values[f.name]), f"0{f.bits}b") for f in fields)
+    cells = radio.bits_to_cells(bits + format(checksum(bits), "016b"))
+    decoded = radio.unpack(cells)
+    assert decoded["schema"] == version
+    for field in fields:
+        if field.kind not in (Kind.FRAC, Kind.ANGLE):
+            assert decoded[field.name] == values[field.name]
+    assert all(decoded[f.name] is None for f in FIELDS[field_count:])
+
+
+def test_cursor_fields_fit_the_existing_schema7_grid():
+    lay = layout()
+    assert (lay["cols"], lay["rows"]) == (12, 9)
+    assert lay["payload_bits"] == 1059
+    assert lay["field_count"] == 117
 
 
 @pytest.mark.parametrize("field", FIELDS, ids=lambda f: f.name)

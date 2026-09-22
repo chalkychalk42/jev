@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 7                                    # bump when the field table changes shape
+SCHEMA = 8                                    # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -63,7 +63,8 @@ of our own, because the combat profiles are keyed by the game's numbering and ou
 with it only for human paladins.
 6: corpse position and extended UI observations.
 7: precise copper, cycling inventory/merchant rows and exact starting-supply counts.
-Old schema 6 reads remain supported, with all new observations unknown."""
+8: read-only mouseover identity and world/UI mouse focus for measured click verification.
+Old schema 6 and 7 reads remain supported, with appended observations unknown."""
 
 # Quantisation step: nibble n renders as n * STEP, so 15 -> 255 exactly.
 STEP = 255 // (LEVELS - 1)                    # 17
@@ -401,15 +402,40 @@ FIELDS: tuple[Field, ...] = (
     Field("merchant.gossip_name_id", 16, Kind.UINT, "return VENDOR_GOSSIP_ID()",
           "unique stock gossip option of type vendor; unknown on absent/ambiguous branches"),
 
+    # Stock GameTooltip.xml uses IsUnit('mouseover'); SecureStateHeader.lua uses
+    # GetMouseFocus(). These observations identify what the client reports under the
+    # pointer. Whether native nameplates and models report different focus is still a
+    # live measurement, not an assumption encoded here. See docs/HOVER.md.
+    _tri("cursor.has", "return tri(UnitExists('mouseover'))",
+         "the stock mouseover token exists; unavailable API remains unknown"),
+    Field("cursor.name_id", 16, Kind.UINT,
+          "if tri(UnitExists('mouseover')) ~= 2 then return nil end\n"
+          "return nameid(UnitName('mouseover'))",
+          "name hash for the observed mouseover; not unique among same-name creatures"),
+    _tri("cursor.dead",
+         "if tri(UnitExists('mouseover')) ~= 2 then return nil end\n"
+         "return tri(UnitIsDead('mouseover'))",
+         "unknown when no mouseover exists; a present living unit is false"),
+    _tri("cursor.is_target",
+         "if tri(UnitExists('mouseover')) ~= 2 then return tri(false) end\n"
+         "return tri(UnitIsUnit('mouseover', 'target'))",
+         "exact stock unit equality, never inferred from matching name hashes"),
+    _tri("cursor.world",
+         "if type(GetMouseFocus) ~= 'function' or not WorldFrame then return nil end\n"
+         "local focus = GetMouseFocus(); if not focus then return nil end\n"
+         "return tri(focus == WorldFrame)",
+         "exact WorldFrame mouse focus; missing focus/API is unknown, another frame false"),
+
 )
 
 # --------------------------------------------------------------------------- layout
 
-# Schema 7 only appended fields. This explicit historical shape keeps existing screen
-# captures and installed schema-6 addons readable without inventing merchant telemetry.
+# Schemas 7 and 8 only appended fields. Explicit historical shapes keep existing screen
+# captures and installed addons readable without inventing merchant or cursor telemetry.
 # Preserve this prefix when adding future schemas; migrations are declared, not guessed.
-SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS}
+SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS}
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
+assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

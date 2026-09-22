@@ -48,6 +48,8 @@ def test_lossless_frames_and_timestamps_are_written_off_the_calling_thread(tmp_p
         assert thread != threading.get_ident()
         assert row["t"] <= captured_at <= row["t"] + row["duration_s"]
         assert row["status"] == "ok"
+        assert row["kind"] == "periodic"
+        assert "label" not in row and "event_t" not in row
         with Image.open(tmp_path / row["file"]) as saved:
             assert np.array_equal(np.asarray(saved), pixels)
 
@@ -129,3 +131,147 @@ def test_close_waits_for_capture_before_returning_and_is_idempotent(tmp_path):
     assert monitor._thread is None
     with pytest.raises(ScreenshotError, match="cannot be restarted"):
         monitor.start()
+
+
+def test_event_captures_are_fresh_saved_observations_with_distinct_metadata(tmp_path):
+    frames = []
+
+    def frame():
+        pixels = np.full((2, 2, 3), len(frames), dtype=np.uint8)
+        frames.append(pixels)
+        return pixels
+
+    monitor = Screenshots(frame, tmp_path, interval_s=30).start()
+    try:
+        until(lambda: monitor.captured == 1)
+        before = monitor.capture_event("0-body-before")
+        after = monitor.capture_event("0-body-after")
+    finally:
+        monitor.close()
+    manifest = rows(tmp_path)
+    assert manifest == [manifest[0], before, after]
+    assert [r["index"] for r in manifest] == [0, 1, 2]
+    assert [r["kind"] for r in manifest] == ["periodic", "event", "event"]
+    assert before["label"] == "0-body-before" and after["label"] == "0-body-after"
+    for row in (before, after):
+        assert row["event_t"] <= row["t"] <= row["t"] + row["duration_s"]
+        assert row["status"] == "ok"
+        with Image.open(tmp_path / row["file"]) as saved:
+            assert np.array_equal(np.asarray(saved), frames[row["index"]])
+    assert before["file"] != after["file"]
+
+
+@pytest.mark.parametrize("label", ["", "../body", "has space", "newline\n", "x" * 81, None])
+def test_event_labels_are_bounded_diagnostic_identifiers(tmp_path, label):
+    monitor = Screenshots(lambda: None, tmp_path)
+    with pytest.raises(ValueError, match="event label"):
+        monitor.capture_event(label)
+    assert not list(tmp_path.iterdir())
+
+
+def test_event_capture_requires_an_open_recorder(tmp_path):
+    monitor = Screenshots(lambda: np.zeros((2, 2, 3), dtype=np.uint8), tmp_path)
+    with pytest.raises(ScreenshotError, match="not been started"):
+        monitor.capture_event("before")
+    monitor.start()
+    monitor.close()
+    count = monitor.captured
+    with pytest.raises(ScreenshotError, match="closed"):
+        monitor.capture_event("after")
+    assert monitor.captured == count
+
+
+def test_missing_event_frame_returns_an_explicit_unavailable_result(tmp_path):
+    pixels = np.ones((2, 2, 3), dtype=np.uint8)
+    frames = iter([pixels, None, pixels])
+    monitor = Screenshots(lambda: next(frames), tmp_path, interval_s=30).start()
+    try:
+        until(lambda: monitor.captured == 1)
+        missing = monitor.capture_event("missing")
+        recovered = monitor.capture_event("recovered")
+    finally:
+        monitor.close()
+    assert missing["status"] == "unavailable" and "file" not in missing
+    assert missing["kind"] == "event" and missing["label"] == "missing"
+    assert recovered["status"] == "ok"
+    assert monitor.error is None
+    assert (monitor.captured, monitor.missing) == (2, 1)
+    assert [r["index"] for r in rows(tmp_path)] == [0, 1, 2]
+
+
+def test_event_storage_failure_stops_all_recording_and_keeps_its_event_label(tmp_path, monkeypatch):
+    monitor = Screenshots(lambda: np.zeros((2, 2, 3), dtype=np.uint8), tmp_path,
+                          interval_s=30).start()
+
+    def fail_save(self, path, **kwargs):
+        path.write_bytes(b"partial image")
+        raise OSError("event disk full")
+
+    try:
+        until(lambda: monitor.captured == 1)
+        monkeypatch.setattr(Image.Image, "save", fail_save)
+        with pytest.raises(ScreenshotError, match="event disk full"):
+            monitor.capture_event("before")
+        with pytest.raises(ScreenshotError, match="event disk full"):
+            monitor.capture_event("after")
+    finally:
+        monitor.close()
+    assert "event disk full" in monitor.error
+    manifest = rows(tmp_path)
+    assert len(manifest) == 2
+    assert manifest[1]["kind"] == "event"
+    assert manifest[1]["label"] == "before"
+    assert manifest[1]["status"] == "error"
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_close_serializes_with_an_event_capture_and_rejects_later_events(tmp_path):
+    entered, release, closed = threading.Event(), threading.Event(), threading.Event()
+    results, errors, calls = [], [], []
+    active = 0
+    overlap = False
+    count_lock = threading.Lock()
+
+    def frame():
+        nonlocal active, overlap
+        with count_lock:
+            active += 1
+            overlap |= active > 1
+            calls.append(threading.current_thread().name)
+        try:
+            if threading.current_thread().name == "event-capture":
+                entered.set()
+                assert release.wait(2)
+            return np.zeros((2, 2, 3), dtype=np.uint8)
+        finally:
+            with count_lock:
+                active -= 1
+
+    monitor = Screenshots(frame, tmp_path, interval_s=0.01).start()
+    until(lambda: monitor.captured >= 1)
+
+    def capture():
+        try:
+            results.append(monitor.capture_event("during-close"))
+        except Exception as exc:
+            errors.append(exc)
+
+    event = threading.Thread(target=capture, name="event-capture")
+    event.start()
+    assert entered.wait(2)
+    closer = threading.Thread(target=lambda: (monitor.close(), closed.set()))
+    closer.start()
+    try:
+        assert not closed.wait(0.03)
+    finally:
+        release.set()
+        event.join(2)
+        closer.join(2)
+    assert closed.is_set() and not errors and not overlap
+    assert results[0]["status"] == "ok"
+    manifest = rows(tmp_path)
+    assert len(manifest) == len(calls)
+    assert [r["index"] for r in manifest] == list(range(len(manifest)))
+    assert manifest[-1] == results[0]
+    with pytest.raises(ScreenshotError, match="closed"):
+        monitor.capture_event("too-late")

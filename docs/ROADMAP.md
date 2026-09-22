@@ -67,6 +67,10 @@ successful wolf turn-in.
 
 1. **Make action evidence useful before changing another aim rule.**
 
+   **Partial implementation:** shared arm/operation attribution and causal primitive
+   records are documented in [Execution evidence](EXECUTION_EVIDENCE.md). The remaining
+   gaps and the acceptance gate below still apply.
+
    Record nested acquisition, engagement, fight, loot, service and recovery events through
    the shared recorder. Link child events to the original run, arm and decision; a pull
    inside one hunt is not automatically a new or independent coach decision. Include the

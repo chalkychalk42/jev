@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from jev.perceive.radio_frame import name_id
+from jev.run.evidence import event, operation, traced
 from jev.world.vendor import Supply, junk_prices
 
 
@@ -60,6 +61,7 @@ class Vendor:
     _deadline: float = field(default=0, init=False)
     _merchant: int = field(default=0, init=False)
 
+    @traced("vendor")
     def run(self, *, expected_name: str, supplies: tuple[Supply, ...] = (),
             sell: bool = True, min_free: int = 6, reserve_copper: int = 0,
             timeout_s: float = 90.0) -> Vended:
@@ -71,6 +73,11 @@ class Vendor:
         """
         self.sold_stacks = self.bought_units = 0
         self.detail = ""
+        with operation("vendor.request") as span:
+            if span.enabled:
+                span.finish(code="requested", data={"name": expected_name, "sell": sell,
+                    "min_free": min_free, "reserve_copper": reserve_copper,
+                    "supplies": [{"item_id": s.item_id, "desired": s.desired} for s in supplies]})
         if not expected_name or min_free < 0 or reserve_copper < 0 or timeout_s <= 0:
             self.detail = "invalid or missing vendor contract"
             return Vended.REFUSED
@@ -149,6 +156,9 @@ class Vendor:
             raise _Stop(Vended.NO_BUTTON, f"no observed stock button: {prefix}")
         ox, oy = self.window_origin
         w, h = self.window_size
+        event("vendor.click", data={"prefix": prefix, "right": right,
+                                    "point": [ox + round(x * w), oy + round(y * h)],
+                                    "merchant_name_id": values.get("merchant.name_id")})
         if self.hid.click(ox + round(x * w), oy + round(y * h), right=right) is False:
             raise _Stop(Vended.REFUSED, "input device refused merchant click")
 
@@ -157,6 +167,7 @@ class Vendor:
         return tuple(values.get("inventory." + k)
                      for k in ("bag", "slot", "item_id", "count", "revision"))
 
+    @traced("vendor.sell")
     def _sell(self, min_free: int) -> None:
         seen: set[int] = set()
         revision = None
@@ -193,14 +204,19 @@ class Vendor:
                 before = fresh.get("bags.money_copper")
                 if before is None or revision is None:
                     raise _Stop(Vended.BLIND, "exact copper/revision required before selling")
+                event("sale.request", data={"item_id": item_id, "count": count,
+                      "unit_price": price, "money_copper": before, "free": free,
+                      "revision": revision})
                 self._click(fresh, "inventory.", right=True)
                 # Stock right-click sells the whole stack. Require its exact generated
                 # sale value, one newly free slot, and a real bag-update event.
-                self._await(lambda r, cash=before + price * count, slots=free, rev=revision:
+                observed = self._await(lambda r, cash=before + price * count, slots=free, rev=revision:
                             r.get("bags.money_copper") == cash
                             and r.get("bags.free") is not None and r["bags.free"] > slots
                             and r.get("inventory.revision") is not None
                             and r["inventory.revision"] != rev, 4.0)
+                event("sale.observed", data={key: observed.get(key) for key in (
+                    "bags.money_copper", "bags.free", "inventory.revision")})
                 self.sold_stacks += 1
                 seen.clear()
                 continue
@@ -208,6 +224,7 @@ class Vendor:
                 raise _Stop(Vended.NO_JUNK, "no confirmed sale-eligible junk can make enough bag space")
             self.sleep(0.05)
 
+    @traced("vendor.buy")
     def _buy(self, supply: Supply, reserve: int) -> None:
         # Each item search begins at the first page: a previous item's successful
         # purchase may have left us on a later page that does not sell this item.
@@ -268,14 +285,20 @@ class Vendor:
                     continue
                 if fresh.get("bags.free") is None or fresh["bags.free"] < 1:
                     continue
+                event("purchase.request", data={"item_id": supply.item_id,
+                      "owned": owned, "quantity": quantity, "price": price,
+                      "money_copper": cash, "desired": supply.desired})
                 self._click(fresh, "merchant.", right=True)
-                self._await(lambda r, money=cash - price, count=owned + quantity:
+                observed = self._await(lambda r, money=cash - price, count=owned + quantity:
                     r.get("bags.money_copper") == money and (
                     (r.get("merchant.item_id") == supply.item_id
                      and r.get("merchant.owned") == count)
                     or (r.get(f"bags.{supply.role}_id") == supply.item_id
                         and r.get(f"bags.{supply.role}_count") == count)),
                     4.0)
+                event("purchase.observed", data={key: observed.get(key) for key in (
+                    "bags.money_copper", "merchant.item_id", "merchant.owned",
+                    f"bags.{supply.role}_id", f"bags.{supply.role}_count")})
                 self.bought_units += quantity
                 continue
             expected = max(0, min(10, total - (current_page - 1) * 10))

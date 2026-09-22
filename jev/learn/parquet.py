@@ -52,7 +52,7 @@ ROW_GROUP = 20_000
 enough that a filtered scan skips most of the file, large enough that the footer does not
 become the file."""
 
-JSON_COLUMNS = frozenset({"state", "params", "artifacts"})
+JSON_COLUMNS = frozenset({"state", "params", "artifacts", "data"})
 """Columns held as JSON text. `artifacts` joins them for the same reason `state` does: it
 is a list of open-shaped dicts whose inferred struct type would differ between a night the
 teacher wrote graph patches and a night it wrote skill drafts."""
@@ -86,6 +86,7 @@ TICKS_SCHEMA = pa.schema([
     ("decision_id", pa.string()),
     ("tracker_event", pa.string()),
     ("tracker_from", pa.string()),
+    ("arm_id", pa.string()),
     (EXTRA, pa.string()),
 ])
 
@@ -146,6 +147,29 @@ SKILLS_SCHEMA = pa.schema([
     ("step_id", pa.string()),
     ("detail", pa.string()),
     ("decision_id", pa.string()),
+    ("arm_id", pa.string()),
+    (EXTRA, pa.string()),
+])
+
+EXECUTIONS_SCHEMA = pa.schema([
+    ("run_id", pa.string()),
+    ("client_id", pa.string()),
+    ("arm_id", pa.string()),
+    ("decision_id", pa.string()),
+    ("armed_by", pa.string()),
+    ("step_id", pa.string()),
+    ("situation_key", pa.string()),
+    ("event_id", pa.string()),
+    ("operation_id", pa.string()),
+    ("parent_operation_id", pa.string()),
+    ("t", pa.float64()),
+    ("tick_id", pa.int64()),
+    ("phase", pa.string()),
+    ("operation", pa.string()),
+    ("code", pa.string()),
+    ("detail", pa.string()),
+    ("duration_s", pa.float64()),
+    ("data", _json_str()),
     (EXTRA, pa.string()),
 ])
 
@@ -154,6 +178,7 @@ SCHEMAS: dict[Stream, pa.Schema] = {
     Stream.DECISIONS: DECISIONS_SCHEMA,
     Stream.GRADES: GRADES_SCHEMA,
     Stream.SKILLS: SKILLS_SCHEMA,
+    Stream.EXECUTIONS: EXECUTIONS_SCHEMA,
 }
 
 

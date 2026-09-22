@@ -23,6 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from jev.run.evidence import event, traced
 from jev.world.combat import CombatProfile, Role, for_class
 
 # Which slot holds food is **not** a constant. Both consumables are item class 0,
@@ -56,6 +57,7 @@ class Rest:
     started_at: float | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
 
+    @traced("rest")
     def until(self, fraction: float = 0.92, *, role: Role = Role.FOOD,
               timeout_s: float = 45.0) -> Rested:
         """Eat until health reaches `fraction`, or say why not.
@@ -68,9 +70,14 @@ class Rest:
         deadline = time.monotonic() + timeout_s
         eating = False
         gauge = "vitals.power" if role is Role.DRINK else "vitals.hp"
+        event("rest.request", data={"role": role.value, "gauge": gauge,
+                                    "fraction": fraction, "timeout_s": timeout_s})
 
         while time.monotonic() < deadline:
             v = self.read()
+            event("rest.observed", code="blind" if v is None else "readable",
+                  data={} if v is None else {key: v.get(key) for key in (
+                      gauge, "vitals.combat", "bars.usable")})
             if v is None:
                 return Rested.BLIND
             level = v.get(gauge)
@@ -95,6 +102,7 @@ class Rest:
                 return Rested.NO_FOOD
 
             if not eating:
+                event("consume.request", data={"slot": ability.slot, "role": role.value})
                 self.hid.tap(SLOT_KEYS.get(ability.slot, str(ability.slot)))
                 self.started_at = time.monotonic()
                 eating = True

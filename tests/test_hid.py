@@ -8,6 +8,7 @@ pretended otherwise — `win32.available()` is False here and the guards say so.
 from __future__ import annotations
 
 import random
+from types import SimpleNamespace
 
 import pytest
 
@@ -164,3 +165,104 @@ def test_a_shifted_character_is_sent_as_a_chord_not_as_its_unshifted_key():
     hid = _Rec()
     assert hid.type_text("(a)")
     assert hid.events == ["shift+9", "tap:a", "shift+0"]
+
+
+@pytest.fixture
+def delivered_input(monkeypatch):
+    hid = Hid()
+    monkeypatch.setattr(hid, "ready", lambda: True)
+    monkeypatch.setattr(hid, "_sleep", lambda _: None)
+    monkeypatch.setattr(hid, "_abs", lambda x, y: (x, y))
+    monkeypatch.setattr(win32, "user32", SimpleNamespace(GetCursorPos=lambda _: 1))
+    monkeypatch.setattr(win32, "scan_code", lambda vk: vk)
+    events = []
+    replies = iter([1, 0])
+
+    def send(inputs):
+        events.extend(inputs)
+        return next(replies)
+
+    monkeypatch.setattr(win32, "send_inputs", send)
+    return hid, events
+
+
+def test_a_partly_refused_cursor_move_cannot_click_the_wrong_position(delivered_input):
+    hid, events = delivered_input
+    assert hid.click(200, 300, right=True) is False
+    assert hid.sent == 1
+    assert hid.refused == 1
+    assert len(events) == 2
+    assert all(e.mi.dwFlags & win32.MOUSEEVENTF_MOVE for e in events)
+    assert not hid.held_buttons
+    assert "accepted 0/1" in hid.detail
+
+
+def test_relative_motion_stops_at_the_first_refused_segment(delivered_input):
+    hid, events = delivered_input
+    assert hid.move_by(0, 100, step_px=10) is False
+    assert len(events) == 2
+    assert hid.sent == 1 and hid.refused == 1
+
+
+def test_button_release_failure_preserves_ownership_for_cleanup(delivered_input, monkeypatch):
+    hid, events = delivered_input
+    assert hid.button(True, right=True)
+    assert not hid.button(False, right=True)
+    assert hid.held_buttons == {True}
+    assert hid.sent == 1 and hid.refused == 1
+    def accepted(inputs):
+        events.extend(inputs)
+        return len(inputs)
+
+    monkeypatch.setattr(win32, "send_inputs", accepted)
+    hid.release_all()
+    assert not hid.held_buttons
+    assert events[-1].mi.dwFlags == win32.MOUSEEVENTF_RIGHTUP
+    assert hid.sent == len(events) - 1  # the original refused release remains uncounted
+
+
+def test_hold_reports_refused_release(delivered_input):
+    hid, _ = delivered_input
+    assert hid.hold("w", 0) is False
+    assert hid.held == {"w"}
+
+
+def test_recording_failure_cannot_skip_remaining_physical_releases(delivered_input, monkeypatch):
+    hid, events = delivered_input
+    hid.held = {"w", "d"}
+    hid.held_buttons = {True, False}
+    refused_key = []
+
+    def send(inputs):
+        events.extend(inputs)
+        if not refused_key:
+            refused_key.append(inputs[0].ki.wScan)
+            return 0
+        return len(inputs)
+
+    def broken_evidence(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(win32, "send_inputs", send)
+    monkeypatch.setattr("jev.clients.hid.evidence_event", broken_evidence)
+    with pytest.raises(OSError, match="disk full"):
+        hid.release_all()
+    assert len(events) == len(Hid.MOVEMENT_KEYS) + 2
+    assert not hid.held_buttons
+    assert all(VK[key] == refused_key[0] for key in hid.held)
+
+
+def test_all_callers_observe_refused_cleanup(delivered_input, monkeypatch):
+    hid, events = delivered_input
+    hid.held = {"w"}
+    hid.held_buttons = {True}
+
+    def refused(inputs):
+        events.extend(inputs)
+        return 0
+
+    monkeypatch.setattr(win32, "send_inputs", refused)
+    with pytest.raises(RuntimeError, match="held inputs remain"):
+        hid.release_all()
+    assert len(events) == len(Hid.MOVEMENT_KEYS) + 1
+    assert hid.held == {"w"} and hid.held_buttons == {True}

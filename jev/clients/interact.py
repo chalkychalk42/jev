@@ -38,13 +38,14 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 from jev.clients.hid import Hid
 from jev.guide.coords import ZoneBounds, distance_yards
 from jev.perceive.radio_frame import name_id
 from jev.perceive.units import Plate, Sighting, find, find_plates
+from jev.run.evidence import event, operation, traced
 
 # How close to the node counts as "standing on it", for the one case where the ring is
 # hidden because the character is on top of the unit.
@@ -107,6 +108,7 @@ class Interact:
 
     # -- the skill -----------------------------------------------------------
 
+    @traced("interact")
     def open_on(self, name: str, node_world: tuple[float, float, float] | None = None,
                 node_map: tuple[float, float] | None = None) -> Result:
         """Stand there, look, right-click a nameplate, confirm who answered.
@@ -122,6 +124,8 @@ class Interact:
         self.used_centre = False
         self.tried = []
         self.detail = ""
+        event("interact.request", data={"name": name, "node_world": node_world,
+                                        "node_map": node_map})
         if self.level is not None:
             self.level()
 
@@ -161,13 +165,19 @@ class Interact:
                        f"{self.tried}")
         return Result.NO_TARGET
 
+    @traced("interact.centre")
     def _try_centre(self, wanted: int) -> Result | None:
         """Right-click the middle of the screen. `None` means it was not the right unit."""
         self.used_centre = True
         self.clicked = self.window_centre
+        event("interact.click", data={"method": "centre", "point": self.clicked,
+                                      "wanted_name_id": wanted})
         self.hid.click(*self.clicked, right=True)
         time.sleep(0.9)
         values = self.read()
+        event("selection.observed", code="blind" if values is None else "readable",
+              data={"wanted_name_id": wanted,
+                    "observed_name_id": values.get("target.name_id") if values else None})
         if values is None:
             self.detail = "no readable frame after the centre click"
             return Result.BLIND
@@ -192,8 +202,13 @@ class Interact:
         cx = self._centre_x()
         plates = find_plates(frame)
         plates.sort(key=lambda p: abs(p.cx - cx))
+        with operation("target.candidates") as span:
+            if span.enabled:
+                span.finish(code="observed", data={"count": len(plates),
+                    "candidates": [asdict(p) for p in plates[:MAX_CANDIDATES]]})
         return plates[:MAX_CANDIDATES]
 
+    @traced("interact.select")
     def _try(self, plate: Plate, wanted: int) -> Result | None:
         """Select via the nameplate, confirm who it is, then interact on the model.
 
@@ -212,10 +227,15 @@ class Interact:
         """
         ox, oy = self.window_origin
         self.clicked = (ox + round(plate.cx), oy + round(plate.cy))
+        event("selection.request", data={"method": "plate", "point": self.clicked,
+                                         "wanted_name_id": wanted})
         self.hid.click(*self.clicked)
         time.sleep(0.6)
 
         values = self.read()
+        event("selection.observed", code="blind" if values is None else "readable",
+              data={"wanted_name_id": wanted,
+                    "observed_name_id": values.get("target.name_id") if values else None})
         if values is None:
             self.detail = "no readable frame after selecting"
             return Result.BLIND
@@ -231,10 +251,16 @@ class Interact:
         # The radio just identified this plate. Keep that evidence when locating its
         # body; a larger ring-shaped patch of another colour is not this target.
         self.sighting = find(frame, plate=plate)
+        with operation("target.location") as span:
+            if span.enabled:
+                span.finish(code="candidate" if self.sighting is not None else "not_visible",
+                            data={"sighting": asdict(self.sighting) if self.sighting else None})
         if self.sighting is None:
             self.detail = "selected the right unit, but no ring and plate to aim at"
             return Result.NOT_VISIBLE
         self.clicked = (ox + self.sighting.torso[0], oy + self.sighting.torso[1])
+        event("interact.click", data={"method": "plate_ring", "point": self.clicked,
+                                      "wanted_name_id": wanted})
         self.hid.click(*self.clicked, right=True)
         time.sleep(0.9)
         return self._window_open() or Result.NO_WINDOW
@@ -253,6 +279,9 @@ class Interact:
 
     def _window_open(self) -> Result | None:
         v = self.read()
+        event("interact.window", code="blind" if v is None else "readable",
+              data={} if v is None else {key: v.get(key) for key in (
+                  "ui.quest_frame", "ui.gossip", "ui.vendor", "ui.loot")})
         if v is None:
             return Result.BLIND
         for key, result in (("ui.quest_frame", Result.QUEST), ("ui.gossip", Result.GOSSIP),

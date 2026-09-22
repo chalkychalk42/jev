@@ -115,16 +115,33 @@ function UnitMana() return pick("mana", 60) end
 function UnitManaMax() return pick("manaMax", 100) end
 function UnitPowerType() return pick("powerType", 0) end
 function UnitAffectingCombat() return pick("combat", nil) end
-function UnitIsDead() return pick("dead", nil) end
+function UnitIsDead(u)
+    if u == "mouseover" then return pick("mouseoverDead", nil) end
+    return pick("dead", nil)
+end
 function UnitIsGhost() return pick("ghost", nil) end
 function UnitIsAFK() return pick("afk", nil) end
 function UnitOnTaxi() return pick("taxi", nil) end
-function UnitExists(u) return pick("hasTarget", 1) end
-function UnitName(u) return pick("targetName", "Kobold Vermin") end
+function UnitExists(u)
+    if u == "mouseover" then return pick("hasMouseover", nil) end
+    return pick("hasTarget", 1)
+end
+function UnitName(u)
+    if u == "mouseover" then return pick("mouseoverName", nil) end
+    return pick("targetName", "Kobold Vermin")
+end
 function UnitReaction() return pick("reaction", 2) end
 function UnitClassification() return pick("classification", "normal") end
-function UnitIsUnit() return pick("targetsMe", nil) end
+function UnitIsUnit(a, b)
+    if a == "mouseover" and b == "target" then return pick("mouseoverIsTarget", nil) end
+    return pick("targetsMe", nil)
+end
 function CheckInteractDistance() return pick("inMelee", 1) end
+function GetMouseFocus()
+    if STATE.mouseFocus == "world" then return WorldFrame end
+    if STATE.mouseFocus == "ui" then return UIParent end
+    return nil
+end
 
 function IsMounted() return pick("mounted", nil) end
 function IsSwimming() return pick("swimming", nil) end

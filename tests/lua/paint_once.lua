@@ -10,6 +10,12 @@ local overrides = loadstring(os.getenv("JEV_STATE") or "return {}")
 if overrides then
     for k, v in pairs(overrides() or {}) do STATE[k] = v end
 end
+-- Test the real getters when a stock entry point is absent or throws. The addon's
+-- pcall boundary must encode unknown rather than turn unavailable APIs into false.
+if STATE.missingApi then _G[STATE.missingApi] = nil end
+if STATE.throwingApi then
+    _G[STATE.throwingApi] = function() error("unavailable test API") end
+end
 if STATE.visiblePanel then
     local panel = CreateFrame("Frame", STATE.visiblePanel)
     function panel:IsVisible() return STATE.panelHidden ~= 1 end

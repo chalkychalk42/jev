@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -41,6 +42,7 @@ class Stream(StrEnum):
     DECISIONS = "decisions"
     GRADES = "grades"
     SKILLS = "skills"
+    EXECUTIONS = "executions"
 
 
 class Outcome(StrEnum):
@@ -92,6 +94,7 @@ class TickRow:
     decision_id: str | None = None   # set when this tick is the one a decision acted on
     tracker_event: str | None = None
     tracker_from: str | None = None
+    arm_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -205,6 +208,7 @@ class SkillResultRow:
     step_id: str | None = None
     detail: str | None = None
     decision_id: str | None = None
+    arm_id: str | None = None
 
     @property
     def counts_toward_rate(self) -> bool:
@@ -215,6 +219,34 @@ class SkillResultRow:
     @property
     def succeeded(self) -> bool:
         return self.outcome is SkillOutcome.SUCCEEDED
+
+
+@dataclass(frozen=True)
+class ExecutionEventRow:
+    """An observed operation within an arm, never another strategic decision.
+
+    Begin/end rows share an operation ID; point events have their own ID and reference
+    the enclosing operation. Native result codes remain evidence, not reward labels.
+    """
+
+    run_id: str
+    client_id: str
+    arm_id: str | None
+    decision_id: str | None
+    armed_by: ArmedBy
+    step_id: str | None
+    situation_key: str
+    event_id: str
+    operation_id: str
+    parent_operation_id: str | None
+    t: float
+    tick_id: int
+    phase: str
+    operation: str
+    code: str = ""
+    detail: str = ""
+    duration_s: float | None = None
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- reward
@@ -349,6 +381,8 @@ class Recorder:
         self.dir.mkdir(parents=True, exist_ok=True)
         self._files: dict[Stream, Any] = {}
         self._tick_id = 0
+        self._writing = threading.RLock()
+        self._closed = False
         self._write_manifest()
 
     def _write_manifest(self) -> None:
@@ -373,13 +407,24 @@ class Recorder:
         return self._files[stream]
 
     def _write(self, stream: Stream, row: Any) -> None:
-        h = self._handle(stream)
-        h.write(json.dumps(asdict(row), default=str) + "\n")
-        h.flush()
+        with self._writing:
+            if self._closed:
+                raise RuntimeError("recorder is closed")
+            h = self._handle(stream)
+            h.write(json.dumps(asdict(row), default=str) + "\n")
+            h.flush()
 
     def next_tick_id(self) -> int:
-        self._tick_id += 1
-        return self._tick_id
+        with self._writing:
+            if self._closed:
+                raise RuntimeError("recorder is closed")
+            self._tick_id += 1
+            return self._tick_id
+
+    @property
+    def tick_id(self) -> int:
+        with self._writing:
+            return self._tick_id
 
     def tick(self, row: TickRow) -> None:
         self._write(Stream.TICKS, row)
@@ -393,10 +438,21 @@ class Recorder:
     def skill_result(self, row: SkillResultRow) -> None:
         self._write(Stream.SKILLS, row)
 
+    def execution(self, row: ExecutionEventRow) -> None:
+        self._write(Stream.EXECUTIONS, row)
+
     def close(self) -> None:
-        for h in self._files.values():
-            h.close()
-        self._files.clear()
+        with self._writing:
+            self._closed = True
+            error = None
+            for h in self._files.values():
+                try:
+                    h.close()
+                except Exception as exc:
+                    error = error or exc
+            self._files.clear()
+            if error is not None:
+                raise error
 
     def __enter__(self) -> Recorder:
         return self

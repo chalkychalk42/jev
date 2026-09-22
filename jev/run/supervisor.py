@@ -14,8 +14,9 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from jev.coach.policy import Context, service
-from jev.learn.episode import SkillOutcome
+from jev.learn.episode import Recorder, SkillOutcome
 from jev.orch.runtime import Armed, ClientRuntime
+from jev.run.evidence import bind, operation
 from jev.skills.catalog import get
 from jev.world.state_v1 import State
 
@@ -59,7 +60,8 @@ class Body(Protocol):
 class Worker:
     def __init__(self, body: Body, arm: Armed | None, state: State, *,
                  focus: Callable[[Callable[[], None]], bool] | None = None,
-                 maintenance: Callable[[Callable[[], None]], Result] | None = None):
+                 maintenance: Callable[[Callable[[], None]], Result] | None = None,
+                 recorder: Recorder | None = None):
         if arm is None and focus is None and maintenance is None:
             raise ValueError("a game worker needs an armed skill")
         self.body, self.arm = body, arm
@@ -71,6 +73,9 @@ class Worker:
         self.done = threading.Event()
         self.result: Result | None = None
         self.completion_observed = False
+        self._evidence = bind(recorder, arm, client_id=state.client_id)
+        self._skill = arm.decision.skill if arm else None
+        self._released = False
         self.thread = threading.Thread(target=self._run, args=(state,), name="jev-body")
 
     def checkpoint(self) -> None:
@@ -83,6 +88,27 @@ class Worker:
             self.cancelled.set()
 
     def _run(self, state: State) -> None:
+        try:
+            with self._evidence, operation("worker", data={"skill": self._skill}) as span:
+                self._perform(state)
+                if self.result is None:
+                    self.result = Result(SkillOutcome.ABORTED, "worker returned no result", "error")
+                span.finish(code=self.result.code, detail=self.result.detail,
+                            data={"outcome": self.result.outcome.value})
+        except BaseException as exc:
+            # A failed evidence write must be visible and must never prevent release
+            # or leave the supervisor waiting forever for this worker.
+            self.result = Result(SkillOutcome.ABORTED,
+                                 f"execution recording failed: {type(exc).__name__}: {exc}",
+                                 "error")
+        finally:
+            try:
+                if not self._released:
+                    self._release()
+            finally:
+                self.done.set()
+
+    def _perform(self, state: State) -> None:
         try:
             self.checkpoint()
             if self.maintenance is not None:
@@ -106,13 +132,19 @@ class Worker:
             self.result = exc.result
         except Exception as exc:
             self.result = Result(SkillOutcome.ABORTED, f"{type(exc).__name__}: {exc}", "error")
+        except BaseException as exc:
+            self.result = Result(SkillOutcome.PREEMPTED,
+                                 f"{type(exc).__name__}: {exc}", "preempted")
         finally:
-            try:
-                self.body.release()
-            except Exception as exc:
-                self.result = Result(SkillOutcome.ABORTED, f"input cleanup failed: {exc}", "error")
-            finally:
-                self.done.set()
+            self._release()
+
+    def _release(self) -> None:
+        try:
+            self.body.release()
+        except BaseException as exc:
+            self.result = Result(SkillOutcome.ABORTED, f"input cleanup failed: {exc}", "error")
+        finally:
+            self._released = True
 
 
 def interruption(arm: Armed, state: State, *, travelling: bool = False,
@@ -272,7 +304,7 @@ class Supervisor:
             arm = self.runtime.armed
             reason = interruption(arm, state)
             if not reason:
-                self.worker = Worker(self.body, arm, state)
+                self.worker = Worker(self.body, arm, state, recorder=self.runtime.recorder)
                 self.worker.thread.start()
         return state
 

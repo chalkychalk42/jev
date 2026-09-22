@@ -672,7 +672,7 @@ CLIENT_API = frozenset({
     "IsMounted", "IsSwimming", "IsFalling", "IsResting", "IsStealthed", "IsIndoors",
     "GetPlayerFacing", "GetPlayerMapPosition", "GetCorpseMapPosition", "GetMoney", "CheckInteractDistance",
     "LootFrame", "GossipFrame", "MerchantFrame", "QuestFrame", "ClassTrainerFrame",
-    "MailFrame",
+    "MailFrame", "GetMouseFocus", "WorldFrame",
 })
 
 FORBIDDEN = (
@@ -693,7 +693,8 @@ def _code_only(lua: str) -> str:
 def test_the_addon_paints_and_never_actuates(call):
     """PLAN section 2.2 is what makes the addon legal at all, so it is a test and not a
     promise in a header comment."""
-    for name, source in (("Helpers.lua", HELPERS_LUA), ("JevRadio.lua", PAINTER_LUA)):
+    for name, source in (("Helpers.lua", HELPERS_LUA), ("JevRadio.lua", PAINTER_LUA),
+                         ("Fields.lua", FIELDS_LUA)):
         assert call not in _code_only(source), f"{name} calls {call}"
 
 
@@ -854,6 +855,17 @@ def test_an_impossible_level_is_refused_rather_than_carried():
 LIVE = pathlib.Path(__file__).parent / "fixtures" / "live-northshire-1600x900.npy"
 GHOST = pathlib.Path(__file__).parent / "fixtures" / "live-ghost-elwynn.npz"
 GHOST_LIVE = pathlib.Path(__file__).parent / "fixtures" / "live-ghost-northshire.npz"
+
+
+def test_schema7_capture_keeps_merchant_data_and_has_no_cursor_observation():
+    with np.load(ROOT / "tests" / "fixtures" / "live-dermot-targeted.npz") as fixture:
+        reading = radio_frame.read(fixture["frame"])
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    assert reading.values["schema"] == 7
+    assert reading.values["target.name_id"] == radio_frame.name_id("Dermot Johns")
+    assert reading.values["bags.money_copper"] == 1027
+    assert all(reading.values[name] is None for name in
+               ("cursor.has", "cursor.name_id", "cursor.dead", "cursor.is_target", "cursor.world"))
 
 
 @pytest.mark.skipif(not LIVE.exists(), reason="no live capture fixture")

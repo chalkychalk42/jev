@@ -35,6 +35,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from jev.run.evidence import event, traced
+
 # Below this, go and repair. Not zero: arriving at a vendor with the weapon already broken
 # means the fights that broke it were already being lost, and a corpse run costs more than
 # a walk to the Abbey.
@@ -84,11 +86,13 @@ class Repair:
         worst = v.get("bags.durability_min")
         return worst is not None and worst <= REPAIR_BELOW
 
+    @traced("repair")
     def run(self) -> Repaired:
         self.before = self.after = None
         self.detail = ""
 
         v = self.read()
+        self._observe(v)
         if v is None:
             return Repaired.BLIND
         self.before = v.get("bags.durability_min")
@@ -116,6 +120,7 @@ class Repair:
             SETTLE_S + OPEN_S)
         self._close()
         after = self.read()
+        self._observe(after)
         self.after = after.get("bags.durability_min") if after else None
         if landed is None:
             self.detail = (f"pressed Repair All and the worst item is still "
@@ -127,6 +132,7 @@ class Repair:
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             v = self.read()
+            self._observe(v)
             if v is not None and ready(v):
                 return v
             time.sleep(0.25)
@@ -138,6 +144,9 @@ class Repair:
             return False
         ox, oy = self.window_origin
         w, h = self.window_size
+        event("repair.request", data={"point": [ox + round(fx * w), oy + round(fy * h)],
+                                      "durability": values.get("bags.durability_min"),
+                                      "money_copper": values.get("bags.money_copper")})
         self.hid.click(ox + round(fx * w), oy + round(fy * h))
         return True
 
@@ -145,3 +154,10 @@ class Repair:
         """Leave the merchant shut. An open frame swallows the next click."""
         self.hid.tap("esc")
         time.sleep(0.4)
+
+    @staticmethod
+    def _observe(values: dict | None) -> None:
+        event("repair.observed", code="blind" if values is None else "readable",
+              data={} if values is None else {key: values.get(key) for key in (
+                  "ui.vendor", "bags.durability_min", "bags.money_copper",
+                  "ui.advance_x", "ui.advance_y")})

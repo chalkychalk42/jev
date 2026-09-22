@@ -27,7 +27,7 @@ from enum import StrEnum
 from jev.clients.fight import Fight, Fought
 from jev.clients.loot import Loot, Looted
 from jev.clients.rest import Rest, Rested
-from jev.run.journal import Journal, outcome_of
+from jev.run.evidence import event, operation, traced
 from jev.world.combat import EAT_BELOW, HEAL_OUT_OF_COMBAT
 
 # Fractions of the radius to ring, nearest first, and how many points on each ring.
@@ -99,12 +99,7 @@ class Hunt:
     approach: Callable[[tuple[float, float, float]], bool]
     progress: Callable[[], tuple[int | None, int | None]]
     say: Callable[[str], None] = print
-    # Optional flight recorder. A hunt is where most of a run's time goes, so a corpus
-    # that skips it is a corpus of walking.
     loot: Loot | None = None
-    journal: Journal | None = None
-    observe: Callable[[], object | None] | None = None
-    step_id: str | None = None
     is_complete: Callable[[], bool | None] | None = None
     service_needed: Callable[[], str | None] | None = None
 
@@ -113,11 +108,14 @@ class Hunt:
     moves: int = field(default=0, init=False)
     detail: str = field(default="", init=False)
 
+    @traced("hunt")
     def run(self, centre: tuple[float, float, float], radius_yards: float,
             name_id: int | None = None, *, timeout_s: float = 900.0) -> Hunted:
         self.kills = self.moves = 0
         self._outdoors = None
         self.detail = ""
+        event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
+                                    "wanted_name_id": name_id, "timeout_s": timeout_s})
         deadline = time.monotonic() + timeout_s
         posts = stations(centre, radius_yards)
         post = 0
@@ -139,6 +137,8 @@ class Hunt:
             have, need = self.progress()
             complete = (self.is_complete() if self.is_complete is not None else
                         need is not None and have is not None and have >= need)
+            event("objective.observed", data={"have": have, "need": need,
+                                               "complete": complete})
             if complete is True:
                 self.say(f"  objective complete: {have}/{need}")
                 return Hunted.DONE
@@ -157,7 +157,10 @@ class Hunt:
                 target = posts[post]
                 post += 1
                 self.moves += 1
-                if not self.approach(target):
+                with operation("hunt.approach", data={"destination": target}) as span:
+                    arrived = self.approach(target)
+                    span.finish(code="true" if arrived else "false")
+                if not arrived:
                     continue          # a station we cannot stand on is not a dead end
                 if self._wrong_side_of_a_door():
                     continue
@@ -172,19 +175,11 @@ class Hunt:
                 self.detail = "too hurt to pull, and nothing left to fix it with"
                 return Hunted.NO_FOOD
 
-            state = self.observe() if self.observe is not None else None
-            if self.journal is not None:
-                self.journal.tick(state, skill="FIGHT", intent="kill")
-            started = time.monotonic()
             outcome = self.fight.run(name_id)
-            if self.journal is not None:
-                self.journal.skill(
-                    "FIGHT",
-                    outcome_of(outcome is Fought.KILLED,
-                               timed_out=outcome is Fought.TIMEOUT),
-                    started_at=started, state=state, step_id=self.step_id,
-                    detail=f"{outcome.value}: {self.fight.detail}" if self.fight.detail
-                    else outcome.value)
+            event("fight.summary", code=outcome.value, detail=self.fight.detail,
+                  data={"pressed_slots": self.fight.pressed, "closed": self.fight.closed,
+                        "heals_landed": self.fight.heals_landed,
+                        "heals_ignored": self.fight.heals_ignored})
             self.say(f"    {outcome.value} ({have}/{need}) "
                      f"pressed {self.fight.pressed} closed {self.fight.closed} "
                      f"heals {self.fight.heals_landed}/{self.fight.heals_ignored}"
@@ -199,7 +194,7 @@ class Hunt:
             if outcome is Fought.KILLED:
                 self.kills += 1
                 dry = 0
-                self._loot(state)
+                self._loot()
             else:
                 # Nothing here worth swinging at. Two empty looks and the camp has moved
                 # on without us; go and stand somewhere else.
@@ -211,7 +206,7 @@ class Hunt:
         self.detail = f"{timeout_s:.0f}s and the counter is {have}/{need}"
         return Hunted.TIMEOUT
 
-    def _loot(self, state) -> None:
+    def _loot(self) -> None:
         """Take what the corpse is holding, straight after the kill.
 
         Here rather than inside `Fight` because looting is not fighting: the corpse is
@@ -221,18 +216,12 @@ class Hunt:
         """
         if self.loot is None:
             return
-        started = time.monotonic()
         # The counter is the first thing worth believing about a corpse, and `Hunt` is
         # what knows how to ask for it.
         outcome = self.loot.run(progress=self.progress)
         if outcome is not Looted.NO_CORPSE:
             self.say(f"    loot: {outcome.value}"
                      + (f" - {self.loot.detail}" if self.loot.detail else ""))
-        if self.journal is not None:
-            self.journal.skill("LOOT", outcome_of(outcome.ok), started_at=started,
-                               state=state, step_id=self.step_id,
-                               detail=f"{outcome.value}: {self.loot.detail}"
-                               if self.loot.detail else outcome.value)
 
     def _wrong_side_of_a_door(self) -> bool:
         """Is this station indoors when the camp is not?

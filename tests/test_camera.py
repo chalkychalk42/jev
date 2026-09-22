@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from jev.clients.camera import LEVEL_PX, TO_THE_STOP_PX, Camera
+import pytest
+
+from jev.clients.camera import GRAB_S, LEVEL_PX, SETTLE_S, TO_THE_STOP_PX, Camera
 
 
 class _Hid:
-    def __init__(self, moves_ok=True):
+    def __init__(self, moves_ok=True, drags=(True, True), grab_ok=True, release_ok=True):
         self.log = []
         self.moves_ok = moves_ok
+        self.drags = iter(drags)
+        self.grab_ok = grab_ok
+        self.release_ok = release_ok
 
     def move_to(self, x, y, steps=0):
         self.log.append(("move_to", x, y))
@@ -16,11 +21,19 @@ class _Hid:
 
     def button(self, down, right=False):
         self.log.append(("button", down, right))
-        return True
+        return self.grab_ok if down else self.release_ok
 
     def move_by(self, dx, dy, step_px=10):
         self.log.append(("move_by", dx, dy))
-        return True
+        result = next(self.drags)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+
+@pytest.fixture(autouse=True)
+def no_real_wait(monkeypatch):
+    monkeypatch.setattr("jev.clients.camera.time.sleep", lambda _: None)
 
 
 def _camera(hid=None):
@@ -69,3 +82,41 @@ def test_the_grab_happens_at_the_middle_of_the_window():
     hid = _Hid()
     _camera(hid).level()
     assert hid.log[0] == ("move_to", 10 + 800, 20 + 450)
+
+
+@pytest.mark.parametrize(("drags", "expected_drags"), [
+    ((False,), [("move_by", 0, TO_THE_STOP_PX)]),
+    ((True, False), [("move_by", 0, TO_THE_STOP_PX), ("move_by", 0, -LEVEL_PX)]),
+])
+def test_a_partial_drag_is_failure_and_always_releases_the_grab(drags, expected_drags):
+    hid = _Hid(drags=drags)
+    assert _camera(hid).level() is False
+    assert [e for e in hid.log if e[0] == "move_by"] == expected_drags
+    assert hid.log[-1] == ("button", False, True)
+
+
+def test_an_undelivered_release_is_not_successful_levelling():
+    hid = _Hid(release_ok=False)
+    assert _camera(hid).level() is False
+    assert hid.log[-1] == ("button", False, True)
+
+
+def test_a_refused_grab_does_not_start_a_drag():
+    hid = _Hid(grab_ok=False)
+    assert _camera(hid).level() is False
+    assert not [e for e in hid.log if e[0] == "move_by"]
+
+
+@pytest.mark.parametrize("error", [RuntimeError("movement failed"), KeyboardInterrupt()])
+def test_an_interrupted_drag_still_releases_the_grab(error):
+    hid = _Hid(drags=(error,))
+    with pytest.raises(type(error)):
+        _camera(hid).level()
+    assert hid.log[-1] == ("button", False, True)
+
+
+def test_success_keeps_the_measured_wait_sequence(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr("jev.clients.camera.time.sleep", sleeps.append)
+    assert _camera().level() is True
+    assert sleeps == [GRAB_S, GRAB_S, GRAB_S, SETTLE_S]

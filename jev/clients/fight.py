@@ -39,10 +39,11 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 from jev.perceive.units import Plate, _find_ring, find, find_plates
+from jev.run.evidence import event, operation, traced
 from jev.world.combat import (
     HEAL_IN_COMBAT,
     HEAL_OUT_OF_COMBAT,
@@ -200,6 +201,7 @@ class Fight:
 
     # -- the skill -----------------------------------------------------------
 
+    @traced("fight")
     def run(self, name_id: int | None = None, *, timeout_s: float = 45.0) -> Fought:
         """Select, engage, and hold the rotation until something settles it."""
         self.pressed = []
@@ -214,8 +216,10 @@ class Fight:
         self.last_hp = None
         self.detail = ""
         self._last_use = {}
+        event("fight.request", data={"wanted_name_id": name_id, "timeout_s": timeout_s})
 
         v = self.read()
+        self._observe(v)
         if v is None:
             return Fought.BLIND
         # The health guard is about **picking** fights, not about surviving one already
@@ -261,6 +265,7 @@ class Fight:
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
             v = self.read()
+            self._observe(v)
             if v is None:
                 return Fought.BLIND
             if v.get("vitals.dead") is True or v.get("vitals.ghost") is True:
@@ -330,7 +335,10 @@ class Fight:
                 if v.get("bars.casting") is not True:
                     if self.closed and self.closed % REAIM_EVERY == 0:
                         self.engage()          # walking blind is walking the old heading
-                    self.hid.hold("w", CLOSE_NUDGE_S if near else CLOSE_BURST_S)
+                    duration = CLOSE_NUDGE_S if near else CLOSE_BURST_S
+                    event("approach.request", data={"key": "w", "duration_s": duration,
+                                                    "closed": self.closed, "near": near})
+                    self.hid.hold("w", duration)
                     self.closed += 1
             elif not landing:
                 # Out of bursts with the target still at full health. Whether anything was
@@ -350,6 +358,7 @@ class Fight:
 
     # -- pieces --------------------------------------------------------------
 
+    @traced("target.acquire")
     def acquire(self, name_id: int | None, *, defend: bool = False) -> Fought | None:
         """Select something worth fighting. `None` means it worked.
 
@@ -360,6 +369,9 @@ class Fight:
         frame = self.read_frame()
         if frame is not None:
             for plate in self._candidates(frame):
+                event("selection.request", data={"method": "plate", "wanted_name_id": name_id,
+                      "point": [self.window_origin[0] + round(plate.cx),
+                                self.window_origin[1] + round(plate.cy)]})
                 self.hid.click(self.window_origin[0] + round(plate.cx),
                                self.window_origin[1] + round(plate.cy))
                 time.sleep(0.35)
@@ -387,11 +399,17 @@ class Fight:
             return min(near) if near else float("inf")
 
         plates.sort(key=lambda p: (crowding(p) < CROWD_PX, abs(p.cx - centre)))
+        with operation("target.candidates") as span:
+            if span.enabled:
+                span.finish(code="observed", data={"count": len(plates),
+                    "candidates": [asdict(p) for p in plates[:MAX_CANDIDATES]]})
         return plates[:MAX_CANDIDATES]
 
     def _acceptable(self, name_id: int | None, *, defend: bool = False) -> bool | None:
         """Is what we just selected worth fighting? `None` if nothing is readable."""
         v = self.read()
+        self._observe(v)
+        event("selection.expected", data={"wanted_name_id": name_id, "defend": defend})
         if v is None:
             return None
         if v.get("target.has") is not True:
@@ -404,6 +422,7 @@ class Fight:
         # Not what we came for. Worth fighting only if it is already hitting us.
         return defend and v.get("target.attacking_me") is True
 
+    @traced("target.select")
     def select(self, name_id: int | None, *, defend: bool = False) -> Fought | None:
         """`Tab`, as a fallback when no nameplate was clickable.
 
@@ -411,9 +430,12 @@ class Fight:
         occluded by terrain while the unit is perfectly fightable.
         """
         for _ in range(MAX_SELECTS):
+            event("selection.request", data={"method": "tab", "wanted_name_id": name_id,
+                                             "defend": defend})
             self.hid.tap("tab")
             time.sleep(0.35)
             v = self.read()
+            self._observe(v)
             if v is None:
                 return Fought.BLIND
             if v.get("target.has") is not True:
@@ -427,6 +449,7 @@ class Fight:
         self.detail = "no nameplate and no Tab target worth fighting"
         return Fought.NO_TARGET
 
+    @traced("target.engage")
     def engage(self) -> bool:
         """Right-click the model: faces the character and starts auto-attack.
 
@@ -440,7 +463,14 @@ class Fight:
         for _ in range(ENGAGE_LOOKS):
             frame = self.read_frame()
             sighting = None if frame is None else find(frame)
+            with operation("target.location") as span:
+                if span.enabled:
+                    span.finish(code="blind" if frame is None else
+                                "candidate" if sighting is not None else "not_visible",
+                                data={"sighting": asdict(sighting) if sighting else None})
             if sighting is not None:
+                event("engage.request", data={"method": "plate_ring",
+                      "point": [ox + sighting.torso[0], oy + sighting.torso[1]]})
                 self.hid.click(ox + sighting.torso[0], oy + sighting.torso[1], right=True)
                 time.sleep(0.5)
                 return True
@@ -457,6 +487,7 @@ class Fight:
         ring = None if frame is None else _find_ring(frame)
         if ring is not None:
             point = (round(ring.cx), round(ring.cy - max(8, ring.h)))
+            event("engage.request", data={"method": "ring_only", "point": [ox + point[0], oy + point[1]]})
             self.hid.click(ox + point[0], oy + point[1], right=True)
             time.sleep(0.5)
             self.detail = "no nameplate; aimed just above the ring to face it"
@@ -468,6 +499,7 @@ class Fight:
             # selected**, so the approximation below the plate is aimed at a known unit
             # rather than a hopeful pixel. Missing costs a click that opens nothing.
             point = self.selected_plate.unit_below()
+            event("engage.request", data={"method": "plate_offset", "point": [ox + point[0], oy + point[1]]})
             self.hid.click(ox + point[0], oy + point[1], right=True)
             time.sleep(0.5)
             self.detail = "no ring; aimed below the nameplate instead"
@@ -542,6 +574,7 @@ class Fight:
             self._press(attack)
             return
 
+    @traced("heal.top_up")
     def top_up(self, target: float = HEAL_OUT_OF_COMBAT, *, tries: int = 4,
                settle_s: float = 3.5) -> bool:
         """Heal between fights. Returns whether we reached `target`.
@@ -557,6 +590,7 @@ class Fight:
         """
         for _ in range(tries):
             v = self.read()
+            self._observe(v)
             if v is None or v.get("vitals.combat") is True:
                 return False
             hp = v.get("vitals.hp")
@@ -585,6 +619,7 @@ class Fight:
             else:
                 return False          # it did not land standing still; food is next
         v = self.read()
+        self._observe(v)
         return v is not None and (v.get("vitals.hp") or 0.0) >= target
 
     def _watch_top_up(self, before: float, settle_s: float) -> bool:
@@ -593,6 +628,7 @@ class Fight:
         while time.monotonic() < deadline:
             time.sleep(0.4)
             v = self.read()
+            self._observe(v)
             if v is None:
                 return False
             hp = v.get("vitals.hp")
@@ -608,6 +644,8 @@ class Fight:
         key = SLOT_KEYS.get(ability.slot)
         if key is None:
             return
+        event("ability.request", data={"slot": ability.slot, "key": key,
+                                       "role": ability.role.value})
         self.hid.tap(key)
         self._last_use[ability.slot] = time.monotonic()
         self.pressed.append(ability.slot)
@@ -643,6 +681,8 @@ class Fight:
         heal = (self.profile or for_class(values.get("char.class_id"),
                                           values.get("char.race_id"))).first(Role.HEAL)
         went_unready = heal is not None and not (ready & (1 << (heal.slot - 1)))
+        event("heal.observed", data={"hp_before": at_press, "hp_after": hp,
+                                     "slot_went_unready": went_unready})
         if (hp is not None and hp > at_press + 0.02) or went_unready:
             self.heals_landed += 1
             self._pending_heal = None
@@ -650,6 +690,7 @@ class Fight:
             self.heals_ignored += 1
             self._pending_heal = None
 
+    @traced("fight.settle")
     def _settle(self) -> Fought:
         """It is gone. Did we kill it?
 
@@ -657,7 +698,16 @@ class Fight:
         causes. A caller that needs certainty counts `quests.o0_have`, which is the
         server's tally and not an inference.
         """
+        event("fight.last_health", data={"target_hp": self.last_hp})
         if self.last_hp is not None and self.last_hp >= LOST_HP:
             self.detail = f"target vanished at {self.last_hp:.0%} health; not ours"
             return Fought.LOST
         return Fought.KILLED
+
+    @staticmethod
+    def _observe(values: dict | None) -> None:
+        event("combat.observed", code="blind" if values is None else "readable",
+              data={} if values is None else {key: values.get(key) for key in (
+                  "vitals.hp", "vitals.power", "vitals.combat", "vitals.dead", "vitals.ghost",
+                  "target.has", "target.name_id", "target.hp", "target.in_melee",
+                  "target.attacking_me", "bars.casting", "bars.ready", "bars.usable")})

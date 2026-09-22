@@ -728,9 +728,11 @@ local function MODAL_UP()
     end
     -- These stock panels capture input without creating a StaticPopup. In particular,
     -- GameMenuFrame blocks mouse-look, so a camera calibration behind it is invalid.
+    -- Stock 2.4.3 BasicControls.xml uses ScriptErrors for both message() dialogs and
+    -- script errors. UIParentLoadAddOn reports every load failure through that dialog.
     local panels = {"GameMenuFrame", "OptionsFrame", "InterfaceOptionsFrame",
                     "VideoOptionsFrame", "AudioOptionsFrame", "KeyBindingFrame",
-                    "AddonList", "ScriptErrorsFrame"}
+                    "AddonList", "ScriptErrors"}
     for _, name in ipairs(panels) do
         local f = _G[name]
         if f and f.IsVisible and f:IsVisible() then return true end

@@ -78,7 +78,7 @@ def test_the_addon_loads_and_paints_without_raising():
 
 @pytest.mark.parametrize("panel", ["GameMenuFrame", "OptionsFrame", "InterfaceOptionsFrame",
                                   "VideoOptionsFrame", "AudioOptionsFrame", "KeyBindingFrame",
-                                  "AddonList", "ScriptErrorsFrame", "StaticPopup1"])
+                                  "AddonList", "ScriptErrors", "StaticPopup1"])
 def test_blocking_panels_survive_the_real_lua_wire_round_trip(panel):
     values = radio.unpack(payload(paint({"visiblePanel": panel}))[:PAYLOAD_CELLS])
     assert values["ui.modal"] is True
@@ -89,6 +89,18 @@ def test_blocking_panels_survive_the_real_lua_wire_round_trip(panel):
 def test_a_quest_panel_is_not_a_blocking_menu():
     values = radio.unpack(payload(paint({"visiblePanel": "QuestFrame"}))[:PAYLOAD_CELLS])
     assert values["ui.modal"] is False
+
+
+def test_stock_message_dialog_blocks_an_otherwise_ready_merchant():
+    """BasicControls.xml message() and _ERRORMESSAGE() both display ScriptErrors.
+
+    An open service window cannot make that independent stock dialog non-modal.
+    The observed TimeManager load failure uses message(), not StaticPopup_Show().
+    """
+    values = radio.unpack(payload(paint({"visiblePanel": "ScriptErrors",
+                                         "inventoryFixture": True}))[:PAYLOAD_CELLS])
+    assert values["ui.vendor"] is True
+    assert values["ui.modal"] is True
 
 
 def test_the_calibration_row_is_what_the_decoder_expects():
@@ -223,3 +235,70 @@ def test_vendor_gossip_uses_semantic_type_and_the_same_normalized_text_hash():
                   {"vendorGossip": True, "vendorLineHidden": True}):
         values = radio.unpack(payload(paint({"visiblePanel": "GossipFrame", **extra}))[:PAYLOAD_CELLS])
         assert values["merchant.gossip_name_id"] is None
+
+
+@pytest.mark.parametrize("present", [None, False, 0])
+def test_absent_mouseover_has_no_identity_or_death_observation(present):
+    values = radio.unpack(payload(paint({"hasMouseover": present,
+                                         "mouseoverName": "Kobold Vermin",
+                                         "mouseoverDead": True,
+                                         "mouseoverIsTarget": True}))[:PAYLOAD_CELLS])
+    assert values["cursor.has"] is False
+    assert values["cursor.name_id"] is None
+    assert values["cursor.dead"] is None
+    assert values["cursor.is_target"] is False
+
+
+@pytest.mark.parametrize("same_target", [None, False, 0, True])
+def test_mouseover_equality_uses_the_client_identity_not_the_name(same_target):
+    from jev.perceive.radio_frame import name_id
+
+    values = radio.unpack(payload(paint({"hasMouseover": True,
+                                         "targetName": "Young Wolf",
+                                         "mouseoverName": "Young Wolf",
+                                         "mouseoverIsTarget": same_target}))[:PAYLOAD_CELLS])
+    assert values["cursor.has"] is True
+    assert values["target.name_id"] == values["cursor.name_id"] == name_id("Young Wolf")
+    assert values["cursor.is_target"] is (same_target is True)
+
+
+@pytest.mark.parametrize("dead", [None, False, 0, True])
+def test_present_mouseover_death_nil_is_observed_false(dead):
+    values = radio.unpack(payload(paint({"hasMouseover": True,
+                                         "mouseoverDead": dead}))[:PAYLOAD_CELLS])
+    assert values["cursor.dead"] is (dead is True)
+
+
+@pytest.mark.parametrize(("focus", "expected"), [(None, None), ("ui", False), ("world", True)])
+def test_mouse_focus_distinguishes_unknown_ui_and_world(focus, expected):
+    values = radio.unpack(payload(paint({"mouseFocus": focus}))[:PAYLOAD_CELLS])
+    assert values["cursor.world"] is expected
+
+
+@pytest.mark.parametrize(("api", "fields"), [
+    ("UnitExists", ("has", "name_id", "dead", "is_target")),
+    ("UnitName", ("name_id",)),
+    ("UnitIsDead", ("dead",)),
+    ("UnitIsUnit", ("is_target",)),
+    ("GetMouseFocus", ("world",)),
+    ("WorldFrame", ("world",)),
+])
+def test_unavailable_cursor_api_is_unknown(api, fields):
+    values = radio.unpack(payload(paint({"hasMouseover": True,
+                                         "mouseoverName": "Young Wolf",
+                                         "mouseoverDead": True,
+                                         "mouseoverIsTarget": True,
+                                         "mouseFocus": "world",
+                                         "missingApi": api}))[:PAYLOAD_CELLS])
+    assert all(values[f"cursor.{field}"] is None for field in fields)
+
+
+@pytest.mark.parametrize(("api", "field"), [
+    ("UnitExists", "has"), ("UnitName", "name_id"), ("UnitIsDead", "dead"),
+    ("UnitIsUnit", "is_target"), ("GetMouseFocus", "world"),
+])
+def test_cursor_getter_failure_keeps_painting_with_unknown(api, field):
+    values = radio.unpack(payload(paint({"hasMouseover": True,
+                                         "throwingApi": api}))[:PAYLOAD_CELLS])
+    assert values[f"cursor.{field}"] is None
+    assert values["char.level"] == 4

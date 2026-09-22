@@ -25,6 +25,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from jev.clients import win32
+from jev.run.evidence import event as evidence_event
+from jev.run.evidence import traced
 
 # Virtual key codes for what a leveling bot actually presses.
 VK = {
@@ -133,7 +135,23 @@ class Hid:
         if self.ready():
             return True
         self.refused += 1
+        self.detail = "input unavailable or client not focused"
+        evidence_event("input.refused", detail=self.detail,
+                       data={"sent": self.sent, "refused": self.refused})
         return False
+
+    def _send(self, event: win32.INPUT) -> bool:
+        """Count only delivery accepted by Windows, for every input primitive."""
+        accepted = win32.send_inputs([event])
+        if accepted != 1:
+            self.refused += 1
+            self.detail = f"SendInput accepted {accepted}/1 events"
+            evidence_event("input.refused", detail=self.detail,
+                           data={"accepted": accepted, "requested": 1,
+                                 "sent": self.sent, "refused": self.refused})
+            return False
+        self.sent += 1
+        return True
 
     def _sleep(self, seconds: float) -> None:
         if self.h.stagger_ms:
@@ -154,8 +172,7 @@ class Hid:
     def key_down(self, key: str) -> bool:
         if not self._guard():
             return False
-        ok = win32.send_inputs([self._key_event(key, up=False)]) == 1
-        self.sent += int(ok)
+        ok = self._send(self._key_event(key, up=False))
         if ok:
             self.held.add(key)
         return ok
@@ -164,8 +181,7 @@ class Hid:
         # Releasing an input we own must survive cancellation and focus loss.
         if key not in self.held and not self.ready():
             return False
-        ok = win32.send_inputs([self._key_event(key, up=True)]) == 1
-        self.sent += int(ok)
+        ok = self._send(self._key_event(key, up=True))
         if ok:
             self.held.discard(key)
         return ok
@@ -220,9 +236,9 @@ class Hid:
                     on_tick()
                 time.sleep(min(tick_s, max(0.0, deadline - time.perf_counter())))
         finally:
-            self.key_up(key)
+            released = self.key_up(key)
         self._sleep(self.h.gap())
-        return True
+        return released
 
     # Default 2.4.3 bindings, confirmed by measurement rather than memory: W/S move,
     # **A/D turn**, and **Q/E strafe**. Holding D for a second moved the character zero
@@ -233,11 +249,24 @@ class Hid:
     STRAFE_LEFT, STRAFE_RIGHT = "q", "e"
 
     def release_all(self) -> None:
-        """Let go of everything that moves. Cheap, and worth calling on any abort path."""
+        """Attempt every release, then report any error or remaining owned input."""
+        error = None
         for key in set(self.MOVEMENT_KEYS) | self.held:
-            self.key_up(key)
+            try:
+                self.key_up(key)
+            except BaseException as exc:
+                # A device or evidence failure must not strand other owned inputs.
+                # Surface the error only after every release has been attempted.
+                error = error or exc
         for right in tuple(self.held_buttons):
-            self.button(False, right=right)
+            try:
+                self.button(False, right=right)
+            except BaseException as exc:
+                error = error or exc
+        if error is not None:
+            raise error
+        if self.held or self.held_buttons:
+            raise RuntimeError("input release was refused; held inputs remain")
 
     def chord(self, modifier: str, key: str) -> bool:
         """Modifier plus key, with the modifier genuinely held around it."""
@@ -346,9 +375,9 @@ class Hid:
             mi = win32.MOUSEINPUT(dx=ax, dy=ay, mouseData=0,
                                   dwFlags=win32.MOUSEEVENTF_MOVE | win32.MOUSEEVENTF_ABSOLUTE,
                                   time=0, dwExtraInfo=None)
-            win32.send_inputs([win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)])
+            if not self._send(win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)):
+                return False
             self._sleep(self.h.rng.uniform(4.0, 14.0) / 1000.0)
-        self.sent += len(path)
         return True
 
     def button(self, down: bool, right: bool = False) -> bool:
@@ -368,8 +397,7 @@ class Hid:
             flag = win32.MOUSEEVENTF_LEFTDOWN if down else win32.MOUSEEVENTF_LEFTUP
         mi = win32.MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flag,
                               time=0, dwExtraInfo=None)
-        ok = win32.send_inputs([win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)]) == 1
-        self.sent += int(ok)
+        ok = self._send(win32.INPUT(type=win32.INPUT_MOUSE, mi=mi))
         if ok:
             if down:
                 self.held_buttons.add(right)
@@ -397,13 +425,17 @@ class Hid:
             mi = win32.MOUSEINPUT(dx=sx * take, dy=sy * take, mouseData=0,
                                   dwFlags=win32.MOUSEEVENTF_MOVE, time=0,
                                   dwExtraInfo=None)
-            win32.send_inputs([win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)])
-            self.sent += 1
+            if not self._send(win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)):
+                return False
             self._sleep(self.h.rng.uniform(8.0, 22.0) / 1000.0)
             left -= take
         return True
 
+    @traced("input.click")
     def click(self, x: int | None = None, y: int | None = None, right: bool = False) -> bool:
+        self.detail = ""
+        evidence_event("input.click.request", data={"x": x, "y": y, "right": right,
+                                                   "sent": self.sent, "refused": self.refused})
         if x is not None and y is not None and not self.move_to(x, y):
             return False
         if not self._guard():

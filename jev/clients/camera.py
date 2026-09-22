@@ -84,10 +84,12 @@ class Camera:
             return False
         try:
             time.sleep(GRAB_S)
-            self.hid.move_by(0, TO_THE_STOP_PX)     # into the bottom stop
-            self.hid.move_by(0, -LEVEL_PX)          # back up to level
+            if not self.hid.move_by(0, TO_THE_STOP_PX):
+                return False                     # no confirmed stop to measure from
+            if not self.hid.move_by(0, -LEVEL_PX):
+                return False                     # the return drag was not delivered
             time.sleep(GRAB_S)
         finally:
-            self.hid.button(False, right=True)
+            released = self.hid.button(False, right=True)
         time.sleep(SETTLE_S)
-        return True
+        return released

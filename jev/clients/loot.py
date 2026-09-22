@@ -32,9 +32,9 @@ coincide - which is a client setting this code cannot see. `autoLootCorpse "1"` 
 `WTF/Config.wtf`; if it is ever off, the frame would stand open and nothing would be in
 the bags, and believing the frame would report a take on every empty wolf in the zone.
 
-An empty corpse is a real and common outcome, so it is reported as `NOTHING` rather than
-as a failure - a skill that treats an empty wolf as an error will retire itself on a
-perfectly good camp.
+An empty corpse is a real and common outcome. `NOTHING` means no observed change after
+the click; that remains non-fatal, but cannot prove whether the corpse was empty or the
+click missed. The execution stream retains the geometry and observed deltas separately.
 
 Bags are checked **before** the click. A full bag makes looting silently do nothing, and
 the fix for that is a vendor, not another click.
@@ -44,10 +44,11 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 from jev.perceive.units import _find_ring
+from jev.run.evidence import event, operation, traced
 
 # How long to wait for the bags or the loot frame to admit something happened.
 SETTLE_S = 2.0
@@ -65,8 +66,8 @@ CORPSE_LIFT_FRACTION = 0.25
 
 
 class Looted(StrEnum):
-    TOOK = "took"              # bags changed, or the loot frame opened
-    NOTHING = "nothing"        # clicked, and the corpse was empty. Not a failure.
+    TOOK = "took"              # objective, money or bag capacity changed
+    NOTHING = "nothing"        # no observed change after clicking; emptiness is unconfirmed
     NO_CORPSE = "no_corpse"    # nothing selected to loot
     BAGS_FULL = "bags_full"    # would not fit; a vendor is the answer, not a click
     BLIND = "blind"
@@ -90,6 +91,7 @@ class Loot:
     took: int = field(default=0, init=False)
     detail: str = field(default="", init=False)
 
+    @traced("loot")
     def run(self, *, settle_s: float = SETTLE_S,
             progress: Callable[[], tuple[int | None, int | None]] | None = None
             ) -> Looted:
@@ -110,9 +112,17 @@ class Loot:
             self.detail = "bags are full; looting would take nothing"
             return Looted.BAGS_FULL
         before = {**v, "objective": self._counter()}
+        event("loot.before", data={key: before.get(key) for key in (
+            "objective", "bags.money_copper", "bags.money_silver", "bags.free",
+            "target.has", "target.name_id", "target.hp", "ui.loot")})
 
         frame = self.read_frame()
         ring = None if frame is None else _find_ring(frame)
+        with operation("loot.location") as span:
+            if span.enabled:
+                span.finish(code="blind" if frame is None else
+                            "candidate" if ring is not None else "no_ring",
+                            data={"ring": asdict(ring) if ring else None})
         if ring is None:
             self.detail = "no ring, so nothing on screen to loot"
             return Looted.NO_CORPSE
@@ -120,23 +130,28 @@ class Loot:
         ox, oy = self.window_origin
         lift = max(ABOVE_RING_PX, round(ring.h * CORPSE_LIFT_FRACTION))
         self.clicked = (ox + round(ring.cx), oy + round(ring.cy - lift))
+        event("loot.request", data={"point": self.clicked, "method": "ring"})
         self.hid.click(*self.clicked, right=True)
 
         deadline = time.monotonic() + settle_s
         while time.monotonic() < deadline:
             time.sleep(0.25)
             after = self.read()
+            event("loot.observed", code="blind" if after is None else "readable",
+                  data={} if after is None else {key: after.get(key) for key in (
+                      "bags.money_copper", "bags.money_silver", "bags.free", "ui.loot")})
             if after is None:
                 continue
             why = self._what_changed(before, after)
             if why:
+                event("loot.change", code="observed", detail=why)
                 self.took += 1
                 self.detail = why
                 self._close_if_open(after)
                 return Looted.TOOK
 
         self._close_if_open(self.read() or {})
-        self.detail = "clicked the corpse and nothing came off it"
+        self.detail = "no observed objective, money or bag-slot change after the click"
         return Looted.NOTHING
 
     def _counter(self) -> int | None:
@@ -151,6 +166,7 @@ class Loot:
     def _what_changed(self, before: dict, after: dict) -> str:
         """Which signal moved, in the order that they are worth believing."""
         have_before, have_now = before.get("objective"), self._counter()
+        event("loot.objective", data={"before": have_before, "after": have_now})
         if (have_before is not None and have_now is not None
                 and have_now > have_before):
             return f"objective {have_before} -> {have_now}"
