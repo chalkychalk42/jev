@@ -36,6 +36,28 @@ each second, with sequence review, explicit stop control and an accountable inpu
 No pass is earned by skipping a quest, moving the playhead, changing a model label or
 letting the watchdog stop a failed loop.
 
+**Mandatory design gate for every package (V37).** Each fix must solve the underlying
+failure class through a shared mechanism that scales across applicable tasks. A wolf,
+merchant or quest supplies a reproduction and acceptance case, never an identity-specific
+branch in the execution code.
+
+- Identify the failing contract, its owning component and every affected caller before
+  choosing the correction. Implement the correction at that owner and use it consistently.
+- Keep target identities, quest requirements, routes, prices and class profiles in
+  validated data. Do not disguise a one-off workaround as another configuration field.
+- Compose distinct observed behaviors from shared primitives. Corpse looting and living
+  NPC interaction can differ by contract; neither needs a per-NPC implementation.
+- Replace obsolete paths instead of accumulating fallback branches, duplicate helpers
+  or independent interpretations of success. Keep bounded failure when evidence is absent.
+- Verify representative positive, negative and regression cases across affected callers.
+  One successful quest proves that case; wider support needs its own evidence.
+- Use the smallest coherent shared solution. Global scope does not require a monolith,
+  speculative framework or support for every future case before fixing today's failure.
+
+Each implementation review must state the failure class, shared owner, affected callers,
+task data involved, verification evidence and any superseded code removed. A proposed fix
+that cannot meet this gate remains an identified limitation, not an accepted local patch.
+
 **Execution order.** Packages 1–2 restore productive gameplay. Packages 3–6 establish a
 credible single-client soak. Packages 7–8 make early leveling sustainable. Packages 9–11
 complete meaningful self-improvement. Package 12 extends and scales the proven result.
@@ -72,8 +94,9 @@ successful wolf turn-in.
    Carry confirmed target identity through fresh observations. Solve the common locator
    used by Interact, Fight and Loot; a Fight-only repair would leave the grass bug in
    corpse handling. Measure the selection-to-body association and the effect of a
-   right-click on facing/engagement at relevant distances. Retire or constrain the raw
-   largest-ring and fixed-drop fallbacks where they cannot establish a valid target.
+   right-click on facing/engagement at relevant distances. Replace unsupported largest-ring
+   and fixed-drop fallbacks with the shared target-evidence contract; insufficient evidence
+   produces a bounded refusal.
    Distinguish successful input delivery from an actual hit or opened interaction.
 
    Select the mechanism from evidence. Brighter masks, nearest-pair ranking and simple

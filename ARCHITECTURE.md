@@ -197,6 +197,19 @@ Not style. Each of these is a class of silent failure that costs a run, not a te
 > layouts, zone tables, enum values — is generated from a single definition. Agreement by
 > convention decays silently; agreement by construction cannot.
 
+> **Fix the failure class in its shared owner.** Every correction must provide a reusable
+> mechanism for all affected callers. A quest, NPC or captured scene may reproduce and
+> verify a failure; its identity must not become an executable exception that hides it.
+
+Task-specific facts belong in validated, generated data: targets, requirements, routes,
+prices and class profiles. Moving an ad hoc workaround into configuration does not make
+it general. Separate behaviors when their observation/action contracts actually differ,
+such as a living-unit interaction and corpse looting, while sharing their common
+mechanisms. Keep one maintained implementation per responsibility and remove superseded
+paths when replacing it. Verify representative successes, failures and affected callers.
+Unknown cases remain explicit; a global design is not a claim that every case works.
+Use the smallest shared design supported by evidence, without speculative frameworks.
+
 > **Angles:** radians, 0 = +X increasing toward +Y. WoW world axes are +X north, +Y west,
 > so that reads as 0 = north, increasing north → west → south → east. Confirmed against
 > this server's own source, `mangos-tbc/src/game/Entities/Object.cpp`: `GetNearPoint2dAt`
