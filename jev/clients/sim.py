@@ -58,6 +58,12 @@ class Pretend:
         self.progress: dict[int, int] = {}
         self.accepted: set[int] = set()
         self.node: Node = graph.get(graph.entry)
+        # Quests with something to do. The rest are talk-to quests, complete on accepting
+        # and handed in by talking: holding every hand-in to ten kills made 783 and 5261
+        # impossible to hand in here, which only looked harmless while a failed hand-in was
+        # passed over rather than retried.
+        self.objective_quests = {n.quest_id for n in graph.nodes
+                                 if n.kind.value == "quest_objective" and n.quest_id is not None}
 
     def follow(self, step_id: str | None) -> None:
         node = self.graph.get(step_id) if step_id else None
@@ -94,7 +100,7 @@ class Pretend:
                 combat = self.progress[qid] < 10
                 self.hp = max(0.25, self.hp - (0.05 if combat else -0.15))
                 self.xp += 0.02
-            elif node.kind.value == "quest_turnin" and self.progress.get(qid, 0) >= 10:
+            elif node.kind.value == "quest_turnin" and self._complete(qid):
                 self.accepted.discard(qid)
                 self.xp += 0.25
 
@@ -112,12 +118,16 @@ class Pretend:
         self.hp = min(1.0, self.hp + 0.05)
         return self._state(combat=combat)
 
+    def _complete(self, qid: int) -> bool:
+        return qid not in self.objective_quests or self.progress.get(qid, 0) >= 10
+
     def _state(self, *, dead: bool = False, combat: bool = False) -> State:
         n = self.node
         quests = tuple(
-            Quest(quest_id=q, title=f"q{q}", complete=self.progress.get(q, 0) >= 10,
+            Quest(quest_id=q, title=f"q{q}", complete=self._complete(q),
                   objectives=(Objective(text="do it", have=self.progress.get(q, 0),
-                                        need=10, counter_index=0),))
+                                        need=10, counter_index=0),)
+                  if q in self.objective_quests else ())
             for q in sorted(self.accepted)
         )
         return State(

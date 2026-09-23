@@ -295,3 +295,28 @@ def test_a_completed_quest_is_behind_us_whatever_its_predicate_says():
     node = g.get(t.step_id)
     assert node.quest_id != 783, "walked back into a quest that is already finished"
     assert node.kind is StepKind.QUEST_ACCEPT and node.quest_id == 7
+
+
+def test_a_rib_remembers_its_way_back_across_runs(tmp_path):
+    """Quest 15 sat complete in the log for a whole session: its hand-in had failed into a
+    rib, and the playhead kept the rib but not where it led back to."""
+    from jev.guide import playhead
+
+    p = tmp_path / "playhead.json"
+    playhead.save("g", "rib", {7}, p, rejoin_to="turnin")
+    remembered = playhead.load("g", p)
+    assert (remembered.step_id, remembered.rejoin_to) == ("rib", "turnin")
+    assert playhead.with_completed(remembered, 8).rejoin_to == "turnin"
+    p.write_text('{"graph_id": "g", "step_id": "rib", "completed": [7]}', encoding="utf-8")
+    assert playhead.load("g", p).rejoin_to is None, "a file from before rejoin was saved"
+    assert playhead.load("other", p).rejoin_to is None
+
+
+def test_a_rib_resumes_with_its_way_back_or_not_at_all():
+    g = _graph()
+    with_way_back = Tracker.resume(g, _with_quest(have=10), start="rib", rejoin_to="turnin")
+    assert with_way_back.step_id == "rib" and with_way_back.memory.rejoin_to == "turnin"
+    # Without one it would grind until the guide ran out: scan from the entry instead,
+    # which finds the hand-in of the quest the log says is complete.
+    lost = Tracker.resume(g, _with_quest(have=10), start="rib")
+    assert lost.step_id == "turnin"

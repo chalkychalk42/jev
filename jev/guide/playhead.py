@@ -18,9 +18,11 @@ backwards into a quest it has already finished.
 
 Deliberately not a save file
 ----------------------------
-One string and the graph it belongs to. Anything richer is a second model of the world
-that has to be kept true, and the log is already the source of truth for everything except
-this one thing the log cannot express.
+The step, the graph it belongs to, and the way back from a grind rib. Anything richer is a
+second model of the world that has to be kept true, and the log is already the source of
+truth for everything except these things it cannot express. A rib is shared by every step
+in its zone, so the graph cannot say where it leads back to either: quest 15 sat complete in
+the log for a session because the hand-in that failed into a rib was not written down.
 """
 
 from __future__ import annotations
@@ -53,6 +55,8 @@ class Remembered:
     graph_id: str
     step_id: str | None = None
     completed: frozenset[int] = frozenset()
+    # Where `step_id` leads when it is done, when that is not its own next step.
+    rejoin_to: str | None = None
 
 
 def load(graph_id: str, path: pathlib.Path = DEFAULT_PATH) -> Remembered:
@@ -78,19 +82,23 @@ def load(graph_id: str, path: pathlib.Path = DEFAULT_PATH) -> Remembered:
     step = data.get("step_id")
     if data.get("graph_id") != graph_id or not isinstance(step, str) or not step:
         step = None
-    return Remembered(graph_id=graph_id, step_id=step, completed=completed)
+    rejoin = data.get("rejoin_to")
+    if step is None or not isinstance(rejoin, str) or not rejoin:
+        rejoin = None
+    return Remembered(graph_id=graph_id, step_id=step, completed=completed, rejoin_to=rejoin)
 
 
 def save(graph_id: str, step_id: str | None = None,
          completed: frozenset[int] | set[int] = frozenset(),
-         path: pathlib.Path = DEFAULT_PATH) -> None:
+         path: pathlib.Path = DEFAULT_PATH, rejoin_to: str | None = None) -> None:
     """Write the position. Best effort: failing to remember must not fail the run."""
     with suppress(OSError):
         atomic_json(path, {"graph_id": graph_id, "step_id": step_id,
-                           "completed": sorted(completed)})
+                           "completed": sorted(completed), "rejoin_to": rejoin_to})
 
 
 def with_completed(remembered: Remembered, quest_id: int) -> Remembered:
     """A record with one more quest finished."""
     return Remembered(graph_id=remembered.graph_id, step_id=remembered.step_id,
-                      completed=remembered.completed | {quest_id})
+                      completed=remembered.completed | {quest_id},
+                      rejoin_to=remembered.rejoin_to)

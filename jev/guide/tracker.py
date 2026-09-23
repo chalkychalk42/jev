@@ -100,7 +100,8 @@ class Tracker:
 
     @classmethod
     def resume(cls, graph: Graph, state: State, *, start: str | None = None,
-               completed: frozenset[int] = frozenset()) -> Tracker:
+               completed: frozenset[int] = frozenset(),
+               rejoin_to: str | None = None) -> Tracker:
         """A playhead placed on the first step the world does not already satisfy.
 
         Cold start: nothing knows how far a character got, so the chain is walked from the
@@ -113,9 +114,18 @@ class Tracker:
         session** looks identical to one never accepted: both are simply absent from the
         log. That needs completed-quest state on the strip to fix properly. Until then the
         result is re-offering a finished quest and failing at the NPC, which is loud.
+
+        A remembered rib resumes with its way back (`rejoin_to`). A rib remembered without
+        one is not resumed at all: it would grind until the guide ran out, so the scan
+        starts from the entry instead and finds the first step not yet done.
         """
+        start_node = graph.get(start or "")
+        if (start_node is not None and start_node.kind is StepKind.GRIND
+                and graph.get(rejoin_to or "") is None):
+            start = None
         tracker = cls(graph=graph, step_id=start or graph.entry)
-        tracker.enter(tracker.step_id, state)
+        tracker.enter(tracker.step_id, state,
+                      rejoin_to=rejoin_to if start is not None and graph.get(rejoin_to or "") else None)
         if start is not None:
             # `start` means "the playhead had got this far", and a playhead only reaches a
             # turn-in by passing its accept — so the quest *was* held, whatever the log

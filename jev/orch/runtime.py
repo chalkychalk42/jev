@@ -47,7 +47,7 @@ from jev.learn.episode import (
 )
 from jev.skills.catalog import NAMES, judges_itself
 from jev.skills.catalog import get as get_skill
-from jev.world.state_v1 import ArmedBy, State
+from jev.world.state_v1 import ArmedBy, State, StepKind
 
 
 @dataclass
@@ -115,7 +115,9 @@ class ClientRuntime:
     policy_context: scripted.Context = field(default_factory=scripted.Context)
     completed: set[int] = field(default_factory=set)
     start_step: str | None = None
-    on_progress: Callable[[str, set[int]], None] | None = None
+    start_rejoin: str | None = None
+    # (step, completed quests, where the step leads back to when that is not its next)
+    on_progress: Callable[[str, set[int], str | None], None] | None = None
     last_state: State | None = field(default=None, init=False)
     _was_dead: bool = field(default=False, init=False)
     _decision_seq: int = field(default=0, init=False)
@@ -123,6 +125,8 @@ class ClientRuntime:
     _tracker_event: str = field(default="none", init=False)
     _tracker_from: str | None = field(default=None, init=False)
     finished: bool = field(default=False, init=False)
+    # Steps that have failed into a rib and been retried once after it.
+    _retried: set[str] = field(default_factory=set, init=False)
 
     counters: Counters = field(default_factory=Counters)
     armed: Armed | None = None
@@ -169,7 +173,8 @@ class ClientRuntime:
         if not self._entered:
             start = self.start_step if self.graph.get(self.start_step or "") is not None else None
             self.tracker = Tracker.resume(self.graph, state, start=start,
-                                          completed=frozenset(self.completed))
+                                          completed=frozenset(self.completed),
+                                          rejoin_to=self.start_rejoin)
             self._entered = True
 
         before = self.tracker.step_id
@@ -185,7 +190,8 @@ class ClientRuntime:
         # Persist only tracker-witnessed progress, never a caller's guessed completion.
         if self.on_progress is not None and (before != self.tracker.step_id
                                             or completed_before != self.completed or self.last_state is None):
-            self.on_progress(self.tracker.step_id, set(self.completed))
+            self.on_progress(self.tracker.step_id, set(self.completed),
+                             self.tracker.memory.rejoin_to)
 
         if choose:
             plan, by, rule, decision_id = self._choose(state, node)
@@ -238,6 +244,11 @@ class ClientRuntime:
                     self.completed.add(node.quest_id)
                 if verdict.goto:
                     self.tracker.enter(verdict.goto, state)
+                elif node is not None and node.kind is StepKind.GRIND:
+                    # A rib with no way back is a detour, not the end of the guide: find
+                    # the first step not yet done, as a fresh run would.
+                    self.tracker = Tracker.resume(self.graph, state,
+                                                  completed=frozenset(self.completed))
                 else:
                     self.finished = True
             case Event.FAIL:
@@ -245,8 +256,20 @@ class ClientRuntime:
                 if verdict.goto:
                     # Remember where to come back to. A rib is shared by every step in its
                     # zone, so the graph cannot name the way back — only the caller knows.
-                    node = self.graph.get(self.tracker.step_id)
+                    # From a rib, the failed step itself, once: a turn-in that timed out
+                    # walking to Marshal McBride and was then passed over left quest 15
+                    # complete in the log for good, and quest 21 behind it. A step that
+                    # fails again after its rib is passed over, so a step that cannot
+                    # succeed costs two ribs, not the run. An alternative step leads on
+                    # past the step it replaces.
+                    failed = self.tracker.step_id
+                    node = self.graph.get(failed)
+                    target = self.graph.get(verdict.goto)
                     rejoin = node.next[0] if node and node.next else None
+                    if (target is not None and target.kind is StepKind.GRIND
+                            and failed not in self._retried):
+                        self._retried.add(failed)
+                        rejoin = failed
                     self.tracker.enter(verdict.goto, state, rejoin_to=rejoin)
             case Event.DEATH:
                 if not self._was_dead:

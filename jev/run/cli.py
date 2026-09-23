@@ -251,8 +251,9 @@ def _live(args, graph, memory, route) -> int:
         runtime = ClientRuntime(
             client_id=args.client_id, graph=graph, source=ClientSource(client), recorder=recorder,
             keys_down=client.hid.keys_down, start_step=memory.step_id,
-            completed=set(memory.completed),
-            on_progress=lambda step, done: playhead.save(graph.graph_id, step, done, args.playhead),
+            start_rejoin=memory.rejoin_to, completed=set(memory.completed),
+            on_progress=lambda step, done, rejoin: playhead.save(
+                graph.graph_id, step, done, args.playhead, rejoin_to=rejoin),
             available_skills=body.available,
             validate_action=body.validate,
         )

@@ -185,7 +185,8 @@ def test_a_grind_step_does_not_attach_level_parameters_to_travel_or_defence(tmp_
 def test_terminal_step_is_completed_and_persisted_once(tmp_path):
     saved = []
     rt = runtime(tmp_path, [seen(0, quests=(Quest(quest_id=1),)), seen(1), seen(2), seen(3)],
-                 start_step="turnin", on_progress=lambda step, done: saved.append((step, done)))
+                 start_step="turnin",
+                 on_progress=lambda step, done, rejoin: saved.append((step, done)))
     rt.run(4, 0)
     assert rt.finished
     assert rt.completed == {1}
@@ -214,3 +215,52 @@ def test_turnin_is_not_completed_when_the_log_is_mid_cycle(tmp_path):
     rt.run(2, 0)
     assert not rt.finished
     assert rt.completed == set()
+
+
+def rib_graph():
+    from jev.guide.graph import FailEdge, FailWhen
+
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    return Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("after",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), timeout_s=10.0,
+             on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=10, goto="rib"),), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=2,
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(1, 10), skills=("TRAVEL_TO", "GRIND_UNTIL"),
+             **base),
+    ))
+
+
+def held(t, level):
+    from jev.world.state_v1 import Char
+
+    return seen(t, char=Char(level=level), quests=(Quest(quest_id=1, complete=True),))
+
+
+def test_a_step_that_failed_into_a_rib_is_retried_once_then_passed_over(tmp_path):
+    """A hand-in that timed out and was passed over left quest 15 complete in the log for
+    good, with quest 21 behind it. Retried once after its rib; a second failure moves on,
+    so a step that cannot succeed costs two ribs, not the run."""
+    saved = []
+    states = [held(0, 3), held(12, 3), held(13, 4), held(25, 4), held(26, 5)]
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       on_progress=lambda step, done, rejoin: saved.append((step, rejoin)))
+    visited = []
+    for _ in states:
+        rt.tick(choose=False)
+        visited.append((rt.tracker.step_id, rt.tracker.memory.rejoin_to))
+    assert visited == [("turnin", None), ("rib", "turnin"), ("turnin", None),
+                       ("rib", "after"), ("after", None)]
+    assert ("rib", "turnin") in saved and ("rib", "after") in saved, "the way back was not saved"
+
+
+def test_a_rib_with_no_way_back_rejoins_the_first_step_not_done(tmp_path):
+    states = [held(0, 3), held(1, 4)]
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path))
+    rt.tick(choose=False)
+    rt.tracker.enter("rib", states[0])          # a rib entered with no rejoin point
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "turnin" and not rt.finished
