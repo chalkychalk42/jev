@@ -115,6 +115,27 @@ def test_the_objective_counter_is_believed_before_the_bags():
     assert "objective" in skill.detail
 
 
+def test_the_last_one_completing_the_objective_is_a_take():
+    """Measured 23 September: the eighth Tough Wolf Meat read 7/8 -> 1/1 (the complete
+    flag, once the counter stops painting), landed on the existing stack, and was
+    reported as "nothing" while the quest log said 8/8."""
+    readings = iter([(7, 8), (1, 1)])
+    last = [(7, 8)]
+
+    def progress():
+        last[0] = next(readings, last[0])
+        return last[0]
+
+    skill = _loot([HAVE, HAVE, HAVE])
+    assert skill.run(settle_s=1.0, progress=progress) is Looted.TOOK
+    assert "complete" in skill.detail
+
+
+def test_an_objective_that_was_already_complete_is_not_a_take():
+    skill = _loot([HAVE, HAVE, HAVE])
+    assert skill.run(settle_s=0.3, progress=lambda: (1, 1)) is Looted.NOTHING
+
+
 def test_money_counts_when_the_bags_cannot_see_it():
     """A copper or two comes off almost everything, and it fills no slot."""
     skill = _loot([HAVE, {**HAVE, "bags.money_silver": 5}])

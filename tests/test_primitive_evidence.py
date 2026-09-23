@@ -69,7 +69,7 @@ def test_hunt_records_selection_click_observation_and_loot_under_one_arm(tmp_pat
     health = [r["data"]["target.hp"] for r in rows if r["operation"] == "combat.observed"]
     assert health == [None, 1, 0.5, 0]
     objective = [r["data"] for r in rows if r["operation"] == "loot.objective"]
-    assert objective == [{"before": 0, "after": 1}]
+    assert objective == [{"before": [0, 1], "after": [1, 1]}]
     root = next(r for r in rows if r["operation"] == "hunt" and r["phase"] == "begin")
     children = [r for r in rows if r["phase"] == "begin" and r["operation"] in {"fight", "loot"}]
     assert len(children) == 2 and all(r["parent_operation_id"] == root["operation_id"] for r in children)

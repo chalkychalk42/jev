@@ -154,19 +154,29 @@ class Loot:
             self.detail = "no observed objective, money or bag-slot change after the click"
         return self._close_if_open(after) or (Looted.TOOK if why else Looted.NOTHING)
 
-    def _counter(self) -> int | None:
+    def _counter(self) -> tuple[int | None, int | None] | None:
         if self._progress is None:
             return None
-        have, _need = self._progress()
-        return have
+        return tuple(self._progress())
 
     def _what_changed(self, before: dict, after: dict) -> str:
-        """Which signal moved, in the order that they are worth believing."""
-        have_before, have_now = before.get("objective"), self._counter()
-        event("loot.objective", data={"before": have_before, "after": have_now})
-        if (have_before is not None and have_now is not None
-                and have_now > have_before):
-            return f"objective {have_before} -> {have_now}"
+        """Which signal moved, in the order that they are worth believing.
+
+        A completing objective can stop painting its counter and report only the quest's
+        complete flag, which the progress readers pass as 1/1: measured 23 September, the
+        eighth Tough Wolf Meat read 7/8 -> 1/1, a stack that already had its bag slot,
+        and "nothing" - while the quest log said 8/8. Short before and complete after
+        is the objective moving.
+        """
+        was, now = before.get("objective") or (None, None), self._counter() or (None, None)
+        event("loot.objective", data={"before": list(was), "after": list(now)})
+        (have_before, need_before), (have_now, need_now) = was, now
+        if have_before is not None and have_now is not None:
+            if need_now == need_before and have_now > have_before:
+                return f"objective {have_before} -> {have_now}"
+            if (need_before is not None and have_before < need_before
+                    and need_now is not None and have_now >= need_now):
+                return f"objective {have_before}/{need_before} -> complete"
 
         money_key = ("bags.money_copper" if before.get("bags.money_copper") is not None
                      and after.get("bags.money_copper") is not None else "bags.money_silver")

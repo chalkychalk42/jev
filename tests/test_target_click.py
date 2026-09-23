@@ -466,3 +466,34 @@ def test_without_a_selection_or_a_name_there_is_no_corpse_to_look_for(harness):
     result = _deselected_corpse_harness(harness).targeting.click_corpse()
     assert result.code is ClickCode.NO_TARGET
     assert harness.hid.moves == harness.hid.buttons == []
+
+
+def test_a_quest_giver_whose_ring_the_character_hides_is_clicked_under_its_plate(
+        harness, monkeypatch):
+    """Measured 23 September: Eagan Peltskinner stood just beyond the character with his
+    plate clear and his ring hidden by the character's own model, and the turn-in failed
+    with "no eligible target geometry". A fresh owning hover below the bar is his body."""
+    fixture = Path(__file__).parent / "fixtures" / "live-eagan-ring-hidden.npz"
+    with np.load(fixture, allow_pickle=False) as archive:
+        harness.frames = [archive["frame"]]
+    for name, implementation in harness.original_geometry.items():
+        monkeypatch.setattr(units, name, implementation)
+    assert units.candidates(harness.frames[0]) == (), "the ring bracket is really missing"
+    [first, *_] = units.body_candidates(harness.frames[0])
+    assert first.plate.colour is units.RingColour.GREEN and first.torso[1] > first.plate.bounds[3]
+    result = harness.run()
+    assert result.code is ClickCode.CLICKED
+    assert harness.hid.buttons == [((), {"right": True})]
+    assert isinstance(result.proposal, units.BodyProposal)
+
+
+def test_a_point_on_the_plate_itself_is_never_a_body_point():
+    fixture = Path(__file__).parent / "fixtures" / "live-eagan-ring-hidden.npz"
+    with np.load(fixture, allow_pickle=False) as archive:
+        frame = archive["frame"]
+    [first, *_] = units.body_candidates(frame)
+    _left, _top, right, bottom = first.plate.bounds
+    assert units.revalidate_body(frame, (round(first.plate.cx), bottom - 2)) is None
+    assert units.revalidate_body(frame, (round(first.plate.cx), bottom + 5)) is None
+    assert units.revalidate_body(frame, (right + 30, bottom + 40)) is None
+    assert units.revalidate_body(frame, first.torso) is not None

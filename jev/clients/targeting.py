@@ -594,7 +594,9 @@ class Targeting:
                 self._retain("target-unavailable", view)
                 return ClickResult(error, None, f"target observation: {view.fault}", attempts)
             observed_name = view.values.get("target.name_id")
-            proposals = units.candidates(view.frame, plate=plate)
+            # Ring brackets first; plate-anchored body points when the ring is hidden.
+            proposals = (*units.candidates(view.frame, plate=plate),
+                         *units.body_candidates(view.frame, plate=plate))
             candidate = next((p for p in proposals if p.torso not in tried), None)
             if candidate is None:
                 self._retain("target-no-proposal", view)
@@ -641,7 +643,8 @@ class Targeting:
                      and values.get("cursor.world") is True)
             dead = values.get("cursor.dead")
             local = cursor[0] - self.window_origin[0], cursor[1] - self.window_origin[1]
-            fresh = units.revalidate(current.frame, local, plate=plate)
+            fresh = (units.revalidate(current.frame, local, plate=plate)
+                     or units.revalidate_body(current.frame, local, plate=plate))
             if not owned or not isinstance(dead, bool):
                 last = ClickResult(ClickCode.UNKNOWN, cursor, "fresh ownership unavailable", attempts)
             elif dead:

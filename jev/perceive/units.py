@@ -654,6 +654,73 @@ def revalidate(frame: np.ndarray, point: Point, *, plate: Plate | None = None,
     return next((s for s in brackets if s.admits(point)), None)
 
 
+# A living unit's body lies under its plate. The ring bracket above needs the selection
+# ring, and an NPC standing just beyond the character has it hidden by the character's own
+# model: Eagan Peltskinner on 23 September, plate clear at 148 px, no ring component at
+# all, and the turn-in failed with "no eligible target geometry". A point this far below
+# the bar's bottom edge is not the nameplate, so a fresh hover owning the target there is
+# its body. Drops cover his torso, 30-80 px below the bar, before the character's head.
+BODY_MARGIN_PX = 12
+BODY_DROPS = (30, 55, 80, 110)
+
+
+@dataclass(frozen=True)
+class BodyProposal:
+    """A point under a plate; the plate is the only geometry, identity needs a hover."""
+
+    plate: Plate
+    torso: Point
+
+    def admits(self, point: Point) -> bool:
+        if self.plate.bounds is None:
+            return False
+        left, _, right, bottom = self.plate.bounds
+        return left <= point[0] < right and point[1] >= bottom + BODY_MARGIN_PX
+
+
+def _anchored_plates(frame: np.ndarray, colours: tuple[RingColour, ...],
+                     plate: Plate | None) -> tuple[list[Plate], list[Plate]]:
+    _, plates, excluded = _observations(frame, colours)
+    if plate is not None:
+        plates = [p for p in plates if p.colour == plate.colour
+                  and abs(p.cx - plate.cx) <= min(p.w, plate.w) / 2]
+    plates.sort(key=lambda p: abs(p.cx - frame.shape[1] / 2))
+    return plates, excluded
+
+
+def body_candidates(frame: np.ndarray,
+                    colours: tuple[RingColour, ...] = PROPOSAL_COLOURS, *,
+                    plate: Plate | None = None, limit: int = PROPOSAL_LIMIT
+                    ) -> tuple[BodyProposal, ...]:
+    """Points under whole plates, nearest the centre first; never an identity.
+
+    For when the ring bracket is missing. Excludes other bars and the interface, as
+    `candidates` does, and needs the same fresh hover ownership before any input.
+    """
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        raise ValueError("candidate limit must be a positive integer")
+    plates, excluded = _anchored_plates(frame, colours, plate)
+    out = []
+    for current in plates:
+        if current.bounds is None:
+            continue
+        for drop in BODY_DROPS:
+            point = (round(current.cx), current.bounds[3] + drop)
+            if _point_clear(point, frame, excluded):
+                out.append(BodyProposal(current, point))
+    return tuple(out[:limit])
+
+
+def revalidate_body(frame: np.ndarray, point: Point, *, plate: Plate | None = None,
+                    colours: tuple[RingColour, ...] = PROPOSAL_COLOURS) -> BodyProposal | None:
+    """A current plate the point lies under, recomputed from these pixels, or `None`."""
+    plates, excluded = _anchored_plates(frame, colours, plate)
+    if not _point_clear(point, frame, excluded):
+        return None
+    return next((BodyProposal(p, point) for p in plates
+                 if BodyProposal(p, point).admits(point)), None)
+
+
 def corpse_candidates(frame: np.ndarray,
                       colours: tuple[RingColour, ...] = PROPOSAL_COLOURS, *,
                       limit: int = PROPOSAL_LIMIT) -> tuple[CorpseSighting, ...]:

@@ -38,9 +38,13 @@ from jev.teacher.client import ClaudeSubscriptionClient, TeacherResult
 # Transient provider failures (an overloaded free tier, a rate limit) are retried inside
 # the same decision deadline, each attempt charged and recorded, waiting longer each time.
 # Measured on 23 Sep 2026: the free GLM tier answered "overloaded" to three requests two
-# seconds apart and served the next scene normally. Never beyond the decision deadline.
-MAX_TRANSIENT_RETRIES = 3
-BACKOFF_S = (2.0, 4.0, 6.0)
+# seconds apart and served the next scene normally; in the first live teaching session it
+# refused four in a row, while the old 2/4/6 s schedule left thirteen seconds of the
+# thirty unused. A retry starts only while a reply can still arrive: answers that came
+# took 3.8-7.5 s. Never beyond the decision deadline.
+BACKOFF_S = (2.0, 2.0, 3.0, 3.0, 4.0, 4.0)
+MAX_TRANSIENT_RETRIES = len(BACKOFF_S)
+REPLY_RESERVE_S = 5.0
 # A reply that breaks the contract is asked for once more, quoting the rejection. It is
 # the model's own answer, corrected against its own error - never repaired locally.
 MAX_REASKS = 1
@@ -338,7 +342,7 @@ class VisionTeacher:
                 if result.retry_after_s is not None and transient_retries < MAX_TRANSIENT_RETRIES:
                     wait = max(result.retry_after_s, BACKOFF_S[transient_retries])
                     remaining = timeout_s - (time.perf_counter() - started)
-                    if math.isfinite(wait) and wait < remaining - 1.0:
+                    if math.isfinite(wait) and wait + REPLY_RESERVE_S < remaining:
                         transient_retries += 1
                         await self.sleep(wait)
                         continue

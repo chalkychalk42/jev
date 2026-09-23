@@ -316,6 +316,35 @@ def test_transient_retries_are_bounded_and_permanent_failures_are_not_retried():
     assert result.status == "transport" and len(result.calls) == 1
 
 
+def test_retries_fill_the_deadline_but_never_start_without_time_for_a_reply():
+    """The first live session met four refusals in a row with thirteen of thirty seconds
+    unused. Retries continue while a reply can still arrive, and stop before that."""
+    from jev.play.teacher import BACKOFF_S, REPLY_RESERVE_S
+
+    busy = TeacherResult(status="transport", model="m", detail="overloaded", retry_after_s=2.0)
+    clock = [0.0]
+    slept = []
+
+    async def sleep(seconds):
+        slept.append(seconds)
+        clock[0] += seconds
+
+    client = FakeVision([busy] * 20)
+    import jev.play.teacher as teacher_module
+
+    real = teacher_module.time.perf_counter
+    teacher_module.time.perf_counter = lambda: clock[0]
+    try:
+        result = asyncio.run(VisionTeacher(client, sleep=sleep).decide(
+            observation(), PNG, controls=CONTROLS, timeout_s=30.0))
+    finally:
+        teacher_module.time.perf_counter = real
+    assert result.status == "transport"
+    assert slept == list(BACKOFF_S[:len(slept)])
+    assert sum(slept) + REPLY_RESERVE_S < 30.0, "waited into the time a reply needs"
+    assert len(result.calls) == len(slept) + 1 >= 6, "gave up with most of the deadline unused"
+
+
 def test_budget_denial_or_changed_image_does_not_make_model_call():
     client = FakeVision([])
     result = asyncio.run(VisionTeacher(client, reserve_call=lambda: False)
