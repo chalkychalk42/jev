@@ -272,6 +272,14 @@ class Fight:
         # better one just adds a second attacker.
         engaged = (in_combat and v.get("target.has") is True
                    and v.get("target.hp") is not None and v["target.hp"] > DEAD_HP)
+        # Already selected and alive, and the unit we came for: that is the fight. Whoever
+        # selected it - the tutor, a previous look - re-acquiring could only swap it for
+        # another of the same name, or for something else entirely.
+        chosen = (not engaged and name_id is not None and v.get("target.has") is True
+                  and v.get("target.name_id") == name_id
+                  and isinstance(v.get("target.hp"), (int, float)) and v["target.hp"] > DEAD_HP)
+        if chosen:
+            engaged = True
         if not engaged:
             # In combat the name filter loosens, but it does not come off. Dropping it
             # entirely meant that after killing a kobold the next plate could be a Timber

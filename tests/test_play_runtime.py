@@ -105,7 +105,9 @@ def composition(tmp_path, *, mode="teach", prediction="shadow", node=None, confi
     teacher, learner = Teacher(), Learner(tmp_path / "learning", mode=prediction)
     playing = PlayingBody(spine, recorder=recorder, store=tmp_path / "store",
                           screenshots=screenshots, mode=mode, teacher=teacher, learner=learner,
-                          config=config or PlayConfig(mode=mode, max_actions=2, outcome_wait_s=0.05,
+                          # The outcome loop stops as soon as the effect is seen; the ceiling
+                          # only matters on a loaded machine, where 0.05 s missed the paint.
+                          config=config or PlayConfig(mode=mode, max_actions=2, outcome_wait_s=0.5,
                                                       poll_s=0.01), start_learning=False)
     screenshots.start()
     skill = "GRIND_UNTIL" if node.kind is StepKind.QUEST_OBJECTIVE else "TRAVEL_TO"

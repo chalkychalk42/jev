@@ -35,7 +35,8 @@ def captured(recorder):
 def test_hunt_records_selection_click_observation_and_loot_under_one_arm(tmp_path, monkeypatch):
     monkeypatch.setattr("jev.clients.fight.time.sleep", lambda _: None)
     monkeypatch.setattr("jev.clients.fight.find_plates", lambda _: [PLATE])
-    values = iter([ALIVE, ALIVE, {**ALIVE, "target.hp": 0.5}, {**ALIVE, "target.hp": 0}])
+    nothing = {**ALIVE, "target.has": False, "target.name_id": None, "target.hp": None}
+    values = iter([nothing, ALIVE, {**ALIVE, "target.hp": 0.5}, {**ALIVE, "target.hp": 0}])
     reads = []
     def fight_read():
         value = next(values)
@@ -66,7 +67,7 @@ def test_hunt_records_selection_click_observation_and_loot_under_one_arm(tmp_pat
     assert names.index("selection.request") < names.index("engage.request") < names.index("loot.request")
     assert len(reads) == 4, "tracing must not consume extra radio observations"
     health = [r["data"]["target.hp"] for r in rows if r["operation"] == "combat.observed"]
-    assert health == [1, 1, 0.5, 0]
+    assert health == [None, 1, 0.5, 0]
     objective = [r["data"] for r in rows if r["operation"] == "loot.objective"]
     assert objective == [{"before": 0, "after": 1}]
     root = next(r for r in rows if r["operation"] == "hunt" and r["phase"] == "begin")

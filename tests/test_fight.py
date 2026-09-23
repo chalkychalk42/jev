@@ -1008,3 +1008,20 @@ def test_a_kill_that_clears_the_selection_is_proved_by_experience(monkeypatch):
     g._xp_start = (2, 0.618)
     g.last_hp = 0.2
     assert g._settle(gone) is Fought.LOST, "without experience a vanished unit is not a kill"
+
+
+def test_an_already_selected_unit_of_the_wanted_name_is_the_fight():
+    """Jev (or a previous look) selected the wolf; re-acquiring could only swap it."""
+    f = _fight([ALIVE])
+    f.acquire = lambda *a, **k: pytest.fail("re-acquired a unit that was already selected")
+    f.engage = lambda *_: False
+    assert f.run(1161, timeout_s=1) is Fought.NOT_VISIBLE
+    assert f._selected_name_id == 1161
+
+
+def test_a_selected_unit_of_another_name_is_not_the_fight():
+    seen = []
+    f = _fight([{**ALIVE, "target.name_id": 1648}])     # a rabbit
+    f.acquire = lambda name_id, **kw: seen.append(name_id) or Fought.NO_TARGET
+    assert f.run(1161, timeout_s=1) is Fought.NO_TARGET
+    assert seen == [1161]

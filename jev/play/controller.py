@@ -156,6 +156,23 @@ def finished(first: dict, current: dict, *, observed_effects=()) -> bool:
     return False
 
 
+# Measured progress toward the guide objective that closes one episode and opens the next.
+# An objective like "eight pieces of meat" outlasts any bounded run of actions; if only its
+# completion counted, every episode that earned three pieces before its budget ran out
+# would teach nothing. Each verified unit of progress is its own successful episode.
+PROGRESS_EFFECTS = frozenset({"quest_progress", "quest_accepted", "quest_cleared"})
+
+
+def progressed(first: dict, current: dict) -> bool:
+    """A durable, measured step toward the objective since this episode began."""
+    effects, _ = measured_effects(first, current)
+    if PROGRESS_EFFECTS & set(effects):
+        return True
+    # A level objective is advanced by kills: experience is its counter.
+    return (first.get("context", {}).get("until_level") is not None
+            and "target_dead" in effects)
+
+
 class PlayController:
     def __init__(self, *, observer, executor, teacher, learner, journal, controls: dict,
                  controls_fingerprint: str, knowledge_fingerprint: str,
@@ -202,10 +219,34 @@ class PlayController:
             self.learning_error = f"{type(exc).__name__}: {exc}"
             return None
 
+    def _close(self, episode_id, first, current, result: Result, *, count: int,
+               started: float, verified: bool) -> None:
+        """Write one episode's measured outcome and hand it to the learner."""
+        final = {"episode_id": episode_id, "t": time.time(), "elapsed_s": time.time() - started,
+                 "actions": count, "outcome": result.outcome.value,
+                 "code": result.code, "detail": result.detail,
+                 "first_observation_id": first.id if first else None,
+                 "last_observation_id": current.id if current else None}
+        if first and current:
+            effects, progress = measured_effects(first.data, current.data)
+            if verified:
+                progress = max(progress, 1.0)  # an independently verified guide/service predicate
+            final.update(effects=effects, progress=progress,
+                         verified=verified,
+                         success=result.outcome is SkillOutcome.SUCCEEDED,
+                         synthetic=first.data.get("synthetic", False))
+        self.journal.append("episodes", final)
+        if self.learner is not None and hasattr(self.learner, "finish_episode"):
+            try:
+                self.learner.finish_episode(episode_id, run_id=self.journal.run_id, outcome=final)
+            except Exception as exc:
+                self.learning_error = f"{type(exc).__name__}: {exc}"
+
     def run(self, arm, checkpoint) -> Result:
         first = current = None
         result = Result(SkillOutcome.PREEMPTED, "teaching episode interrupted", "preempted")
-        episode_id = arm.arm_id or uuid.uuid4().hex
+        base_id = episode_id = arm.arm_id or uuid.uuid4().hex
+        segment = 0
         count = 0
         goal_verified = False
         observed_effects = set()
@@ -350,6 +391,17 @@ class PlayController:
                     result = Result(SkillOutcome.SUCCEEDED,
                                     "bounded loot attempt finished without an observed take", "nothing")
                     return result
+                if progressed(first.data, current.data):
+                    # A verified unit of objective progress: this episode succeeded and the
+                    # objective continues as a new one from the current observation.
+                    self._close(episode_id, first, current,
+                                Result(SkillOutcome.SUCCEEDED, "verified objective progress",
+                                       "progress"), count=count, started=started, verified=True)
+                    segment += 1
+                    episode_id = f"{base_id}:{segment}"
+                    first, count, observed_effects, started = current, 0, set(), time.time()
+                    no_effect = 0
+                    continue
                 useful = (outcome["success"] and expected not in {"observed", "scene_changed", "moved"})
                 no_effect = 0 if useful else no_effect + 1
                 if no_effect >= self.config.max_no_effect:
@@ -359,22 +411,5 @@ class PlayController:
             result = Result(SkillOutcome.TIMED_OUT, "teaching action budget exhausted", "teaching_stalled")
             return result
         finally:
-            final = {"episode_id": episode_id, "t": time.time(), "elapsed_s": time.time() - started,
-                     "actions": count, "outcome": result.outcome.value,
-                     "code": result.code, "detail": result.detail,
-                     "first_observation_id": first.id if first else None,
-                     "last_observation_id": current.id if current else None}
-            if first and current:
-                effects, progress = measured_effects(first.data, current.data)
-                if goal_verified:
-                    progress = max(progress, 1.0)  # an independently verified guide/service predicate
-                final.update(effects=effects, progress=progress,
-                             verified=goal_verified,
-                             success=result.outcome is SkillOutcome.SUCCEEDED,
-                             synthetic=first.data.get("synthetic", False))
-            self.journal.append("episodes", final)
-            if self.learner is not None and hasattr(self.learner, "finish_episode"):
-                try:
-                    self.learner.finish_episode(episode_id, run_id=self.journal.run_id, outcome=final)
-                except Exception as exc:
-                    self.learning_error = f"{type(exc).__name__}: {exc}"
+            self._close(episode_id, first, current, result, count=count, started=started,
+                        verified=goal_verified)

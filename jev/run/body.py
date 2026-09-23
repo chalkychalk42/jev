@@ -328,8 +328,27 @@ class LiveBody:
         plan = service(state, context=self.policy_context)
         return plan.decision.why if plan else None
 
+    def _objective_name(self) -> int | None:
+        """The creature the armed guide step wants, when it names one; else None."""
+        node = self._node()
+        if node is None:
+            return None
+        target = node
+        if node.objective_targets:
+            self._quest_ids()
+            with self.client._capturing:
+                log = self.client.log.complete
+            selection = select_objective(node, log)
+            target = selection.target
+        if target is None or target.target_kind != "creature" or not target.target_name:
+            return None
+        return name_id(target.target_name)
+
     def _fight(self, state) -> Result:
-        outcome = self.fight.run(None)
+        # Inside an objective the fight is for its creature, not the nearest plate: the
+        # first live run's nearest plate was a rabbit. Self-defence still takes whatever
+        # is attacking us (Fight loosens the name in combat, never drops it).
+        outcome = self.fight.run(self._objective_name())
         if outcome.ok:
             looted = self.loot.run(progress=self._progress, anchor=self.fight.last_plate,
                                    name_id=self.fight.killed_name_id)

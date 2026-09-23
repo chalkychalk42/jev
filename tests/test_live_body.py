@@ -376,3 +376,28 @@ def test_reconnect_invalidates_camera_before_session_work_even_when_reconnect_fa
     assert hid.move_by.call_count == 2, "reconnecting performed speculative calibration"
     assert b.loot.level() is True
     assert hid.move_by.call_count == 4
+
+
+def test_a_fight_inside_an_objective_is_for_its_creature():
+    """Delegated COMBAT_PROFILE inside the wolf objective asked for no name and could pick
+    the nearest plate - a rabbit on the first live run."""
+    b = body(StepKind.QUEST_OBJECTIVE)
+    asked = []
+    b.fight = SimpleNamespace(run=lambda name_id: asked.append(name_id) or Fought.NOT_VISIBLE,
+                              detail="not visible", last_plate=None, killed_name_id=None)
+    b._objective_name = lambda: 2864
+    b._fight(seen())
+    assert asked == [2864]
+
+
+def test_the_objective_name_is_the_armed_steps_creature_or_none():
+    from jev.perceive.radio_frame import name_id
+
+    creature = body(StepKind.QUEST_OBJECTIVE)
+    assert creature._objective_name() == name_id("NPC")
+    service = body(StepKind.QUEST_OBJECTIVE)
+    service.graph = Graph(graph_id="g", faction="alliance", entry="quest", nodes=(
+        service.graph.nodes[0].model_copy(update={"target_kind": "gameobject"}),))
+    assert service._objective_name() is None, "an object is not a creature to fight"
+    service.arm = None
+    assert service._objective_name() is None

@@ -335,3 +335,44 @@ def test_rest_completion_requires_known_resource_type(power_type, wire_type, pow
                               "vitals.power_type": wire_type},
                    "state": {"vitals": {"power_type": power_type}}}
     assert finished(observation, observation) is ready
+
+
+def test_each_verified_unit_of_objective_progress_is_its_own_successful_episode(tmp_path):
+    """Eight pieces of meat outlast any bounded run of actions; three earned before a
+    budget ran out must still teach something. Each gain closes a successful episode, and
+    the arm itself ends only when the guide's own predicate says the objective is done."""
+    quests = {"count": 0}
+    grind = replace(arm(), decision=arm().decision.model_copy(update={"skill": "GRIND_UNTIL"}))
+    stride = ({"kind": "key", "control": "move_forward", "duration_s": 0.3}, None)
+    env, _, journal, controller = setup(tmp_path, [stride] * 8, max_actions=3, max_no_effect=10)
+    original_observe, original_execute = env.observe, env.execute
+
+    def observe(arm_, *, retain=True):
+        observation = original_observe(arm_, retain=retain)
+        observation.data["state"]["quests"] = [{
+            "quest_id": 33, "complete": quests["count"] >= 8,
+            "objectives": [{"counter_index": 0, "have": quests["count"], "need": 8}]}]
+        observation.data["context"]["quest_id"] = 33
+        return observation
+
+    def execute(action, expected=None):
+        quests["count"] += 1                     # every stride earns a piece, for the test
+        return original_execute(action, expected)
+
+    env.observe, env.execute = observe, execute
+    result = controller.run(grind, lambda: None)
+    episodes = [json.loads(line) for line in
+                (journal.directory / "play-episodes.jsonl").read_text().splitlines()]
+    progress = [e for e in episodes if e["code"] == "progress"]
+    assert len(progress) == 7 and all(e["success"] and e["verified"] for e in progress)
+    assert [e["episode_id"] for e in progress[:3]] == ["episode", "episode:1", "episode:2"]
+    assert all(e["progress"] >= 1 and e["actions"] == 1 for e in progress)
+    assert episodes[-1]["code"] == "done" and episodes[-1]["episode_id"] == "episode:7"
+    assert result.outcome is SkillOutcome.SUCCEEDED and result.code == "done"
+
+
+def test_an_episode_without_progress_still_ends_on_its_action_budget(tmp_path):
+    stride = ({"kind": "key", "control": "move_forward", "duration_s": 0.3}, None)
+    env, _, _journal, controller = setup(tmp_path, [stride] * 3, max_actions=3, max_no_effect=10)
+    result = controller.run(arm(), lambda: None)
+    assert result.code == "teaching_stalled" and len(env.actions) == 3
