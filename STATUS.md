@@ -1909,3 +1909,31 @@ log. Installed to the client (loads at the next login); the old save moved to Te
 key, `var/playheads/character-26a9640b.json`.
 
 NEXT: restart the client when the PC is free, then a fresh level 1 human paladin.
+
+## 2026-09-24 00:45 — overnight debrief 1: Testvvi, a fresh level 1
+
+The operator made a fresh level 1 human paladin, Testvvi, and handed over the night.
+Per-character saves (V70) worked live from the first second: its own file, started at
+quest 783, and Testvii's save untouched.
+
+Progress (sessions 1-6, ~1h20): level 1 to 3, quests 783, 7, 5261 and 33 done. Session 1
+alone taught the motor learner 29 qualified examples (acquire 15/60, approach 13/60,
+interact 11/60 after it). The V68/V69 safeguards fired live: the repeat guard handed
+three Tab loops to Jev's routine, and the watchdog failed stalled steps into their grind.
+
+Found and fixed tonight, all general:
+- the learner's store lock timed out on Windows (V74, and the live run is now left to its
+  own controller, the idle record scan skipped);
+- a kill whose selection moves on was reported lost and never looted (V73);
+- hunts stood on rings round a centre the mobs were not near: 38 empty looks in one
+  session. Hunts now walk the target's own spawn points (V72), from a table beside the
+  guide so the guide's bytes, and the learner's corpus, are untouched;
+- the motor learner restarted its corpus at every guide change (V71): tied to bindings now;
+- the blocked-spot memory (V66) marked Northshire Abbey's halls blocked after single bumps
+  and routed round its only doorway for ten minutes. Spots now need two blocks, and the
+  four bad ones were cleared;
+- two Defias Thugs side by side made every nameplate proof fail and the character died
+  not fighting back. An attacker in melee is now fought by the client's own facing errors.
+
+NEXT: keep the loop running; the class trainer (a fresh paladin has no Devotion Aura and
+never learns a rank) as the background project.
