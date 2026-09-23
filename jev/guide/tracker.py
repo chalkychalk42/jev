@@ -322,6 +322,24 @@ class Tracker:
         # resolve. It is exactly the sort of thing the coach exists for.
         return None
 
+    def expire(self) -> bool:
+        """Run the current step's clock out, so its own timeout edge fails it.
+
+        For the run's watchdog: a step that has earned nothing for a whole window has
+        stalled whatever its clock says. Inside Echo Ridge Mine a character stood on a
+        stack of crates, walled in, while every fight came back unreachable and the step's
+        clock, stopped for each walk, was not near its ten minutes; the watchdog then
+        ended the run rather than let the step fail into the grind it was built to take
+        (run 20260923T191946-2b79ed). `False` when there is no step to expire.
+        """
+        node = self._node()
+        if node is None:
+            return False
+        limit = max([node.timeout_s] + [e.value for e in node.on_fail
+                                        if e.when is FailWhen.TIMEOUT and e.value])
+        self.memory.working_s = max(self.memory.working_s, limit) + 1.0
+        return True
+
     def is_blocked(self, state: State) -> bool:
         node = self._node()
         if node is None:

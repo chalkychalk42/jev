@@ -94,6 +94,17 @@ def test_a_timeout_takes_the_edge_it_was_given():
     assert v.event is Event.FAIL and v.goto == "rib"
 
 
+def test_an_expired_step_fails_by_its_own_timeout_edge_on_the_next_tick():
+    """The watchdog's first answer to a stalled run (run 20260923T191946-2b79ed): the
+    step fails into the grind it was built to take, instead of the run stopping."""
+    tr = Tracker(_graph(), "accept")
+    tr.enter("accept", _s(t=0.0))
+    assert tr.tick(_s(t=1.0)).event is not Event.FAIL
+    assert tr.expire()
+    v = tr.tick(_s(t=2.0))
+    assert v.event is Event.FAIL and v.goto == "rib"
+
+
 def test_deaths_on_a_step_eventually_route_around_it():
     tr = Tracker(_graph(), "do")
     tr.enter("do", _with_quest())

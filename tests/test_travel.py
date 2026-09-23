@@ -231,3 +231,74 @@ def test_input_refused_is_reported_as_refused_not_as_stuck():
     result = t.to((0.9, 0.9), timeout_s=12.0, allow_detour=False)
     assert result.outcome is Outcome.REFUSED
     assert "focus" in result.detail
+
+
+def test_a_blocked_leg_no_detour_gets_past_is_remembered_and_routed_round(monkeypatch):
+    """Echo Ridge Mine (runs 20260923T184413-a386ff, ...190938-3b2dd7): the mesh stepped
+    onto the mine's platform across a log, and the pocket beside it defeated every
+    detour. The spot is blocked where the route met it, and the planner is asked once
+    more for a way that stays clear of it - which the mesh had all along."""
+    from jev.guide.coords import map_to_world, world_to_map
+    from jev.guide.path import Path, PathStatus
+    from jev.guide.route_memory import AvoidingQuery, RouteMemory
+
+    def world(mx, my):
+        x, y = map_to_world(mx, my, ELWYNN)
+        return (x, y, 90.0)
+
+    start, crossing, goal = (0.5000, 0.5000), (0.5000, 0.4950), (0.5000, 0.4800)
+    front = (0.5040, 0.4990)                       # the platform's open front
+
+    def side(point):
+        m = world_to_map(point[0], point[1], ELWYNN)
+        return "platform" if m[1] < 0.4951 or m[0] > 0.5030 else "slope"
+
+    class Mesh:
+        """Two ways from the slope onto the platform, the crossing and the front, and it
+        takes whichever is shorter. It does not know about the log."""
+
+        def path(self, map_id, a, b):
+            if side(a) == side(b):
+                return Path(PathStatus.COMPLETE, (a, b))
+            portal = min((world(*crossing), world(*front)),
+                         key=lambda p: math.dist(a[:2], p[:2]) + math.dist(p[:2], b[:2]))
+            return Path(PathStatus.COMPLETE, (a, portal, b))
+
+        def close(self):
+            pass
+
+    memory = RouteMemory()
+    query = AvoidingQuery(Mesh(), memory)
+    walked = []
+    here = [start]
+
+    class Scripted(Travel):
+        def to(self, target, **kw):
+            walked.append(tuple(round(v, 4) for v in target))
+            blocked = math.dist(target, goal) < 1e-6 and math.dist(here[0], crossing) < 1e-6
+            if blocked:                              # the log: every walk at it stops
+                self.last_stuck_at = (0.4999, 0.4952)
+                return self._result(Outcome.STUCK, here[0], here[0], target, 1.0,
+                                    "blocked on a planned leg; re-plan from here")
+            here[0] = target
+            return self._result(Outcome.ARRIVED, here[0], target, target, 1.0, "")
+
+        def _detour(self, where):
+            self.detours += 1
+
+    travel = Scripted(hid=None, bounds=ELWYNN, read_pos=lambda: here[0])
+    monkeypatch.setattr(travel, "position", lambda: here[0])
+    first = query.path(0, world(*start), world(*goal))
+
+    def replan(position):
+        return query.path(0, world(*position), world(*goal))
+
+    result = travel.follow(first, replan=replan, memory=memory, max_replans=0)
+    assert result.outcome is Outcome.ARRIVED, result.detail
+    assert "blocked spot" in result.detail
+    [spot] = memory.blocks(0)
+    assert math.dist(world_to_map(spot.x, spot.y, ELWYNN), crossing) < 0.0005, \
+        "blocked where the route met the log, not where the character slid to"
+    assert math.dist(here[0], goal) < 1e-6
+    assert math.dist(walked[-1], goal) < 1e-6
+    assert math.dist(walked[-2], crossing) > 1e-4, "the way round went by the crossing again"

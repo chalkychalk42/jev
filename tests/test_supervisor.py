@@ -509,3 +509,44 @@ def test_a_lost_defensive_fight_is_a_death_not_a_failed_attempt_at_the_step(
         assert supervisor.stopped.is_set() is stops
     finally:
         supervisor.close()
+
+
+def test_a_stalled_step_is_failed_over_before_the_run_is_stopped(tmp_path):
+    """Run 20260923T191946-2b79ed: a character stood on crates in Echo Ridge Mine while
+    every fight came back unreachable, and the watchdog stopped the run with the quest
+    at 1/12. The first window without progress now fails the step into its own edge,
+    and only a second one stops the run."""
+    from jev.clients.source import ScriptedSource
+    from jev.guide.graph import FailEdge, FailWhen, Graph, Node
+    from jev.learn.episode import Recorder
+    from jev.orch.runtime import ClientRuntime
+    from jev.run.watchdog import Watchdog
+    from jev.world.state_v1 import StepKind
+
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    g = Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), timeout_s=600.0,
+             on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=600, goto="rib"),), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1,
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(1, 10), **base),
+    ))
+    rt = ClientRuntime("c", g, ScriptedSource([seen(t) for t in range(40)]), Recorder(tmp_path))
+    body = Body()
+    lines = []
+    supervisor = Supervisor(rt, body, say=lines.append, watchdog=Watchdog(no_progress_s=10))
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        for t in range(1, 12):
+            supervisor.step(t)
+        assert rt.tracker.step_id == "rib", "the stalled step did not fail over"
+        assert supervisor.failure is None and not supervisor.stopped.is_set()
+        assert any("failing it over" in line for line in lines)
+        for t in range(12, 23):
+            supervisor.step(t)
+        assert "no quest or experience" in (supervisor.failure or "")
+    finally:
+        body.allow_finish.set()
+        supervisor.close()

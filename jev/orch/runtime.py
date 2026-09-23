@@ -222,6 +222,14 @@ class ClientRuntime:
                     and prev.decision.goal == plan.goal
                     and prev.decision.params == plan.params)
 
+    def expire_step(self) -> bool:
+        """The watchdog's first answer to a stalled run: fail the step being worked.
+
+        Its own `on_fail` edge decides where to, on the next tick - the grind for the
+        character's level, which earns what the step could not.
+        """
+        return False if self.finished else self.tracker.expire()
+
     def finish(self, outcome: SkillOutcome, detail: str = "", *, state: State | None = None) -> None:
         """The body reports its measured outcome once, against the original arm."""
         if self.armed is not None and self.last_state is not None:

@@ -19,12 +19,32 @@ from jev.world.state_v1 import Char, GuidePos, Sense
 
 
 def test_fail_rib_rejoin_cycles_cannot_reset_the_no_progress_deadline():
+    """The first window fails the step over; step changes alone never count as progress,
+    so a second window without any stops the run."""
     watch = Watchdog(no_progress_s=10)
     state = seen(char=Char(level=5, xp_pct=0.2), guide=GuidePos(step_id="objective"))
     watch.observe(state, 0)
     for now, step in ((4, "rib"), (8, "turnin"), (10, "objective")):
         watch.observe(state.model_copy(update={"guide": GuidePos(step_id=step)}), now)
+    assert watch.escalate and watch.failure is None, "the first window fails the step over"
+    watch.escalate = False
+    for now, step in ((14, "rib"), (18, "turnin"), (20, "objective")):
+        watch.observe(state.model_copy(update={"guide": GuidePos(step_id=step)}), now)
     assert "no quest or experience" in watch.failure
+    assert not watch.escalate, "one fail-over per stall"
+
+
+def test_progress_after_a_fail_over_earns_a_fresh_one():
+    watch = Watchdog(no_progress_s=10)
+    state = seen(char=Char(level=5, xp_pct=0.2), guide=GuidePos(step_id="objective"))
+    watch.observe(state, 0)
+    watch.observe(state, 10)
+    assert watch.escalate
+    watch.escalate = False
+    grinding = state.model_copy(update={"char": Char(level=5, xp_pct=0.3)})
+    watch.observe(grinding, 15)                               # the rib earned experience
+    watch.observe(grinding, 25)
+    assert watch.escalate and watch.failure is None
 
 
 def test_last_reconnect_is_allowed_to_finish_before_budget_exhaustion(tmp_path):

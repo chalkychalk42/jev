@@ -54,6 +54,15 @@ MIN_TRAVEL_FOR_HEADING = 1.5      # yards; below this the angle is noise
 MIN_PULSE_S = 0.05
 MAX_PULSE_S = 0.45                # one correction, not a whole swing
 
+# Near the point, a large heading error is turned off standing still. Turned while walking,
+# a pulse is an arc of three yards before the new heading can even be measured, and within
+# a few yards of the point the arcs close into a circle round it. Simulated: a point four
+# to eight yards off at sixty to ninety degrees was circled until the walk timed out, 16
+# walks of 72, moving the whole time so no stuck test fired; a character following a
+# learned passage circled one for 295 s.
+PIVOT_YARDS = 10.0
+PIVOT_ERROR = math.radians(60.0)
+
 # A detour whose own walk covered less than this found a dead end on its side.
 DETOUR_BLOCKED_YARDS = 3.0
 
@@ -141,6 +150,8 @@ class Travel:
     last_unstick: str = field(default="", init=False)
     # Where the last `_detour` left the character: the escape a blocked spot is learned by.
     last_detour_end: tuple[float, float] | None = field(default=None, init=False)
+    # Where the last stuck event stopped the character, before anything moved it.
+    last_stuck_at: tuple[float, float] | None = field(default=None, init=False)
     # Positions of the escape in progress since its last stuck event, while one is traced.
     _trace: list | None = field(default=None, init=False)
     _track: deque = field(default_factory=lambda: deque(maxlen=64), init=False)
@@ -302,6 +313,7 @@ class Travel:
                             time.perf_counter() - t0,
                             "the game window lost focus; nothing was pressed")
                     self.stuck_events += 1
+                    self.last_stuck_at = here
                     if pulse_key is not None:
                         self.hid.key_up(pulse_key)
                         pulse_key = None
@@ -348,6 +360,9 @@ class Travel:
                         want = self.bearing(here, target)
                         if want is not None:
                             error = _wrap(want - heading)
+                            if abs(error) > PIVOT_ERROR and remaining < PIVOT_YARDS:
+                                self._pivot(error)
+                                continue
                             if abs(error) > self._deadband(self.distance(here, target)):
                                 pulse_len = min(MAX_PULSE_S,
                                                 abs(error) / max(self.turn_rate, 0.1))
@@ -365,7 +380,7 @@ class Travel:
     def follow(self, path, *, timeout_s: float = 300.0,
                abort: Callable[[], bool] | None = None,
                replan: Callable[[tuple[float, float]], object] | None = None,
-               max_replans: int = 3, memory=None) -> TravelResult:
+               max_replans: int = 3, memory=None, rounds: int = 2) -> TravelResult:
         """Walk a planned route, one waypoint at a time.
 
         Sequencing only. The follower is unchanged and learns nothing new about geometry:
@@ -421,6 +436,7 @@ class Travel:
             last = self.to(leg, timeout_s=remaining, abort=abort, allow_detour=False)
 
             if last.outcome is Outcome.STUCK:
+                stuck_at = self.last_stuck_at
                 # Blocked. Ask the planner from here instead of improvising: the mesh
                 # knows the way round, and a follower that invents one is the thing this
                 # whole file stopped doing.
@@ -467,6 +483,25 @@ class Travel:
                             continue           # past it; the planner has the route back
                     finally:
                         self._trace = None
+                    # Nor did the wall heuristic get past: a spot with no way round a
+                    # detour can find, like the pocket under Echo Ridge Mine's pit prop.
+                    # Remember it as blocked and ask the planner once more, for a route
+                    # that stays clear of it (`AvoidingQuery`).
+                    if (last.outcome is Outcome.STUCK and memory is not None
+                            and replan is not None and rounds > 0 and stuck_at is not None):
+                        rounded = self._round_blocked(
+                            path, legs[i - 1], leg, stuck_at, memory, replan,
+                            timeout_s - (time.perf_counter() - t0), abort,
+                            max_replans - replans, rounds - 1)
+                        if rounded is not None:
+                            self.arrival_yards = exact
+                            return TravelResult(
+                                outcome=rounded.outcome, start=legs[0], end=rounded.end,
+                                remaining_yards=self._short_by(rounded.end, legs),
+                                elapsed_s=time.perf_counter() - t0, turns=self.turns,
+                                stuck_events=self.stuck_events, detours=self.detours,
+                                turn_rate_deg_s=rounded.turn_rate_deg_s,
+                                detail=f"round a blocked spot at leg {i}: {rounded.detail}".strip())
                     self.arrival_yards = exact
                     return self._result(last.outcome, legs[0], last.end, leg,
                                         time.perf_counter() - t0,
@@ -476,7 +511,7 @@ class Travel:
                     rest = self.follow(
                         fresh, timeout_s=timeout_s - (time.perf_counter() - t0),
                         abort=abort, replan=replan, max_replans=max_replans - replans,
-                        memory=memory,
+                        memory=memory, rounds=rounds,
                     )
                     return TravelResult(
                         outcome=rest.outcome, start=legs[0], end=rest.end,
@@ -535,6 +570,35 @@ class Travel:
         if stuck is not None and via is not None:
             memory.learn(self.bounds.map_id, stuck, via)
 
+    def _round_blocked(self, path, previous, leg, stuck_at, memory, replan, timeout_s,
+                       abort, max_replans, rounds) -> TravelResult | None:
+        """Block the spot where the route met what stopped it, and follow a way round.
+
+        The spot is on the route, not where the character ended up: pressed into the log
+        at Echo Ridge Mine it slid three yards along it into the pocket before the stuck
+        test fired. So it is the point of the blocked leg nearest where it stopped, at the
+        route's own height there. `None` when the planner has no other way to offer.
+        """
+        a = map_to_world(previous[0], previous[1], self.bounds)
+        b = map_to_world(leg[0], leg[1], self.bounds)
+        at = map_to_world(stuck_at[0], stuck_at[1], self.bounds)
+        if a is None or b is None or at is None:
+            return None
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length2 = dx * dx + dy * dy
+        t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((at[0] - a[0]) * dx
+                                                        + (at[1] - a[1]) * dy) / length2))
+        spot = (a[0] + t * dx, a[1] + t * dy)
+        z = min(path.points, key=lambda p: math.dist(p[:2], spot))[2] if path.points else 0.0
+        memory.block(self.bounds.map_id, (spot[0], spot[1], z), heading=(dx, dy))
+        position = self.position()
+        fresh = replan(position) if position is not None else None
+        if (fresh is None or not getattr(fresh, "usable", False)
+                or self._same_answer(fresh, position, leg)):
+            return None
+        return self.follow(fresh, timeout_s=timeout_s, abort=abort, replan=replan,
+                           max_replans=max_replans, memory=memory, rounds=rounds)
+
     def _same_answer(self, fresh, position, leg) -> bool:
         """Would following `fresh` walk straight back into the leg that just blocked?
 
@@ -549,7 +613,10 @@ class Travel:
             return False
         ahead = [w for w in (world_to_map(pt[0], pt[1], self.bounds)
                              for pt in fresh.points) if w is not None]
-        ahead = [w for w in ahead if self.distance(w, position) > self.arrival_yards]
+        # Already there by the tight radius, not the leg's: a final leg arrives within
+        # talking distance, and a way round that starts four yards off is a new way.
+        near = min(self.arrival_yards, self.waypoint_arrival_yards)
+        ahead = [w for w in ahead if self.distance(w, position) > near]
         if not ahead:
             return True                    # nowhere left to go, so nothing new to try
         return self.distance(ahead[0], leg) <= self.waypoint_arrival_yards
@@ -592,6 +659,15 @@ class Travel:
             self._detour_side *= -1
             self._sweep *= 2
             self._sweep_left = self._sweep
+
+    def _pivot(self, error: float) -> None:
+        """Stop, turn the whole error standing still, and walk on to measure it afresh."""
+        key = "d" if error > 0 else "a"
+        self.hid.key_up("w")
+        self.hid.hold(key, abs(error) / max(self.turn_rate, 0.1), tick_s=self.sample_s)
+        self._track.clear()                  # the heading it had is not the one it has
+        self.turns += 1
+        self.hid.key_down("w")
 
     def _unstick(self) -> bool:
         """Try the things that actually free a character, cheapest first.

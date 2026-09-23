@@ -1886,4 +1886,13 @@ OPEN: routes into Echo Ridge Mine can still cross the log (the mesh does not kno
 the teaching watchdog (300 s without progress) always stops a stuck objective before its
 own 600 s timeout fails it into a rib.
 
-NEXT: session 17 inside the mine.
+Session 17 (`runs/20260923T191946-2b79ed`), inside the mine: the first Kobold Laborer
+killed and looted (1/12). The tutor then pressed Tab for minutes, the scripted hunt
+climbed onto crates in a nook where no strafe moved it, and the watchdog stopped the run.
+
+Fixed offline (V66-V68): blocked spots and plans that avoid them, a standing turn that
+ends circling near a point (a real bug the simulation found: 16 of 72 short walks), the
+watchdog failing a stalled step into its rib before stopping, and backing off when a
+sidestep goes nowhere.
+
+NEXT: debrief with the operator before session 18.

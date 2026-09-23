@@ -137,3 +137,20 @@ def test_a_walk_that_has_spent_its_re_plans_still_rounds_the_next_obstacle(monke
                      -math.pi / 2, monkeypatch=monkeypatch)
     assert result.outcome is Outcome.ARRIVED, result.detail
     assert result.stuck_events >= len(walls), "a wall was never met"
+
+
+@pytest.mark.parametrize("yards", [4.0, 6.0, 8.0])
+@pytest.mark.parametrize("bearing", [60, 90, 270, 300])
+def test_a_point_close_and_to_one_side_is_reached_not_circled(yards, bearing, monkeypatch):
+    """Turned while walking, each correction is an arc of three yards before the new
+    heading can be measured, and near the point the arcs closed into a circle: a point
+    four to eight yards off at sixty to ninety degrees was circled until the walk timed
+    out, 16 walks of 72, and a learned passage's point was circled for 295 s."""
+    world = WalkWorld(x=X0, y=Y0, heading=0.0, width_yards=W, height_yards=H)
+    monkeypatch.setattr(travel_module, "time", SimTime(world))
+    target = ((X0 + yards * math.cos(math.radians(bearing))) / W,
+              (Y0 + yards * math.sin(math.radians(bearing))) / H)
+    travel = Travel(hid=SimHid(world), bounds=ELWYNN, read_pos=world.map_position,
+                    arrival_yards=3.0)
+    result = travel.to(target, timeout_s=60.0)
+    assert result.outcome is Outcome.ARRIVED and result.elapsed_s < 8.0

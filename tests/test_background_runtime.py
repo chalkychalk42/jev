@@ -124,6 +124,9 @@ def test_watchdog_uses_progress_not_motion_or_unread_fields():
     watch.observe(s, 0)
     watch.observe(s.model_copy(update={"quests": None, "char": Char()}), 5)
     watch.observe(s, 10)
+    assert watch.escalate and watch.failure is None, "the first window fails the step over"
+    watch.observe(s.model_copy(update={"quests": None, "char": Char()}), 15)
+    watch.observe(s, 20)
     assert "no quest or experience" in watch.failure
     watch = Watchdog(no_progress_s=10)
     watch.observe(s, 0)

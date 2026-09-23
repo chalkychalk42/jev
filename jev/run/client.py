@@ -36,6 +36,7 @@ from jev.guide.coords import (
     world_to_map,
 )
 from jev.guide.path import PathQuery
+from jev.guide.route_memory import AvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
 from jev.world.state_v1 import Pos, SenseFault
@@ -340,7 +341,8 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     zones_path = str(Path(__file__).resolve().parents[2] / "data/zones-tbc-243.json")
     client.coordinate_zones = bounds_by_radio_id(zones_path) if zones is None else zones
     client.coordinate_names = names_by_radio_id(zones_path) if zone_names is None else zone_names
-    client.query = query
+    # Every plan, first and re-plan, stays clear of the spots walking found blocked.
+    client.query = query if route_memory is None else AvoidingQuery(query, route_memory)
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards)

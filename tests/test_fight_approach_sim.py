@@ -194,3 +194,21 @@ def test_which_side_the_first_sidestep_takes_is_drawn_per_fight():
         fight.run(WOLF)
         sides.add(fight._side)
     assert sides == {1, -1}
+
+
+def test_a_sidestep_that_goes_nowhere_backs_off_the_way_it_came(monkeypatch):
+    """Walled on both sides of a post, as on the crates in Echo Ridge Mine: strafing moves
+    nothing, and the character backs off instead of strafing into rock again."""
+    walls = [Segment(2.0, 0.8, 9.0, 0.8), Segment(2.0, -0.8, 9.0, -0.8)]
+    world = WalkWorld(x=0.0, y=0.0, heading=0.0, obstacles=(PIT_PROP, *walls))
+    target = Target(world, 20.0, 0.0)
+    monkeypatch.setattr(fight_module, "time", SimTime(world))
+    fight = Fight(hid=SimHid(world), read=target.values, read_frame=lambda: None,
+                  targeting=Steering(world, target), bounds=ELWYNN)
+    fight._selected_name_id = WOLF
+    fight._swings = 0
+    fight.last_plate = Plate(800.0, 400.0, 147, RingColour.RED)
+    fight._close(target.values(), near=False)
+    assert fight.sidesteps == 1
+    assert any(p[:2] == ("down", "s") for p in world.presses), "never backed off"
+    assert world.x < 8.0 - 1.0 - 0.4 - 1.5, "did not back off the way it came"

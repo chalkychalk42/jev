@@ -25,6 +25,11 @@ class Watchdog:
     reconnecting: bool = False
     failure: str | None = None
     _facts: tuple | None = None
+    # The first window without progress fails the step being worked, into its own
+    # `on_fail` edge, and only a second one stops the run. The grind a failed step goes to
+    # earns experience, which is progress, so a run stalled on one quest carries on.
+    escalate: bool = False       # a request for the supervisor, consumed by it
+    escalated: bool = False
     _quests: tuple | None = None
     _level: int | None = None
     _xp: float | None = None
@@ -54,8 +59,14 @@ class Watchdog:
         facts = (self._level, self._xp, self._quests)
         if facts != self._facts or self.progress_at is None:
             self._facts, self.progress_at = facts, now
+            self.escalated = False
         elif now - self.progress_at >= self.no_progress_s:
-            self.failure = "no quest or experience progress within watchdog window; playhead preserved"
+            if not self.escalated:
+                self.escalate = self.escalated = True
+                self.progress_at = now
+            else:
+                self.failure = ("no quest or experience progress within watchdog window; "
+                                "playhead preserved")
 
     def maintenance(self, now):
         if (self.failure or self.reconnecting or self.reconnect is None or self.blind_since is None

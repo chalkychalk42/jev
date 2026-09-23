@@ -162,6 +162,11 @@ STILL_STEPS = 2
 # length. Half a second is three and a half yards at run speed; a pit prop is one.
 SIDESTEP_S = 0.5
 MAX_SIDESTEP_S = 2.0
+# A strafe that went nowhere is walled on that side too, and the character backs off the
+# way it came - about two yards, what travel's unstick measured always works. Inside Echo
+# Ridge Mine a character stood on a stack of crates in a nook, rock to one side and a pit
+# prop ahead, and ten strafes moved it not at all (run 20260923T191946-2b79ed).
+BACK_OFF_S = 0.5
 
 # A toggle's new state reaches the radio a paint or two after the key. Pressing it again
 # inside this window would read the old state and switch it straight back.
@@ -884,12 +889,20 @@ class Fight:
         self.sidesteps += 1
         event("approach.sidestep", data={"key": key, "seconds": round(seconds, 3),
                                           "mode": mode, "closed": self.closed})
+        before = self._position(self.read())
         if not self.hid.hold(key, seconds):
             self._input_refused = True
             self.detail = "sidestep input refused"
             return
         self._side = -self._side
         self._sidestep_s = min(MAX_SIDESTEP_S, 2 * self._sidestep_s)
+        after = self._position(self.read())
+        if (before is not None and after is not None
+                and distance_yards(before, after, self.bounds) < STEP_STILL_YARDS):
+            event("approach.back_off", data={"key": "s", "seconds": BACK_OFF_S})
+            if not self.hid.hold("s", BACK_OFF_S):
+                self._input_refused = True
+                self.detail = "back-off input refused"
 
     def _same_fight(self, values: dict) -> bool:
         """Still this fight's living target, and nothing that stops a fight."""

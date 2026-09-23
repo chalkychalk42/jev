@@ -284,6 +284,13 @@ class Supervisor:
         state = self.runtime.tick(choose=choose, record=record, state=state)
         if self.watchdog:
             self.watchdog.observe(state, now)
+            if self.watchdog.escalate:
+                self.watchdog.escalate = False
+                step = self.runtime.tracker.step_id
+                if self.runtime.expire_step():
+                    self.say(f"watchdog: no progress on {step}; failing it over")
+                    if self.worker and self.worker.arm is not None:
+                        self.worker.cancel("no quest or experience progress; step failed over")
             if self.watchdog.failure:
                 self.failure = self.watchdog.failure
                 self.stopped.set()
