@@ -26,7 +26,7 @@ runs is followed.
 
 **Seeing it** comes first. The client draws nameplates only near the character, and the
 camera shows about a hundred degrees of that circle, so before `Tab` the character looks
-round in quarter turns for a plate of the unit it wants. `Tab` reaches well beyond
+round in turns of about a quarter for a plate of the unit it wants. `Tab` reaches well beyond
 nameplate distance: measured 23 September, a Young Wolf in plain view with its selection
 ring and name but no plate, and turning to look for it swung it out of view. So a `Tab`
 pick with no plate is located by the ring and name the client draws the moment it is
@@ -61,7 +61,7 @@ from enum import StrEnum
 
 import numpy as np
 
-from jev.clients.hid import pace
+from jev.clients.hid import held, humaniser, pace
 from jev.clients.targeting import FACE_SEARCH_MAX_S, FaceCode, HoverCode, PaintCode, Targeting
 from jev.clients.travel import TURN_RATE_SEED
 from jev.perceive.radio_frame import UI_ERROR_KEYS
@@ -108,8 +108,10 @@ FLEE_HP = 0.30
 SETTLE_LOOKS = 3
 SETTLE_LOOK_S = 0.25
 
-# Tab presses before giving up on finding something attackable.
+# Tab presses before giving up on finding something attackable. With a humaniser the count
+# is drawn per search, so a camp is not searched with the same burst every time.
 MAX_SELECTS = 4
+SELECTS_DRAWN = (3, 5)
 
 # Closing to melee is one continuous walk. Strides with a facing look between each walked
 # three yards, stood, walked three yards, stood, and shuffled in nudges until a swing
@@ -141,11 +143,15 @@ REACH_HOLD_S = 4.5
 # inside this window would read the old state and switch it straight back.
 TOGGLE_SETTLE_S = 1.0
 
-# Looking round for a plate before Tab: quarter turns at the measured turn rate. The
-# camera shows about a hundred degrees, so three turns and the starting view see all of
-# the circle within nameplate distance.
-SCAN_TURNS = 3
+# Looking round for a plate before Tab, at the measured turn rate. The camera shows about
+# a hundred degrees, so views at most 96 degrees apart, the last within 96 of the first,
+# see all of the circle within nameplate distance: the starting view and three quarter
+# turns. With a humaniser the way round is drawn per look-round and each turn is a drawn
+# 84-96 degrees, with a fourth whenever three fell short - the same coverage, without the
+# same three quarter turns to the right at every stop.
 SCAN_TURN_S = math.radians(90.0) / TURN_RATE_SEED
+SCAN_TURN_DEG = (84.0, 96.0)
+SCAN_SWEEP_DEG = 264.0
 
 # Walking toward a Tab pick that has no plate yet. Tab reaches past nameplate range;
 # eight half-second strides are about twenty-five yards at run speed, looking after each.
@@ -467,28 +473,37 @@ class Fight:
 
         Nameplates first, because a plate means the client is drawing the unit near enough
         to fight, and `Tab` does not care how far away or how occluded its pick is. With
-        no wanted plate in view the character looks round in quarter turns before `Tab`;
-        not in self-defence, where whatever is hitting us is chosen by `Tab` and found by
-        the facing search.
+        no wanted plate in view the character looks round in turns of about a quarter
+        before `Tab`; not in self-defence, where whatever is hitting us is chosen by `Tab`
+        and found by the facing search.
         """
         self.selected_plate = None
         self._ahead = False
         self._mark_offset = None
         self._targeting().cancel_pending_spell()
+        h = humaniser(self.hid)
         turn = getattr(self.hid, "TURN_RIGHT", "d")
-        for look in range(1 if defend else SCAN_TURNS + 1):
-            if look:
-                event("acquire.scan", data={"look": look, "key": turn, "seconds": round(SCAN_TURN_S, 3)})
-                if not self.hid.hold(turn, SCAN_TURN_S):
-                    self.detail = "scan input refused"
-                    return Fought.REFUSED
-                if self._targeting().wait_for_paint().code is PaintCode.BLIND:
-                    self.detail = "radio lost while looking round"
-                    return Fought.BLIND
+        if h is not None and h.rng.random() < 0.5:
+            turn = getattr(self.hid, "TURN_LEFT", "a")
+        swept, look = 0.0, 0
+        while True:
             picked = self._pick_plate(name_id, defend)
             if picked is not False:
                 return picked
-        return self.select(name_id, defend=defend)
+            if defend or swept >= SCAN_SWEEP_DEG:
+                return self.select(name_id, defend=defend)
+            look += 1
+            seconds = (SCAN_TURN_S if h is None
+                       else math.radians(h.rng.uniform(*SCAN_TURN_DEG)) / TURN_RATE_SEED)
+            event("acquire.scan", data={"look": look, "key": turn, "seconds": round(seconds, 3)})
+            # Exact: the turn is drawn already, and coverage is counted from it.
+            if not self.hid.hold(turn, seconds, exact=True):
+                self.detail = "scan input refused"
+                return Fought.REFUSED
+            swept += math.degrees(held(self.hid, seconds) * TURN_RATE_SEED)
+            if self._targeting().wait_for_paint().code is PaintCode.BLIND:
+                self.detail = "radio lost while looking round"
+                return Fought.BLIND
 
     def _pick_plate(self, name_id: int | None, defend: bool) -> Fought | bool | None:
         """Select a plate in the current view: `None` selected, `False` none acceptable."""
@@ -580,7 +595,8 @@ class Fight:
         The client picks; the radio says what it picked. Kept because a plate can be
         occluded by terrain while the unit is perfectly fightable.
         """
-        for _ in range(MAX_SELECTS):
+        h = humaniser(self.hid)
+        for _ in range(MAX_SELECTS if h is None else h.rng.randint(*SELECTS_DRAWN)):
             event("selection.request", data={"method": "tab", "wanted_name_id": name_id,
                                              "defend": defend})
             before = self.read_frame()

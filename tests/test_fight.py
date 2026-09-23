@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import inspect
+import math
+import random
 import time
 
 import pytest
@@ -21,6 +23,7 @@ from jev.clients.fight import (
     Fight,
     Fought,
 )
+from jev.clients.hid import Humaniser
 from jev.clients.targeting import (
     ClickCode,
     ClickResult,
@@ -31,6 +34,7 @@ from jev.clients.targeting import (
     PaintCode,
     PaintResult,
 )
+from jev.clients.travel import TURN_RATE_SEED
 from jev.world.combat import GENERIC, Ability, Role, for_class
 
 
@@ -1259,14 +1263,52 @@ def test_with_no_wanted_plate_in_view_the_character_looks_round_before_tab():
 
 
 def test_a_full_look_round_with_nothing_wanted_falls_back_to_tab():
-    from jev.clients.fight import SCAN_TURNS
-
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
     f.read_frame = lambda: _plate_frame(None)
     assert f.acquire(1161) is None
-    assert len(hid.holds) == SCAN_TURNS and hid.taps == ["tab"]
+    assert len(hid.holds) == 3 and hid.taps == ["tab"]
     assert f._ahead is True
+
+
+class _DrawnHid(_Hid):
+    """The fake device, carrying the humaniser a live `Hid` has."""
+
+    TURN_LEFT, TURN_RIGHT = "a", "d"
+
+    def __init__(self, seed: int):
+        super().__init__()
+        self.h = Humaniser(rng=random.Random(seed))
+
+
+def test_a_drawn_look_round_varies_its_way_turns_and_count_and_still_sees_the_circle():
+    """PLAN 2.1: three quarter turns to the right at every stop is a pattern. Drawn, the
+    way round, each turn and the count vary, and the views still cover the circle: no
+    two more than 96 degrees apart, the last within 96 of the first."""
+    looks = []
+    for seed in range(40):
+        hid = _DrawnHid(seed)
+        f = _fight([ALIVE], hid=hid)
+        f.read_frame = lambda: _plate_frame(None)
+        assert f.acquire(1161) is None
+        (key,) = {k for k, _ in hid.holds}
+        turns = [math.degrees(s * TURN_RATE_SEED) for _, s in hid.holds]
+        assert all(84 - 1e-6 <= d <= 96 + 1e-6 for d in turns)
+        assert sum(turns) >= 264 - 1e-6 > sum(turns[:-1]), "short of the circle, or past it"
+        looks.append((key, len(turns), round(sum(turns))))
+    assert {k for k, _, _ in looks} == {"a", "d"}
+    assert {n for _, n, _ in looks} == {3, 4}
+    assert len({s for _, _, s in looks}) > 15
+
+
+def test_the_tab_burst_is_drawn_per_search():
+    counts = set()
+    for seed in range(30):
+        hid = _DrawnHid(seed)
+        dead = {**ALIVE, "target.hp": 0.0}
+        assert _fight([dead], hid=hid).select(None) is Fought.NO_TARGET
+        counts.add(len(hid.taps))
+    assert counts == {3, 4, 5}
 
 
 def test_self_defence_does_not_look_round():
