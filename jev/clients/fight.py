@@ -441,6 +441,14 @@ class Fight:
                 return self._settle(v)
             if (self._selected_name_id is not None
                     and v.get("target.name_id") != self._selected_name_id):
+                # The client can move the selection on at the kill itself: a Timber Wolf
+                # at 20% gave way to another unit at full health on the tick its
+                # experience arrived, the kill went unlooted, and the quest's meat with
+                # it (run 20260923T233909-8b1484). Nothing but a kill grants experience
+                # in a fight.
+                if self._gained(v) or self._experience_follows():
+                    self.killed_name_id = self._selected_name_id
+                    return Fought.KILLED
                 self.detail = "selected target changed during fight"
                 return Fought.LOST
             hp = v.get("target.hp")
@@ -1194,18 +1202,21 @@ class Fight:
         A caller that needs certainty still counts `quests.o0_have`.
         """
         event("fight.last_health", data={"target_hp": self.last_hp})
-        if self.last_hp == 0.0 or self._gained(values):
+        if self.last_hp == 0.0 or self._gained(values) or self._experience_follows():
             self.killed_name_id = self._selected_name_id
             return Fought.KILLED
+        self.detail = "target disappeared without observed death"
+        return Fought.LOST
+
+    def _experience_follows(self) -> bool:
+        """Watch briefly for the experience of a kill; it can lag the selection by a paint."""
         for _ in range(SETTLE_LOOKS):
             time.sleep(pace(self.hid, SETTLE_LOOK_S))
             later = self.read()
             self._observe(later)
             if self._gained(later):
-                self.killed_name_id = self._selected_name_id
-                return Fought.KILLED
-        self.detail = "target disappeared without observed death"
-        return Fought.LOST
+                return True
+        return False
 
     def _gained(self, values: dict | None) -> bool:
         """Experience or a level above what the fight started with."""

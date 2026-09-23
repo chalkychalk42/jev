@@ -1339,3 +1339,36 @@ def test_a_refused_turn_stops_the_look_round():
     f.read_frame = lambda: _plate_frame(None)
     assert f.acquire(1161) is Fought.REFUSED
     assert hid.taps == []
+
+
+def test_a_kill_whose_selection_moves_on_is_a_kill_not_a_loss(combat_clock):
+    """Run 20260923T233909-8b1484: a Timber Wolf at 20% gave way to another unit at full
+    health on the tick its experience arrived; reported lost, the kill went unlooted."""
+    fighting = {**ALIVE, "vitals.combat": True, "target.melee_range": True, "target.hp": 0.2,
+                "char.level": 2, "char.xp_pct": 0.449}
+    moved_on = {**fighting, "target.name_id": 99, "target.hp": 1.0, "char.xp_pct": 0.496}
+    f = _fight([fighting, fighting, moved_on])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+    assert f.killed_name_id == 1161
+
+
+def test_experience_a_paint_behind_the_new_selection_still_proves_the_kill(combat_clock):
+    fighting = {**ALIVE, "vitals.combat": True, "target.melee_range": True, "target.hp": 0.2,
+                "char.level": 2, "char.xp_pct": 0.449}
+    moved_on = {**fighting, "target.name_id": 99, "target.hp": 1.0}
+    paid = {**moved_on, "char.xp_pct": 0.496}
+    f = _fight([fighting, fighting, moved_on, paid])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+
+
+def test_a_selection_that_moves_on_without_experience_is_lost(combat_clock):
+    fighting = {**ALIVE, "vitals.combat": True, "target.melee_range": True, "target.hp": 0.2,
+                "char.level": 2, "char.xp_pct": 0.449}
+    f = _fight([fighting, fighting, {**fighting, "target.name_id": 99, "target.hp": 1.0}])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.LOST and "changed" in f.detail

@@ -103,6 +103,20 @@ def test_newly_selected_injured_target_is_not_damage_caused_by_selection():
     assert outcome(before, after, "selected", action={"kind": "key", "control": "target_next"})["success"]
 
 
+def test_a_kill_whose_selection_moves_on_is_target_dead():
+    """The client can move the selection on at the kill itself, in the paint the
+    experience arrives (run 20260923T233909-8b1484)."""
+    fight = {"kind": "skill", "name": "COMBAT_PROFILE"}
+    before = view(values={"target.hp": 0.2, "vitals.combat": True, "char.xp_pct": 0.4})
+    after = view(11, values={"target.name_id": WOLF + 1, "target.hp": 1.0,
+                             "vitals.combat": True, "char.xp_pct": 0.45})
+    assert "target_dead" in outcome(before, after, "target_dead", action=fight)["effects"]
+    no_experience = view(11, values={"target.name_id": WOLF + 1, "target.hp": 1.0,
+                                     "vitals.combat": True, "char.xp_pct": 0.4})
+    assert "target_dead" not in outcome(before, no_experience, "target_dead",
+                                        action=fight)["effects"]
+
+
 def test_tab_from_a_corpse_to_a_living_unit_of_the_same_name_is_a_selection():
     """After a kill the corpse stays selected. Tab to the next living kobold keeps the
     name, and a name-only test never credited it (run 20260923T191946-2b79ed); a corpse

@@ -222,6 +222,17 @@ def measured_effects(before: dict, after: dict) -> tuple[list[str], float]:
         # fight nothing else grants experience, so that pairing is the kill.
         if _increase(a, b, "char.xp_pct") or _increase(a, b, "char.level"):
             effects.append("target_dead")
+    # A kill can move the selection on in the same paint its experience arrives: a Timber
+    # Wolf at 20% gave way to another unit at full health (run 20260923T233909-8b1484).
+    # A living selection replaced while experience arrived is the kill.
+    moved_on = (b.get("target.has") is True
+                and (b.get("target.name_id") != a.get("target.name_id")
+                     or (_number(a.get("target.hp")) and _number(b.get("target.hp"))
+                         and b.get("target.hp") > a.get("target.hp"))))
+    if ("target_dead" not in effects and a.get("target.has") is True
+            and _number(a.get("target.hp")) and a.get("target.hp") > 0 and moved_on
+            and (_increase(a, b, "char.xp_pct") or _increase(a, b, "char.level"))):
+        effects.append("target_dead")
     same = (a.get("target.has") is True and b.get("target.has") is True
             and a.get("target.name_id") is not None
             and a.get("target.name_id") == b.get("target.name_id"))
