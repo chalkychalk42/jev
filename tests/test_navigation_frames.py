@@ -151,7 +151,7 @@ def test_a_replan_starts_at_the_height_of_the_route_that_got_us_here():
     client.query.path = path
     client.travel.position = lambda: (0.49, 0.42)
 
-    def follow(route, *, timeout_s, replan):
+    def follow(route, *, timeout_s, replan, memory=None):
         replan((0.49, 0.42))
         return SimpleNamespace(outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0,
                                stuck_events=1, detail="")

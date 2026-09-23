@@ -19,6 +19,7 @@ from jev.guide.coords import bounds_by_radio_id, navigation_frame
 from jev.guide.graph import Graph
 from jev.guide.path import MmapQuery
 from jev.guide.route import compile_route
+from jev.guide.route_memory import RouteMemory
 from jev.learn.episode import Recorder
 from jev.orch.runtime import ClientRuntime
 from jev.persist import atomic_json, file_lock, input_lock_path
@@ -220,7 +221,8 @@ def _live(args, graph, memory, route) -> int:
         launcher = ("wsl.exe", "-d", "Ubuntu-24.04", "-e") if win32.IS_WINDOWS else ()
         with_travel(client, bounds, MmapQuery(args.jevpath, args.mmaps, launcher=launcher,
                     checkpoint=lambda: client.hid.checkpoint() if client.hid.checkpoint else None),
-                    arrival_yards=GOSSIP_YARDS, say=print, zones=zones)
+                    arrival_yards=GOSSIP_YARDS, say=print, zones=zones,
+                    route_memory=RouteMemory(ROOT / "var/route-memory.json"))
         body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt,
                         record_frame=screenshots.record_frame if screenshots is not None else None)
         if recorder is None:

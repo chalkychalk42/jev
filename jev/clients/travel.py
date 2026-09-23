@@ -36,6 +36,7 @@ from jev.guide.coords import (
     ZoneBounds,
     distance_yards,
     heading_yards,
+    map_to_world,
     world_to_map,
 )
 
@@ -126,6 +127,10 @@ class Travel:
     _pulse_ended_at: float = field(default=0.0, init=False)
     stuck_events: int = field(default=0, init=False)
     last_unstick: str = field(default="", init=False)
+    # Where the last `_detour` left the character: the escape a blocked spot is learned by.
+    last_detour_end: tuple[float, float] | None = field(default=None, init=False)
+    # Positions of the escape in progress since its last stuck event, while one is traced.
+    _trace: list | None = field(default=None, init=False)
     _track: deque = field(default_factory=lambda: deque(maxlen=64), init=False)
 
     # -- geometry ------------------------------------------------------------
@@ -246,6 +251,8 @@ class Travel:
                 if p is not None:
                     here = p
                     self._track.append((now, p))
+                    if self._trace is not None:
+                        self._trace.append(p)
 
                 # Close out a turn pulse and learn from what it did.
                 if pulse_key is not None and now >= pulse_until:
@@ -313,6 +320,8 @@ class Travel:
                             f"{self.detours} detours did not get around it "
                             f"(closest {self.closest_yards:.1f} yards); "
                             "this node needs a recorded route")
+                    if self._trace is not None:
+                        self._trace = []        # only the attempt that works is learned
                     self._detour(here, target)
                     self._track.clear()
                     self.hid.key_down("w")
@@ -344,7 +353,7 @@ class Travel:
     def follow(self, path, *, timeout_s: float = 300.0,
                abort: Callable[[], bool] | None = None,
                replan: Callable[[tuple[float, float]], object] | None = None,
-               max_replans: int = 3) -> TravelResult:
+               max_replans: int = 3, memory=None) -> TravelResult:
         """Walk a planned route, one waypoint at a time.
 
         Sequencing only. The follower is unchanged and learns nothing new about geometry:
@@ -365,12 +374,20 @@ class Travel:
         A blocked leg asks the planner again from where the character actually is, rather
         than turning ninety degrees and hoping. The mesh knows about the door; the
         follower does not and should not learn.
+
+        What the mesh does not know is learned instead (`memory`, a `RouteMemory`): a
+        spot where a leg was blocked and only the follower's own detour got past it -
+        a tree gap, a rail fence, a ledge the server's creature mesh calls open ground -
+        is remembered with the point the detour reached, and every later route passing
+        that spot goes by the point.
         """
         if not path.usable:
             return self._result(Outcome.STUCK, self.position(), self.position(),
                                 self.position() or (0.0, 0.0), 0.0,
                                 f"no usable path: {path.status.value} {path.detail}".strip())
 
+        if memory is not None:
+            path = memory.patch(self.bounds.map_id, path)
         t0 = time.perf_counter()
         legs = [world_to_map(pt[0], pt[1], self.bounds) for pt in path.points]
         legs = [leg for leg in legs if leg is not None]
@@ -413,10 +430,21 @@ class Travel:
                 # yards and *then* wedges has moved, and that one spins just as happily.
                 if self._same_answer(fresh, position, leg):
                     self.detours = 0       # a fresh obstacle, not the last one continued
-                    last = self.to(leg, abort=abort, allow_detour=True,
-                                   timeout_s=timeout_s - (time.perf_counter() - t0))
-                    if last.outcome is Outcome.ARRIVED:
-                        continue           # past it; the planner has the route back
+                    # Round it now. Walking the same leg first only found the same
+                    # obstacle again: measured in simulation, a whole second stuck cycle
+                    # per fence before the first detour.
+                    self.last_detour_end = None
+                    self._trace = []
+                    try:
+                        if position is not None:
+                            self._detour(position, leg)
+                        last = self.to(leg, abort=abort, allow_detour=True,
+                                       timeout_s=timeout_s - (time.perf_counter() - t0))
+                        if last.outcome is Outcome.ARRIVED:
+                            self._learn(memory, position, leg)
+                            continue           # past it; the planner has the route back
+                    finally:
+                        self._trace = None
                     self.arrival_yards = exact
                     return self._result(last.outcome, legs[0], last.end, leg,
                                         time.perf_counter() - t0,
@@ -426,6 +454,7 @@ class Travel:
                     rest = self.follow(
                         fresh, timeout_s=timeout_s - (time.perf_counter() - t0),
                         abort=abort, replan=replan, max_replans=max_replans - replans,
+                        memory=memory,
                     )
                     return TravelResult(
                         outcome=rest.outcome, start=legs[0], end=rest.end,
@@ -458,6 +487,31 @@ class Travel:
             stuck_events=self.stuck_events, detours=self.detours,
             turn_rate_deg_s=last.turn_rate_deg_s, detail="",
         )
+
+    def _learn(self, memory, blocked, leg) -> None:
+        """Remember where a leg was blocked, and the widest point of the escape that worked.
+
+        The escape traced since its last stuck event is the one that got past; its point
+        farthest from the blocked line is where it went round - the end of a fence, the
+        far side of a trunk. The end of the first detour is not: along a long fence it
+        is still in front of the fence.
+        """
+        trace = self._trace or ([self.last_detour_end] if self.last_detour_end else [])
+        if memory is None or blocked is None or not trace:
+            return
+        bx, by = _yards(blocked, self.bounds)
+        lx, ly = _yards(leg, self.bounds)
+        length = math.hypot(lx - bx, ly - by) or 1.0
+
+        def lateral(point):
+            px, py = _yards(point, self.bounds)
+            return abs((lx - bx) * (py - by) - (ly - by) * (px - bx)) / length
+
+        widest = max(trace, key=lateral)
+        stuck = map_to_world(blocked[0], blocked[1], self.bounds)
+        via = map_to_world(widest[0], widest[1], self.bounds)
+        if stuck is not None and via is not None:
+            memory.learn(self.bounds.map_id, stuck, via)
 
     def _same_answer(self, fresh, position, leg) -> bool:
         """Would following `fresh` walk straight back into the leg that just blocked?
@@ -498,6 +552,9 @@ class Travel:
         after_pos = self.position()
         if after_pos is None:
             return
+        self.last_detour_end = after_pos
+        if self._trace is not None:
+            self._trace.append(after_pos)
         if self.distance(after_pos, target) > before:
             self._detour_side *= -1
 
@@ -612,6 +669,11 @@ def _thin(legs: list[tuple[float, float]], bounds: ZoneBounds,
             kept.append(leg)
     kept.append(legs[-1])
     return kept
+
+
+def _yards(point: tuple[float, float], bounds: ZoneBounds) -> tuple[float, float]:
+    """A map position in the map-aligned yard frame `heading_yards` measures in."""
+    return point[0] * abs(bounds.left - bounds.right), point[1] * abs(bounds.top - bounds.bottom)
 
 
 def _wrap(a: float) -> float:

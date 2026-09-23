@@ -82,6 +82,8 @@ class Client:
     _paint_generation: int = field(default=0, init=False)
     travel: Travel | None = field(default=None, init=False)
     query: PathQuery | None = field(default=None, init=False)
+    # Spots where walking got stuck and the way round that worked (`RouteMemory`).
+    route_memory: object | None = field(default=None, init=False)
     bounds: ZoneBounds | None = field(default=None, init=False)
     coordinate_zones: dict[int, ZoneBounds] = field(default_factory=dict, init=False)
     coordinate_names: dict[int, str] = field(default_factory=dict, init=False)
@@ -251,7 +253,9 @@ class Client:
                 followed.append(planned)
             return planned
 
-        result = self.travel.follow(path, timeout_s=timeout_s, replan=replan)
+        result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
+
+                                    memory=self.route_memory)
         if result.outcome is Outcome.REFUSED:
             # Nothing was pressed because the window was not focused - a notification
             # panel, or anything else that takes the foreground. `Hid` is right to refuse,
@@ -260,7 +264,8 @@ class Client:
             # stations refused, walking nowhere.
             self._say("  the window lost focus; taking it back")
             if self.focused(FOCUS_QUICK_S):
-                result = self.travel.follow(path, timeout_s=timeout_s, replan=replan)
+                result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
+                                            memory=self.route_memory)
         remaining = ("unknown" if result.remaining_yards is None
                      else f"{result.remaining_yards:.1f} yards")
         self._say(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "
@@ -327,9 +332,11 @@ def attach(client_id: str = "run", *, title: str = "World of Warcraft",
 def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                 arrival_yards: float, say: Callable[[str], None] | None = None,
                 zones: dict[int, ZoneBounds] | None = None,
-                zone_names: dict[int, str] | None = None) -> Client:
+                zone_names: dict[int, str] | None = None,
+                route_memory=None) -> Client:
     """Give a client the ability to walk. Separate because reading needs no planner."""
     client.bounds = bounds
+    client.route_memory = route_memory
     zones_path = str(Path(__file__).resolve().parents[2] / "data/zones-tbc-243.json")
     client.coordinate_zones = bounds_by_radio_id(zones_path) if zones is None else zones
     client.coordinate_names = names_by_radio_id(zones_path) if zone_names is None else zone_names
