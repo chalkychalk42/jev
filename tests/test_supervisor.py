@@ -369,22 +369,22 @@ def test_the_bodys_own_jump_does_not_preempt_the_skill_that_jumped(tmp_path):
 def test_a_fall_longer_than_any_jump_still_preempts(tmp_path):
     airborne = seen(flags=Flags(falling=True))
     rt = runtime(tmp_path, [seen(0)] + [airborne.model_copy(update={"t": t / 2})
-                                        for t in range(1, 6)])
+                                        for t in range(1, 8)])
     body = Body()
     supervisor = Supervisor(rt, body, say=lambda line: None)
     try:
         supervisor.step(0)
         assert body.started.wait(1)
         worker = supervisor.worker
-        for t in (0.5, 1.0, 1.5):
+        for t in (0.5, 1.0, 1.5, 2.0, 2.5):
             supervisor.step(t)
-        assert not worker.cancelled.is_set()
-        supervisor.step(2.0)                       # 1.5 s airborne: longer than any jump
+        assert not worker.cancelled.is_set(), "a 2 s airtime was measured on a slope"
+        supervisor.step(3.0)                       # 2.5 s airborne: longer than any jump
         assert worker.cancelled.is_set() and worker.reason == "falling"
     finally:
         supervisor.close()
     assert interruption(worker.arm, airborne) == "falling", "untracked callers stay conservative"
-    assert interruption(worker.arm, airborne, falling_s=1.0) != "falling"
+    assert interruption(worker.arm, airborne, falling_s=2.0) != "falling"
 
 
 def test_a_catalog_timeout_is_a_counted_failure_not_a_retrying_preemption(tmp_path):

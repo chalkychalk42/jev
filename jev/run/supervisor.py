@@ -23,8 +23,9 @@ from jev.world.state_v1 import State
 # The body's own jump reads as falling for its whole airtime: measured 0.5-1.06 s per
 # jump over 17 unstick jumps on 23 September. Cancelling mid-air released the forward key,
 # the character dropped back on the near side of the fence and the leg replanned into the
-# same jump for 45 s. A fall that outlasts any jump is a real one.
-FALL_GRACE_S = 1.5
+# same jump for 45 s. Jumps and runs down a slope in the next run measured up to 2.05 s at
+# the half-second tick. A fall that outlasts all of those is a real one.
+FALL_GRACE_S = 2.5
 
 
 class Cancelled(Exception):

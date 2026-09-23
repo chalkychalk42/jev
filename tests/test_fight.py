@@ -1103,3 +1103,55 @@ def test_a_selected_unit_of_another_name_is_not_the_fight():
     f.acquire = lambda name_id, **kw: seen.append(name_id) or Fought.NO_TARGET
     assert f.run(1161, timeout_s=1) is Fought.NO_TARGET
     assert seen == [1161]
+
+
+def _plate_frame(cx=None):
+    import numpy as np
+
+    frame = np.zeros((900, 1600, 3), dtype=np.uint8)
+    if cx is not None:
+        frame[380:387, cx - 73:cx + 74] = (230, 200, 10)       # a full yellow plate
+    return frame
+
+
+def test_with_no_wanted_plate_in_view_the_character_looks_round_before_tab():
+    """Plates exist only near the character and the camera shows about a hundred
+    degrees of that circle: a wolf behind the character is invisible until it turns."""
+    from jev.clients.fight import SCAN_TURN_S
+
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.read_frame = lambda: _plate_frame(900 if len(hid.holds) == 2 else None)
+    assert f.acquire(1161) is None
+    assert hid.holds == [("d", SCAN_TURN_S)] * 2, "looked round past the plate, or not at all"
+    assert hid.taps == [] and len(hid.clicks) == 1, "fell back to Tab with a plate in view"
+    assert f.selected_plate is not None and f._ahead is False
+
+
+def test_a_full_look_round_with_nothing_wanted_falls_back_to_tab():
+    from jev.clients.fight import SCAN_TURNS
+
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.read_frame = lambda: _plate_frame(None)
+    assert f.acquire(1161) is None
+    assert len(hid.holds) == SCAN_TURNS and hid.taps == ["tab"]
+    assert f._ahead is True
+
+
+def test_self_defence_does_not_look_round():
+    """Whatever is hitting us is chosen by Tab and found by the facing search."""
+    hid = _Hid()
+    f = _fight([{**ALIVE, "target.attacking_me": True}], hid=hid)
+    f.read_frame = lambda: _plate_frame(None)
+    assert f.acquire(1161, defend=True) is None
+    assert hid.holds == [] and hid.taps == ["tab"]
+
+
+def test_a_refused_turn_stops_the_look_round():
+    hid = _Hid()
+    hid.hold = lambda key, seconds, **_: False
+    f = _fight([ALIVE], hid=hid)
+    f.read_frame = lambda: _plate_frame(None)
+    assert f.acquire(1161) is Fought.REFUSED
+    assert hid.taps == []

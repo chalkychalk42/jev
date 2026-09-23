@@ -22,11 +22,13 @@ own range check says a swing reaches (`target.melee_range`, schema 9). `target.i
 `CheckInteractDistance` index 3, about eleven yards, and only chooses the stride length.
 Without the range check (an older addon) the target's **health** decides, as before.
 
-**Seeing it** comes first. `Tab` picks ahead of the character but reaches well beyond the
-distance at which the client draws nameplates: measured 23 September, a Young Wolf in
-plain view about twenty yards ahead with its selection ring and name but no plate. Turning
-to look for it swung it out of view. So a `Tab` pick with no plate is walked toward in
-strides, looking after each one, until its plate shows. A selection kept from before this
+**Seeing it** comes first. The client draws nameplates only near the character, and the
+camera shows about a hundred degrees of that circle, so before `Tab` the character looks
+round in quarter turns for a plate of the unit it wants. `Tab` reaches well beyond
+nameplate distance: measured 23 September, a Young Wolf in plain view with its selection
+ring and name but no plate, and turning to look for it swung it out of view. So a `Tab`
+pick with no plate is walked toward in strides, looking after each one, until its plate
+shows. A selection kept from before this
 fight is not assumed to be ahead: when its plate is not on screen it is dropped for a new
 acquisition. The same run kept one such wolf selected for five minutes and twenty-eight
 fights while the hunt walked between spots.
@@ -47,12 +49,14 @@ the client says is ready, respecting the global cooldown. Priorities are data
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 from jev.clients.targeting import FACE_SEARCH_MAX_S, FaceCode, HoverCode, PaintCode, Targeting
+from jev.clients.travel import TURN_RATE_SEED
 from jev.perceive.radio_frame import UI_ERROR_KEYS
 from jev.perceive.units import Plate, find_plates
 from jev.run.evidence import event, operation, traced
@@ -118,6 +122,12 @@ MAX_CLOSE_BURSTS = 12
 # A toggle's new state reaches the radio a paint or two after the key. Pressing it again
 # inside this window would read the old state and switch it straight back.
 TOGGLE_SETTLE_S = 1.0
+
+# Looking round for a plate before Tab: quarter turns at the measured turn rate. The
+# camera shows about a hundred degrees, so three turns and the starting view see all of
+# the circle within nameplate distance.
+SCAN_TURNS = 3
+SCAN_TURN_S = math.radians(90.0) / TURN_RATE_SEED
 
 # Walking toward a Tab pick that has no plate yet. Tab reaches past nameplate range;
 # eight half-second strides are about twenty-five yards at run speed, looking after each.
@@ -437,10 +447,30 @@ class Fight:
         """Select something worth fighting. `None` means it worked.
 
         Nameplates first, because a plate means the client is drawing the unit near enough
-        to fight, and `Tab` does not care how far away or how occluded its pick is.
+        to fight, and `Tab` does not care how far away or how occluded its pick is. With
+        no wanted plate in view the character looks round in quarter turns before `Tab`;
+        not in self-defence, where whatever is hitting us is chosen by `Tab` and found by
+        the facing search.
         """
         self.selected_plate = None
         self._ahead = False
+        turn = getattr(self.hid, "TURN_RIGHT", "d")
+        for look in range(1 if defend else SCAN_TURNS + 1):
+            if look:
+                event("acquire.scan", data={"look": look, "key": turn, "seconds": round(SCAN_TURN_S, 3)})
+                if not self.hid.hold(turn, SCAN_TURN_S):
+                    self.detail = "scan input refused"
+                    return Fought.REFUSED
+                if self._targeting().wait_for_paint().code is PaintCode.BLIND:
+                    self.detail = "radio lost while looking round"
+                    return Fought.BLIND
+            picked = self._pick_plate(name_id, defend)
+            if picked is not False:
+                return picked
+        return self.select(name_id, defend=defend)
+
+    def _pick_plate(self, name_id: int | None, defend: bool) -> Fought | bool | None:
+        """Select a plate in the current view: `None` selected, `False` none acceptable."""
         frame = self.read_frame()
         if frame is not None:
             for plate in self._candidates(frame):
@@ -474,7 +504,7 @@ class Fight:
                 if self._acceptable(name_id, defend=defend, values=paint.after) is True:
                     self.selected_plate = self.last_plate = plate
                     return None
-        return self.select(name_id, defend=defend)
+        return False
 
     def _candidates(self, frame) -> list[Plate]:
         """Plates worth clicking: alone first, then central. An ordering, not an ID.
