@@ -23,14 +23,16 @@ entry per paint, so a partial cycle is unread — treating it as a short log is 
 tracker concludes a quest is missing from a log it never saw. That cuts both ways here:
 `CLEARED` waits for a whole cycle too, or every mid-cycle read would look like a turn-in.
 
+A reward page offering a **choice** of items. Complete Quest is painted and pressable
+there, but it does nothing until an item is selected: measured 23 September, three presses
+on "Wolves Across the Border" changed nothing. The addon paints its default choice
+(`ui.choice_x/y`: usable first, then quality, then the earlier item) and whether one is
+chosen; when none is, that point is clicked first, and the next read decides the rest.
+Which reward is *best* is a real decision the default does not claim to make.
+
 Not covered, deliberately
 -------------------------
-A reward page offering a **choice** of items. Complete Quest is painted and pressable
-there, but it does nothing until an item is selected, so this will press, get
-"You must choose a reward", and fail with the log unchanged — honestly, and without
-guessing an item. Choosing a reward is a different decision (which one?), not a different
-button, and it belongs to whatever ranks loot. Multi-option gossip is the same shape: a
-list, not a button.
+Multi-option gossip: a list, not a button.
 """
 
 from __future__ import annotations
@@ -40,10 +42,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-# Enough for the longest stock flow — progress page, reward page, done — plus one. Small
-# on purpose: a frame that has not moved after this many fresh reads is not a frame this
-# skill knows how to advance, and pressing harder has never been the answer.
-MAX_PRESSES = 3
+# Enough for the longest stock flow — progress page, a reward choice, reward page, done —
+# plus one. Small on purpose: a frame that has not moved after this many fresh reads is not
+# a frame this skill knows how to advance, and pressing harder has never been the answer.
+MAX_PRESSES = 4
 
 
 class Goal(StrEnum):
@@ -98,6 +100,10 @@ class AdvanceQuestFrame:
                 return Advanced.NO_FRAME
 
             fx, fy = v.get("ui.advance_x"), v.get("ui.advance_y")
+            if ((v.get("ui.choice_count") or 0) > 0 and v.get("ui.choice_made") is False
+                    and v.get("ui.choice_x") is not None and v.get("ui.choice_y") is not None):
+                # A reward must be chosen before Complete Quest does anything.
+                fx, fy = v["ui.choice_x"], v["ui.choice_y"]
             if fx is None or fy is None:
                 if self.clicked:
                     break

@@ -378,6 +378,41 @@ local function LIST_LINE(i, axis)
     return 1 - (y * ratio) / UIParent:GetHeight()
 end
 
+-- The reward to take when a quest's reward page offers a choice.
+--
+-- Complete Quest does nothing until one is chosen. The default is usable by this
+-- character first, then higher quality, then the earlier item: a fixed rule, painted as a
+-- position, so whoever clicks can still choose another. Reads the stock reward panel.
+local function questChoiceShown()
+    local panel = QuestFrameRewardPanel
+    return panel ~= nil and panel.IsVisible ~= nil and panel:IsVisible() and panel or nil
+end
+
+local function QUEST_CHOICE(what)
+    local panel = questChoiceShown()
+    local n = panel and (GetNumQuestChoices() or 0) or 0
+    if what == "count" then return clamp(n, 6) end
+    if panel == nil or n < 1 then return nil end
+    if what == "made" then return (panel.itemChoice or 0) > 0 end
+    local best, bestUsable, bestQuality = nil, -1, -1
+    for i = 1, n do
+        local _, _, _, quality, usable = GetQuestItemInfo("choice", i)
+        usable = usable and 1 or 0
+        quality = quality or 0
+        if usable > bestUsable or (usable == bestUsable and quality > bestQuality) then
+            best, bestUsable, bestQuality = i, usable, quality
+        end
+    end
+    local btn = best and getglobal("QuestRewardItem" .. best)
+    if not (btn and btn.IsVisible and btn:IsVisible()) then return nil end
+    local x, y = btn:GetCenter()
+    if x == nil or y == nil then return nil end
+    -- The same ratio as ADVANCE_BUTTON, and for the same reason.
+    local ratio = btn:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    if what == "x" then return (x * ratio) / UIParent:GetWidth() end
+    return 1 - (y * ratio) / UIParent:GetHeight()
+end
+
 local function ADVANCE_BUTTON(axis)
     for i = 1, #ADVANCE_BUTTONS do
         local btn = getglobal(ADVANCE_BUTTONS[i])
@@ -902,6 +937,7 @@ JevRadioHelpers = {
     BAG_FREE = BAG_FREE,
     DURABILITY_MIN = DURABILITY_MIN,
     ADVANCE_BUTTON = ADVANCE_BUTTON,
+    QUEST_CHOICE = QUEST_CHOICE,
     LIST_LINE = LIST_LINE,
     QUEST_HASH = QUEST_HASH,
     QUEST_COUNT = QUEST_COUNT,

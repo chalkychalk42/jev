@@ -170,13 +170,28 @@ def test_pressing_is_bounded_and_every_press_re_reads_the_radio():
     skill = AdvanceQuestFrame(hid=hid, read=read, quest_ids=lambda: (7,),
                               window_origin=(10, 38), window_size=(1600, 900))
     assert skill.run(783, settle_s=0, confirm_tries=1) is Advanced.CLICKED
-    assert len(hid.clicks) == 3
-    assert reads["n"] == 3, "a press that did not re-read the radio is a blind press"
+    assert len(hid.clicks) == 4
+    assert reads["n"] == 4, "a press that did not re-read the radio is a blind press"
 
 
-def test_choosing_a_reward_is_not_this_skill():
+def test_a_reward_page_waiting_for_a_choice_gets_the_painted_default_first():
+    """Measured 23 September: "Wolves Across the Border" offered two rewards, and three
+    presses of Complete Quest changed nothing. The addon paints its default choice; the
+    skill clicks it, then the next read presses Complete Quest."""
+    choice = {**OPEN, "ui.choice_count": 2, "ui.choice_made": False,
+              "ui.choice_x": 0.05, "ui.choice_y": 0.40}
+    chosen = {**choice, "ui.choice_made": True}
+    skill, hid = _stepping(OPEN, choice, chosen, SHUT,
+                           ids_at=lambda n: (783,) if n < 3 else ())
+    assert skill.run(783, Goal.CLEARED, settle_s=0) is Advanced.DONE
+    assert [c[:2] for c in hid.clicks] == [(10 + 300, 38 + 700), (10 + 80, 38 + 360),
+                                           (10 + 300, 38 + 700)]
+
+
+def test_choosing_which_reward_is_best_is_not_this_skill():
     """Naming what it does not do keeps the next failure from being answered with a
-    fourth button in the list. An item choice is a decision, not a button."""
+    fourth button in the list. The default choice is the addon's painted point; ranking
+    rewards is a decision, not a button."""
     import inspect
 
     from jev.clients import advance

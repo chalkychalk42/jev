@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 9                                    # bump when the field table changes shape
+SCHEMA = 10                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -459,6 +459,22 @@ FIELDS: tuple[Field, ...] = (
     Field("ui.error_count", 4, Kind.UINT, "return RECENT_ERROR('count')",
           "UI errors seen since the addon loaded, modulo 15; a change is a new error"),
 
+    # A reward page offering a choice. Complete Quest does nothing until an item is
+    # chosen: measured 23 September, "Wolves Across the Border" offered Soft Fur-lined
+    # Shoes or Wolfskin Bracers and three presses changed nothing. The addon paints how
+    # many choices there are, whether one is chosen, and where the default one is: usable
+    # by this character first, then higher quality, then the earlier item. Which reward is
+    # best is a real decision; this is a default a tutor can overrule by clicking another.
+    Field("ui.choice_count", 3, Kind.UINT, "return QUEST_CHOICE('count')",
+          "reward choices on the open quest reward page; 0 when none is showing"),
+    _tri("ui.choice_made",
+         "local v = QUEST_CHOICE('made'); if v == nil then return nil end\n"
+         "return tri(v)",
+         "a reward choice is selected on the open reward page"),
+    Field("ui.choice_x", 11, Kind.FRAC, "return QUEST_CHOICE('x')",
+          "fraction across the interface of the default reward choice's button"),
+    Field("ui.choice_y", 11, Kind.FRAC, "return QUEST_CHOICE('y')"),
+
 )
 
 # --------------------------------------------------------------------------- layout
@@ -466,10 +482,12 @@ FIELDS: tuple[Field, ...] = (
 # Schemas 7 and 8 only appended fields. Explicit historical shapes keep existing screen
 # captures and installed addons readable without inventing merchant or cursor telemetry.
 # Preserve this prefix when adding future schemas; migrations are declared, not guessed.
-SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS}
+SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS[:121],
+                 10: FIELDS}
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 assert sum(f.bits for f in SCHEMA_FIELDS[8]) == 1059
+assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

@@ -234,6 +234,26 @@ function GetQuestLink() return "|Hquest:7:3|h[Kobold Camp Cleanup]|h" end
 
 LootFrame, GossipFrame, MerchantFrame = newFrame(), newFrame(), newFrame()
 QuestFrame, ClassTrainerFrame, MailFrame = newFrame(), newFrame(), newFrame()
+-- A reward page: STATE.choices is a list of {quality, usable}; STATE.itemChoice the pick.
+QuestFrameRewardPanel = newFrame()
+function QuestFrameRewardPanel:IsVisible() return STATE.choices ~= nil end
+setmetatable(QuestFrameRewardPanel, {__index = function(t, k)
+    if k == "itemChoice" then return STATE.itemChoice or 0 end
+    return getmetatable(UIParent).__index(t, k)
+end})
+function GetNumQuestChoices() return STATE.choices and #STATE.choices or 0 end
+function GetQuestItemInfo(kind, i)
+    local c = STATE.choices and STATE.choices[i]
+    if kind ~= "choice" or c == nil then return nil end
+    return "Reward " .. i, "tex", 1, c.quality, c.usable
+end
+for i = 1, 6 do
+    local btn = newFrame()
+    local index = i
+    function btn:IsVisible() return STATE.choices ~= nil and index <= #STATE.choices end
+    function btn:GetCenter() return 100 + 150 * ((index - 1) % 2), 600 - 50 * math.floor((index - 1) / 2) end
+    _G["QuestRewardItem" .. i] = btn
+end
 STATICPOPUP_NUMDIALOGS = 4
 -- Two stock GlobalStrings, so UI_ERROR_MESSAGE can be matched the way the client does.
 ERR_BADATTACKFACING = "You are facing the wrong way!"

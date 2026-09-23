@@ -46,7 +46,7 @@ def test_layout_fits_the_grid():
 
 
 @pytest.mark.parametrize(("version", "field_count", "payload_bits"),
-                         [(6, 75, 582), (7, 112, 1035), (8, 117, 1059)])
+                         [(6, 75, 582), (7, 112, 1035), (8, 117, 1059), (9, 121, 1073)])
 def test_historical_schema_prefixes_keep_their_checksum_boundary(version, field_count, payload_bits):
     fields = SCHEMA_FIELDS[version]
     assert len(fields) == field_count
@@ -63,12 +63,13 @@ def test_historical_schema_prefixes_keep_their_checksum_boundary(version, field_
     assert all(decoded[f.name] is None for f in FIELDS[field_count:])
 
 
-def test_melee_fields_fit_the_existing_grid():
-    """Schema 9 appends 14 bits and must not grow the painted strip."""
+def test_reward_choice_fields_fit_the_existing_grid():
+    """Schema 10 appends 27 bits and must not grow the painted strip."""
     lay = layout()
     assert (lay["cols"], lay["rows"]) == (12, 9)
-    assert lay["payload_bits"] == 1073
-    assert lay["field_count"] == 121
+    assert lay["payload_bits"] == 1100
+    assert lay["field_count"] == 125
+    assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073, "schema 9 is a preserved prefix"
 
 
 @pytest.mark.parametrize("field", FIELDS, ids=lambda f: f.name)

@@ -61,6 +61,8 @@ def _lua(v) -> str:
         return f'"{v}"'
     if isinstance(v, (list, tuple)):
         return "{" + ", ".join(_lua(x) for x in v) + "}"
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"{k}={_lua(x)}" for k, x in v.items()) + "}"
     return str(v)
 
 
@@ -350,3 +352,33 @@ def test_a_ui_error_is_held_long_enough_for_a_slow_reader():
     assert fresh["ui.error_count"] == 1
     assert stale["ui.error_last"] == 0, "held for 1.5 s, not forever"
     assert stale["ui.error_count"] == 1, "the count is how a reader tells a new error"
+
+
+def _choices(state):
+    return radio.unpack(payload(paint(state))[:PAYLOAD_CELLS])
+
+
+def test_no_reward_page_paints_no_choice():
+    values = _choices({})
+    assert values["ui.choice_count"] == 0
+    assert values["ui.choice_made"] is None and values["ui.choice_x"] is None
+
+
+def test_the_default_reward_is_usable_first_then_better_quality():
+    """Measured 23 September: a reward page with two choices and Complete Quest doing
+    nothing until one was chosen."""
+    values = _choices({"choices": [{"quality": 3, "usable": False},
+                                   {"quality": 1, "usable": True},
+                                   {"quality": 2, "usable": True}]})
+    assert values["ui.choice_count"] == 3
+    assert values["ui.choice_made"] is False
+    # QuestRewardItem3 in the stub: column 0, row 1 -> (100, 550) of a 1600x900 UIParent.
+    assert values["ui.choice_x"] == pytest.approx(100 / 1600, abs=0.002)
+    assert values["ui.choice_y"] == pytest.approx(1 - 550 / 900, abs=0.002)
+
+
+def test_equal_choices_take_the_earlier_item_and_a_pick_is_reported():
+    both = [{"quality": 2, "usable": True}, {"quality": 2, "usable": True}]
+    values = _choices({"choices": both})
+    assert values["ui.choice_x"] == pytest.approx(100 / 1600, abs=0.002)
+    assert _choices({"choices": both, "itemChoice": 2})["ui.choice_made"] is True
