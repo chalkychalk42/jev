@@ -1771,3 +1771,30 @@ intermittently in full-suite runs (canary not promoted); it now reports the fail
 
 NEXT: hand in quest 15 (the route is on an Elwynn grind step after the failed turn-in),
 then long teach sessions to give every capability its independent runs.
+
+## 2026-09-23 — Operator review: Holy Light, loot skips, pathing, Claude tutor
+
+The operator was back at the desktop, so no live runs; all of this is offline, pushed
+(`f26122b`, `56c3f73`, `237c184`, `d980f89`).
+
+- **Holy Light blocking selection** (V50). Frames 534-543 of `20260923T110010-adc4a3`: the
+  between-fights heal, pressed with a looted corpse selected, waited for a target click
+  (button lit), and three fights selected nothing. Heals now self-cast; schema 11 paints
+  `bars.targeting` and every click path cancels a waiting spell first. Schema 11 files are
+  installed in the client and load at the next login.
+- **Loot skipped after a kill** (noted, not changed). When another mob joins, the fight can
+  end `lost - selected target changed` although its target died (Echo Ridge counter 8 -> 9),
+  and only a `killed` fight is followed by looting. NEXT: remember such kills and loot them
+  once combat ends.
+- **Pathing and unsticking** (V52). Replaying today's stuck positions through the real
+  navmesh: the mesh treats a fence, a trunk gap and a ledge as open ground, so no re-plan
+  can route round them. `jev.clients.walk_sim` now runs the real `Travel` against simulated
+  obstacles; `RouteMemory` learns each blocked spot and the escape that worked, and later
+  routes go round it (60-yard fence 42.4 s -> 11.0 s, trunk-and-wall wedge 20.5 s -> 8.8 s
+  on the second trip, no stuck events). With this morning's falling grace and re-plan
+  height, all four recorded stuck causes have a shared fix.
+- **Tutor on the Claude subscription** (V51): `claude-opus-4-7`, medium effort; 5.7 s and
+  6.4 s on saved frames. The local teaching launch configuration uses it.
+
+NEXT: with the desktop free - restart the client once (schema 11), hand in quest 15, then
+long teach sessions with the Claude tutor; watch `var/route-memory.json` fill as trips repeat.
