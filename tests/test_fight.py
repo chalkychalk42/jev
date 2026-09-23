@@ -1395,5 +1395,29 @@ def test_an_attacker_in_melee_whose_plate_cannot_be_proved_is_fought_by_the_clie
 def test_an_unproved_plate_is_still_not_fought_blind_out_of_melee():
     far = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": False}
     f = _fight([far])
+    f.acquire = lambda name_id, **_: None
     f.targeting.face = NOT_VISIBLE
     assert f.run(1161, timeout_s=2.0) is Fought.NOT_VISIBLE
+
+
+def test_a_fresh_selection_whose_plate_cannot_be_proved_is_chosen_again_once(combat_clock):
+    """A same-name unit in front answered every hover, and seven fights gave up "not
+    visible" (run 20260924T002817-cee9c2). Any unit of the wanted name will do for a kill:
+    choose again, once, by a click that proves itself."""
+    reacquired = []
+    faces = iter([NOT_VISIBLE, FACED, FACED, FACED, FACED, FACED, FACED, FACED])
+    swung = {**ALIVE, "target.melee_range": True, "target.hp": 0.0}
+    f = _fight([ALIVE, ALIVE, swung])
+    f.acquire = lambda name_id, **_: reacquired.append(name_id)
+    f.targeting.face_selected = lambda **_: next(faces)
+    assert f.run(None, timeout_s=5.0) is Fought.KILLED, f.detail
+    assert reacquired == [None, None], "the first pick and exactly one more"
+
+
+def test_a_second_unprovable_pick_ends_the_fight(combat_clock):
+    reacquired = []
+    f = _fight([ALIVE])
+    f.acquire = lambda name_id, **_: reacquired.append(name_id)
+    f.targeting.face = NOT_VISIBLE
+    assert f.run(None, timeout_s=5.0) is Fought.NOT_VISIBLE
+    assert reacquired == [None, None], "chose again more than once"

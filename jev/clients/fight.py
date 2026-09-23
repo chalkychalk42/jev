@@ -398,11 +398,16 @@ class Fight:
             self._damage_mark = v.get("target.hp")
             self.selected_plate = None
         if not self.engage(v) and not self._fight_blind(v):
-            if not (chosen and self._aim_code is FaceCode.NOT_VISIBLE):
+            if self._aim_code is not FaceCode.NOT_VISIBLE:
                 return self._aim_failure()
             # Kept from before this fight and not on screen: nothing says it is ahead or
             # near, so choose again from what is. Measured: one stale far selection
             # absorbed twenty-eight fights while the hunt walked between spots.
+            #
+            # And a selection made moments ago whose plate cannot be proved - a unit of the
+            # same name in front of it answering every hover - is chosen again once, by a
+            # click that proves itself; any unit of the wanted name will do for a kill
+            # (seven such fights gave up in run 20260924T002817-cee9c2).
             event("selection.dropped", data={"name_id": self._selected_name_id,
                                              "reason": self.detail})
             acquired = self.acquire(name_id, defend=in_combat)
