@@ -43,6 +43,12 @@ MAX_PER_MAP = 400
 # at a height within `AVOID_HEIGHT` of it, would walk into it again. Tight, because the
 # way round at Echo Ridge passes two yards from the crossing that is blocked.
 BLOCK_MERGE_YARDS = 1.0
+# Blocked this many times before plans avoid it. Once is weak evidence: inside Northshire
+# Abbey a detour cannot get past anything, so every bump in its halls became a "blocked"
+# spot, and plans routed round the Abbey's only doorway - ten minutes of wandering and a
+# failed quest step (run 20260924T001027-84b25c). A log across a crossing blocks every
+# time; a hall blocks once.
+BLOCK_CONFIRM_HITS = 2
 AVOID_YARDS = 1.5
 AVOID_HEIGHT = 4.0
 # Where to look for a way round a blocked spot: rings about it, twelve bearings each.
@@ -127,7 +133,8 @@ class RouteMemory:
         return found
 
     def blocks(self, map_id: int) -> list[Block]:
-        return [b for b in self.blocked if b.map_id == map_id]
+        """The confirmed blocked spots on a map: those walking was stopped at repeatedly."""
+        return [b for b in self.blocked if b.map_id == map_id and b.hits >= BLOCK_CONFIRM_HITS]
 
     def learn(self, map_id: int, stuck: tuple[float, float], via: tuple[float, float]) -> Passage:
         """Remember that the character stopped at `stuck` and got past by `via`."""

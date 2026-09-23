@@ -293,6 +293,12 @@ def test_a_blocked_leg_no_detour_gets_past_is_remembered_and_routed_round(monkey
     def replan(position):
         return query.path(0, world(*position), world(*goal))
 
+    # Once is not enough to plan round a spot (V66): the first walk records it and fails.
+    failed = travel.follow(first, replan=replan, memory=memory, max_replans=0)
+    assert failed.outcome is Outcome.STUCK and memory.blocks(0) == []
+    here[0] = start
+    walked.clear()
+    first = query.path(0, world(*start), world(*goal))
     result = travel.follow(first, replan=replan, memory=memory, max_replans=0)
     assert result.outcome is Outcome.ARRIVED, result.detail
     assert "blocked spot" in result.detail

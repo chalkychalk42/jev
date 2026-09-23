@@ -50,6 +50,12 @@ def test_memory_is_bounded_per_map():
     assert len(memory.passages) == MAX_PER_MAP
 
 
+def confirmed(memory, spot, heading=None):
+    """Blocked twice, as walking has to be before plans avoid a spot."""
+    memory.block(0, spot, heading=heading)
+    return memory.block(0, spot, heading=heading)
+
+
 class _Straight:
     """A planner that knows no obstacles: every answer is the straight line."""
 
@@ -85,7 +91,7 @@ def test_a_route_through_a_blocked_spot_is_planned_round_it():
     from jev.guide.route_memory import AVOID_YARDS, AvoidingQuery, passes
 
     memory = RouteMemory()
-    memory.block(0, (0.0, -20.0, 80.0))
+    confirmed(memory, (0.0, -20.0, 80.0))
     planned = AvoidingQuery(_Straight(), memory).path(0, (0.0, 0.0, 80.0), (0.0, -40.0, 80.0))
     assert planned.usable and planned.points[0][:2] == (0.0, 0.0)
     assert planned.points[-1][:2] == (0.0, -40.0)
@@ -97,8 +103,8 @@ def test_a_route_clear_of_blocked_spots_is_the_planners_own():
     from jev.guide.route_memory import AvoidingQuery
 
     memory = RouteMemory()
-    memory.block(0, (30.0, -20.0, 80.0))
-    memory.block(0, (0.0, -20.0, 100.0))                    # a bridge ten yards up
+    confirmed(memory, (30.0, -20.0, 80.0))
+    confirmed(memory, (0.0, -20.0, 100.0))                  # a bridge ten yards up
     inner = _Straight()
     planned = AvoidingQuery(inner, memory).path(0, (0.0, 0.0, 80.0), (0.0, -40.0, 80.0))
     assert planned.points == ((0.0, 0.0, 80.0), (0.0, -40.0, 80.0))
@@ -109,8 +115,8 @@ def test_a_blocked_spot_the_route_starts_or_ends_on_is_not_avoided():
     from jev.guide.route_memory import AvoidingQuery
 
     memory = RouteMemory()
-    memory.block(0, (0.0, -0.5, 80.0))
-    memory.block(0, (0.0, -39.5, 80.0))
+    confirmed(memory, (0.0, -0.5, 80.0))
+    confirmed(memory, (0.0, -39.5, 80.0))
     inner = _Straight()
     AvoidingQuery(inner, memory).path(0, (0.0, 0.0, 80.0), (0.0, -40.0, 80.0))
     assert len(inner.asked) == 1
@@ -121,7 +127,7 @@ def test_with_no_way_round_the_planners_answer_stands():
     from jev.guide.route_memory import AvoidingQuery
 
     memory = RouteMemory()
-    memory.block(0, (0.0, -20.0, 80.0))
+    confirmed(memory, (0.0, -20.0, 80.0))
     planned = AvoidingQuery(_Straight(only_direct=True), memory).path(
         0, (0.0, 0.0, 80.0), (0.0, -40.0, 80.0))
     assert planned.points == ((0.0, 0.0, 80.0), (0.0, -40.0, 80.0))
@@ -139,3 +145,19 @@ def test_from_a_blocked_spot_the_way_back_is_open_and_the_way_through_is_not():
     assert not passes(_route((0.0, -20.0), (0.0, 0.0)), spot), "back the way it came"
     assert not passes(_route((0.0, -20.0), (8.0, -20.0)), spot), "along the log"
     assert passes(_route((0.0, 0.0), (0.0, -40.0)), spot), "through it from further back"
+
+
+def test_one_bump_is_not_a_blocked_spot():
+    """Inside Northshire Abbey a detour cannot get past anything, so every bump in its
+    halls was recorded blocked, and plans routed round the Abbey's only doorway for ten
+    minutes (run 20260924T001027-84b25c). A spot is avoided once it has blocked twice."""
+    from jev.guide.route_memory import AvoidingQuery
+
+    memory = RouteMemory()
+    memory.block(0, (0.0, -20.0, 80.0))
+    assert memory.blocks(0) == []
+    inner = _Straight()
+    AvoidingQuery(inner, memory).path(0, (0.0, 0.0, 80.0), (0.0, -40.0, 80.0))
+    assert len(inner.asked) == 1, "planned round a spot seen blocked once"
+    memory.block(0, (0.3, -20.0, 80.0))
+    assert len(memory.blocks(0)) == 1
