@@ -266,11 +266,16 @@ class ClientRuntime:
                     node = self.graph.get(failed)
                     target = self.graph.get(verdict.goto)
                     rejoin = node.next[0] if node and node.next else None
-                    if (target is not None and target.kind is StepKind.GRIND
-                            and failed not in self._retried):
-                        self._retried.add(failed)
-                        rejoin = failed
-                    self.tracker.enter(verdict.goto, state, rejoin_to=rejoin)
+                    goto = verdict.goto
+                    if target is not None and target.kind is StepKind.GRIND:
+                        # The rib whose mobs suit the character as it is, not as the guide
+                        # expected: a level 3 character failed into level 5-6 boars and
+                        # died there three times (run 20260923T174132-d01302).
+                        goto = self.graph.rib_for(state.char.level, preferred=target).id
+                        if failed not in self._retried:
+                            self._retried.add(failed)
+                            rejoin = failed
+                    self.tracker.enter(goto, state, rejoin_to=rejoin)
             case Event.DEATH:
                 if not self._was_dead:
                     self.counters.deaths += 1

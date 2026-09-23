@@ -254,3 +254,33 @@ def test_random_spawn_entry_loot_sources_are_not_reported_missing(human, quest_i
 def test_prerequisite_metadata_keeps_milly_chain_connected(human):
     manifest = next(n for n in human.nodes if n.quest_id == 3905)
     assert manifest.quest_prerequisites == ((3904,),)
+
+
+def test_ribs_cover_the_band_in_level_windows_and_steps_fail_into_their_own(human):
+    """The one densest cluster for levels 1-12 was level 5-6 boars, and every Northshire
+    step sent a level 3 character there to die (run 20260923T174132-d01302)."""
+    ribs = human.ribs()
+    assert len({r.level for r in ribs}) >= 4, "one rib for the whole band again"
+    assert min(r.level[0] for r in ribs) == 1, "nothing for a new character to grind"
+    by_id = {r.id: r for r in ribs}
+    for node in human.nodes:
+        for edge in node.on_fail:
+            rib = by_id.get(edge.goto)
+            if rib is not None:
+                assert rib is human.rib_for(node.level[0]), (node.id, rib.id)
+                assert rib.level[0] <= max(node.level[0], min(r.level[0] for r in ribs))
+
+
+def test_the_rib_for_a_level_is_the_highest_window_it_has_reached():
+    from jev.guide.graph import Node, rib_for
+
+    def rib(lo, hi):
+        return Node(id=f"r{lo}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi))
+
+    low, mid, high = rib(1, 3), rib(3, 5), rib(5, 7)
+    ribs = (high, low, mid)
+    assert rib_for(ribs, 1) is low and rib_for(ribs, 3) is mid and rib_for(ribs, 4) is mid
+    assert rib_for(ribs, 9) is high, "past every window: the highest"
+    assert rib_for((mid, high), 1) is mid, "below every window: the lowest"
+    assert rib_for(ribs, None, preferred=high) is high, "an unread level keeps the guide's"
+    assert rib_for((), 3) is None

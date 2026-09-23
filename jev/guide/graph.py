@@ -201,6 +201,10 @@ class Graph(BaseModel):
         """Grind loops hanging off the spine — what `on_fail` falls back to."""
         return tuple(n for n in self.nodes if n.kind is StepKind.GRIND)
 
+    def rib_for(self, level: int | None, preferred: Node | None = None) -> Node | None:
+        """The rib whose mobs suit a character of `level`. See `rib_for`."""
+        return rib_for(self.ribs(), level, preferred)
+
     def unreachable(self) -> tuple[str, ...]:
         """Nodes no edge leads to. Not an error — a rib is reached only on failure — but
         a node unreachable from anywhere is dead content and worth reporting."""
@@ -231,6 +235,23 @@ class GraphStats(BaseModel):
     with_position: int
     unreachable: int
     quests: int
+
+
+def rib_for(ribs, level: int | None, preferred: Node | None = None) -> Node | None:
+    """The rib whose mobs suit a character of `level`: of the ribs whose level window
+    starts at or below it, the highest; below every window, the lowest. `preferred` wins
+    a tie, and is the answer when the level is unknown."""
+    ribs = tuple(ribs)
+    if not ribs:
+        return None
+    if level is None:
+        return preferred or ribs[0]
+    fitting = [r for r in ribs if r.level[0] <= level]
+    if not fitting:
+        return min(ribs, key=lambda r: r.level[0])
+    top = max(r.level[0] for r in fitting)
+    best = [r for r in fitting if r.level[0] == top]
+    return preferred if preferred in best else best[0]
 
 
 def stats(g: Graph) -> GraphStats:

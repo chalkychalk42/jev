@@ -5,27 +5,117 @@
   "coord_zone_id": 12,
   "nodes": [
     {
-      "id": "alli_human_1_12_grind_elwynn_0",
+      "id": "alli_human_1_12_grind_elwynn_1_3",
       "kind": "grind",
       "zone": "Elwynn",
       "zone_id": 12,
       "level": [
         1,
-        12
+        3
       ],
       "pos": [
-        0.40742755775155715,
-        0.8028470733354427
+        0.47957042640725006,
+        0.3482778964234796
       ],
       "world": [
-        -9797.839201626712,
-        121.30351077040581,
-        25.52829195375312
+        -8745.701108870968,
+        -129.09235665106004,
+        86.38992137293661
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 63.502919878276884,
+      "hunt_yards": 49.4913912091905,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Young Wolf",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Young Wolf"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "62 spawns of Young Wolf clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_3_5",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        3,
+        5
+      ],
+      "pos": [
+        0.5435980397273279,
+        0.4699328989968549
+      ],
+      "world": [
+        -9027.281710642688,
+        -351.321526005583,
+        72.6792006582584
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 66.6063931283128,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Kobold Worker",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Kobold Worker"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "64 spawns of Kobold Worker clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_5_7",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        5,
+        7
+      ],
+      "pos": [
+        0.40265617580249,
+        0.8037812545500509
+      ],
+      "world": [
+        -9800.001441592261,
+        137.86418189699688,
+        24.67006209918431
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 56.82478783555033,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -46,31 +136,31 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "111 spawns of Stonetusk Boar clustered here; route not recorded",
+      "notes": "69 spawns of Stonetusk Boar clustered here; route not recorded",
       "source": "generated"
     },
     {
-      "id": "alli_human_1_12_grind_elwynn_1",
+      "id": "alli_human_1_12_grind_elwynn_7_9",
       "kind": "grind",
       "zone": "Elwynn",
       "zone_id": 12,
       "level": [
-        1,
-        12
+        7,
+        9
       ],
       "pos": [
-        0.5387355815000389,
-        0.6697344389176699
+        0.6005207183983688,
+        0.7804645413172516
       ],
       "world": [
-        -9489.738959878177,
-        -334.4447443040751,
-        59.09460714307882
+        -9746.032973345587,
+        -548.8906519272748,
+        41.54961810392492
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 91.38131231664363,
+      "hunt_yards": 57.18173936956914,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -91,7 +181,97 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "92 spawns of Rockhide Boar clustered here; route not recorded",
+      "notes": "43 spawns of Rockhide Boar clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_9_11",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        9,
+        11
+      ],
+      "pos": [
+        0.7997576853875548,
+        0.7976617656832804
+      ],
+      "world": [
+        -9785.837376644737,
+        -1240.4089419716283,
+        40.203421241358704
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 67.72463723193283,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Prowler",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Prowler"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "29 spawns of Prowler clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_11_12",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        11,
+        12
+      ],
+      "pos": [
+        0.034264097066891555,
+        0.821644889407753
+      ],
+      "world": [
+        -9841.348307291666,
+        1416.4916585286458,
+        41.282649993896484
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 54.85941404398485,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Defias Smuggler",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Defias Smuggler"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "26 spawns of Defias Smuggler clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -1008,17 +1188,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1072,17 +1252,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1140,17 +1320,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1232,17 +1412,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1300,17 +1480,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1368,17 +1548,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1436,17 +1616,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1504,17 +1684,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1596,17 +1776,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1664,17 +1844,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1732,17 +1912,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1824,17 +2004,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1892,17 +2072,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -1960,17 +2140,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2052,17 +2232,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2120,17 +2300,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2188,17 +2368,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2280,17 +2460,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2348,17 +2528,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2416,17 +2596,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2508,17 +2688,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2576,17 +2756,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2644,17 +2824,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2712,17 +2892,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2780,17 +2960,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2872,17 +3052,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -2940,17 +3120,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3008,17 +3188,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3100,17 +3280,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3168,17 +3348,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3236,17 +3416,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3328,17 +3508,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3396,17 +3576,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3460,17 +3640,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3548,17 +3728,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3612,17 +3792,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3676,17 +3856,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3740,17 +3920,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_1_3",
           "value": null
         }
       ],
@@ -3804,17 +3984,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -3892,17 +4072,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -3956,17 +4136,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4024,17 +4204,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4116,17 +4296,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4184,17 +4364,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4248,17 +4428,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4336,17 +4516,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4400,17 +4580,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4464,17 +4644,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4552,17 +4732,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4616,17 +4796,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4680,17 +4860,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4768,17 +4948,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4832,17 +5012,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4900,17 +5080,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -4992,17 +5172,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -5060,17 +5240,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_3_5",
           "value": null
         }
       ],
@@ -5124,17 +5304,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5188,17 +5368,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5256,17 +5436,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5348,17 +5528,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5416,17 +5596,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5484,17 +5664,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5576,17 +5756,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5644,17 +5824,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5708,17 +5888,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5796,17 +5976,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5860,17 +6040,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5928,17 +6108,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -5996,17 +6176,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6064,17 +6244,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6156,17 +6336,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6224,17 +6404,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6292,17 +6472,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6384,17 +6564,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6452,17 +6632,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6520,17 +6700,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6612,17 +6792,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6680,17 +6860,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6748,17 +6928,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6840,17 +7020,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6908,17 +7088,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -6972,17 +7152,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7060,17 +7240,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7124,17 +7304,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7188,17 +7368,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7276,17 +7456,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7340,17 +7520,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7404,17 +7584,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7492,17 +7672,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7556,17 +7736,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7620,17 +7800,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7708,17 +7888,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7772,17 +7952,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7840,17 +8020,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7908,17 +8088,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_5_7",
           "value": null
         }
       ],
@@ -7972,17 +8152,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8036,17 +8216,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8104,17 +8284,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8172,17 +8352,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8240,17 +8420,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8308,17 +8488,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8376,17 +8556,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8444,17 +8624,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8512,17 +8692,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8604,17 +8784,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8672,17 +8852,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8740,17 +8920,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8808,17 +8988,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8872,17 +9052,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -8960,17 +9140,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9024,17 +9204,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9088,17 +9268,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9199,17 +9379,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9263,17 +9443,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9331,17 +9511,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9423,17 +9603,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9491,17 +9671,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9559,17 +9739,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9651,17 +9831,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 600.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9719,17 +9899,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_7_9",
           "value": null
         }
       ],
@@ -9783,17 +9963,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_9_11",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_9_11",
           "value": 3.0
         },
         {
           "when": "quest_not_offered",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_9_11",
           "value": null
         }
       ],
@@ -9842,17 +10022,17 @@
       "on_fail": [
         {
           "when": "timeout_s",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_9_11",
           "value": 240.0
         },
         {
           "when": "deaths_on_step",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_9_11",
           "value": 3.0
         },
         {
           "when": "quest_missing",
-          "goto": "alli_human_1_12_grind_elwynn_0",
+          "goto": "alli_human_1_12_grind_elwynn_9_11",
           "value": null
         }
       ],

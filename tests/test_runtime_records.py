@@ -264,3 +264,23 @@ def test_a_rib_with_no_way_back_rejoins_the_first_step_not_done(tmp_path):
     rt.tracker.enter("rib", states[0])          # a rib entered with no rejoin point
     rt.tick(choose=False)
     assert rt.tracker.step_id == "turnin" and not rt.finished
+
+
+def test_a_step_fails_into_the_rib_for_the_characters_own_level(tmp_path):
+    """The guide names a rib for the step's quest level; the character may not be there."""
+    from jev.guide.graph import FailEdge, FailWhen
+
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    graph = Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, timeout_s=10.0,
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), level=(5, 8),
+             on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=10, goto="boars"),), **base),
+        Node(id="wolves", kind=StepKind.GRIND, level=(1, 3), skills=("GRIND_UNTIL",), **base),
+        Node(id="boars", kind=StepKind.GRIND, level=(5, 7), skills=("GRIND_UNTIL",), **base),
+    ))
+    rt = ClientRuntime("c", graph, ScriptedSource([held(0, 3), held(12, 3)]), Recorder(tmp_path))
+    rt.tick(choose=False)
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("wolves", "turnin")

@@ -27,7 +27,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from jev.guide.coords import ZoneBounds, _as_float, load_bounds, on_map, world_to_map
-from jev.guide.graph import FailEdge, FailWhen, Graph, Node, ObjectiveTarget
+from jev.guide.graph import FailEdge, FailWhen, Graph, Node, ObjectiveTarget, rib_for
 from jev.world.state_v1 import StepKind
 
 # Race bitmasks are `1 << (ChrRaces.id - 1)`. RequiredRaces == 0 means every race.
@@ -660,6 +660,11 @@ class WorldDB:
 # --------------------------------------------------------------------------- generation
 
 
+def rib_windows(level_min: int, level_max: int, width: int = 2) -> list[tuple[int, int]]:
+    """Overlapping level windows for ribs: (1, 3), (3, 5), ... up to `level_max`."""
+    return [(lo, min(level_max, lo + width)) for lo in range(level_min, level_max, width)]
+
+
 def _order_quests(quests: list[QuestRow], zone_order: dict[int, int]) -> list[QuestRow]:
     """Starter zone first, then level order, and never a quest before its prerequisite.
 
@@ -767,25 +772,35 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         return None, world, spawn.map_id
 
     # -- ribs first, so quest nodes have somewhere to fail to -------------------
-    rib_for_zone: dict[int, str] = {}
+    # One per level window, each the densest cluster of mobs in it, and the rib's `level`
+    # is its window. The densest cluster for the whole band was Stonetusk Boars, level
+    # 5-6, and every Northshire step failed into it: a level 3 character went there and
+    # died three times running (run 20260923T174132-d01302).
+    ribs: list[Node] = []
     for zid in zone_ids:
         b = db.bounds.get(zid)
         if b is None or b.degenerate:
             continue
-        for i, (spawn, count) in enumerate(db.grind_clusters(b, level_min, level_max)):
-            frac, world, map_id = place(spawn, zid)
-            rid = f"{prefix}_grind_{_slug(zone_names.get(zid, str(zid)), 12)}_{i}"
-            nodes.append(Node(
-                id=rid, kind=StepKind.GRIND, zone=zone_names.get(zid, str(zid)), zone_id=zid,
-                level=(level_min, level_max), pos=frac, world=world, map_id=map_id,
-                r=0.06,   # a rib is a loop you walk, not a point you stand on
-                hunt_yards=hunt_yards(spawn),
-                target_name=spawn.name, target_kind=spawn.kind,
-                objectives=(f"grind {spawn.name}",),
-                skills=("GRIND_UNTIL",), timeout_s=900.0, skippable=True,
-                notes=f"{count} spawns of {spawn.name} clustered here; route not recorded",
-            ))
-            rib_for_zone.setdefault(zid, rid)
+        taken: set[int] = set()
+        for lo, hi in rib_windows(level_min, level_max):
+            for spawn, count in db.grind_clusters(b, lo, hi, limit=3):
+                if spawn.npc_id in taken:
+                    continue
+                taken.add(spawn.npc_id)
+                frac, world, map_id = place(spawn, zid)
+                rid = f"{prefix}_grind_{_slug(zone_names.get(zid, str(zid)), 12)}_{lo}_{hi}"
+                ribs.append(Node(
+                    id=rid, kind=StepKind.GRIND, zone=zone_names.get(zid, str(zid)),
+                    zone_id=zid, level=(lo, hi), pos=frac, world=world, map_id=map_id,
+                    r=0.06,   # a rib is a loop you walk, not a point you stand on
+                    hunt_yards=hunt_yards(spawn),
+                    target_name=spawn.name, target_kind=spawn.kind,
+                    objectives=(f"grind {spawn.name}",),
+                    skills=("GRIND_UNTIL",), timeout_s=900.0, skippable=True,
+                    notes=f"{count} spawns of {spawn.name} clustered here; route not recorded",
+                ))
+                break
+    nodes.extend(ribs)
 
     # -- services ---------------------------------------------------------------
     for zid in zone_ids:
@@ -828,7 +843,6 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         zid = q.zone_or_sort if q.zone_or_sort in zone_ids else zone_ids[0]
         zname = zone_names.get(zid, str(zid))
         base = f"{prefix}_{q.quest_id}_{_slug(q.title)}"
-        rib = rib_for_zone.get(zid)
         band = (max(1, q.min_level), max(q.level, q.min_level) + 3)
 
         giver, taker = db.giver(q.quest_id), db.taker(q.quest_id)
@@ -937,11 +951,12 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         fails = n.on_fail
         if not fails:
             # Everything on the spine can stall, so everything on the spine needs an exit.
-            # A rib is the better landing when the zone has one — it earns XP while the
-            # blocked step waits — but the next node is always available, and skipping
-            # forward beats standing still.
-            rib = rib_for_zone.get(n.zone_id) or next(iter(rib_for_zone.values()), None)
-            escape = rib or (nxt[0] if nxt else None)
+            # A rib is the better landing - it earns XP while the blocked step waits - the
+            # one whose mobs suit the step's level, and the runtime picks again by the
+            # character's own. The next node is always available, and skipping forward
+            # beats standing still.
+            rib = rib_for(ribs, n.level[0])
+            escape = rib.id if rib else (nxt[0] if nxt else None)
             if escape:
                 # `QUEST_MISSING` means "the quest should be in the log and is not", so it
                 # belongs on objectives and turn-ins only. On an *accept* node the quest
