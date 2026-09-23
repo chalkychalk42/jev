@@ -71,6 +71,7 @@ class ClaudeVisionClient(ClaudeSubscriptionClient):
             raise ValueError("preflight timeout must be positive and finite")
         binary = shutil.which(self.binary) or self.binary
         report: dict[str, Any] = {"binary": binary, "requested_model": self.model,
+                                  "requested_effort": self.effort,
                                   "platform": os.name, "model_call_made": False,
                                   "vision_roundtrip_verified": False}
         try:
@@ -92,7 +93,7 @@ class ClaudeVisionClient(ClaudeSubscriptionClient):
         required = ("--print", "--input-format", "--output-format", "--verbose", "--safe-mode",
                     "--no-session-persistence", "--permission-prompts", "--tools",
                     "--strict-mcp-config", "--mcp-config", "--model", "--system-prompt",
-                    "--json-schema")
+                    "--json-schema", *(("--effort",) if self.effort else ()))
         report["version"] = results["version"].stdout.strip()[:120]
         report["required_flags"] = {flag: flag in results["help"].stdout for flag in required}
         report["command_exit_codes"] = {name: result.returncode for name, result in results.items()}
@@ -126,7 +127,8 @@ class ClaudeVisionClient(ClaudeSubscriptionClient):
                 "--output-format", "stream-json", "--verbose", "--safe-mode",
                 "--no-session-persistence", "--permission-prompts", "none",
                 "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-                "--model", self.model, "--system-prompt", SYSTEM_PROMPT,
+                "--model", self.model, *(("--effort", self.effort) if self.effort else ()),
+                "--system-prompt", SYSTEM_PROMPT,
                 "--json-schema", json.dumps(json_schema, separators=(",", ":"))]
 
     @staticmethod

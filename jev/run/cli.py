@@ -79,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="credential variable name, never the credential value")
     parser.add_argument("--teacher-env-file", type=Path, default=ROOT / ".env")
     parser.add_argument("--teacher-binary")
+    parser.add_argument("--teacher-effort", choices=("low", "medium", "high", "xhigh", "max"),
+                        help="Claude reasoning effort; unset leaves the CLI default")
     parser.add_argument("--teacher-calls-per-hour", type=int, default=12)
     parser.add_argument("--play-mode", choices=("off", "teach", "adaptive"), default="off",
                         help="visual Jev actions inside guide skills; adaptive enables evaluated motor handover")
@@ -152,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
                           "play_teacher_calls_per_hour": args.play_teacher_calls_per_hour,
                           "teacher_provider": args.teacher_provider,
                           "teacher_requested": args.teacher_model,
+                          "teacher_effort": args.teacher_effort,
                           "bindings": [str(path) for path in args.bindings],
                           "world_db": str(args.world_db),
                           "screenshots": args.screenshots,
@@ -232,6 +235,7 @@ def _live(args, graph, memory, route) -> int:
                 teacher_binary=args.teacher_binary,
                 teacher_provider=args.teacher_provider, teacher_base_url=args.teacher_base_url,
                 teacher_env_file=args.teacher_env_file, teacher_key_env=args.teacher_key_env,
+                teacher_effort=args.teacher_effort,
                 teacher_calls_per_hour=args.play_teacher_calls_per_hour,
                 binding_paths=args.bindings, world_db=args.world_db,
                 config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout))
@@ -254,7 +258,8 @@ def _live(args, graph, memory, route) -> int:
         if args.teacher and args.play_mode == "off":
             try:
                 from jev.teacher.client import ClaudeSubscriptionClient
-                teacher = ClaudeSubscriptionClient(binary=args.teacher_binary, model=args.teacher_model)
+                teacher = ClaudeSubscriptionClient(binary=args.teacher_binary, model=args.teacher_model,
+                                                   effort=args.teacher_effort)
             except Exception as exc:
                 print(f"teacher unavailable; scripted floor continues: {type(exc).__name__}: {exc}")
         background = Background(runtime, runs=args.runs_dir, store=args.learning_store,

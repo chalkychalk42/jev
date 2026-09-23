@@ -98,6 +98,7 @@ class PlayingBody:
                  teacher_model: str | None = None, teacher_binary: str | None = None,
                  teacher_provider: str = "claude", teacher_base_url: str | None = None,
                  teacher_env_file: Path | None = None, teacher_key_env: str = "GLM_API_KEY",
+                 teacher_effort: str | None = None,
                  teacher_calls_per_hour: int = 240, binding_paths=(),
                  config: PlayConfig | None = None, teacher=None, learner=None,
                  start_learning: bool = True, world_db: Path | None = DEFAULT_WORLD_DB):
@@ -128,7 +129,8 @@ class PlayingBody:
         if teacher is None:
             transport = make_vision_client(
                 provider=teacher_provider, binary=teacher_binary, model=teacher_model,
-                base_url=teacher_base_url, env_file=teacher_env_file, key_env=teacher_key_env)
+                base_url=teacher_base_url, env_file=teacher_env_file, key_env=teacher_key_env,
+                effort=teacher_effort)
             budget = BudgetClient(transport, Path(store) / "motor-teacher-budget.sqlite",
                                   calls_per_hour=teacher_calls_per_hour, interval_s=0)
             teacher = VisionTeacher(transport, knowledge=self.knowledge,

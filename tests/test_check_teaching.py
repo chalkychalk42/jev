@@ -136,7 +136,7 @@ def test_smoke_factory_receives_explicit_provider_and_narrows_fake_transport_sch
     construct.assert_called_once_with(
         provider="glm", binary=None, model="glm-4.6v-flash",
         base_url="https://open.bigmodel.cn/api/paas/v4", env_file=fixture,
-        key_env="JEV_TEST_GLM_CREDENTIAL",
+        key_env="JEV_TEST_GLM_CREDENTIAL", effort=None,
     )
 
 

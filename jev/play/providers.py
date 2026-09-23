@@ -34,14 +34,17 @@ def credential(name: str, path: Path | None = None) -> str:
 
 def make_vision_client(*, provider: str = "claude", model: str | None = None,
                        binary: str | None = None, base_url: str | None = None,
-                       env_file: Path | None = None, key_env: str = "GLM_API_KEY"):
+                       env_file: Path | None = None, key_env: str = "GLM_API_KEY",
+                       effort: str | None = None):
     model = model_for(provider, model)
     if provider == "claude":
         from jev.play.teacher import ClaudeVisionClient
 
         if base_url is not None:
             raise ValueError("an API base URL applies only to the GLM provider")
-        return ClaudeVisionClient(binary=binary, model=model)
+        return ClaudeVisionClient(binary=binary, model=model, effort=effort)
+    if effort is not None:
+        raise ValueError("a reasoning effort applies only to the Claude provider")
     from jev.play.glm import ZAI_BASE_URL, GLMVisionClient
 
     return GLMVisionClient(api_key=credential(key_env, env_file), model=model,

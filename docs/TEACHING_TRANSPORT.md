@@ -1,5 +1,21 @@
 # Visual teacher transport
 
+## Current choice: Claude subscription, `claude-opus-4-7` at medium effort (23 September 2026)
+
+The owner dropped GLM for the tutor after five teach sessions in which the free
+`glm-4.6v-flash` tier refused most requests ("overloaded", 1305), and chose the Claude
+subscription with a medium-effort model. The launch configuration passes
+`--teacher-provider claude --teacher-model claude-opus-4-7 --teacher-effort medium` and the
+native `claude.exe`; `--teacher-effort` maps to the CLI's `--effort` (low, medium, high,
+xhigh, max; Claude Code 2.1.280) and is recorded in `play-config.json` and in every reply's
+model label (`claude-sub:claude-opus-4-7@medium`).
+
+Measured on native Windows with saved frames (no game input): the preflight reported
+subscription authentication and every required flag; one smoke reply took 5.7 s; a
+non-executing replay of the Echo Ridge kobold camp returned `select_unit` on the Kobold
+Worker's nameplate in 6.4 s, well inside the 30 s decision deadline. These calls draw on
+the owner's subscription allocation, which is also what their own Claude Code sessions use.
+
 ## GLM API option
 
 The visual tutor can also use the explicit `--teacher-provider glm` transport. This was

@@ -437,3 +437,17 @@ def test_timeout_and_cancellation_kill_and_reap_child(tmp_path, cancel):
 
     asyncio.run(scenario())
     assert not marker.exists()
+
+
+def test_claude_effort_is_passed_to_the_cli_and_named_in_the_records():
+    """The operator chose a medium-effort Claude model for the tutor (23 September)."""
+    from jev.play.teacher import ClaudeVisionClient
+
+    client = ClaudeVisionClient(binary="claude", model="claude-opus-4-7", effort="medium")
+    argv = client.image_argv({"type": "object"})
+    assert argv[argv.index("--effort") + 1] == "medium"
+    assert argv[argv.index("--model") + 1] == "claude-opus-4-7"
+    assert client.model_name == "claude-sub:claude-opus-4-7@medium"
+    assert "--effort" not in ClaudeVisionClient(binary="claude", model="sonnet").image_argv({})
+    with pytest.raises(ValueError):
+        ClaudeVisionClient(binary="claude", model="sonnet", effort="extreme")

@@ -80,6 +80,9 @@ from jev.coach.schema import Status
 
 # Bounded so one hung child cannot hold the farm's single worker for the rest of the run.
 DEFAULT_MODEL = "sonnet"
+# The CLI's reasoning effort levels (`claude --effort`, Claude Code 2.1.280). Unset leaves
+# the CLI's own default; a tutor deciding every few seconds wants it chosen, not inherited.
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
 """The teacher's tier. See the note in `ClaudeSubscriptionClient.__init__`: pinned so a
 farm never contends with the human for the Opus allocation."""
 
@@ -210,7 +213,11 @@ class ClaudeSubscriptionClient:
         json_schema: dict[str, Any] | None = None,
         extra_args: Sequence[str] = (),
         env: dict[str, str] | None = None,
+        effort: str | None = None,
     ) -> None:
+        if effort is not None and effort not in EFFORTS:
+            raise ValueError(f"effort must be one of {', '.join(EFFORTS)}")
+        self.effort = effort
         # Resolved from PATH rather than hard-coded: the binary lives under one user's home
         # on this machine, and a path baked into the module is a path that breaks on the
         # next one. "claude" is kept as the last resort so the failure is a clear ENOENT
@@ -242,7 +249,7 @@ class ClaudeSubscriptionClient:
         self.json_schema = json_schema
         self.extra_args = tuple(extra_args)
         self.env = env
-        self.model_name = f"claude-sub:{self.model}"
+        self.model_name = f"claude-sub:{self.model}" + (f"@{effort}" if effort else "")
 
     def argv(self, prompt: str) -> list[str]:
         """Built as a list and executed without a shell, so a prompt containing quotes,
@@ -250,6 +257,8 @@ class ClaudeSubscriptionClient:
         args = [self.binary, *BASE_ARGS]
         if self.model:
             args += ["--model", self.model]
+        if self.effort:
+            args += ["--effort", self.effort]
         if self.json_schema is not None:
             args += ["--json-schema", json.dumps(self.json_schema, separators=(",", ":"))]
         args += [*self.extra_args, prompt]

@@ -57,6 +57,7 @@ def parser() -> argparse.ArgumentParser:
                         help="optional read-only exact-server world/DBC snapshot")
     result.add_argument("--bindings", action="append", type=Path, default=[])
     result.add_argument("--teacher-binary")
+    result.add_argument("--teacher-effort", choices=("low", "medium", "high", "xhigh", "max"))
     result.add_argument("--teacher-model")
     result.add_argument("--teacher-provider", choices=("claude", "glm"), default="claude")
     result.add_argument("--teacher-base-url")
@@ -202,7 +203,8 @@ def run(args, *, client=None) -> dict:
     if client is None and (args.transport_check or args.smoke_image or args.replay_image):
         client = make_vision_client(provider=args.teacher_provider, binary=args.teacher_binary,
                                      model=args.teacher_model, base_url=args.teacher_base_url,
-                                     env_file=args.teacher_env_file, key_env=args.teacher_key_env)
+                                     env_file=args.teacher_env_file, key_env=args.teacher_key_env,
+                                     effort=args.teacher_effort)
     if args.transport_check:
         report["transport"] = client.preflight()
         report["ok"] &= report["transport"]["ok"]
