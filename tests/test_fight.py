@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import inspect
 import time
-from itertools import pairwise
 
 import pytest
 
 from jev.clients.fight import (
-    CLOSE_BURST_S,
-    CLOSE_NUDGE_S,
     CLOSE_STEP_S,
     DEAD_HP,
     FLEE_HP,
@@ -45,6 +42,14 @@ class _Hid:
 
     def hold(self, key, seconds, **_):
         self.holds.append((key, seconds))
+        return True
+
+    def key_down(self, key):
+        self.downs = [*getattr(self, "downs", []), key]
+        return True
+
+    def key_up(self, key):
+        self.ups = [*getattr(self, "ups", []), key]
         return True
 
     def tap(self, key):
@@ -95,6 +100,9 @@ class _Targeting:
             self.hid.tap("esc")
             return True
         return False
+
+    def track_selected(self, hint, **_):
+        return None                    # no plate to steer on unless a test gives one
 
     def turn_toward(self, offset):
         self.turned_toward = [*getattr(self, "turned_toward", []), offset]
@@ -430,7 +438,7 @@ def test_walking_at_it_and_swinging_at_it_are_the_same_loop():
     assert f.closed > 0, "swung at it and never closed"
 
 
-def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
+def test_a_target_that_never_takes_damage_is_given_up_not_waited_out(combat_clock):
     """Out of bursts with the target still at full health is the answer already; more
     seconds cannot improve on it.
 
@@ -438,13 +446,15 @@ def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
     lands on the character, not on the kobold. Requiring "pressed nothing" here let two
     live fights walk eight bursts and then stand in the rotation for the full forty-five
     seconds: `pressed [2, 1, 2] closed 8`, twice."""
+    from jev.clients.fight import MAX_APPROACH_S
+
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)          # rotation is live; it will press the seal
     f.acquire = lambda name_id, **_: None
     f.engage = lambda *_: True
-    f.closed = MAX_CLOSE_BURSTS
-    assert f.run(timeout_s=5) is Fought.UNREACHABLE
+    assert f.run(timeout_s=45) is Fought.UNREACHABLE
     assert "cannot reach" in f.detail
+    assert f._approach_s >= MAX_APPROACH_S and combat_clock[0] < 45
     assert f.pressed, "this is the case where it presses and still cannot reach"
 
 
@@ -509,7 +519,7 @@ def test_a_heal_is_not_pressed_again_until_the_last_one_answers():
     assert hid.taps.count("3") == 2
 
 
-def test_every_stride_is_preceded_by_facing():
+def test_every_approach_is_preceded_by_facing(combat_clock):
     """`W` walks whatever heading the character has, so a unit that moves - or a first
     turn that fell short - is walked past. Six fights in one run reported `closed 8` and
     landed nothing, walking a heading nothing had set."""
@@ -518,9 +528,9 @@ def test_every_stride_is_preceded_by_facing():
     engages = []
     f.acquire = lambda name_id, **_: None
     f.engage = lambda *_: engages.append(1) or True
-    f.run(timeout_s=6)
-    assert f.closed > 1, "did not stride at all"
-    assert len(engages) == f.closed + 1, "strode without facing first"
+    f.run(timeout_s=45)
+    assert f.closed > 1, "did not approach more than once"
+    assert len(engages) == f.closed + 1, "walked without facing first"
 
 
 def test_a_heal_that_never_lands_is_dropped_for_the_rest_of_the_fight():
@@ -672,29 +682,76 @@ def test_it_re_aims_when_the_target_stops_taking_damage():
     assert f.hid.holds == [], "observed damage already ended closing"
 
 
-def test_it_creeps_the_last_yards_rather_than_stopping_or_charging_through():
-    """Two live failures, opposite directions. Running until the target lost health went
-    straight through the kobold and out the other side. Then stopping at
-    `target.in_melee` parked the character three quarters of the way there and left it
-    standing - that flag is CheckInteractDistance index 3, about eleven yards, and a
-    melee swing needs five.
-
-    So the stride shortens instead of ending."""
+def test_far_off_it_walks_in_one_go_and_near_it_steps(combat_clock):
+    """Watched by the operator on 23 September: "4 paces, then 4 paces, then a couple tiny
+    steps until it swings". Far off, forward is now held for one continuous walk; within
+    `target.in_melee` (about ten yards, not the five a swing needs) it steps and looks."""
     hid = _Hid()
-    near = {**ALIVE, "target.in_melee": True}
-    f = _fight([near], hid=hid)
+    far = {**ALIVE, "target.in_melee": False}
+    f = _fight([far], hid=hid)
     f.acquire = lambda name_id, **_: None
     f.engage = lambda *_: True
-    f.run(timeout_s=1.5)
-    assert hid.holds, "stood still eleven yards from something it needed to be five from"
-    assert all(secs == CLOSE_NUDGE_S for _k, secs in hid.holds), "charged through it"
+    f.run(timeout_s=3.0)
+    assert getattr(hid, "downs", []) and hid.downs == hid.ups, "forward left held"
+    assert hid.holds == [], "strode in bursts from far away"
 
-    far = {**ALIVE, "target.in_melee": False}
-    g = _fight([far], hid=hid)
+    near = {**ALIVE, "target.in_melee": True}
+    g = _fight([near])
     g.acquire = lambda name_id, **_: None
     g.engage = lambda *_: True
     g.run(timeout_s=1.5)
-    assert any(secs == CLOSE_BURST_S for _k, secs in g.hid.holds), "crept from far away"
+    assert g.hid.holds and all(secs == CLOSE_STEP_S for _k, secs in g.hid.holds)
+    assert not getattr(g.hid, "downs", []), "ran at something already this close"
+
+
+def test_the_walk_stops_at_the_first_swing_that_resolves(combat_clock):
+    """A resolved swing, landed or missed, is the reach signal (schema 12)."""
+    far = {**ALIVE, "target.in_melee": False, "combat.swings": 3}
+    swung = {**far, "combat.swings": 4}
+    f = _fight([far, far, far, far, swung])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    f._reach_at = None
+    assert f._close(far, near=False) is True
+    assert f.hid.downs == ["w"] and f.hid.ups == ["w"]
+    assert f._reach_at is not None
+
+
+def test_a_unit_running_at_the_character_is_not_walked_into(combat_clock):
+    near_attacking = {**ALIVE, "target.in_melee": True, "target.attacking_me": True}
+    f = _fight([{**ALIVE, "target.in_melee": False}, near_attacking])
+    assert f._close({**ALIVE, "target.in_melee": False}, near=False) is False
+    assert combat_clock[0] < 0.5, "kept walking at something already coming"
+
+
+def test_past_ten_yards_the_walk_runs_on_only_a_bounded_way(combat_clock):
+    from jev.clients.fight import NEAR_OVERRUN_S
+
+    near = {**ALIVE, "target.in_melee": True}
+    f = _fight([{**ALIVE, "target.in_melee": False}, near])
+    assert f._close({**ALIVE, "target.in_melee": False}, near=False) is False
+    assert NEAR_OVERRUN_S <= combat_clock[0] <= NEAR_OVERRUN_S + 0.3
+
+
+def test_the_walk_steers_on_the_tracked_plate(combat_clock):
+    from jev.perceive.units import Plate, RingColour
+
+    far = {**ALIVE, "target.in_melee": False}
+    f = _fight([far])
+    f.last_plate = Plate(1000.0, 400.0, 147, RingColour.YELLOW)
+    f.targeting.track_selected = lambda hint, **_: (hint, 0.12)
+    f._close(far, near=False, deadline=1.0)
+    assert f.hid.holds and f.hid.holds[0][0] == "d", "did not steer toward an off-centre plate"
+
+
+def test_reach_expires_so_a_unit_that_runs_is_followed(combat_clock):
+    """A kobold at low health runs; standing to swing at air until the timeout lost it."""
+    from jev.clients.fight import REACH_HOLD_S
+
+    f = _fight([ALIVE])
+    f._reach_at = 0.0
+    combat_clock[0] = REACH_HOLD_S + 0.1
+    assert not (f._reach_at is not None and combat_clock[0] - f._reach_at < REACH_HOLD_S)
 
 
 def test_the_attack_actions_range_check_ends_closing_exactly():
@@ -787,10 +844,10 @@ def test_initially_injured_target_is_not_evidence_of_our_landed_damage():
     assert not f._damage_seen
 
 
-def test_a_fight_at_constant_injured_health_still_closes_and_starts_its_attack():
+def test_a_fight_at_constant_injured_health_still_closes_and_starts_its_attack(combat_clock):
     f = _fight([{**ALIVE, "target.hp": 0.6, "vitals.combat": True}])
     assert f.run(timeout_s=0.6) is Fought.TIMEOUT
-    assert f.hid.holds
+    assert getattr(f.hid, "downs", []) == ["w"], "never walked at it"
     assert "1" in f.hid.taps
     assert not f._damage_seen
 
@@ -831,13 +888,16 @@ def test_acquisition_and_initial_verification_do_not_spend_the_fight_timeout(com
 
     setattr(f.targeting, phase, slow_first_call)
     assert f.run(timeout_s=0.6) is Fought.TIMEOUT
-    assert f.hid.holds and f.pressed, "acquisition consumed the budget before any attack"
+    walked = f.hid.holds or getattr(f.hid, "downs", [])
+    assert walked and f.pressed, "acquisition consumed the budget before any attack"
     assert combat_clock[0] >= delay + 0.6
 
 
 @pytest.mark.parametrize("timeout_s", [None, 15.0])
 def test_reaim_cadence_does_not_extend_the_configured_fight_timeout(combat_clock, timeout_s):
-    """A hit then a stall earns spaced re-aims within the existing fight deadline."""
+    """A hit then a stall earns a re-aim, then - once reach has expired - approaches again,
+    all within the existing fight deadline. Standing to re-aim at a unit that had run
+    lost fleeing kobolds until the fight timed out."""
     started = {**ALIVE, "vitals.combat": True}
     stalled = {**started, "target.hp": 0.6}
     f = _fight([started, stalled])
@@ -851,13 +911,17 @@ def test_reaim_cadence_does_not_extend_the_configured_fight_timeout(combat_clock
     f.targeting.face_selected = measured_action
     configured = 45.0 if timeout_s is None else timeout_s
     arguments = {} if timeout_s is None else {"timeout_s": timeout_s}
-    assert f.run(**arguments) is Fought.TIMEOUT
-    assert f._damage_seen and not f.hid.holds
+    from jev.clients.fight import REACH_HOLD_S
+
+    outcome = f.run(**arguments)
+    assert outcome in (Fought.TIMEOUT, Fought.UNREACHABLE)
+    assert f._damage_seen
     assert len(aimed_at) >= 3, "the local attempt never exercised repeated re-aims"
-    assert all(REAIM_AFTER_S <= later - earlier <= REAIM_AFTER_S + 0.21
-               for earlier, later in pairwise(aimed_at))
-    assert configured <= combat_clock[0] <= configured + 0.21
-    assert f.detail == f"{configured:.0f}s and it is still standing"
+    first_gap = aimed_at[1] - aimed_at[0]
+    assert REAIM_AFTER_S <= first_gap <= REAIM_AFTER_S + 0.21, "the stall was not re-aimed"
+    assert getattr(f.hid, "downs", []), "a stall past the reach window never closed again"
+    assert combat_clock[0] <= configured + 0.21
+    assert REACH_HOLD_S > REAIM_AFTER_S
 
 
 def test_one_facing_per_stride_and_the_stride_budget_is_bounded(combat_clock):
@@ -898,7 +962,7 @@ def test_slow_fresh_verification_keeps_the_existing_closing_and_timeout_bounds(
     f.targeting.face_selected = slow_verified_action
     outcome = f.run(timeout_s=timeout_s)
     assert len(f.hid.holds) == f.closed
-    assert all(key == "w" and duration == CLOSE_NUDGE_S for key, duration in f.hid.holds)
+    assert all(key == "w" and duration == CLOSE_STEP_S for key, duration in f.hid.holds)
     if timeout_s == 45.0:
         assert outcome is Fought.UNREACHABLE
         assert f.closed == MAX_CLOSE_BURSTS

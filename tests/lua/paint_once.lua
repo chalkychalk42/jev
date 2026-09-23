@@ -62,7 +62,10 @@ if STATE.events then
     local w = _G["JevRadioWatcher"]
     assert(w and w.scripts and w.scripts.OnEvent, "the addon registered no event watcher")
     for _, e in ipairs(STATE.events) do
+        -- Later arguments arrive only as globals on 2.4.3 (arg2, arg3, ...).
+        for i = 3, #e do _G["arg" .. (i - 1)] = e[i] end
         w.scripts.OnEvent(w, e[1], e[2])
+        for i = 3, #e do _G["arg" .. (i - 1)] = nil end
     end
 end
 if STATE.paintTime then STATE.time = STATE.paintTime end

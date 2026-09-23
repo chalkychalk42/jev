@@ -793,6 +793,16 @@ local function MELEE_RANGE()
     return nil
 end
 
+-- The character's own melee swings that resolved - landed or missed - counted from the
+-- combat log. A swing only resolves when the target is in reach and in front, so a new
+-- one is the reach signal the Attack action cannot give (IsActionInRange answers nil for
+-- it on 2.4.3). A counter, like errors, so a reader between paints still sees each one.
+local swingCount = 0
+
+local function SWINGS()
+    return swingCount
+end
+
 -- `LAST_ERROR` is an edge painted once. A reader sampling at 2 Hz misses most of those,
 -- so the last error is also held for a short window and every error bumps a counter.
 local RECENT_ERROR_S = 1.5
@@ -853,6 +863,7 @@ watcher:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 watcher:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
 watcher:RegisterEvent("PLAYER_ENTER_COMBAT")
 watcher:RegisterEvent("PLAYER_LEAVE_COMBAT")
+watcher:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 
 watcher:SetScript("OnEvent", function(self, event, a1)
     -- 2.4.3 delivers event arguments in the globals arg1..argN; named handler parameters
@@ -871,6 +882,13 @@ watcher:SetScript("OnEvent", function(self, event, a1)
         attackingByEvent = true               -- the swing timer started: auto-attack is on
     elseif ev == "PLAYER_LEAVE_COMBAT" then
         attackingByEvent = false
+    elseif ev == "COMBAT_LOG_EVENT_UNFILTERED" then
+        -- 2.4.3: timestamp, sub-event, source GUID, ... in arg1..argN.
+        local sub, source = arg2, arg3
+        if (sub == "SWING_DAMAGE" or sub == "SWING_MISSED") and source ~= nil
+                and UnitGUID and source == UnitGUID("player") then
+            swingCount = (swingCount + 1) % 15
+        end
     elseif ev == "BAG_UPDATE" then
         inventoryRevision = (inventoryRevision + 1) % 65535
     elseif ev == "QUEST_LOG_UPDATE" then
@@ -952,6 +970,7 @@ JevRadioHelpers = {
     ATTACKING = ATTACKING,
     MELEE_RANGE = MELEE_RANGE,
     RECENT_ERROR = RECENT_ERROR,
+    SWINGS = SWINGS,
     MODAL_UP = MODAL_UP,
     LAST_ERROR = LAST_ERROR,
     CLASS_ID = CLASS_ID,

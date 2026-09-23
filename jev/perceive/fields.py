@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 11                                   # bump when the field table changes shape
+SCHEMA = 12                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -481,6 +481,12 @@ FIELDS: tuple[Field, ...] = (
     _tri("bars.targeting", "return tri(SpellIsTargeting())",
          "a spell is waiting for a target click; Esc cancels it"),
 
+    # The character's melee swings that resolved, landed or missed, modulo 15. A swing
+    # resolves only with the target in reach and in front, so a new one is the reach
+    # signal: 2.4.3 gives the Attack action no range, and damage alone misses every miss.
+    Field("combat.swings", 4, Kind.UINT, "return SWINGS()",
+          "the character's resolved melee swings since the addon loaded, modulo 15"),
+
 )
 
 # --------------------------------------------------------------------------- layout
@@ -489,12 +495,13 @@ FIELDS: tuple[Field, ...] = (
 # captures and installed addons readable without inventing merchant or cursor telemetry.
 # Preserve this prefix when adding future schemas; migrations are declared, not guessed.
 SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS[:121],
-                 10: FIELDS[:125], 11: FIELDS}
+                 10: FIELDS[:125], 11: FIELDS[:126], 12: FIELDS}
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 assert sum(f.bits for f in SCHEMA_FIELDS[8]) == 1059
 assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073
 assert sum(f.bits for f in SCHEMA_FIELDS[10]) == 1100
+assert sum(f.bits for f in SCHEMA_FIELDS[11]) == 1102
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

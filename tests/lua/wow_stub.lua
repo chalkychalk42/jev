@@ -243,6 +243,10 @@ setmetatable(QuestFrameRewardPanel, {__index = function(t, k)
 end})
 function GetNumQuestChoices() return STATE.choices and #STATE.choices or 0 end
 function SpellIsTargeting() return pick("spellTargeting", nil) end
+function UnitGUID(u)
+    if u == "player" then return pick("playerGuid", "0x0000000000000042") end
+    return nil
+end
 function GetQuestItemInfo(kind, i)
     local c = STATE.choices and STATE.choices[i]
     if kind ~= "choice" or c == nil then return nil end

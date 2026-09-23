@@ -445,10 +445,10 @@ class Targeting:
             slack = TRACK_SHIFT_SHARE * shift
             self.wait_for_paint()
 
-    def _target_plate(self, view: TargetView, tracked,
-                      slack: float = 0.0) -> units.Plate | FaceResult | None:
-        """The selected unit's plate: tracked from a proved one, else proved by hover."""
-        height, width = view.frame.shape[:2]
+    @staticmethod
+    def _plate_candidates(view: TargetView) -> list[units.Plate]:
+        """Plates that could be the selected unit's, in its colours and at its health."""
+        width = view.frame.shape[1]
         candidates = units.plate_candidates(view.frame,
                                             units.plate_colours(view.values.get("target.reaction")))
         # A health bar's fill is the unit's health times the plate width: measured 89 px at
@@ -459,6 +459,34 @@ class Targeting:
             expected = hp * units.PLATE_FULL_W_FRAC * width
             candidates = [p for p in candidates
                           if abs(p.w - expected) <= max(PLATE_FILL_SLACK_PX, 0.25 * expected)]
+        return candidates
+
+    def track_selected(self, hint: units.Plate | None, *,
+                       window_dy: float = TRACK_DY) -> tuple[units.Plate, float] | None:
+        """The selected unit's plate near where it was, from one look; no hover, no input.
+
+        For steering while walking: a hover proof would stop to wait for a paint, so this
+        only follows a plate already proved. Returns the plate and its offset from the
+        centre line as a fraction of the width, or `None` when it is not near `hint`.
+        """
+        if hint is None:
+            return None
+        view = self._view()
+        if view.frame is None or view.values is None:
+            return None
+        height, width = view.frame.shape[:2]
+        near = [p for p in self._plate_candidates(view)
+                if abs(p.cx - hint.cx) <= TRACK_DX * width and abs(p.cy - hint.cy) <= window_dy * height]
+        if not near:
+            return None
+        plate = min(near, key=lambda p: math.hypot(p.cx - hint.cx, p.cy - hint.cy))
+        return plate, (plate.cx - width / 2) / width
+
+    def _target_plate(self, view: TargetView, tracked,
+                      slack: float = 0.0) -> units.Plate | FaceResult | None:
+        """The selected unit's plate: tracked from a proved one, else proved by hover."""
+        height, width = view.frame.shape[:2]
+        candidates = self._plate_candidates(view)
         if tracked is not None:
             near = [p for p in candidates if abs(p.cx - tracked[0]) <= TRACK_DX * width + slack
                     and abs(p.cy - tracked[1]) <= TRACK_DY * height]

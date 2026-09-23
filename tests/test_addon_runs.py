@@ -388,3 +388,15 @@ def test_equal_choices_take_the_earlier_item_and_a_pick_is_reported():
 def test_a_spell_waiting_for_a_target_is_painted(targeting, expected):
     values = radio.unpack(payload(paint({"spellTargeting": targeting}))[:PAYLOAD_CELLS])
     assert values["bars.targeting"] is expected
+
+
+def test_the_characters_own_resolved_swings_are_counted_hits_and_misses():
+    """2.4.3 gives the Attack action no range; a resolved swing is the reach signal."""
+    me, other = "0x0000000000000042", "0x0000000000000099"
+    events = [["COMBAT_LOG_EVENT_UNFILTERED", 1.0, "SWING_DAMAGE", me],
+              ["COMBAT_LOG_EVENT_UNFILTERED", 2.0, "SWING_MISSED", me],
+              ["COMBAT_LOG_EVENT_UNFILTERED", 3.0, "SWING_DAMAGE", other],
+              ["COMBAT_LOG_EVENT_UNFILTERED", 4.0, "SPELL_DAMAGE", me]]
+    values = radio.unpack(payload(paint({"events": events}))[:PAYLOAD_CELLS])
+    assert values["combat.swings"] == 2
+    assert radio.unpack(payload(paint({}))[:PAYLOAD_CELLS])["combat.swings"] == 0

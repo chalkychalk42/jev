@@ -17,10 +17,12 @@ it starts an attack and leaves the heading alone. Measured in run 20260922T19210
 frames 99-104: auto-attack on, the wolf two yards away at the character's side, full health
 throughout, while the old code walked `W` down a heading nothing had set.
 
-**Closing to it** is short `W` strides, each one after re-facing, until the Attack action's
-own range check says a swing reaches (`target.melee_range`, schema 9). `target.in_melee` is
-`CheckInteractDistance` index 3, about eleven yards, and only chooses the stride length.
-Without the range check (an older addon) the target's **health** decides, as before.
+**Closing to it** is one continuous walk: forward held while the unit's plate is tracked
+and steered on, released the moment a swing resolves (`combat.swings`, schema 12) or
+damage lands - the reach signal 2.4.3 does not give the Attack action. `target.in_melee`
+(`CheckInteractDistance` index 3, about ten yards) only bounds how far past it the walk may
+run. Reach expires when no swing resolves for a swing timer and a margin, so a unit that
+runs is followed.
 
 **Seeing it** comes first. The client draws nameplates only near the character, and the
 camera shows about a hundred degrees of that circle, so before `Tab` the character looks
@@ -108,21 +110,31 @@ SETTLE_LOOK_S = 0.25
 # Tab presses before giving up on finding something attackable.
 MAX_SELECTS = 4
 
-# Closing to melee. Held in strides rather than one long press so the loop can stop the
-# moment a swing reaches, and bounded because walking at something that is not getting
-# closer is walking into a fence. Each stride is preceded by re-facing.
+# Closing to melee is one continuous walk. Strides with a facing look between each walked
+# three yards, stood, walked three yards, stood, and shuffled in nudges until a swing
+# landed - watched by the operator on 23 September: "4 paces, then 4 paces, then a couple
+# tiny steps until it swings". Forward is now held while the plate is steered on.
 ENGAGE_LOOKS = 5
-CLOSE_BURST_S = 0.45
-
-# The stride once inside interact distance. Short, because eleven yards of running at
-# something five yards away is how the character went straight through it. With the
-# Attack action's range known the loop stops exactly on arrival, so the stride can be
-# longer; without it, only damage says "arrived" and the stride stays a nudge.
-CLOSE_NUDGE_S = 0.12
-CLOSE_STEP_S = 0.25
-# Strides without new damage before giving up. Twelve covers twenty yards of approach
-# (six bursts) and six yards of stepping with room for a unit that moves.
+CLOSE_LOOK_S = 0.1              # how often the walk reads the radio
+CLOSE_STEER_S = 0.3             # how often it looks at the plate to steer
+CLOSE_STEER_TOLERANCE = 0.04    # of the width off centre before a correcting turn
+CLOSE_TRACK_DY = 0.10           # a plate falls down the screen as its unit comes closer
+CLOSE_MAX_S = 6.0               # about forty yards; farther is not this fight's to walk
+# Past `in_melee` (about ten yards) the walk runs this long at most - about five and a half
+# yards, which ends inside reach of a unit standing still without walking through it.
+NEAR_OVERRUN_S = 0.8
+# Near, and still no swing: a step of a yard and a half, then a look for one.
+CLOSE_STEP_S = 0.2
+SWING_WAIT_S = 0.5
+# Approaches without new reach before giving up: walks and steps, with room for a unit
+# that moves, and at most this much time spent walking and stepping - about a hundred
+# yards; a unit not reached in that is behind something.
 MAX_CLOSE_BURSTS = 12
+MAX_APPROACH_S = 15.0
+# Reach is a swing or damage this recent. A melee swing comes every two to four seconds,
+# so none for longer means the target moved out of reach - a kobold at low health runs -
+# and the character closes again instead of swinging at air.
+REACH_HOLD_S = 4.5
 
 # A toggle's new state reaches the radio a paint or two after the key. Pressing it again
 # inside this window would read the old state and switch it straight back.
@@ -232,6 +244,10 @@ class Fight:
     killed_name_id: int | None = field(default=None, init=False)
     _xp_start: tuple | None = field(default=None, init=False)
     _strides: int = field(default=0, init=False)
+    _approach_s: float = field(default=0.0, init=False)
+    # The last evidence a swing reached (a resolved swing or damage), and the swing count.
+    _reach_at: float | None = field(default=None, init=False)
+    _swings: int | None = field(default=None, init=False)
     # The current selection came from Tab in this fight, so it lies ahead of the character.
     _ahead: bool = field(default=False, init=False)
     # Where the Tab pick's selection mark appeared, as a fraction of the width off centre.
@@ -263,6 +279,7 @@ class Fight:
         self.killed_name_id = None
         self._xp_start = None
         self._strides = 0
+        self._approach_s = 0.0
         self._ahead = False
         self._error_count = None
         self._damage_at = time.monotonic()
@@ -278,6 +295,8 @@ class Fight:
         if v is None:
             return Fought.BLIND
         self._error_count = v.get("ui.error_count")   # errors before the fight are not news
+        self._swings = v.get("combat.swings")           # and neither are earlier swings
+        self._reach_at = None
         self._xp_start = (v.get("char.level"), v.get("char.xp_pct"))
         # The health guard is about **picking** fights, not about surviving one already
         # under way. Refusing to swing back because health is low is how a character
@@ -389,19 +408,12 @@ class Fight:
             # rotation was behind the gate — so a live run reported
             # `unreachable pressed [] closed 8` eight times over. It had walked at the
             # kobold and never once pressed anything at it.
-            if hp is not None:
-                if self._damage_mark is not None and hp < self._damage_mark:
-                    self._damage_seen = True
-                    self._damage_at = time.monotonic()
-                    self._strides = 0          # progress: the stride budget starts again
-                if self._damage_mark is None:
-                    self._damage_at = time.monotonic()
-                self._damage_mark = hp
-            landing = self._damage_seen
+            if self._note_damage(v) or self._note_swing(v):
+                self._strides = 0              # progress: the approach budget starts again
+                self._approach_s = 0.0
 
-            # In reach: the Attack action's own range check, when the addon paints it.
-            # Without it (schema 8 and older) the only evidence of reach is damage, and
-            # `target.in_melee` - about eleven yards - shortens the stride instead.
+            # In reach: the Attack action's own range check when the addon has one (it
+            # answers nil on 2.4.3), else a recent resolved swing or recent damage.
             #
             # Closing used to end only when the target lost health, so a character that
             # was facing slightly wrong walked *through* the kobold and out the other
@@ -409,38 +421,33 @@ class Fight:
             # try to attack but then just keep running forwards and passed them".
             melee = v.get("target.melee_range")
             near = v.get("target.in_melee") is True
-            in_reach = melee is True or (melee is None and landing)
             now = time.monotonic()
-            stalled = now - max(self._damage_at, self._last_aim_at) > REAIM_AFTER_S
+            reached = self._reach_at is not None and now - self._reach_at < REACH_HOLD_S
+            in_reach = melee is True or (melee is None and reached)
+            stalled = now - max(self._damage_at, self._last_aim_at,
+                                self._reach_at or 0.0) > REAIM_AFTER_S
             wrong_way = self._new_error(v) == "not_facing"
             if in_reach:
                 # Stand and swing. Turn back only on evidence the swings are not landing.
                 if (wrong_way or stalled) and not self.engage(v):
                     return self._aim_failure()
-            elif self._strides < MAX_CLOSE_BURSTS:
+            elif self._strides < MAX_CLOSE_BURSTS and self._approach_s < MAX_APPROACH_S:
                 # Not while casting: movement cancels a cast, and the only thing being
                 # cast here is a heal that is keeping us alive.
                 if v.get("bars.casting") is not True:
-                    if not self.engage(v):     # face before every stride, never walk blind
+                    if not self.engage(v):     # face before walking, never walk blind
                         return self._aim_failure()
-                    duration = (CLOSE_BURST_S if not near else
-                                CLOSE_STEP_S if melee is False else CLOSE_NUDGE_S)
-                    event("approach.request", data={"key": "w", "duration_s": duration,
-                                                    "closed": self.closed, "near": near,
-                                                    "melee_range": melee})
-                    if not self.hid.hold("w", duration):
-                        self.detail = "approach input refused"
+                    self._close(v, near, deadline=deadline)
+                    if self._input_refused:
                         return Fought.REFUSED
-                    self.closed += 1
-                    self._strides += 1
             else:
                 # Out of strides with no new damage. Whether anything was *pressed* says
                 # nothing about whether it was reached - a seal lands on the character,
                 # not on the kobold - and requiring "pressed nothing" here let two live
                 # fights walk eight bursts and then stand in the rotation for the full
                 # forty-five seconds: `pressed [2, 1, 2] closed 8`, twice.
-                self.detail = (f"closed {self.closed} times and never came within reach; "
-                               "cannot reach it")
+                self.detail = (f"closed {self.closed} times over {self._approach_s:.0f}s and "
+                               "never came within reach; cannot reach it")
                 return Fought.UNREACHABLE
 
             self._rotate(v)
@@ -651,6 +658,119 @@ class Fight:
             return False
         self._last_aim_at = time.monotonic()
         return self._ensure_attacking()
+
+    def _note_damage(self, values: dict) -> bool:
+        """The target lost health since the last look: a swing reached it."""
+        hp = values.get("target.hp")
+        if hp is None:
+            return False
+        hit = self._damage_mark is not None and hp < self._damage_mark
+        now = time.monotonic()
+        if hit:
+            self._damage_seen = True
+            self._damage_at = self._reach_at = now
+        if self._damage_mark is None:
+            self._damage_at = now
+        self._damage_mark = hp
+        return hit
+
+    def _note_swing(self, values: dict) -> bool:
+        """A swing of ours resolved since the last look, landed or missed (schema 12)."""
+        count = values.get("combat.swings")
+        if count is None:
+            return False
+        new = self._swings is not None and count != self._swings
+        self._swings = count
+        if new:
+            self._reach_at = time.monotonic()
+        return new
+
+    def _close(self, values: dict, near: bool, *, deadline: float | None = None) -> bool:
+        """Walk at the faced target until a swing can reach it. `True` once one has.
+
+        Far off, one continuous walk steered on the plate; near, a short step and a look.
+        Either stops on the first resolved swing or damage, on a facing error, or when the
+        selection is no longer this fight's living target.
+        """
+        began = time.monotonic()
+        try:
+            return self._approach(near, deadline)
+        finally:
+            self._approach_s += time.monotonic() - began
+
+    def _approach(self, near: bool, deadline: float | None) -> bool:
+        if near:
+            event("approach.request", data={"key": "w", "mode": "step",
+                                            "duration_s": CLOSE_STEP_S, "closed": self.closed})
+            if not self.hid.hold("w", CLOSE_STEP_S):
+                self._input_refused = True
+                self.detail = "approach input refused"
+                return False
+            self.closed += 1
+            self._strides += 1
+            wait_until = time.monotonic() + SWING_WAIT_S
+            if deadline is not None:
+                wait_until = min(wait_until, deadline)
+            while time.monotonic() < wait_until:
+                time.sleep(min(CLOSE_LOOK_S, max(0.0, wait_until - time.monotonic())))
+                v = self.read()
+                if v is None or not self._same_fight(v):
+                    return False
+                if self._note_damage(v) or self._note_swing(v):
+                    return True
+            return False
+
+        targeting = self._targeting()
+        plate = self.last_plate
+        event("approach.request", data={"key": "w", "mode": "walk", "closed": self.closed})
+        if not self.hid.key_down("w"):
+            self._input_refused = True
+            self.detail = "approach input refused"
+            return False
+        self.closed += 1
+        self._strides += 1
+        started = time.monotonic()
+        stop_at = started + CLOSE_MAX_S if deadline is None else min(started + CLOSE_MAX_S, deadline)
+        steer_at = started + CLOSE_STEER_S
+        near_at = None
+        try:
+            while time.monotonic() < stop_at:
+                time.sleep(min(CLOSE_LOOK_S, max(0.0, stop_at - time.monotonic())))
+                v = self.read()
+                if v is None or not self._same_fight(v):
+                    return False
+                if self._note_damage(v) or self._note_swing(v):
+                    return True
+                if self._new_error(v) == "not_facing":
+                    return False
+                if v.get("target.in_melee") is True:
+                    if v.get("target.attacking_me") is True:
+                        return False           # it is coming to us; the swing decides
+                    near_at = near_at if near_at is not None else time.monotonic()
+                    if time.monotonic() - near_at >= NEAR_OVERRUN_S:
+                        return False
+                if time.monotonic() >= steer_at:
+                    steer_at = time.monotonic() + CLOSE_STEER_S
+                    seen = targeting.track_selected(plate, window_dy=CLOSE_TRACK_DY)
+                    if seen is not None:
+                        plate, offset = seen
+                        self.last_plate = plate
+                        if abs(offset) > CLOSE_STEER_TOLERANCE and not targeting.turn_toward(offset):
+                            self._input_refused = True
+                            self.detail = "turn input refused"
+                            return False
+            return False
+        finally:
+            self.hid.key_up("w")
+
+    def _same_fight(self, values: dict) -> bool:
+        """Still this fight's living target, and nothing that stops a fight."""
+        hp = values.get("target.hp")
+        return (values.get("target.has") is True
+                and (self._selected_name_id is None
+                     or values.get("target.name_id") == self._selected_name_id)
+                and not (isinstance(hp, (int, float)) and hp <= DEAD_HP)
+                and values.get("vitals.dead") is not True and values.get("ui.modal") is not True)
 
     def _close_to_sight(self, result):
         """Turn toward a Tab pick's mark, then walk at it until its plate shows.
