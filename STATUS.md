@@ -1729,3 +1729,45 @@ MEASURED GAPS, each fixed in its shared owner:
 TEACHING: the first teach-mode session (`20260923T102857-75d538`) met four consecutive
 "overloaded" replies (1305) from the free `glm-4.6v-flash` and handed the objective to the
 scripted routine, as designed. GLM availability, not the loop, is what limits teaching now.
+
+## 2026-09-23 — Jev in charge: five teach sessions, two quests further
+
+DID: five supervised teach-mode sessions (one-second screenshots) with the free
+`glm-4.6v-flash` tutor and the scripted routines as fallback; each gap fixed in its shared
+owner and pushed (`3bd9c83`, `88306c5`, `2573ad1`, `c4c8139`, `7ba3a3f`, `c15b3d2`).
+
+| session | length | tutor replies | what happened |
+|---|---|---|---|
+| `20260923T102857-75d538` | 3 min | 0 ok / 3 refused | scripted fallback finished quest 33 (8/8); turn-in failed: ring hidden |
+| `20260923T103917-b4cdcc` | 1 min | 2 ok | Jev chose TURNIN_QUEST; frame opened; reward page waited for a choice |
+| `20260923T104945-d671ad` | 2 min | 0 ok / 2 refused | **quest 33 handed in** (reward chosen); accept timed out on the walk |
+| `20260923T110010-adc4a3` | 15 min | 18 ok / 3 refused | **quest 15 accepted and taken to 10/10**; Jev fought with COMBAT_PROFILE (6), attack_target, clicks and travel; turn-in stuck on the abbey's back ledge |
+| `20260923T112542-6d799e` | 1 min | 0 ok / 1 refused | stopped: the operator's desktop became active (browser, Telegram) |
+
+LIVE EVIDENCE: Jev's replies were valid actions every time the provider answered; the
+executor refused an imprecise unit click by hover (no wrong click delivered). Quest 7, 33,
+783 and 5261 are complete; quest 15 is 10/10 awaiting hand-in. Character level 3 at 78%.
+
+MEASURED GAPS, each fixed in its shared owner:
+- **Hidden ring at a quest giver**: plate-anchored body points (V46). Verified live.
+- **Reward choice**: schema 10 paints a default; the advance routine and the tutor choose
+  it (V47). Verified live; the addon was deployed after a graceful client restart and
+  `tools/login.py`.
+- **Tutor time billed to the routine**: the body keeps its routine's clock; retries fill
+  the tutor's deadline (V48). Verified live.
+- **Delegated kill unmeasured**: a fight that selects its own kill is a death on experience
+  with a corpse or a counter. Offline.
+- **Ledge re-plans through the abbey wall**: re-plans start at the followed route's height
+  (V49). Verified against the real navmesh at all five recorded positions; not yet live.
+- **Loot missed the completing item**: short-then-complete counts as progress. Offline.
+
+LEARNING: the store holds 20 decision records and 17 episodes over interact, acquire,
+approach and travel; every capability is "waiting for more independent successful runs".
+No student model has trained yet. Provider availability is the limit: sessions 1-3 got
+almost no replies; session 4 got 18 in 15 minutes.
+
+OPEN: `test_actual_controller_corpus_trains_shadows_hands_over_and_rolls_back` fails
+intermittently in full-suite runs (canary not promoted); it now reports the failing gate.
+
+NEXT: hand in quest 15 (the route is on an Elwynn grind step after the failed turn-in),
+then long teach sessions to give every capability its independent runs.
