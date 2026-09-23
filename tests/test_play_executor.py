@@ -338,6 +338,16 @@ def test_reward_choice_clicks_the_painted_default_only_while_unchosen():
     assert result.code == "interrupted" and not h.hid.calls
 
 
+def test_a_spell_waiting_for_a_target_blocks_everything_but_escape():
+    h = Harness()
+    h.values["bars.targeting"] = True
+    result = h.run(kind="action_slot", slot=1)
+    assert result.code == "interrupted" and not h.hid.calls
+    h = Harness()
+    h.values["bars.targeting"] = True
+    assert h.run(kind="key", control="escape").delivered
+
+
 def test_camera_is_single_axis_mouse_look_without_claimed_facing():
     h = Harness()
     result = h.run(kind="camera", axis="yaw", pixels=-40)

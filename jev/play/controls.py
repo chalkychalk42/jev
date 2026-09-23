@@ -14,7 +14,7 @@ from pathlib import Path
 
 from jev.clients.hid import VK
 from jev.play.actions import HELD_CONTROLS
-from jev.world.combat import GENERIC, for_class
+from jev.world.combat import GENERIC, SELF_CAST_MODIFIER, for_class
 
 # control -> command, repo binding, semantics. Configured overrides always win.
 CONTROL_SPECS = {
@@ -189,11 +189,20 @@ def build_manifest(values: dict | None = None, *, binding_paths=(), skills=(),
                              {"attack_target", "sit_stand"} else "tap"}
     profile = for_class(values.get("char.class_id"), values.get("char.race_id"))
     abilities = {a.slot: a for a in profile.abilities}
+    # The saved self-cast modifier, else the 2.4.3 default (`combat.SELF_CAST_MODIFIER`).
+    saved = next((row["binding"].lower() for row in modified
+                  if row["command"].upper() == "SELFCAST"), None)
+    self_cast_key = saved if saved in {"alt", "ctrl", "shift"} else SELF_CAST_MODIFIER
     slots = []
     for slot in range(1, 13):
         key = str(slot) if slot < 10 else {10: "0", 11: "-", 12: "="}[slot]
         ability = abilities.get(slot)
-        slots.append({"slot": slot, **binding(f"ACTIONBUTTON{slot}", key),
+        row = binding(f"ACTIONBUTTON{slot}", key)
+        if ability is not None and ability.self_cast and row["keys"]:
+            # A heal waits for a target click when a hostile or dead unit is selected.
+            row = {**row, "keys": [self_cast_key, *row["keys"]]}
+        slots.append({"slot": slot, **row,
+                      "self_cast": bool(ability and ability.self_cast),
                       "name": ability.name if ability else None,
                       "role": ability.role.value if ability else None,
                       "toggle": ability.toggle if ability else None,

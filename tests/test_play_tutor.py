@@ -26,6 +26,15 @@ def test_a_blocking_dialog_offers_only_observe_and_escape():
     assert names({"ui.modal": None}) == ["observe"], "unknown dialog state authorizes nothing"
 
 
+def test_a_spell_waiting_for_a_target_offers_only_observe_and_escape():
+    """A click now would cast the waiting spell at whatever it lands on."""
+    waiting = names({"bars.targeting": True, "target.has": True, "target.hp": 1.0},
+                    skills=("COMBAT_PROFILE",))
+    assert waiting == ["observe", "escape"]
+    assert "attack_target" in names({"bars.targeting": False, "target.has": True,
+                                     "target.hp": 1.0})
+
+
 def test_the_dead_may_only_release_and_the_ghost_may_walk():
     dead = names({"vitals.dead": True}, skills=("RELEASE_SPIRIT", "LOOT"))
     assert dead == ["observe", "skill:RELEASE_SPIRIT"]

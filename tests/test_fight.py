@@ -51,6 +51,11 @@ class _Hid:
         self.taps.append(key)
         return True
 
+    def chord(self, modifier, key):
+        """The modifier held around the key, as `Hid.chord` does it."""
+        self.chords = [*getattr(self, "chords", []), (modifier, key)]
+        return self.tap(key)
+
     def click(self, x, y, right=False):
         self.clicks.append((x, y, right))
         return True
@@ -83,6 +88,13 @@ class _Targeting:
     def face_selected(self, **request):
         self.faces.append(request)
         return self.face
+
+    def cancel_pending_spell(self, values=None):
+        if values and values.get("bars.targeting") is True:
+            self.cancelled = getattr(self, "cancelled", 0) + 1
+            self.hid.tap("esc")
+            return True
+        return False
 
     def turn_toward(self, offset):
         self.turned_toward = [*getattr(self, "turned_toward", []), offset]
@@ -939,6 +951,27 @@ def test_refused_top_up_stops_without_waiting_or_recording_a_cast(combat_clock, 
     assert f.top_ups == f.top_ups_landed == 0
     assert f.pressed == [] and f._last_use == {}
     assert f._pending_heal is None
+
+
+def test_heals_are_cast_on_the_caster_whatever_is_selected(combat_clock):
+    """Measured 23 September: a between-fights Holy Light with a looted corpse selected
+    waited for a target click, its button lit, and the next three fights selected
+    nothing. The self-cast modifier casts it on the character instead."""
+    f = _fight([{**ALIVE, "vitals.combat": False, "vitals.hp": 0.6,
+                 "vitals.power": 0.9, "vitals.power_max": 100}])
+    f.top_up(tries=1)
+    assert getattr(f.hid, "chords", []) == [("alt", "3")]
+    swing = _fight([{**ALIVE, "vitals.combat": True, "vitals.hp": 1.0, "bars.ready": 0b1}])
+    swing.run(timeout_s=0.3)
+    assert getattr(swing.hid, "chords", []) == [], "the attack toggle is not self-cast"
+
+
+def test_a_spell_waiting_for_a_target_is_cancelled_before_anything_is_clicked():
+    waiting = {**ALIVE, "bars.targeting": True}
+    f = _fight([waiting, ALIVE])
+    f.acquire = lambda name_id, **_: None
+    f.run(timeout_s=0.3)
+    assert "esc" in f.hid.taps and getattr(f.targeting, "cancelled", 0) >= 1
 
 
 def test_unready_heal_slot_without_health_gain_is_not_a_landed_heal(combat_clock):

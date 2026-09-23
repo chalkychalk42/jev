@@ -149,6 +149,12 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
         if modal is True and _executable(controls, "escape"):
             choices.append(Choice("escape", (), (), "Esc: close the blocking dialog"))
         return choices + lookup_choice
+    if values.get("bars.targeting") is True:
+        # A click now would cast the waiting spell at whatever it lands on.
+        if _executable(controls, "escape"):
+            choices.append(Choice("escape", (), (),
+                                  "Esc: cancel the spell waiting for a target click"))
+        return choices + lookup_choice
     dead, ghost = values.get("vitals.dead"), values.get("vitals.ghost")
     if dead is None or ghost is None:
         return choices + lookup_choice
@@ -445,7 +451,8 @@ def render(observation: dict, *, choices: list[Choice], knowledge: dict | None =
     error = values.get("ui.error_last")
     lines += ["", "UI",
               f"- Open windows: {', '.join(windows) or 'none'}; blocking dialog: "
-              f"{_flag(values.get('ui.modal'))}",
+              f"{_flag(values.get('ui.modal'))}; spell waiting for a target: "
+              f"{_flag(values.get('bars.targeting'))}",
               "- Last game error: " + (UI_ERROR_KEYS[error] if isinstance(error, int)
                                         and 0 < error < len(UI_ERROR_KEYS) else "none"),
               "", "BAGS",

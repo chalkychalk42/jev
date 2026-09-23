@@ -672,7 +672,7 @@ CLIENT_API = frozenset({
     "IsMounted", "IsSwimming", "IsFalling", "IsResting", "IsStealthed", "IsIndoors",
     "GetPlayerFacing", "GetPlayerMapPosition", "GetCorpseMapPosition", "GetMoney", "CheckInteractDistance",
     "LootFrame", "GossipFrame", "MerchantFrame", "QuestFrame", "ClassTrainerFrame",
-    "MailFrame", "GetMouseFocus", "WorldFrame",
+    "MailFrame", "GetMouseFocus", "WorldFrame", "SpellIsTargeting",
 })
 
 FORBIDDEN = (

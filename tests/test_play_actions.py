@@ -127,6 +127,18 @@ def test_missing_requested_bindings_fail_and_defaults_are_explicit(tmp_path):
     assert manifest.slot(1)["live_identity_verified"] is False
 
 
+def test_a_heal_slot_is_pressed_with_the_saved_self_cast_modifier(tmp_path):
+    """Measured 23 September: Holy Light with a corpse selected waited for a target click."""
+    saved = tmp_path / "bindings.wtf"
+    saved.write_text("bind 1 ACTIONBUTTON1\nbind 3 ACTIONBUTTON3\nmodifiedclick CTRL SELFCAST\n")
+    paladin = {"char.class_id": 2, "char.race_id": 1}
+    manifest = build_manifest(paladin, binding_paths=[saved])
+    assert manifest.slot(3)["keys"] == ["ctrl", "3"] and manifest.slot(3)["self_cast"]
+    assert manifest.slot(1)["keys"] == ["1"] and not manifest.slot(1)["self_cast"]
+    default = build_manifest(paladin)
+    assert default.slot(3)["keys"] == ["alt", "3"], "the 2.4.3 default modifier"
+
+
 def test_supported_modifier_bindings_and_unknown_hardware():
     assert key_parts("CTRL-SHIFT-TAB") == ("ctrl", "shift", "tab")
     assert key_parts("CTRL--") == ("ctrl", "minus")

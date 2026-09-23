@@ -321,6 +321,21 @@ class Targeting:
                                                   captured_at=view.captured_at)
         event("target.frame", code="observed", data=metadata)
 
+    def cancel_pending_spell(self, values: dict | None = None) -> bool:
+        """Esc when the radio says a spell is waiting for a target click; `True` if it was.
+
+        While one waits, a click meant to select or use a unit casts it there instead. Only
+        on a positive observation: Esc with nothing pending clears the target or opens
+        the game menu.
+        """
+        values = self.read() if values is None else values
+        if not values or values.get("bars.targeting") is not True:
+            return False
+        event("spell.cancel", data={"reason": "a spell was waiting for a target click"})
+        self.hid.tap("esc")
+        self.wait_for_paint()
+        return True
+
     def turn_toward(self, offset: float) -> bool:
         """One open-loop turn by a screen offset (fraction of the width, + is right).
 
@@ -498,6 +513,8 @@ class Targeting:
     def _click_corpse(self, wanted, anchor, max_probes, timeout_s) -> ClickResult:
         deadline = time.monotonic() + timeout_s
         view = self._view()
+        if self.cancel_pending_spell(view.values):
+            view = self._view()              # a click now would cast it on the corpse
         values = view.values
         selected = values is not None and values.get("target.has") is True
         if selected or values is None:
@@ -589,6 +606,8 @@ class Targeting:
         while attempts < max_probes and time.monotonic() < deadline:
             self._checkpoint()
             view = self._view()
+            if self.cancel_pending_spell(view.values):
+                continue                     # a click now would cast it on the unit
             error = self._eligible(view.values, wanted, kind)
             if error is not None:
                 self._retain("target-unavailable", view)

@@ -382,3 +382,9 @@ def test_equal_choices_take_the_earlier_item_and_a_pick_is_reported():
     values = _choices({"choices": both})
     assert values["ui.choice_x"] == pytest.approx(100 / 1600, abs=0.002)
     assert _choices({"choices": both, "itemChoice": 2})["ui.choice_made"] is True
+
+
+@pytest.mark.parametrize(("targeting", "expected"), [(1, True), (None, False)])
+def test_a_spell_waiting_for_a_target_is_painted(targeting, expected):
+    values = radio.unpack(payload(paint({"spellTargeting": targeting}))[:PAYLOAD_CELLS])
+    assert values["bars.targeting"] is expected

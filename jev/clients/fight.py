@@ -68,6 +68,7 @@ from jev.world.combat import (
     HEAL_IN_COMBAT,
     HEAL_OUT_OF_COMBAT,
     MIN_MANA_TO_HEAL,
+    SELF_CAST_MODIFIER,
     Ability,
     CombatProfile,
     Role,
@@ -271,6 +272,8 @@ class Fight:
         event("fight.request", data={"wanted_name_id": name_id, "timeout_s": timeout_s})
 
         v = self.read()
+        if self._targeting().cancel_pending_spell(v):
+            v = self.read()                  # its click would cast, not select
         self._observe(v)
         if v is None:
             return Fought.BLIND
@@ -365,6 +368,8 @@ class Fight:
                 self.detail = f"broke off at {mine:.0%} health"
                 return Fought.LOSING
 
+            if self._targeting().cancel_pending_spell(v):
+                continue                       # its click would have cast, not selected
             if v.get("target.has") is not True:
                 return self._settle(v)
             if (self._selected_name_id is not None
@@ -461,6 +466,7 @@ class Fight:
         self.selected_plate = None
         self._ahead = False
         self._mark_offset = None
+        self._targeting().cancel_pending_spell()
         turn = getattr(self.hid, "TURN_RIGHT", "d")
         for look in range(1 if defend else SCAN_TURNS + 1):
             if look:
@@ -865,8 +871,10 @@ class Fight:
             self.detail = f"ability slot {ability.slot} has no configured key"
             return False
         event("ability.request", data={"slot": ability.slot, "key": key,
-                                       "role": ability.role.value})
-        if not self.hid.tap(key):
+                                       "role": ability.role.value, "self_cast": ability.self_cast})
+        pressed = (self.hid.chord(SELF_CAST_MODIFIER, key) if ability.self_cast
+                   else self.hid.tap(key))
+        if not pressed:
             self._input_refused = True
             self.detail = f"ability slot {ability.slot} input refused"
             return False

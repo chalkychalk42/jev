@@ -237,6 +237,8 @@ class Executor:
         if values.get("ui.modal") is not False:
             raise _Refusal("interrupted" if values.get("ui.modal") is True else "blind",
                            "blocking modal is present or unknown")
+        if values.get("bars.targeting") is True:
+            raise _Refusal("interrupted", "a spell is waiting for a target click; Esc cancels it")
         if isinstance(action, SkillAction):
             # Recovery and service implementations own their own preconditions.
             return

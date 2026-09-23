@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 10                                   # bump when the field table changes shape
+SCHEMA = 11                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -475,6 +475,12 @@ FIELDS: tuple[Field, ...] = (
           "fraction across the interface of the default reward choice's button"),
     Field("ui.choice_y", 11, Kind.FRAC, "return QUEST_CHOICE('y')"),
 
+    # A spell waiting for a target click: its action button stays lit, and a click meant
+    # to select a unit casts it there instead. Measured 23 September: a Holy Light with a
+    # corpse selected waited, and three fights selected nothing. Esc cancels it.
+    _tri("bars.targeting", "return tri(SpellIsTargeting())",
+         "a spell is waiting for a target click; Esc cancels it"),
+
 )
 
 # --------------------------------------------------------------------------- layout
@@ -483,11 +489,12 @@ FIELDS: tuple[Field, ...] = (
 # captures and installed addons readable without inventing merchant or cursor telemetry.
 # Preserve this prefix when adding future schemas; migrations are declared, not guessed.
 SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS[:121],
-                 10: FIELDS}
+                 10: FIELDS[:125], 11: FIELDS}
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 assert sum(f.bits for f in SCHEMA_FIELDS[8]) == 1059
 assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073
+assert sum(f.bits for f in SCHEMA_FIELDS[10]) == 1100
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

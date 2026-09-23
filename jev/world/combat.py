@@ -64,6 +64,15 @@ MIN_MANA_TO_HEAL = 0.08
 food, or to a vendor, or break the fight off — never a drink loop inside a fight."""
 
 
+# Casting on oneself. With a hostile or dead unit selected, a helpful spell does not fall
+# back to the caster unless the client's auto-self-cast option is on; it waits for a target
+# click, and every click meant to select a unit then tries to cast it there. Measured 23
+# September: a between-fights Holy Light with a looted corpse selected left its button lit
+# and the next three fights selected nothing. The stock self-cast modifier (the 2.4.3
+# default, saved on this client as `modifiedclick ALT SELFCAST`) casts on the caster.
+SELF_CAST_MODIFIER = "alt"
+
+
 @dataclass(frozen=True)
 class Ability:
     """One action slot and what it is for."""
@@ -75,6 +84,11 @@ class Ability:
     every_s: float = 0.0
     # Melee auto-attack is a toggle: pressing it while already swinging stops the swing.
     toggle: bool = False
+
+    @property
+    def self_cast(self) -> bool:
+        """Cast on the caster whatever is selected. A solo character heals only itself."""
+        return self.role is Role.HEAL
 
 
 @dataclass(frozen=True)
