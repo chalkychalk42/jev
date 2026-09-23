@@ -187,6 +187,11 @@ def _cluster(npc_id: int, name: str, map_id: int, rows) -> Spawn:
     return Spawn(npc_id, name, map_id, x, y, z, spread=spread, points=points)
 
 
+# A grind rib's creature counts as spread out when its spawns sit this far from their nearest
+# neighbour, as a median: Northshire's Timber Wolves 31 yards, its Defias Thugs 15.
+RIB_SPREAD_YARDS = 20.0
+CREATURE_BEAST = 1                     # creature_template.CreatureType
+
 # Spawn points kept per cluster for a hunt to stand on: the nearest this many to its centre.
 HUNT_SPAWNS = 16
 
@@ -629,18 +634,28 @@ class WorldDB:
 
     def grind_clusters(self, zone_bounds: ZoneBounds, level_min: int, level_max: int,
                        limit: int = 2) -> list[tuple[Spawn, int]]:
-        """Dense clusters of killable creatures in band, as grind ribs.
+        """Grind ribs: one creature's densest cluster, the safest kinds first.
 
         "Killable" is a heuristic and named as one: normal rank, in level band, carrying
         loot, and **no NPC flags at all**. A creature that can be talked to, trained from
         or bought from is furniture, not prey. This will occasionally miss a valid grind
         mob and occasionally include a neutral critter; the rib is verified by walking it
         (V5), which is exactly the half the DB cannot answer.
+
+        One creature per cluster. Pooling every creature in the band and naming the densest
+        pool after its first row put the "Kobold Worker" rib in the middle of Northshire's
+        Defias Thug camp, 230 yards from any kobold: a failed step's detour walked a level 3
+        paladin into thugs to hunt kobolds, and it died there (run 20260924T002817-cee9c2).
+
+        A rib is where a step goes when it fails, so the safest grind leads: spawns spread
+        out (a median of `RIB_SPREAD_YARDS` to the nearest neighbour, not a camp that pulls
+        in pairs), beasts (they neither flee for help nor carry weapons), the lower end of
+        the band, then the biggest cluster.
         """
         rows = self.con.execute(
             """
             select cast(c.position_x as real) x, cast(c.position_y as real) y,
-                   cast(c.position_z as real) z, c.map, c.id, t.Name
+                   cast(c.position_z as real) z, c.map, c.id, t.Name, t.CreatureType
             from world_creature c
             join world_creature_template t on t.Entry = c.id
             where c.map = ? and t.Rank = 0 and t.NpcFlags = 0
@@ -648,30 +663,36 @@ class WorldDB:
             """,
             (zone_bounds.map_id, level_min, level_max),
         ).fetchall()
+        levels = dict(self.con.execute(
+            "select Entry, MaxLevel from world_creature_template where MinLevel >= ? and MaxLevel <= ?",
+            (level_min, level_max)).fetchall())
 
-        # Bucket into a coarse grid over the zone map, then take the fullest buckets.
-        # Coarse on purpose: a rib is a loop you walk, not a pin you stand on.
-        buckets: dict[tuple[int, int], list] = defaultdict(list)
+        by_creature: dict[int, list] = defaultdict(list)
         for r in rows:
             frac = world_to_map(r["x"], r["y"], zone_bounds)
-            if not frac or not on_map(*frac, slack=0.0):
-                continue
-            buckets[(int(frac[0] * 8), int(frac[1] * 8))].append(r)
+            if frac and on_map(*frac, slack=0.0):
+                by_creature[r["id"]].append(r)
 
-        best = sorted(buckets.values(), key=len, reverse=True)[:limit]
-        out: list[tuple[Spawn, int]] = []
-        for group in best:
+        ranked = []
+        for npc_id, group in by_creature.items():
             if len(group) < 6:      # a "cluster" of four wolves is not a grind rib
                 continue
             # Same clustering as a kill objective's, so a rib carries a real reach
             # rather than the floor. `x`/`y`/`z` here, `px`/`py`/`pz` there.
             rekeyed = [{"px": g["x"], "py": g["y"], "pz": g["z"]} for g in group]
-            out.append((
-                _cluster(group[0]["id"], group[0]["Name"] or "mobs",
-                         group[0]["map"], rekeyed),
-                len(group),
-            ))
-        return out
+            spawn = _cluster(npc_id, group[0]["Name"] or "mobs", group[0]["map"], rekeyed)
+            members = [r for r in rekeyed
+                       if math.hypot(r["px"] - spawn.x, r["py"] - spawn.y) <= CLUSTER_REACH]
+            if len(members) < 6:
+                continue
+            gaps = sorted(min(math.hypot(a["px"] - b["px"], a["py"] - b["py"])
+                              for b in members if b is not a) for a in members)
+            spread = gaps[len(gaps) // 2] >= RIB_SPREAD_YARDS
+            beast = group[0]["CreatureType"] == CREATURE_BEAST
+            key = (spread, beast, -int(levels.get(npc_id) or level_max), len(members))
+            ranked.append((key, spawn, len(members)))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [(spawn, count) for _key, spawn, count in ranked[:limit]]
 
 
 # --------------------------------------------------------------------------- generation

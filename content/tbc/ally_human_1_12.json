@@ -14,18 +14,18 @@
         3
       ],
       "pos": [
-        0.47957042640725006,
-        0.3482778964234796
+        0.4317554939635833,
+        0.6004121568986491
       ],
       "world": [
-        -8745.701108870968,
-        -129.09235665106004,
-        86.38992137293661
+        -9329.286783854166,
+        36.86530081431071,
+        65.35596720377605
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 49.4913912091905,
+      "hunt_yards": 65.9723330639027,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -46,7 +46,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "62 spawns of Young Wolf clustered here; route not recorded",
+      "notes": "8 spawns of Young Wolf clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -59,18 +59,18 @@
         5
       ],
       "pos": [
-        0.5435980397273279,
-        0.4699328989968549
+        0.48889816755174337,
+        0.34572920591376066
       ],
       "world": [
-        -9027.281710642688,
-        -351.321526005583,
-        72.6792006582584
+        -8739.801953125,
+        -161.46739078097875,
+        86.36963772243924
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 66.6063931283128,
+      "hunt_yards": 62.07866467609233,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -91,7 +91,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "64 spawns of Kobold Worker clustered here; route not recorded",
+      "notes": "45 spawns of Kobold Worker clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -104,28 +104,28 @@
         7
       ],
       "pos": [
-        0.40265617580249,
-        0.8037812545500509
+        0.2963425640350633,
+        0.7250988753488827
       ],
       "world": [
-        -9800.001441592261,
-        137.86418189699688,
-        24.67006209918431
+        -9617.884543678978,
+        506.8610007546165,
+        43.945463527332656
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 56.82478783555033,
+      "hunt_yards": 69.09056016433675,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
       "title": "",
       "npc_id": null,
-      "target_name": "Stonetusk Boar",
+      "target_name": "Mangy Wolf",
       "target_kind": "creature",
       "objective_targets": [],
       "objectives": [
-        "grind Stonetusk Boar"
+        "grind Mangy Wolf"
       ],
       "requires": [],
       "next": [],
@@ -136,7 +136,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "69 spawns of Stonetusk Boar clustered here; route not recorded",
+      "notes": "22 spawns of Mangy Wolf clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -149,28 +149,28 @@
         9
       ],
       "pos": [
-        0.6005207183983688,
-        0.7804645413172516
+        0.605513856377912,
+        0.655121999158178
       ],
       "world": [
-        -9746.032973345587,
-        -548.8906519272748,
-        41.54961810392492
+        -9455.917255108174,
+        -566.2210012582632,
+        66.13069930443397
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 57.18173936956914,
+      "hunt_yards": 54.505770393148964,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
       "title": "",
       "npc_id": null,
-      "target_name": "Rockhide Boar",
+      "target_name": "Gray Forest Wolf",
       "target_kind": "creature",
       "objective_targets": [],
       "objectives": [
-        "grind Rockhide Boar"
+        "grind Gray Forest Wolf"
       ],
       "requires": [],
       "next": [],
@@ -181,7 +181,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "43 spawns of Rockhide Boar clustered here; route not recorded",
+      "notes": "26 spawns of Gray Forest Wolf clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -194,18 +194,18 @@
         11
       ],
       "pos": [
-        0.7997576853875548,
-        0.7976617656832804
+        0.7389091548984119,
+        0.39668721609228763
       ],
       "world": [
-        -9785.837376644737,
-        -1240.4089419716283,
-        40.203421241358704
+        -8857.748497596154,
+        -1029.213839017428,
+        75.47291506253757
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 67.72463723193283,
+      "hunt_yards": 69.04759339808528,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -226,7 +226,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "29 spawns of Prowler clustered here; route not recorded",
+      "notes": "14 spawns of Prowler clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -239,28 +239,28 @@
         12
       ],
       "pos": [
-        0.034264097066891555,
-        0.821644889407753
+        0.06777190331848137,
+        0.9648895933969385
       ],
       "world": [
-        -9841.348307291666,
-        1416.4916585286458,
-        41.282649993896484
+        -10172.900065104166,
+        1300.191650390625,
+        37.615716298421226
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 54.85941404398485,
+      "hunt_yards": 25.372476182150997,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
       "title": "",
       "npc_id": null,
-      "target_name": "Defias Smuggler",
+      "target_name": "Harvest Golem",
       "target_kind": "creature",
       "objective_targets": [],
       "objectives": [
-        "grind Defias Smuggler"
+        "grind Harvest Golem"
       ],
       "requires": [],
       "next": [],
@@ -271,7 +271,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "26 spawns of Defias Smuggler clustered here; route not recorded",
+      "notes": "6 spawns of Harvest Golem clustered here; route not recorded",
       "source": "generated"
     },
     {

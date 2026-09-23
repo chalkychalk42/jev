@@ -308,3 +308,23 @@ def test_every_hunt_knows_where_its_target_spawns_without_touching_the_guide():
     plain = generate(DB, graph_id="t", faction="alliance", zone_ids=tuple(HUMAN_ZONES),
                      zone_names=HUMAN_ZONES, level_min=1, level_max=12)
     assert plain.model_dump() == g.model_dump(), "the guide itself changed"
+
+
+def test_a_grind_rib_stands_among_the_creature_it_is_named_for(human):
+    """Pooling every creature in a band put the "Kobold Worker" rib in Northshire's Defias
+    Thug camp, 230 yards from any kobold, and a failed step's detour died there hunting
+    kobolds among thugs (run 20260924T002817-cee9c2)."""
+    import math
+    import sqlite3
+
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    for rib in (n for n in human.nodes if n.kind is StepKind.GRIND):
+        entry = con.execute("select Entry from world_creature_template where Name = ?",
+                            (rib.target_name,)).fetchone()[0]
+        spawns = [(float(x), float(y)) for x, y in con.execute(
+            "select position_x, position_y from world_creature where id = ? and map = ?",
+            (entry, rib.map_id))]
+        nearest = min(math.dist(rib.world[:2], p) for p in spawns)
+        assert nearest < 40, f"{rib.id} is {nearest:.0f} yards from any {rib.target_name}"
+    three_five = next(n for n in human.nodes if n.id.endswith("grind_elwynn_3_5"))
+    assert three_five.target_name != "Defias Thug", "a packed humanoid camp as a safety net"
