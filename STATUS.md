@@ -1798,3 +1798,8 @@ The operator was back at the desktop, so no live runs; all of this is offline, p
 
 NEXT: with the desktop free - restart the client once (schema 11), hand in quest 15, then
 long teach sessions with the Claude tutor; watch `var/route-memory.json` fill as trips repeat.
+- **Approach stutter** (V53): reported by the operator ("4 paces, then 4 paces, then a
+  couple tiny steps"). Closing is now one steered walk that stops at the first resolved
+  swing (schema 12 `combat.swings` from the combat log); reach expires so fleeing units are
+  followed. Simulated: 25 yards to a swing in 2.9 s, forward pressed once. Schema 12 files
+  are installed in the client (`f422149`).
