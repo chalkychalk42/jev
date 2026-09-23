@@ -6,35 +6,39 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
-from typing import get_args
 
 import pytest
 
+from jev.play import tutor
+from jev.play.controls import build_manifest
 from jev.play.knowledge import LocalKnowledge
-from jev.play.observation import EFFECTS
-from jev.play.teacher import (
-    Capability,
-    ClaudeVisionClient,
-    ExpectedEffect,
-    VisionTeacher,
-    reply_schema,
-)
+from jev.play.teacher import MAX_TRANSIENT_RETRIES, ClaudeVisionClient, VisionTeacher
 from jev.teacher.client import TeacherResult
 
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
 
 
-def observation():
+ALIVE = {"ui.modal": False, "vitals.dead": False, "vitals.ghost": False, "target.has": True,
+         "target.hp": 1.0, "target.name_id": 2864, "target.reaction": 4, "seq": 5}
+CONTROLS = build_manifest(ALIVE, skills=("COMBAT_PROFILE", "LOOT")).to_dict()
+
+
+def observation(**values):
     return {"id": "observation-1", "screen": {"sha256": hashlib.sha256(PNG).hexdigest()},
-            "values": {"target.hp": 1.0}, "context": {"goal": "collect wolf meat"}}
+            "values": {**ALIVE, **values}, "size": [1600, 900],
+            "context": {"goal": "collect wolf meat", "skill": "GRIND_UNTIL",
+                        "target_name": "Young Wolf", "target_name_id": 2864},
+            "detections": {"selected_plate": {"x": 0.81, "y": 0.41}, "plates": []}}
 
 
 def reply(**changes):
-    return {"observation_id": "observation-1", "capability": "approach",
-            "action": {"kind": "key", "control": "move_forward", "duration_s": 0.3},
-            "lookup": None, "rationale": "Target remains ahead with full health.",
-            "expected_effect": "closer", **changes}
+    return {"observation_id": "observation-1", "action": "move_forward", "seconds": 0.3,
+            "why": "Target remains ahead with full health.", **changes}
+
+
+def reply_schema():
+    return tutor.schema(tutor.menu(observation(), CONTROLS))
 
 
 def cli_result(**changes):
@@ -52,8 +56,9 @@ class FakeVision:
         self.requests = []
 
     async def ask_image(self, prompt, image_png, *, json_schema, timeout_s):
-        self.requests.append((json.loads(prompt), image_png, json_schema, timeout_s))
-        item = self.replies.pop(0)
+        self.requests.append((prompt, image_png, json_schema, timeout_s))
+        # The last reply repeats, so a re-ask of a bad reply gets the same bad reply.
+        item = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
         if isinstance(item, TeacherResult):
             return item
         return TeacherResult(status="ok", text=json.dumps(item), model="actual-model",
@@ -73,10 +78,6 @@ def test_image_is_embedded_as_image_and_tools_are_disabled():
     assert "--safe-mode" in argv and "--strict-mcp-config" in argv
     assert "--no-session-persistence" in argv and "--bare" not in argv
     assert prompt not in argv
-
-
-def test_tutor_effect_vocabulary_matches_independent_observer():
-    assert set(get_args(ExpectedEffect)) == EFFECTS
 
 
 def test_preflight_checks_native_flags_and_subscription_without_exposing_account(monkeypatch):
@@ -153,128 +154,172 @@ def test_incomplete_or_failed_transport_can_never_supply_an_action(output, code)
     assert not result.ok and result.text is None
 
 
-def test_tutor_receives_controls_image_goal_and_failed_action_history():
+def test_tutor_sees_goal_state_plate_history_and_only_the_available_actions():
     client = FakeVision([reply()])
-    recent = [{"action": {"kind": "click"}, "outcome": {"effects": [], "target_hp": 1.0}}]
-    result = asyncio.run(VisionTeacher(client).decide(observation(), PNG,
-                                                     controls={"bindings": ["move_forward"]}, recent=recent))
+    recent = [{"action": {"kind": "key", "control": "turn_right", "duration_s": 0.25},
+               "outcome": {"effects": ["observed", "faced"], "success": True,
+                           "reason": "observed faced"}, "delivery": {"code": "delivered"}}]
+    result = asyncio.run(VisionTeacher(client).decide(
+        observation(), PNG, controls=CONTROLS, recent=recent, skills=("COMBAT_PROFILE",)))
     assert result.ok and result.action.control == "move_forward"
+    assert result.action.duration_s == 0.3
     assert result.requested_model == "claude-sub:requested" and result.actual_model == "actual-model"
     prompt, image, schema, _ = client.requests[0]
-    assert prompt["recent_action_results"] == recent
-    assert prompt["observation"]["context"]["goal"] == "collect wolf meat"
-    assert prompt["controls"]["bindings"] == ["move_forward"]
-    assert prompt["reply_contract"]["capability"]["allowed"] == list(get_args(Capability))
-    assert prompt["reply_contract"]["expected_effect"]["allowed"] == list(get_args(ExpectedEffect))
-    assert image == PNG and "action" in schema["properties"]
+    assert "observation_id: observation-1" in prompt
+    assert "Unit to find: Young Wolf" in prompt
+    assert "0.31 right of centre: turn right to face it" in prompt
+    assert "turn_right 0.25s -> worked (delivered); effects: faced" in prompt
+    assert "- skill:COMBAT_PROFILE:" in prompt and "loot_corpse" not in prompt
+    assert image == PNG
+    assert schema["properties"]["action"]["enum"] == [c.name for c in tutor.menu(
+        observation(), CONTROLS, skills=("COMBAT_PROFILE",))]
 
 
-def test_teacher_projection_preserves_game_state_and_every_control_without_mutating_records(tmp_path):
-    from jev.play.controls import build_manifest
-
-    bindings = tmp_path / "bindings.wtf"
-    bindings.write_text("bind W MOVEFORWARD\nbind UP MOVEFORWARD\nbind ESCAPE TOGGLEGAMEMENU\n"
-                        "bind ENTER OPENCHAT\nbind 1 ACTIONBUTTON1\n"
-                        "modifiedclick ALT SELFCAST\n")
-    controls = build_manifest(binding_paths=[bindings], skills=["ABORT_WAIT", "TRAVEL_TO"]).to_dict()
-    observed = {**observation(), "features": {"screen.0.0.0": 0.125},
-                "values": {"ui.modal": False, "target.hp": None, "target.name_id": 7},
-                "state": {"quests": [{"quest_id": 33, "objectives": [{"have": 0, "need": 8}]}]},
-                "origin": [1, 2], "size": [1600, 900], "freshness": {"paint_generation": 10}}
+def test_the_prompt_is_compact_and_records_are_not_mutated():
+    """28,080 tokens went into one modal request, 26k characters of it unusable bindings."""
+    observed, controls = observation(), deepcopy(CONTROLS)
     recorded_observation, recorded_controls = deepcopy(observed), deepcopy(controls)
     client = FakeVision([reply()])
-    result = asyncio.run(VisionTeacher(client).decide(observed, PNG, controls=controls))
+    result = asyncio.run(VisionTeacher(client, knowledge=LocalKnowledge())
+                         .decide(observed, PNG, controls=controls))
     assert result.ok
-    prompt, image, _, _ = client.requests[0]
-    assert prompt["observation"] == {key: value for key, value in recorded_observation.items()
-                                     if key != "features"}
-    assert image == PNG
-    projected = prompt["controls"]
-    references = projected.pop("source_references")
-    for rows in (projected["bindings"].values(), projected["action_slots"],
-                 projected["binding_inventory"]):
-        for row in rows:
-            if "source_ref" in row:
-                row["source"] = references[row.pop("source_ref")]
-    assert projected == recorded_controls
+    prompt = client.requests[0][0]
+    assert len(prompt) < 6000, len(prompt)
+    assert "binding_inventory" not in prompt and "TOGGLEPETBOOK" not in prompt
     assert observed == recorded_observation and controls == recorded_controls
 
 
-@pytest.mark.parametrize("bad,status", [
-    (reply(observation_id="an-old-frame"), "stale"),
-    (reply(capability="key"), "invalid"),
-    (reply(capability="click"), "invalid"),
-    (reply(action={"kind": "key", "control": "move_forward", "duration_s": 10.0}), "invalid"),
-    (reply(action={"kind": "shell", "cmd": "anything"}), "invalid"),
-    (reply(action={"kind": "observe"}, lookup="wolf"), "invalid"),
-    (reply(extra="unrecognized"), "invalid"),
-    (reply(expected_effect="definitely_succeeded"), "invalid"),
-    (reply(expected_effect="observed"), "invalid"),
+@pytest.mark.parametrize("bad,status,why", [
+    (reply(observation_id="an-old-frame"), "stale", "observation_id"),
+    (reply(action="key"), "invalid", "not available"),
+    (reply(action="loot_corpse", x=0.5, y=0.5), "invalid", "not available"),
+    (reply(seconds=None), "invalid", "needs seconds"),
+    (reply(seconds=10.0), "invalid", "seconds"),
+    (reply(seconds=True), "invalid", "seconds"),
+    (reply(seconds=0.01), "invalid", "at least"),
+    (reply(x=0.5), "invalid", "does not take x"),
+    (reply(action="interact_unit", x=812, y=400), "invalid", "x"),
+    (reply(action="lookup", query="wolf"), "invalid", "not available"),
+    ({"action": "observe"}, "invalid", "observation_id"),
 ])
-def test_stale_or_out_of_contract_replies_never_reach_executor(bad, status):
-    result = asyncio.run(VisionTeacher(FakeVision([bad])).decide(observation(), PNG, controls={}))
+def test_stale_or_out_of_contract_replies_never_reach_executor(bad, status, why):
+    result = asyncio.run(VisionTeacher(FakeVision([bad])).decide(
+        observation(), PNG, controls=CONTROLS))
     assert result.status == status and not result.ok and result.action is None
+    assert why in result.detail
+
+
+def test_unit_clicks_bind_identity_from_the_observation_not_the_model():
+    client = FakeVision([reply(action="interact_unit", x=0.81, y=0.5, seconds=None)])
+    result = asyncio.run(VisionTeacher(client).decide(observation(), PNG, controls=CONTROLS))
+    assert result.ok
+    assert (result.action.intent, result.action.button) == ("interact", "right")
+    assert result.action.expected_target_id == 2864 and result.action.expected_dead is False
+    corpse = observation(**{"target.hp": 0.0})
+    client = FakeVision([reply(action="loot_corpse", x=0.5, y=0.6, seconds=None)])
+    result = asyncio.run(VisionTeacher(client).decide(corpse, PNG, controls=CONTROLS))
+    assert result.ok and result.action.expected_dead is True
 
 
 @pytest.mark.parametrize("action", [
-    {"kind": "key", "control": "move_forward", "duration_s": 0.3},
-    {"kind": "click", "button": "left", "intent": "ui", "ui_control": "quest_advance"},
-    {"kind": "skill", "name": "ABORT_WAIT"},
-    {"kind": "pointer", "x": 0.5, "y": 0.5},
-    {"kind": "camera", "axis": "yaw", "pixels": 20},
-    {"kind": "action_slot", "slot": 1},
+    reply(), reply(action="quest_advance", seconds=None),
+    reply(action="skill:COMBAT_PROFILE", seconds=None),
+    reply(action="camera_yaw", pixels=20, seconds=None), reply(action="slot_1", seconds=None),
 ])
 def test_modal_contract_is_enforced_even_when_provider_ignores_narrowed_schema(action):
-    client = FakeVision([reply(action=action, expected_effect="ui_closed")])
-    observed = {**observation(), "values": {"ui.modal": True}}
-    result = asyncio.run(VisionTeacher(client).decide(observed, PNG, controls={}))
+    client = FakeVision([action])
+    observed = observation(**{"ui.modal": True})
+    result = asyncio.run(VisionTeacher(client).decide(observed, PNG, controls=CONTROLS,
+                                                      skills=("COMBAT_PROFILE",)))
     assert result.status == "invalid" and result.action is None
-    assert "blocking modal" in result.detail
+    assert "not available" in result.detail
     schema = client.requests[0][2]
-    assert schema == reply_schema(observed["values"])
-    assert set(schema["$defs"]) == {"ObserveAction", "KeyAction"}
-    assert schema["properties"]["action"]["anyOf"][1] == {"type": "null"}
-    assert reply_schema({"ui.modal": False}) == reply_schema()
+    assert schema["properties"]["action"]["enum"] == ["observe", "escape"]
 
 
-@pytest.mark.parametrize("action,effect", [
-    ({"kind": "observe", "wait_s": 0.1}, "observed"),
-    ({"kind": "key", "control": "escape", "duration_s": 0}, "ui_closed"),
+@pytest.mark.parametrize("action,kind", [
+    ({"action": "observe", "seconds": 0.1}, "observe"),
+    ({"action": "escape"}, "key"),
 ])
-def test_modal_contract_preserves_lookup_and_permitted_actions(action, effect):
-    client = FakeVision([reply(action=None, lookup="Young Wolf"),
-                         reply(action=action, expected_effect=effect)])
-    observed = {**observation(), "values": {"ui.modal": True}}
+def test_modal_contract_preserves_lookup_and_permitted_actions(action, kind):
+    first = {"observation_id": "observation-1", "action": "lookup", "query": "Young Wolf",
+             "why": "check"}
+    client = FakeVision([first, {"observation_id": "observation-1", "why": "close it",
+                                 **action}])
+    observed = observation(**{"ui.modal": True})
     result = asyncio.run(VisionTeacher(client, knowledge=LocalKnowledge())
-                         .decide(observed, PNG, controls={}))
-    assert result.ok and result.action.kind == action["kind"]
+                         .decide(observed, PNG, controls=CONTROLS))
+    assert result.ok and result.action.kind == kind
     assert len(client.requests) == 2 and result.lookups
-    assert client.requests[0][2] == client.requests[1][2] == reply_schema(observed["values"])
+    assert "LOOKUP RESULTS" in client.requests[1][0]
 
 
 def test_lookup_returns_local_facts_then_one_action_and_charges_every_call():
-    client = FakeVision([reply(action=None, lookup="Young Wolf"), reply()])
+    lookup = reply(action="lookup", query="Young Wolf", seconds=None)
+    client = FakeVision([lookup, reply()])
     reserved, recorded = [], []
-    tutor = VisionTeacher(client, knowledge=LocalKnowledge(),
-                          reserve_call=lambda: reserved.append(True) or True, record_call=recorded.append)
-    result = asyncio.run(tutor.decide(observation(), PNG, controls={}))
+    tutor_ = VisionTeacher(client, knowledge=LocalKnowledge(),
+                           reserve_call=lambda: reserved.append(True) or True,
+                           record_call=recorded.append)
+    result = asyncio.run(tutor_.decide(observation(), PNG, controls=CONTROLS))
     assert result.ok and len(reserved) == len(recorded) == len(result.calls) == 2
     assert result.tokens_in == 200 and result.tokens_out == 40
-    assert client.requests[1][0]["lookup_results"][0]["records"]
+    assert result.lookups[0]["records"]
     assert client.requests[1][3] <= client.requests[0][3]
 
 
 def test_lookup_budget_ends_without_executing_or_unbounded_retries():
-    client = FakeVision([reply(action=None, lookup="wolf")] * 2)
+    lookup = reply(action="lookup", query="wolf", seconds=None)
+    client = FakeVision([lookup] * 2)
     result = asyncio.run(VisionTeacher(client, knowledge=LocalKnowledge(), max_lookups=1)
-                         .decide(observation(), PNG, controls={}))
-    assert result.status == "invalid" and len(client.requests) == 2
+                         .decide(observation(), PNG, controls=CONTROLS))
+    assert result.status == "invalid" and len(client.requests) == 3   # lookup, bad, re-ask
+
+
+def test_a_transient_provider_failure_is_retried_within_the_deadline_and_charged():
+    busy = TeacherResult(status="transport", model="claude-sub:requested",
+                         detail="overloaded", retry_after_s=0.01)
+    client = FakeVision([busy, reply()])
+    reserved, recorded, slept = [], [], []
+
+    async def sleep(seconds):
+        slept.append(seconds)
+
+    result = asyncio.run(VisionTeacher(client, reserve_call=lambda: reserved.append(1) or True,
+                                       record_call=recorded.append, sleep=sleep)
+                         .decide(observation(), PNG, controls=CONTROLS))
+    assert result.ok and len(result.calls) == len(reserved) == len(recorded) == 2
+    assert slept == [2.0], "the first wait is the backoff floor, not the provider's hint alone"
+
+
+def test_an_invalid_reply_is_asked_for_once_more_with_its_rejection():
+    client = FakeVision([reply(seconds=None), reply()])
+    result = asyncio.run(VisionTeacher(client).decide(observation(), PNG, controls=CONTROLS))
+    assert result.ok and len(result.calls) == 2
+    assert "YOUR PREVIOUS REPLY WAS REJECTED: move_forward needs seconds" in client.requests[1][0]
+    assert "REJECTED" not in client.requests[0][0]
+
+
+def test_transient_retries_are_bounded_and_permanent_failures_are_not_retried():
+    busy = TeacherResult(status="transport", model="m", detail="overloaded", retry_after_s=0.0)
+    client = FakeVision([busy] * (MAX_TRANSIENT_RETRIES + 2))
+
+    async def sleep(_seconds):
+        return None
+
+    result = asyncio.run(VisionTeacher(client, sleep=sleep).decide(
+        observation(), PNG, controls=CONTROLS))
+    assert result.status == "transport" and len(result.calls) == MAX_TRANSIENT_RETRIES + 1
+    broke = TeacherResult(status="transport", model="m", detail="insufficient balance")
+    result = asyncio.run(VisionTeacher(FakeVision([broke, reply()]), sleep=sleep).decide(
+        observation(), PNG, controls=CONTROLS))
+    assert result.status == "transport" and len(result.calls) == 1
 
 
 def test_budget_denial_or_changed_image_does_not_make_model_call():
     client = FakeVision([])
     result = asyncio.run(VisionTeacher(client, reserve_call=lambda: False)
-                         .decide(observation(), PNG, controls={}))
+                         .decide(observation(), PNG, controls=CONTROLS))
     assert result.status == "budget" and not client.requests
     changed = {**observation(), "screen": {"sha256": "0" * 64}}
     result = asyncio.run(VisionTeacher(client).decide(changed, PNG, controls={}))

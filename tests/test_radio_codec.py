@@ -45,7 +45,8 @@ def test_layout_fits_the_grid():
     assert len(radio.calibration_row()) == GRID_COLS
 
 
-@pytest.mark.parametrize(("version", "field_count", "payload_bits"), [(6, 75, 582), (7, 112, 1035)])
+@pytest.mark.parametrize(("version", "field_count", "payload_bits"),
+                         [(6, 75, 582), (7, 112, 1035), (8, 117, 1059)])
 def test_historical_schema_prefixes_keep_their_checksum_boundary(version, field_count, payload_bits):
     fields = SCHEMA_FIELDS[version]
     assert len(fields) == field_count
@@ -62,11 +63,12 @@ def test_historical_schema_prefixes_keep_their_checksum_boundary(version, field_
     assert all(decoded[f.name] is None for f in FIELDS[field_count:])
 
 
-def test_cursor_fields_fit_the_existing_schema7_grid():
+def test_melee_fields_fit_the_existing_grid():
+    """Schema 9 appends 14 bits and must not grow the painted strip."""
     lay = layout()
     assert (lay["cols"], lay["rows"]) == (12, 9)
-    assert lay["payload_bits"] == 1059
-    assert lay["field_count"] == 117
+    assert lay["payload_bits"] == 1073
+    assert lay["field_count"] == 121
 
 
 @pytest.mark.parametrize("field", FIELDS, ids=lambda f: f.name)

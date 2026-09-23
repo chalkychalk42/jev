@@ -31,7 +31,7 @@ from jev.play.teacher import PlayTeacherResult
 from jev.run.body import LiveBody
 from jev.run.client import Client, ClientSource
 from jev.run.screenshots import Screenshots
-from jev.run.supervisor import FocusLost, Supervisor, Worker
+from jev.run.supervisor import FocusLost, Result, Supervisor, Worker
 from jev.world.state_v1 import ArmedBy, StepKind
 
 
@@ -367,3 +367,45 @@ def test_default_live_body_keeps_modal_wait_without_input(tmp_path):
         f.playing.close()
         f.screenshots.close()
         recorder.close()
+
+
+class UnavailableTeacher(Teacher):
+    async def decide(self, observation, png, **kwargs):
+        self.requests.append((observation, png, kwargs.get("skills")))
+        return PlayTeacherResult("transport", observation["id"], requested_model="fixture",
+                                 detail="GLM API returned HTTP 429 code 1305; transient")
+
+
+def test_an_unavailable_tutor_hands_the_objective_to_the_scripted_routine(tmp_path):
+    """Progress with zero teacher calls: the guide's own routine plays the objective."""
+    env = composition(tmp_path)
+    env.playing.controller.teacher = UnavailableTeacher()
+    scripted = []
+    env.spine.execute = lambda arm, state, checkpoint: scripted.append(arm) or Result(
+        SkillOutcome.SUCCEEDED, "scripted travel arrived", "arrived")
+    try:
+        result = env.playing.execute(env.arm, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert result.outcome is SkillOutcome.SUCCEEDED and result.code == "arrived"
+    assert scripted == [env.arm]
+    assert set(env.playing.controller.teacher.requests[0][2]) == {
+        "COMBAT_PROFILE", "EAT_DRINK", "FACE_TARGET", "LOOT", "TRAVEL_TO"}
+    rows = [json.loads(line) for line in
+            (env.recorder.dir / "play-actions.jsonl").read_text().splitlines()]
+    assert any(row.get("event") == "scripted_fallback" and "1305" in row["reason"]
+               for row in rows)
+
+
+def test_a_dialog_nobody_can_dismiss_is_not_handed_to_a_routine(tmp_path):
+    env = composition(tmp_path)
+    env.playing.controller.teacher = UnavailableTeacher()
+    env.spine.execute = Mock(side_effect=AssertionError("a wait is not a routine"))
+    wait = replace(env.arm, decision=env.arm.decision.model_copy(update={"skill": "ABORT_WAIT"}))
+    try:
+        result = env.playing.execute(wait, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert result.code == "teacher_unavailable"

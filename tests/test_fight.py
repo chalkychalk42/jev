@@ -1,4 +1,4 @@
-"""Killing one unit: select by Tab, face by clicking, and do not claim a kill."""
+"""Killing one unit: select, face by turning, swing on observed state, never claim a kill."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import pytest
 from jev.clients.fight import (
     CLOSE_BURST_S,
     CLOSE_NUDGE_S,
+    CLOSE_STEP_S,
     DEAD_HP,
     FLEE_HP,
     HEAL_GIVE_UP,
@@ -18,12 +19,19 @@ from jev.clients.fight import (
     MAX_SELECTS,
     MIN_START_HP,
     REAIM_AFTER_S,
-    REAIM_EVERY,
     SLOT_KEYS,
+    TOGGLE_SETTLE_S,
     Fight,
     Fought,
 )
-from jev.clients.targeting import ClickCode, ClickResult, PaintCode, PaintResult
+from jev.clients.targeting import (
+    ClickCode,
+    ClickResult,
+    FaceCode,
+    FaceResult,
+    PaintCode,
+    PaintResult,
+)
 from jev.world.combat import GENERIC, Ability, Role, for_class
 
 
@@ -49,13 +57,18 @@ class _Hid:
 A_FRAME = object()   # shared Targeting has its own pixel/hover tests
 
 
-class _Targeting:
-    """A measured-delivery boundary, independent of perception and radio sequencing."""
+FACED = FaceResult(FaceCode.FACED, "selected plate on the centre line", 0.01, None, 1, 0.1)
 
-    def __init__(self, read, hid, action=None):
+
+class _Targeting:
+    """The shared facing boundary, independent of perception and radio sequencing."""
+
+    def __init__(self, read, hid, face=None, action=None):
         self.read, self.hid = read, hid
+        self.face = face or FACED
         self.action = action or ClickResult(ClickCode.CLICKED, (710, 438), "delivered", 1)
-        self.requests = []
+        self.faces = []        # facing requests
+        self.requests = []     # living-unit click requests (Interact)
         self.paints = 0
 
     def wait_for_paint(self):
@@ -64,11 +77,18 @@ class _Targeting:
         code = PaintCode.FRESH if after is not None else PaintCode.BLIND
         return PaintResult(code, None, after, "observed post-selection paint")
 
+    def face_selected(self, **request):
+        self.faces.append(request)
+        return self.face
+
     def click_selected(self, **request):
         self.requests.append(request)
         if self.action.delivered:
             assert self.hid.click(*self.action.point, right=True) is True
         return self.action
+
+    def click_corpse(self, **request):
+        return self.click_selected(**request)
 
 
 def _fight(frames, hid=None, frame=A_FRAME):
@@ -118,18 +138,28 @@ def test_the_wrong_unit_costs_a_selection_and_tab_moves_on():
     assert hid.taps == ["tab"] * 3, "gave up, or accepted the wrong unit"
 
 
-def test_engaging_refuses_when_the_unit_cannot_be_seen():
-    """2.4.3 has no facing API — `GetPlayerFacing` is 3.0 and `pos.facing` reads None on
-    every live frame — so clicking the model is the only way to aim the character. No
-    sighting means no way to face it, and swinging anyway hits whatever the camera is
-    pointed at."""
+def test_engaging_refuses_when_the_unit_cannot_be_faced():
+    """2.4.3 has no facing API, and a right-click does not turn the character either:
+    measured with auto-attack on and the wolf at the character's side. Facing is turning
+    until the unit's own plate is centred; no plate after the search means no way to face
+    it, and walking anyway walks whatever heading the character happens to have."""
     hid = _Hid()
     targeting = _Targeting(lambda: ALIVE, hid,
-        ClickResult(ClickCode.NOT_VISIBLE, None, "no current body bracket"))
+        FaceResult(FaceCode.NOT_VISIBLE, "no plate for the selected unit", turns=0))
     f = Fight(hid=hid, read=lambda: ALIVE, read_frame=lambda: None, targeting=targeting)
     assert f.engage() is False
-    assert hid.clicks == []
-    assert "bracket" in f.detail
+    assert hid.clicks == [] and hid.holds == [] and hid.taps == []
+    assert "no plate" in f.detail
+    assert f._aim_failure() is Fought.NOT_VISIBLE
+
+
+def test_engaging_never_clicks_the_body_it_turns_and_starts_the_swing():
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    assert f.engage() is True
+    assert hid.clicks == [], "aimed by clicking, which does not turn the character"
+    assert hid.taps == ["1"], "faced the unit and never started swinging"
+    assert f.targeting.faces == [{"expected_name_id": None}]
 
 
 def test_a_vanishing_target_at_full_health_is_not_a_kill():
@@ -176,7 +206,7 @@ def test_a_seal_is_not_re_pressed_every_tick():
 def test_melee_auto_attack_is_a_toggle_and_is_pressed_once():
     """Spell 6603 toggles the swing: pressing it while already swinging stops it. The
     first live rotation pressed `[1, 2, 2, ..., 1, 2, ...]` and turned the character's
-    attack on and off all fight."""
+    attack on and off all fight. Without an observed state, one press per fight."""
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
     for _ in range(4):
@@ -184,6 +214,31 @@ def test_melee_auto_attack_is_a_toggle_and_is_pressed_once():
     assert hid.taps.count("1") == 1, "auto-attack was toggled more than once"
     attack = for_class(2, 1).first(Role.ATTACK)
     assert attack is not None and attack.toggle
+
+
+def test_an_observed_swing_is_never_toggled_off():
+    """The right-click's attack was switched straight back off by the rotation's own
+    press. With the radio's state the toggle is pressed only when it is observed off."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    swinging = {**ALIVE, "bars.attacking": True, "bars.ready": 0b101}
+    for _ in range(4):
+        f._rotate(swinging)
+    assert "1" not in hid.taps
+
+
+def test_an_observed_stopped_swing_is_restarted_after_the_paint_settles(combat_clock):
+    """A new target, or a swing the client stopped, is observed off and started again -
+    but never inside the window where the radio has not painted the last press."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    stopped = {**ALIVE, "bars.attacking": False, "bars.ready": 0b101}
+    f._rotate(stopped)
+    f._rotate(stopped)
+    assert hid.taps.count("1") == 1, "pressed again before the press could be painted"
+    combat_clock[0] += TOGGLE_SETTLE_S + 0.1
+    f._rotate(stopped)
+    assert hid.taps.count("1") == 2, "an observed stopped swing was never restarted"
 
 
 def test_a_toggle_is_not_pressed_once_damage_is_already_landing():
@@ -429,20 +484,18 @@ def test_a_heal_is_not_pressed_again_until_the_last_one_answers():
     assert hid.taps.count("3") == 2
 
 
-def test_closing_re_aims_because_only_a_click_turns_the_character():
-    """A right-click is the only thing that turns this character, and it happens once,
-    before the walking starts. When it misses - no ring, so the click went below the
-    nameplate and landed on grass - nothing faces the target and `W` walks the old
-    heading for every burst after it. Six fights in one run reported `closed 8` and
-    landed nothing."""
+def test_every_stride_is_preceded_by_facing():
+    """`W` walks whatever heading the character has, so a unit that moves - or a first
+    turn that fell short - is walked past. Six fights in one run reported `closed 8` and
+    landed nothing, walking a heading nothing had set."""
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
     engages = []
     f.acquire = lambda name_id, **_: None
     f.engage = lambda: engages.append(1) or True
     f.run(timeout_s=6)
-    assert f.closed >= REAIM_EVERY, "did not close far enough to need re-aiming"
-    assert len(engages) > 1, "walked the whole way without ever re-aiming"
+    assert f.closed > 1, "did not stride at all"
+    assert len(engages) == f.closed + 1, "strode without facing first"
 
 
 def test_a_heal_that_never_lands_is_dropped_for_the_rest_of_the_fight():
@@ -619,13 +672,48 @@ def test_it_creeps_the_last_yards_rather_than_stopping_or_charging_through():
     assert any(secs == CLOSE_BURST_S for _k, secs in g.hid.holds), "crept from far away"
 
 
-def test_missing_body_evidence_never_uses_a_raw_ring_or_plate_drop():
+def test_the_attack_actions_range_check_ends_closing_exactly():
+    """Schema 9 paints the Attack action's own range check. In reach, the character
+    stands and swings; near but out of reach, it steps rather than nudges."""
+    hid = _Hid()
+    reach = {**ALIVE, "target.in_melee": True, "target.melee_range": True}
+    f = _fight([reach], hid=hid)
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda: True
+    f.run(timeout_s=1.0)
+    assert hid.holds == [], "walked while a swing already reached"
+    assert f.pressed, "stood in reach and never swung"
+
+    step = {**ALIVE, "target.in_melee": True, "target.melee_range": False}
+    g = _fight([step])
+    g.acquire = lambda name_id, **_: None
+    g.engage = lambda: True
+    g.run(timeout_s=1.0)
+    assert g.hid.holds and all(secs == CLOSE_STEP_S for _k, secs in g.hid.holds)
+
+
+def test_a_new_facing_error_turns_back_to_the_target():
+    """The client says "facing the wrong way" on a swing; that is an immediate re-face,
+    not three and a half seconds of swinging at air."""
+    engages = []
+    first = {**ALIVE, "target.melee_range": True, "ui.error_count": 3, "ui.error_last": 0}
+    wrong = {**first, "ui.error_count": 4, "ui.error_last": 3}      # 3 = not_facing
+    f = _fight([first, first, wrong, wrong])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda: engages.append(1) or True
+    f.run(timeout_s=0.9)
+    assert len(engages) == 2, "a facing error did not re-face, or an old one did"
+    assert f.hid.holds == []
+
+
+def test_an_unfaced_unit_is_never_walked_at_or_clicked():
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
-    f.targeting.action = ClickResult(ClickCode.NOT_VISIBLE, None, "ring without body bracket")
-    assert f.engage() is False
-    assert hid.clicks == []
-    assert f.targeting.requests == [{"kind": "living", "expected_name_id": None, "plate": None}]
+    f.acquire = lambda name_id, **_: None
+    f.targeting.face = FaceResult(FaceCode.UNSETTLED, "plate still off centre", 0.2)
+    assert f.run(timeout_s=1) is Fought.NOT_VISIBLE
+    assert hid.clicks == [] and hid.holds == []
+    assert f.targeting.faces == [{"expected_name_id": None}]
 
 
 @pytest.mark.parametrize("last_hp", [None, 1.0, 0.03])
@@ -641,7 +729,7 @@ def test_refused_tab_cannot_accept_a_preexisting_matching_target():
     f = _fight([ALIVE], hid=hid)
     assert f.select(1161) is Fought.REFUSED
     assert f.targeting.paints == 0
-    assert not f.targeting.requests
+    assert not f.targeting.faces
 
 
 def test_refused_plate_selection_cannot_accept_a_preexisting_matching_target(monkeypatch):
@@ -653,17 +741,14 @@ def test_refused_plate_selection_cannot_accept_a_preexisting_matching_target(mon
     monkeypatch.setattr(f, "_candidates", lambda _: [Plate(700, 300, 140, RingColour.YELLOW)])
     assert f.acquire(1161) is Fought.REFUSED
     assert f.targeting.paints == 0
-    assert not f.targeting.requests
+    assert not f.targeting.faces
 
 
-def test_refused_reaim_stops_before_any_following_movement():
+def test_refused_refacing_stops_before_any_following_movement():
     near = {**ALIVE, "vitals.combat": True, "target.in_melee": True}
     f = _fight([near])
-    actions = iter([
-        ClickResult(ClickCode.CLICKED, (710, 438), "initial input delivered", 1),
-        ClickResult(ClickCode.REFUSED, None, "fresh pointer input refused", 1),
-    ])
-    f.targeting.click_selected = lambda **_: next(actions)
+    results = iter([FACED, FaceResult(FaceCode.REFUSED, "turn input refused")])
+    f.targeting.face_selected = lambda **_: next(results)
     assert f.run(timeout_s=1) is Fought.REFUSED
     assert f.hid.holds == []
     assert f.closed == 0
@@ -705,7 +790,7 @@ def combat_clock(monkeypatch):
     return now
 
 
-@pytest.mark.parametrize("phase", ["wait_for_paint", "click_selected"])
+@pytest.mark.parametrize("phase", ["wait_for_paint", "face_selected"])
 def test_acquisition_and_initial_verification_do_not_spend_the_fight_timeout(combat_clock, phase):
     """Slow selection/body verification must still leave time for a first attack."""
     f = _fight([ALIVE], frame=None)
@@ -731,14 +816,14 @@ def test_reaim_cadence_does_not_extend_the_configured_fight_timeout(combat_clock
     started = {**ALIVE, "vitals.combat": True}
     stalled = {**started, "target.hp": 0.6}
     f = _fight([started, stalled])
-    original = f.targeting.click_selected
+    original = f.targeting.face_selected
     aimed_at = []
 
     def measured_action(**kwargs):
         aimed_at.append(combat_clock[0])
         return original(**kwargs)
 
-    f.targeting.click_selected = measured_action
+    f.targeting.face_selected = measured_action
     configured = 45.0 if timeout_s is None else timeout_s
     arguments = {} if timeout_s is None else {"timeout_s": timeout_s}
     assert f.run(**arguments) is Fought.TIMEOUT
@@ -750,24 +835,23 @@ def test_reaim_cadence_does_not_extend_the_configured_fight_timeout(combat_clock
     assert f.detail == f"{configured:.0f}s and it is still standing"
 
 
-def test_near_and_closing_conditions_share_one_reaim_per_iteration(combat_clock):
+def test_one_facing_per_stride_and_the_stride_budget_is_bounded(combat_clock):
     from collections import Counter
 
     f = _fight([{**ALIVE, "vitals.combat": True, "target.in_melee": True}])
-    original = f.targeting.click_selected
-    aims_at_closed = []
+    original = f.targeting.face_selected
+    faced_at_closed = []
 
     def measured_action(**kwargs):
-        aims_at_closed.append(f.closed)
+        faced_at_closed.append(f.closed)
         return original(**kwargs)
 
-    f.targeting.click_selected = measured_action
+    f.targeting.face_selected = measured_action
     assert f.run() is Fought.UNREACHABLE
     assert f.closed == MAX_CLOSE_BURSTS
-    # Exclude the initial body action; each remaining action belongs to a loop iteration.
-    counts = Counter(aims_at_closed[1:])
-    assert counts[REAIM_EVERY] == counts[2 * REAIM_EVERY] == 1
-    assert all(count == 1 for count in counts.values()), "overlapping conditions double-clicked"
+    counts = Counter(faced_at_closed)
+    assert counts[0] == 2, "the engagement and the first stride each face once"
+    assert all(counts[n] == 1 for n in range(1, MAX_CLOSE_BURSTS)), "a stride faced twice"
 
 
 @pytest.mark.parametrize("timeout_s", [45.0, 5.0])
@@ -780,44 +864,42 @@ def test_slow_fresh_verification_keeps_the_existing_closing_and_timeout_bounds(
     timeout still stops the attempt before all steps have been delivered.
     """
     f = _fight([{**ALIVE, "vitals.combat": True, "target.in_melee": True}])
-    original = f.targeting.click_selected
+    original = f.targeting.face_selected
 
     def slow_verified_action(**kwargs):
         combat_clock[0] += 2.0
         return original(**kwargs)
 
-    f.targeting.click_selected = slow_verified_action
+    f.targeting.face_selected = slow_verified_action
     outcome = f.run(timeout_s=timeout_s)
     assert len(f.hid.holds) == f.closed
     assert all(key == "w" and duration == CLOSE_NUDGE_S for key, duration in f.hid.holds)
     if timeout_s == 45.0:
         assert outcome is Fought.UNREACHABLE
         assert f.closed == MAX_CLOSE_BURSTS
-        assert 12.0 < combat_clock[0] < timeout_s
+        assert 2.0 * MAX_CLOSE_BURSTS < combat_clock[0] < timeout_s
     else:
         assert outcome is Fought.TIMEOUT
         assert 0 < f.closed < MAX_CLOSE_BURSTS
     assert f.pressed, "fresh verification displaced the existing rotation"
 
 
-def test_acquisition_plate_expires_only_after_successful_body_delivery():
+def test_the_last_faced_plate_is_kept_for_the_corpse():
+    """A corpse has no plate. Where the living unit's plate last stood is where to look."""
     from jev.perceive.units import Plate, RingColour
 
     f = _fight([ALIVE])
-    plate = Plate(700, 300, 140, RingColour.YELLOW)
-    f.selected_plate = plate
-    f.targeting.action = ClickResult(ClickCode.STALE, None, "target moved during verification")
+    plate = Plate(700, 300, 147, RingColour.YELLOW)
+    f.targeting.face = FaceResult(FaceCode.FACED, "centred", 0.0, plate, 1, 0.1)
+    assert f.engage() is True
+    assert f.last_plate is plate
+    f.targeting.face = FaceResult(FaceCode.NOT_VISIBLE, "no plate")
     assert f.engage() is False
-    assert f.selected_plate is plate
-    f.targeting.action = ClickResult(ClickCode.CLICKED, (710, 438), "delivered", 1)
-    assert f.engage() is True
-    assert f.selected_plate is None
-    assert f.engage() is True
-    assert [request["plate"] for request in f.targeting.requests] == [plate, plate, None]
+    assert f.last_plate is plate, "a failed look erased where the unit was last seen"
 
 
 @pytest.mark.parametrize("values, key", [
-    ({**ALIVE, "vitals.combat": True, "vitals.hp": 0.2,
+    ({**ALIVE, "vitals.combat": True, "vitals.hp": 0.2, "bars.attacking": True,
       "vitals.power": 0.9, "vitals.power_max": 100}, "3"),
     ({**ALIVE, "vitals.combat": True, "vitals.hp": 1.0, "bars.ready": 0b1}, "1"),
 ])

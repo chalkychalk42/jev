@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -23,14 +24,15 @@ class FakeTransport:
     async def ask_image(self, prompt, image_png, *, json_schema, timeout_s):
         self.calls += 1
         self.schemas.append(json_schema)
-        data = json.loads(prompt)
-        assert data["observation"]["synthetic"] is True
-        assert data["controls"]["allowed_actions"] == [{"kind": "observe", "wait_s": 0}]
+        observation_id = re.search(r"^observation_id: (\S+)$", prompt, re.M).group(1)
+        offered = prompt.split("ACTIONS AVAILABLE NOW\n", 1)[1].split("\n\n", 1)[0]
+        assert offered.splitlines() == ["- observe [seconds 0-2.0]: wait up to 2 seconds "
+                                        "and look again"]
         assert image_png == FIXTURE.read_bytes()
-        reply = {"observation_id": data["observation"]["id"], "capability": "observe",
-                 "action": None if self.lookup else {"kind": "observe", "wait_s": 0.0},
-                 "lookup": "Young Wolf" if self.lookup else None,
-                 "rationale": "Offline transport verification only.", "expected_effect": "observed"}
+        reply = {"observation_id": observation_id,
+                 "action": "lookup" if self.lookup else "observe",
+                 **({"query": "Young Wolf"} if self.lookup else {"seconds": 0}),
+                 "why": "Offline transport verification only."}
         return TeacherResult(status="ok", text=json.dumps(reply), model="actual-test-model",
                              tokens_in=100, tokens_out=20)
 
@@ -64,10 +66,9 @@ def test_smoke_never_makes_a_second_call_even_if_model_requests_lookup():
 
 def test_smoke_schema_only_allows_zero_wait_observation():
     schema = observe_schema()
-    assert schema["properties"]["action"] == {"$ref": "#/$defs/ObserveAction"}
-    assert schema["properties"]["lookup"] == {"type": "null"}
-    assert schema["properties"]["capability"]["const"] == "observe"
-    assert schema["$defs"]["ObserveAction"]["properties"]["wait_s"]["const"] == 0
+    assert schema["properties"]["action"]["enum"] == ["observe"]
+    assert schema["properties"]["seconds"] == {"type": "number", "const": 0}
+    assert schema["additionalProperties"] is False
 
 
 def test_glm_offline_readiness_does_not_construct_transport_or_read_credentials(tmp_path, monkeypatch):

@@ -27,6 +27,7 @@ class _Fight:
         self.topped_up = 0
         self.detail = ""
         self.broken = False
+        self.last_plate = None
 
     def top_up(self, *_a, **_k):
         self.topped_up += 1

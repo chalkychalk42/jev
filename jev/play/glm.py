@@ -5,10 +5,15 @@ Vision: https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v
 Prices: https://docs.z.ai/guides/overview/pricing (Flash is free, checked 2026-09-22).
 
 The caller supplies a credential and selects its issuing platform. This module never
-loads credentials, changes providers, retries a call, or executes model tool requests.
-Vision models do not document response_format support, so the tutor schema is supplied
-as an instruction. The base tutor contract is independently validated here, then again
-by VisionTeacher. Callers must check any further restrictions in their supplied schema.
+loads credentials, changes providers or models, retries a call itself, or executes model
+tool requests. Vision models do not document response_format support, so the tutor schema
+is supplied as an instruction. The reply text is returned as-is: the tutor contract is
+validated in one place, `VisionTeacher`, for every provider.
+
+An HTTP error names the provider's numeric business code and nothing else from its body
+(bodies can echo request content). Codes the provider documents as transient - 1302 rate
+limit, 1305 overloaded - and 5xx responses carry a retry hint; an exhausted balance (1113)
+or a plan without the model never does. Codes: https://docs.z.ai/api-reference/api-code
 """
 
 from __future__ import annotations
@@ -22,9 +27,8 @@ import time
 from typing import Any
 
 import httpx
-from pydantic import ValidationError
 
-from jev.play.teacher import SYSTEM_PROMPT, TutorReply
+from jev.play.tutor import SYSTEM_PROMPT
 from jev.teacher.client import TeacherResult
 
 DEFAULT_GLM_MODEL = "glm-4.6v-flash"
@@ -36,6 +40,10 @@ MAX_REQUEST_BYTES = 10 * 1024 * 1024
 MAX_RESPONSE_BYTES = 256 * 1024
 MAX_SCHEMA_BYTES = 64 * 1024
 _MODEL_NAME = re.compile(r"glm-[a-z0-9][a-z0-9._-]{0,99}", re.IGNORECASE)
+_ERROR_CODE = re.compile(r"\d{3,5}")
+MAX_ERROR_BYTES = 4096
+TRANSIENT_CODES = frozenset({"1302", "1305"})   # rate limit reached; service overloaded
+RETRY_AFTER_S = 2.0
 
 
 def _json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -158,8 +166,18 @@ class GLMVisionClient:
                 ) as response:
                     if response.status_code != 200:
                         # In particular, never follow a redirect carrying Authorization.
-                        # Error bodies and headers may echo user content or credentials.
-                        return fail(f"GLM API returned HTTP {response.status_code}; no retry")
+                        # Error bodies may echo request content: only the numeric
+                        # business code is read out of them.
+                        code = await self._error_code(response)
+                        transient = (response.status_code >= 500
+                                     or (response.status_code == 429 and code in TRANSIENT_CODES))
+                        result = fail(f"GLM API returned HTTP {response.status_code}"
+                                      f"{f' code {code}' if code else ''}; "
+                                      f"{'transient' if transient else 'not retryable'}")
+                        if transient:
+                            result = TeacherResult(**{**result.__dict__,
+                                                      "retry_after_s": RETRY_AFTER_S})
+                        return result
                     if response.headers.get("content-encoding", "identity").lower() != "identity":
                         return fail("GLM API returned an unsupported response encoding")
                     body = bytearray()
@@ -177,8 +195,23 @@ class GLMVisionClient:
             # Never expose an HTTP exception, which can retain request data and secrets.
             return fail("GLM vision transport failed; no retry")
 
+    @staticmethod
+    async def _error_code(response) -> str | None:
+        body = bytearray()
+        try:
+            async for chunk in response.aiter_bytes(chunk_size=1024):
+                body.extend(chunk)
+                if len(body) >= MAX_ERROR_BYTES:
+                    break
+            doc = _loads(bytes(body[:MAX_ERROR_BYTES]))
+        except Exception:
+            return None
+        code = (doc.get("error") or {}).get("code") if isinstance(doc, dict) else None
+        code = str(code) if isinstance(code, (int, str)) and not isinstance(code, bool) else None
+        return code if code is not None and _ERROR_CODE.fullmatch(code) else None
+
     def classify_response(self, body: bytes, *, latency_ms: float = 0.0) -> TeacherResult:
-        """Accept only a complete, single assistant JSON reply with a valid bounded action."""
+        """Accept only a complete, single assistant text reply; its contract is the tutor's."""
         meta: dict[str, Any] = {"model": self.model_name, "latency_ms": latency_ms}
         if len(body) > MAX_RESPONSE_BYTES:
             return TeacherResult(status="transport", detail="GLM API response exceeded the byte limit",
@@ -213,22 +246,4 @@ class GLMVisionClient:
         content = message.get("content")
         if message.get("refusal") or not isinstance(content, str) or not content.strip():
             return TeacherResult(status="abstained", detail="GLM did not supply an action reply", **meta)
-        try:
-            reply = TutorReply.model_validate(_loads(content))
-        except ValidationError as exc:
-            # Diagnose schema incompatibility without retaining response text, values,
-            # arbitrary extra-field names or exception context that might echo input.
-            fields = {"observation_id", "capability", "action", "lookup", "rationale",
-                      "expected_effect", "kind", "control", "duration_s", "wait_s", "slot",
-                      "button", "intent", "x", "y", "expected_target_id", "expected_dead",
-                      "ui_control", "ui_name_id", "axis", "pixels", "name", "params",
-                      "observe", "key", "action_slot", "pointer", "click", "camera", "skill"}
-            errors = [".".join(str(part) if part in fields else "field" for part in row["loc"])
-                      + ":" + row["type"] for row in exc.errors(include_input=False,
-                        include_context=False, include_url=False)[:6]]
-            return TeacherResult(status="rejected", detail="GLM reply failed bounded tutor validation: "
-                                 + "; ".join(errors), **meta)
-        except (ValueError, TypeError, RecursionError):
-            return TeacherResult(status="rejected", detail="GLM reply failed bounded tutor validation",
-                                 **meta)
-        return TeacherResult(status="ok", text=reply.model_dump_json(), **meta)
+        return TeacherResult(status="ok", text=content, **meta)

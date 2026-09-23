@@ -17,7 +17,7 @@ import subprocess
 
 import pytest
 
-from jev.perceive import radio
+from jev.perceive import radio, radio_frame
 from jev.perceive.fields import (
     CALIBRATION_SWATCHES,
     GRID_COLS,
@@ -59,6 +59,8 @@ def _lua(v) -> str:
         return "1" if v else "false"
     if isinstance(v, str):
         return f'"{v}"'
+    if isinstance(v, (list, tuple)):
+        return "{" + ", ".join(_lua(x) for x in v) + "}"
     return str(v)
 
 
@@ -302,3 +304,49 @@ def test_cursor_getter_failure_keeps_painting_with_unknown(api, field):
                                          "throwingApi": api}))[:PAYLOAD_CELLS])
     assert values[f"cursor.{field}"] is None
     assert values["char.level"] == 4
+
+
+# --- melee state: the toggle is observed before anything presses it -------------------
+
+def test_auto_attack_state_is_the_stock_attack_button_flash():
+    """IsAttackAction plus IsCurrentAction is exactly what ActionButton_UpdateFlash uses."""
+    on = radio.unpack(payload(paint({"attackSlot": 1, "attacking": True}))[:PAYLOAD_CELLS])
+    off = radio.unpack(payload(paint({"attackSlot": 1, "attacking": False}))[:PAYLOAD_CELLS])
+    assert on["bars.attacking"] is True
+    assert off["bars.attacking"] is False
+
+
+def test_without_an_attack_action_the_combat_edge_is_the_state():
+    unknown = radio.unpack(payload(paint())[:PAYLOAD_CELLS])
+    started = radio.unpack(payload(paint({"events": [["PLAYER_ENTER_COMBAT"]]}))[:PAYLOAD_CELLS])
+    stopped = radio.unpack(payload(paint({"events": [["PLAYER_ENTER_COMBAT"],
+                                                     ["PLAYER_LEAVE_COMBAT"]]}))[:PAYLOAD_CELLS])
+    assert unknown["bars.attacking"] is None, "no edge seen yet is unknown, not off"
+    assert started["bars.attacking"] is True
+    assert stopped["bars.attacking"] is False
+
+
+@pytest.mark.parametrize(("reach", "expected"), [(1, True), (0, False), (None, None)])
+def test_melee_range_is_the_attack_actions_own_range_check(reach, expected):
+    values = radio.unpack(payload(paint({"attackSlot": 1, "meleeRange": reach}))[:PAYLOAD_CELLS])
+    assert values["target.melee_range"] is expected
+
+
+def test_melee_range_without_a_target_or_attack_action_is_unknown():
+    no_target = radio.unpack(payload(paint({"attackSlot": 1, "meleeRange": 1,
+                                            "hasTarget": False}))[:PAYLOAD_CELLS])
+    no_action = radio.unpack(payload(paint({"meleeRange": 1}))[:PAYLOAD_CELLS])
+    assert no_target["target.melee_range"] is None
+    assert no_action["target.melee_range"] is None
+
+
+def test_a_ui_error_is_held_long_enough_for_a_slow_reader():
+    facing = [["UI_ERROR_MESSAGE", "You are facing the wrong way!"]]
+    fresh = radio.unpack(payload(paint({"events": facing, "time": 100.0,
+                                        "paintTime": 101.0}))[:PAYLOAD_CELLS])
+    stale = radio.unpack(payload(paint({"events": facing, "time": 100.0,
+                                        "paintTime": 102.0}))[:PAYLOAD_CELLS])
+    assert radio_frame.UI_ERROR_KEYS[fresh["ui.error_last"]] == "not_facing"
+    assert fresh["ui.error_count"] == 1
+    assert stale["ui.error_last"] == 0, "held for 1.5 s, not forever"
+    assert stale["ui.error_count"] == 1, "the count is how a reader tells a new error"

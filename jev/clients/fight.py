@@ -10,20 +10,21 @@ false, no sighting, target at full health throughout. A unit with a nameplate on
 by construction one the client is drawing near enough to fight. Identity still comes from
 `target.name_id` after the click, never from the plate.
 
-**Engaging it** is a right-click on the model, which targets, *turns the character to
-face*, and starts auto-attack in one action. That matters because there is no API that
-turns the character: `GetPlayerFacing` (3.0) would only ever have *read* a heading, and
-`pos.facing` now paints one off the minimap arrow (V29), which still turns nothing. The
-only way this bot aims its character at something is to click it. If the
-unit cannot be seen properly, this skill refuses rather than swinging at the air, and
-`not_facing` in the radio's error field is what that failure looks like when it is not
-refused.
+**Facing it** is turning until the unit's own nameplate sits on the screen's centre line,
+through the shared `Targeting.face_selected`. The camera is behind the character, so a
+unit on that line is straight ahead at any distance. A right-click does **not** do this:
+it starts an attack and leaves the heading alone. Measured in run 20260922T192105-3d5fcf,
+frames 99-104: auto-attack on, the wolf two yards away at the character's side, full health
+throughout, while the old code walked `W` down a heading nothing had set.
 
-**Closing to it** uses the facing that the right-click just set. There is no other way
-round: with no facing API, the character can only be pointed at something by clicking it,
-and `W` then walks along that heading. So `W` is held in short bursts and the thing being
-watched is the target's **health**, not a range flag — `target.in_melee` is
-`CheckInteractDistance` index 3, about eleven yards, and a paladin swings at five.
+**Closing to it** is short `W` strides, each one after re-facing, until the Attack action's
+own range check says a swing reaches (`target.melee_range`, schema 9). `target.in_melee` is
+`CheckInteractDistance` index 3, about eleven yards, and only chooses the stride length.
+Without the range check (an older addon) the target's **health** decides, as before.
+
+**Swinging** is melee auto-attack, a toggle. It is pressed only when the radio says it is
+off (`bars.attacking`, the stock Attack-button flash state): pressing it while it is on
+switches it off, which is what the old rotation did straight after every right-click.
 
 **Knowing it died** is the one that invites lying. A target that vanishes has either died
 or been lost, and those are the same observation. So the health it was last seen at
@@ -42,7 +43,8 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
-from jev.clients.targeting import ClickCode, PaintCode, Targeting
+from jev.clients.targeting import FaceCode, PaintCode, Targeting
+from jev.perceive.radio_frame import UI_ERROR_KEYS
 from jev.perceive.units import Plate, find_plates
 from jev.run.evidence import event, operation, traced
 from jev.world.combat import (
@@ -84,38 +86,30 @@ FLEE_HP = 0.30
 # Tab presses before giving up on finding something attackable.
 MAX_SELECTS = 4
 
-# Closing to melee. Held in bursts rather than one long press so the loop can stop the
-# moment damage starts, and bounded because walking at something that is not getting
-# closer is walking into a fence.
+# Closing to melee. Held in strides rather than one long press so the loop can stop the
+# moment a swing reaches, and bounded because walking at something that is not getting
+# closer is walking into a fence. Each stride is preceded by re-facing.
 ENGAGE_LOOKS = 5
 CLOSE_BURST_S = 0.45
 
 # The stride once inside interact distance. Short, because eleven yards of running at
-# something five yards away is how the character went straight through it.
+# something five yards away is how the character went straight through it. With the
+# Attack action's range known the loop stops exactly on arrival, so the stride can be
+# longer; without it, only damage says "arrived" and the stride stays a nudge.
 CLOSE_NUDGE_S = 0.12
-MAX_CLOSE_BURSTS = 8
+CLOSE_STEP_S = 0.25
+# Strides without new damage before giving up. Twelve covers twenty yards of approach
+# (six bursts) and six yards of stepping with room for a unit that moves.
+MAX_CLOSE_BURSTS = 12
 
-# Re-aim every this many bursts while closing.
-#
-# A right-click is the only thing that turns this character, and it happens once, before
-# the walking starts. When it misses - no ring, so the click went below the nameplate and
-# landed on grass - nothing faces the target and `W` walks the old heading for every burst
-# after it. Six fights in one live run reported `closed 8` and landed nothing, and the
-# seventh killed its kobold the moment a fallback click happened to connect.
-#
-# Re-clicking a unit whose identity the radio has already confirmed is not a sweep. It is
-# the one action available that re-establishes facing.
-REAIM_EVERY = 3
+# A toggle's new state reaches the radio a paint or two after the key. Pressing it again
+# inside this window would read the old state and switch it straight back.
+TOGGLE_SETTLE_S = 1.0
 
-# Re-aim after this long without the target losing any health.
-#
-# Re-aiming used to stop the moment the first hit landed, so a fight that started well and
-# then went wrong - the kobold walked round us, something else pulled us sideways, a knock
-# back - left the character swinging at empty air and never turning. Watched live: getting
-# attacked and not retaliating.
-#
-# Health coming off the target is the only evidence that the character is still pointed at
-# it, so the absence of that is what triggers a re-aim. Same one mechanism as closing.
+# Re-face after this long without the target losing any health, or at once when the
+# client reports "facing the wrong way". Health coming off the target is the only evidence
+# the character still points at it: a unit that walked round the character leaves it
+# swinging at air. Watched live: getting attacked and not retaliating.
 REAIM_AFTER_S = 3.5
 
 # Ignored heals before the heal row is dropped for the rest of this fight.
@@ -198,7 +192,11 @@ class Fight:
     _last_aim_at: float = field(default=0.0, init=False)
     last_hp: float | None = field(default=None, init=False)
     _selected_name_id: int | None = field(default=None, init=False)
-    _aim_code: ClickCode | None = field(default=None, init=False)
+    _aim_code: FaceCode | None = field(default=None, init=False)
+    # The selected unit's plate at the last facing look: where a corpse will lie.
+    last_plate: Plate | None = field(default=None, init=False)
+    _strides: int = field(default=0, init=False)
+    _error_count: int | None = field(default=None, init=False)
     _damage_seen: bool = field(default=False, init=False)
     _input_refused: bool = field(default=False, init=False)
     detail: str = field(default="", init=False)
@@ -221,6 +219,9 @@ class Fight:
         self._damage_seen = self._input_refused = False
         self._selected_name_id = None
         self._aim_code = None
+        self.last_plate = None
+        self._strides = 0
+        self._error_count = None
         self._damage_at = time.monotonic()
         self.last_hp = None
         self.detail = ""
@@ -231,6 +232,7 @@ class Fight:
         self._observe(v)
         if v is None:
             return Fought.BLIND
+        self._error_count = v.get("ui.error_count")   # errors before the fight are not news
         # The health guard is about **picking** fights, not about surviving one already
         # under way. Refusing to swing back because health is low is how a character
         # stands there being hit at 49%, declines to eat because it is in combat, and
@@ -324,55 +326,53 @@ class Fight:
                 if self._damage_mark is not None and hp < self._damage_mark:
                     self._damage_seen = True
                     self._damage_at = time.monotonic()
+                    self._strides = 0          # progress: the stride budget starts again
                 if self._damage_mark is None:
                     self._damage_at = time.monotonic()
                 self._damage_mark = hp
             landing = self._damage_seen
-            # Already within reach: stop walking and turn instead.
+
+            # In reach: the Attack action's own range check, when the addon paints it.
+            # Without it (schema 8 and older) the only evidence of reach is damage, and
+            # `target.in_melee` - about eleven yards - shortens the stride instead.
             #
             # Closing used to end only when the target lost health, so a character that
             # was facing slightly wrong walked *through* the kobold and out the other
             # side, still holding W, for all eight bursts - watched live: "we target and
             # try to attack but then just keep running forwards and passed them".
-            #
-            # `target.in_melee` is CheckInteractDistance index 3, about eleven yards. Too
-            # loose to prove we can hit something, which is why it never gated the
-            # rotation - but exact enough to prove we should stop running at it.
-            # `target.in_melee` is CheckInteractDistance index 3 - about **eleven**
-            # yards - and a melee swing needs five. Using it to stop walking parked the
-            # character three quarters of the way there and left it standing: "we do
-            # nothing to actually walk towards the target".
-            #
-            # So it shortens the stride instead of ending it. Far away, run; close,
-            # creep, so the last few yards are covered without running straight through
-            # and out the other side.
+            melee = v.get("target.melee_range")
             near = v.get("target.in_melee") is True
-            closing = not landing and self.closed < MAX_CLOSE_BURSTS
-            due_to_close = (closing and v.get("bars.casting") is not True
-                            and self.closed > 0 and self.closed % REAIM_EVERY == 0)
-            due_to_damage = (landing and time.monotonic()
-                             - max(self._damage_at, self._last_aim_at) > REAIM_AFTER_S)
-            # One verification per iteration even when both closing rules apply.
-            if ((near and not landing) or due_to_close or due_to_damage) and not self.engage():
-                return self._aim_failure()
-            if not landing and self.closed < MAX_CLOSE_BURSTS:
+            in_reach = melee is True or (melee is None and landing)
+            now = time.monotonic()
+            stalled = now - max(self._damage_at, self._last_aim_at) > REAIM_AFTER_S
+            wrong_way = self._new_error(v) == "not_facing"
+            if in_reach:
+                # Stand and swing. Turn back only on evidence the swings are not landing.
+                if (wrong_way or stalled) and not self.engage():
+                    return self._aim_failure()
+            elif self._strides < MAX_CLOSE_BURSTS:
                 # Not while casting: movement cancels a cast, and the only thing being
                 # cast here is a heal that is keeping us alive.
                 if v.get("bars.casting") is not True:
-                    duration = CLOSE_NUDGE_S if near else CLOSE_BURST_S
+                    if not self.engage():      # face before every stride, never walk blind
+                        return self._aim_failure()
+                    duration = (CLOSE_BURST_S if not near else
+                                CLOSE_STEP_S if melee is False else CLOSE_NUDGE_S)
                     event("approach.request", data={"key": "w", "duration_s": duration,
-                                                    "closed": self.closed, "near": near})
+                                                    "closed": self.closed, "near": near,
+                                                    "melee_range": melee})
                     if not self.hid.hold("w", duration):
                         self.detail = "approach input refused"
                         return Fought.REFUSED
                     self.closed += 1
-            elif not landing:
-                # Out of bursts with the target still at full health. Whether anything was
-                # *pressed* says nothing about whether it was reached — a seal lands on
-                # the character, not on the kobold — and requiring "pressed nothing" here
-                # let two live fights walk eight bursts and then stand in the rotation for
-                # the full forty-five seconds: `pressed [2, 1, 2] closed 8`, twice.
-                self.detail = (f"closed {self.closed} times and landed nothing; "
+                    self._strides += 1
+            else:
+                # Out of strides with no new damage. Whether anything was *pressed* says
+                # nothing about whether it was reached - a seal lands on the character,
+                # not on the kobold - and requiring "pressed nothing" here let two live
+                # fights walk eight bursts and then stand in the rotation for the full
+                # forty-five seconds: `pressed [2, 1, 2] closed 8`, twice.
+                self.detail = (f"closed {self.closed} times and never came within reach; "
                                "cannot reach it")
                 return Fought.UNREACHABLE
 
@@ -499,25 +499,71 @@ class Fight:
 
     @traced("target.engage")
     def engage(self) -> bool:
-        """Deliver one verified body click. Facing and damage remain observed effects."""
-        result = self._targeting().click_selected(kind="living",
-                    expected_name_id=self._selected_name_id, plate=self.selected_plate)
+        """Face the selected unit, then have melee auto-attack on. Damage stays observed.
+
+        Facing is the shared `Targeting.face_selected`: turn until the unit's own plate is
+        on the centre line. Auto-attack is pressed only when the radio says it is off.
+        """
+        result = self._targeting().face_selected(expected_name_id=self._selected_name_id)
         self._aim_code = result.code
         self.detail = result.detail
         event("engage.request", code=result.code.value,
-              data={"point": result.point, "attempts": result.attempts})
-        if result.delivered:
-            # A plate is an acquisition hint, not a durable pixel identity. Future
-            # re-aims observe current geometry and exact selected-unit ownership.
-            self.selected_plate = None
-            self._last_aim_at = time.monotonic()
-        return result.delivered
+              data={"offset": result.offset, "turns": result.turns,
+                    "turned_s": round(result.turned_s, 3)})
+        if result.plate is not None:
+            self.last_plate = result.plate
+        if not result.faced:
+            return False
+        self._last_aim_at = time.monotonic()
+        return self._ensure_attacking()
+
+    def _ensure_attacking(self) -> bool:
+        """Press the melee toggle only when it is observed off (ARCHITECTURE section 6).
+
+        An older addon cannot say; then the toggle is pressed at most once per fight and
+        never after damage has landed, which is the previous rule and the best available.
+        """
+        v = self.read()
+        self._observe(v)
+        if v is None:
+            self.detail = "radio lost before starting the attack"
+            return False
+        profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
+        toggle = next((a for a in profile.by_role(Role.ATTACK) if a.toggle), None)
+        if toggle is None or not self._toggle_needed(toggle, v):
+            return True
+        if not self._press(toggle):
+            return False
+        self._toggled = True
+        return True
+
+    def _toggle_needed(self, toggle: Ability, values: dict) -> bool:
+        attacking = values.get("bars.attacking")
+        if attacking is True:
+            return False
+        last = self._last_use.get(toggle.slot)
+        if last is not None and time.monotonic() - last < TOGGLE_SETTLE_S:
+            return False                       # the radio has not painted the press yet
+        if attacking is False:
+            return True
+        return not (self._toggled or self._damage_seen)
+
+    def _new_error(self, values: dict) -> str | None:
+        """A UI error the client raised since the last look, from the held schema 9 field."""
+        count = values.get("ui.error_count")
+        if count is None or count == self._error_count:
+            return None
+        self._error_count = count
+        error = values.get("ui.error_last")
+        return UI_ERROR_KEYS[error] if isinstance(error, int) and 0 < error < len(UI_ERROR_KEYS) else None
 
     def _aim_failure(self) -> Fought:
-        return {ClickCode.REFUSED: Fought.REFUSED, ClickCode.BLIND: Fought.BLIND,
-                ClickCode.INTERRUPTED: Fought.INTERRUPTED,
-                ClickCode.NO_TARGET: Fought.LOST, ClickCode.WRONG_TARGET: Fought.LOST,
-                ClickCode.WRONG_KIND: Fought.LOST}.get(self._aim_code, Fought.NOT_VISIBLE)
+        if self._input_refused:
+            return Fought.REFUSED
+        return {FaceCode.REFUSED: Fought.REFUSED, FaceCode.BLIND: Fought.BLIND,
+                FaceCode.INTERRUPTED: Fought.INTERRUPTED,
+                FaceCode.NO_TARGET: Fought.LOST, FaceCode.WRONG_TARGET: Fought.LOST,
+                FaceCode.WRONG_KIND: Fought.LOST}.get(self._aim_code, Fought.NOT_VISIBLE)
 
     def _rotate(self, values: dict) -> None:
         """Press the highest-priority row the client says is ready.
@@ -577,10 +623,8 @@ class Fight:
         for attack in profile.by_role(Role.ATTACK):
             if not pressable(attack):
                 continue
-            if attack.toggle:
-                landed = self._damage_seen
-                if self._toggled or landed:
-                    continue
+            if attack.toggle and not self._toggle_needed(attack, values):
+                continue
             if self._press(attack) and attack.toggle:
                 self._toggled = True
             return

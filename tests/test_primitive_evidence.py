@@ -54,8 +54,8 @@ def test_hunt_records_selection_click_observation_and_loot_under_one_arm(tmp_pat
         return {"bags.free": 8, "ui.loot": False,
                 "target.has": True, "target.hp": 0, "target.name_id": 1161}
     loot = Loot(loot_hid, loot_read, lambda: object(),
-                targeting=_Targeting(loot_read, loot_hid,
-                    ClickResult(ClickCode.CLICKED, (700, 495), "delivered", 1)))
+                targeting=_Targeting(loot_read, loot_hid, action=ClickResult(
+                    ClickCode.CLICKED, (700, 495), "delivered", 1)))
     hunt = Hunt(fight, SimpleNamespace(), lambda: {}, lambda _: True,
                 lambda: (have[0], 1), loot=loot, say=lambda _: None)
     rec = Recorder(tmp_path)

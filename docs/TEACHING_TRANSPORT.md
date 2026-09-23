@@ -34,6 +34,28 @@ skills. It is not called for each screenshot or radio tick. In `adaptive` mode, 
 qualified local capability can execute covered actions; novel situations and teacher
 audits still require a model. A new installation has no proven student to replace it.
 
+### Reply contract and replay evidence, 23 September 2026
+
+The tutor now answers with one action name from a menu built from the current state, plus
+that action's flat parameters (`jev/play/tutor.py`, DECISIONS V43). Capability and expected
+effect are derived locally. The prompt is compact text: goal, character, target, nameplate
+detections, UI, bags, the measured results of recent actions, and the available actions.
+Transports only transport; `VisionTeacher` validates every provider's reply once.
+
+Non-executing replays of saved frames through `glm-4.6v-flash`
+(`tools/check_teaching.py --replay-image FRAME --replay-step STEP --replay-skill SKILL`):
+the login dialog returned `escape` (2,911 input tokens), the wolf-beside frame returned
+`skill:COMBAT_PROFILE` (3,624 / 67 tokens, 3.8 s), and the wolf-to-the-right frame met three
+consecutive "overloaded" responses (business code 1305). Transient codes 1302/1305 and 5xx
+are retried with 2/4/6 s backoff inside the decision deadline; an exhausted balance (1113)
+is not. A tutor that cannot answer hands the objective to the scripted routine.
+
+A text-only probe on 23 September showed the supplied key belongs to a GLM Coding Plan.
+`glm-4.6v` answers on `https://api.z.ai/api/coding/paas/v4`, but the plan's FAQ restricts
+it to supported coding tools, so the bot does not use that endpoint. On the pay-as-you-go
+endpoint only the free Flash model is available; paid vision models return 1113 until the
+account has balance (GLM-4.6V-FlashX is listed at $0.04/$0.40 per million tokens).
+
 ### GLM connection evidence, 22 September 2026
 
 Native Windows returned a validated reply from `glm-4.6v-flash` in **2.233 seconds**

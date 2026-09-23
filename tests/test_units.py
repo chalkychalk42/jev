@@ -22,12 +22,13 @@ from jev.perceive.units import (
     _find_ring,
     candidates,
     corpse_candidates,
+    corpse_probe_points,
     find,
     find_plates,
     mask_for,
     plate_for,
     revalidate,
-    revalidate_corpse,
+    selected_plates,
 )
 
 LIVE = pathlib.Path(__file__).parent / "fixtures" / "live-willem-targeted.npz"
@@ -393,29 +394,44 @@ def test_legacy_manual_components_cannot_invent_measured_brackets():
     assert not Sighting(ring, plate, (800, 445)).admits((800, 445))
 
 
-def test_corpse_proposal_retains_the_measured_prone_pose_and_requires_current_ring():
+def test_corpse_probes_start_on_the_ring_then_search_under_the_last_living_plate():
     frame = _scene()
     [sighting] = corpse_candidates(frame)
     assert sighting.point == (800, 544)
     assert sighting.ring.bounds == (770, 540, 830, 560)
-    assert revalidate_corpse(frame, sighting.point) is not None
-    assert revalidate_corpse(frame, (800, 445)) is None
-    moved = _scene(ring_left=1010, bar_left=968)
-    assert revalidate_corpse(moved, sighting.point) is None
+    points = corpse_probe_points(frame)
+    assert points[0] == sighting.point, "the measured prone pose is tried first"
+    anchor = Plate(500.0, 300.0, 147, RingColour.YELLOW)
+    anchored = corpse_probe_points(np.zeros((900, 1600, 3), dtype=np.uint8), anchor)
+    assert anchored[0] == (500, 400), "the column under the last living plate comes first"
+    assert all(abs(x - 500) <= 85 for x, _ in anchored[:25])
+    assert len(anchored) == 16, "the search is bounded"
+    no_anchor = corpse_probe_points(np.zeros((900, 1600, 3), dtype=np.uint8))
+    assert no_anchor[0] == (800, round(900 * 0.46) + 100), "centre line without a plate"
 
 
 def test_corpse_proposal_rejects_plate_surfaces_and_interface():
     frame = _scene()
     frame[542:547, 728:873] = (72, 219, 48)
     assert all(not (542 <= s.point[1] < 547) for s in corpse_candidates(frame))
-    assert revalidate_corpse(frame, (800, 544)) is None
+    assert all(not (542 <= y < 547 and 728 <= x < 873) for x, y in corpse_probe_points(frame))
     # The component's centroid clears the minimap, while the prone-pose point lies
     # inside it. The shared point check still excludes that interface surface.
     frame = np.zeros((900, 1600, 3), dtype=np.uint8)
     _outline(frame, 1400, 200, 80, 80, (211, 173, 8))
     assert _find_ring(frame) is not None
     assert corpse_candidates(frame) == ()
-    assert revalidate_corpse(frame, (1440, 220)) is None
+    bars = Plate(800.0, 760.0, 147, RingColour.YELLOW)
+    assert all(y < 0.88 * 900 for _x, y in corpse_probe_points(frame, bars)), "probed the action bars"
+
+
+def test_the_selected_plate_is_the_bright_one_in_a_reaction_colour():
+    frame = np.zeros((900, 1600, 3), dtype=np.uint8)
+    frame[380:387, 1227:1374] = (230, 200, 10)         # bright yellow: the selected wolf
+    frame[500:507, 100:247] = (110, 95, 5)              # faded yellow: another wolf
+    [plate] = selected_plates(frame, reaction=4)
+    assert abs(plate.cx - 1300) < 2
+    assert selected_plates(frame, reaction=5) == [], "a friendly unit has a green plate"
 
 
 @pytest.mark.parametrize("fixture", [

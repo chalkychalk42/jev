@@ -1600,3 +1600,54 @@ VERIFICATION: **1,777 tests passed in 96.20 seconds**. Ruff (`jev tools tests`) 
 behavior, preservation of all configured controls, nonmutation of recordings, invalid
 capability rejection and sanitized diagnostics. No fixture result is claimed as live
 gameplay or learning success.
+
+## 2026-09-23 — Facing, observed attack state, corpse hover and a tutor that can answer
+
+DID: diagnosed why "we confirm the target but never walk up and attack" from the saved
+live frames, fixed it in the shared owners, and rebuilt the tutor's reply contract so the
+free GLM model can drive. No client input was sent in this build turn.
+
+- **Root cause (V40/V41).** Run `20260922T192105-3d5fcf` frames 99-104: after a verified
+  right-click the Attack slot flashes (auto-attack on) while the wolf stands two yards away
+  at the character's side at full health. A right-click never turns the character, so Fight
+  walked `W` down a heading nothing had set; the rotation then pressed the Attack toggle and
+  switched the swing off. `Targeting.face_selected` now turns until the selected unit's own
+  (bright) plate is on the centre line, measuring each pulse's actual rate; Fight faces before
+  every stride, stops when the Attack action is in range, re-faces on a new "facing the wrong
+  way" error or three and a half seconds without damage, and presses the toggle only when
+  `bars.attacking` says it is off. The body right-click engagement path is gone.
+- **Radio schema 9.** `bars.attacking`, `target.melee_range` and a 1.5 s held UI error with a
+  counter; 14 bits inside the existing 12x9 grid. Schemas 6-8 still decode.
+- **Corpses (V42).** `Targeting.click_corpse` hovers a bounded grid under the last plate the
+  unit had alive, then the centre line, and clicks only where the client reports the selected
+  unit dead. Hunt and the body pass Fight's last plate to Loot. `revalidate_corpse` is removed.
+- **Tutor (V43).** `jev/play/tutor.py`: a menu of currently available actions built by the
+  executor's own rules, a flat reply `{"observation_id","action",<params>,"why"}`, strict
+  parsing (one JSON object, no duplicate keys, parameters only for their action), identities
+  bound from the observation, and a readable prompt with goal, state, nameplate detections and
+  measured results of recent actions. Observations now carry nameplate detections; the judge
+  measures new `faced` and `attacking` effects. The GLM transport returns reply text and names
+  the provider's numeric error code; 1302/1305 and 5xx carry a retry hint. The teacher retries
+  transient failures with 2/4/6 s backoff inside the decision deadline, re-asks once quoting
+  the rejection, and an unavailable tutor hands the objective to the guide's scripted routine.
+  `FACE_TARGET` is a new body routine the tutor may call.
+- **Tooling.** `tools/observe.py` is a read-only live look (frames, radio, held inputs).
+  `tools/check_teaching.py --replay-image` makes one non-executing tutor decision on a frame.
+
+MEASURED (non-executing replays through the real `glm-4.6v-flash`, saved frames only):
+the login-dialog scene returned `escape` (2,911 input tokens, after one transient retry);
+the wolf-beside scene returned `skill:COMBAT_PROFILE` (3,624 input / 67 output tokens, 3.8 s);
+the wolf-to-the-right scene met three consecutive "overloaded" (1305) responses. The earlier
+attempt spent 28,080 tokens per request and failed validation every time. A text-only probe
+showed the key belongs to a GLM Coding Plan: `glm-4.6v` answers on the coding endpoint, but
+the plan's terms restrict it to supported coding tools, so the bot stays on the pay-as-you-go
+endpoint where only the free Flash model has balance (paid models return 1113).
+
+NOW: deploy the schema 9 addon, enable Blizzard_TimeManager for the character (its disabled
+state raises the login dialog), then supervised live acceptance: face -> close -> swing ->
+kill -> corpse loot on wolves, scripted and then with Jev choosing.
+
+VERIFICATION: full suite passes; Ruff (`jev tools tests`) and `git diff --check` pass.
+New tests cover facing in a simulated world with real plate pixels, toggle state, closing on
+range, corpse hover search, every menu rule, strict parsing, re-asks, transient retries and
+the scripted fallback. Offline evidence does not establish that a live swing lands.

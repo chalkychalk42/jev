@@ -38,7 +38,7 @@ def _loot(readings, hid=None, code=ClickCode.CLICKED):
     action = ClickResult(code, (710, 533) if code is ClickCode.CLICKED else None,
                          "observed targeting result", 1)
     skill = Loot(hid=hid, read=read, read_frame=lambda: A_FRAME,
-                 window_origin=(10, 38), targeting=_Targeting(read, hid, action))
+                 window_origin=(10, 38), targeting=_Targeting(read, hid, action=action))
     return skill
 
 
@@ -76,7 +76,7 @@ def test_loot_delegates_the_selected_corpse_pose_to_shared_targeting():
     hid = _Hid()
     skill = _loot([HAVE, {**HAVE, "bags.free": 7}], hid=hid)
     assert skill.run(settle_s=1.0) is Looted.TOOK
-    assert skill.targeting.requests == [{"kind": "corpse", "expected_name_id": 1161}]
+    assert skill.targeting.requests == [{"expected_name_id": 1161, "anchor": None}]
     assert hid.clicks == [(710, 533, True)]
     assert skill.clicked == (710, 533)
 
@@ -221,7 +221,7 @@ def test_targeting_cancellation_propagates():
     skill = _loot([HAVE])
     def cancelled(**_):
         raise Cancelled("stop requested")
-    skill.targeting.click_selected = cancelled
+    skill.targeting.click_corpse = cancelled
     with pytest.raises(Cancelled, match="stop requested"):
         skill.run()
 
@@ -260,3 +260,12 @@ def test_full_bags_propagate_refused_window_closure_before_service():
     assert skill.run() is Looted.REFUSED
     assert skill.hid.clicks == []
     assert "bags are full" in skill.detail
+
+
+def test_the_corpse_search_starts_under_the_last_living_plate():
+    from jev.perceive.units import Plate, RingColour
+
+    plate = Plate(640.0, 430.0, 147, RingColour.YELLOW)
+    skill = _loot([HAVE, {**HAVE, "bags.free": 7}])
+    assert skill.run(settle_s=1.0, anchor=plate) is Looted.TOOK
+    assert skill.targeting.requests == [{"expected_name_id": 1161, "anchor": plate}]

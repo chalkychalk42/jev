@@ -142,6 +142,10 @@ class TeacherResult:
     # Free-text cause, e.g. "api_error_status=429" or "exit=2 stderr=...". It lands in the
     # DecisionRow, so a postmortem names the failure instead of describing its silhouette.
     detail: str | None = None
+    # A transport that knows its failure is transient (a provider "overloaded" or rate
+    # limit, never an exhausted balance) says how long to wait before the same request may
+    # be tried again. The caller decides whether it has the time and budget to do so.
+    retry_after_s: float | None = None
 
     @property
     def ok(self) -> bool:

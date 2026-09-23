@@ -77,21 +77,18 @@ class ClickHarness:
         plate = units.Plate(800.0, 405.0, 146, units.RingColour.YELLOW, h=10,
                             bounds=(727, 400, 873, 410))
         self.proposal = units.Sighting(ring, plate, (800, 450))
-        self.corpse = units.CorpseSighting(ring, (800, 495))
         self.proposals = [self.proposal]
-        self.corpse_proposals = [self.corpse]
+        self.corpse_points = [(800, 495)]
         self.accept_geometry = True
         self.targeting = Targeting(self.hid, self.read, wait_s=0.2, poll_s=0.05)
         monkeypatch.setattr(self.targeting, "_view", self.view)
         self.original_geometry = {name: getattr(units, name) for name in (
-            "candidates", "corpse_candidates", "revalidate", "revalidate_corpse",
+            "candidates", "corpse_probe_points", "revalidate",
         )}
         monkeypatch.setattr(units, "candidates", lambda frame, **kw: tuple(self.proposals))
-        monkeypatch.setattr(units, "corpse_candidates",
-                            lambda frame, **kw: tuple(self.corpse_proposals))
+        monkeypatch.setattr(units, "corpse_probe_points",
+                            lambda frame, anchor=None, **kw: list(self.corpse_points))
         monkeypatch.setattr(units, "revalidate", self.revalidate)
-        monkeypatch.setattr(units, "revalidate_corpse",
-                            lambda frame, point, **kw: self.revalidate(frame, point, corpse=True))
 
     @staticmethod
     def take(items):
@@ -108,11 +105,11 @@ class ClickHarness:
                           self.clock[0] - self.view_age,
                           "none" if values is not None else "missing_frame")
 
-    def revalidate(self, frame, point, *, corpse=False, **kwargs):
-        self.revalidated.append((frame, point, corpse))
+    def revalidate(self, frame, point, **kwargs):
+        self.revalidated.append((frame, point, False))
         if self.on_revalidate is not None:
             self.on_revalidate()
-        proposal = self.corpse if corpse else self.proposal
+        proposal = self.proposal
         return proposal if self.accept_geometry and proposal.admits(point) else None
 
     def run(self, **kwargs):
@@ -191,8 +188,13 @@ def test_ineligible_initial_observation_never_moves(harness, changes, expected):
 
 
 def test_living_target_cannot_be_looted(harness):
-    assert harness.run(kind="corpse").code is ClickCode.WRONG_KIND
+    assert harness.targeting.click_corpse().code is ClickCode.WRONG_KIND
     assert harness.hid.moves == harness.hid.buttons == []
+
+
+def test_the_living_click_refuses_corpses_outright(harness):
+    with pytest.raises(ValueError, match="click_corpse"):
+        harness.targeting.click_selected(kind="corpse")
 
 
 def test_dead_mouseover_cannot_authorize_a_living_action(harness):
@@ -201,21 +203,37 @@ def test_dead_mouseover_cannot_authorize_a_living_action(harness):
     assert harness.hid.buttons == []
 
 
-def test_corpse_action_requires_dead_exact_hover_and_current_corpse_geometry(harness):
+def test_a_corpse_is_clicked_where_a_fresh_hover_reports_the_selected_unit_dead(harness):
+    """A dead unit has no nameplate, so a dead selected-unit hover can only be its body."""
     harness.observations = [radio(seq, **{"target.hp": 0.0, "cursor.dead": True})
                             for seq in (1, 4, 5)]
     harness.samples = [radio(seq, **{"target.hp": 0.0, "cursor.dead": True})
                        for seq in (1, 2, 3)]
-    result = harness.run(kind="corpse")
+    harness.targeting.window_origin = (25, 40)
+    result = harness.targeting.click_corpse()
     assert result.code is ClickCode.CLICKED
-    assert result.point == (800, 495)
-    assert harness.revalidated[0][2] is True
+    assert result.point == (825, 535)
+    assert harness.revalidated == [], "a dead hover needs no living-body geometry"
+    assert harness.hid.moves == [(825, 535)]
     assert harness.hid.buttons == [((), {"right": True})]
 
 
 def test_live_mouseover_cannot_authorize_looting_despite_zero_target_hp(harness):
     harness.observations = [radio(seq, **{"target.hp": 0.0}) for seq in (1, 4, 5)]
-    assert harness.run(kind="corpse").code is ClickCode.WRONG_KIND
+    harness.samples = [radio(seq, **{"target.hp": 0.0}) for seq in (1, 2, 3)]
+    result = harness.targeting.click_corpse()
+    assert result.code is ClickCode.WRONG_KIND
+    assert harness.hid.buttons == []
+
+
+def test_the_corpse_search_moves_on_from_ground_and_is_bounded(harness):
+    harness.observations = [radio(1, **{"target.hp": 0.0})]
+    ground = {"target.hp": 0.0, "cursor.has": False, "cursor.is_target": False}
+    harness.samples = [radio(seq, **ground) for seq in range(1, 40)]
+    harness.corpse_points = [(700 + 10 * i, 500) for i in range(20)]
+    result = harness.targeting.click_corpse(max_probes=5)
+    assert result.code is ClickCode.NOT_VISIBLE
+    assert result.attempts == 20, "every proposed point is one hover"
     assert harness.hid.buttons == []
 
 

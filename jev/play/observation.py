@@ -24,8 +24,11 @@ EFFECTS = frozenset({
     "closer", "moved", "scene_changed", "ui_opened", "ui_closed", "quest_progress",
     "quest_accepted", "quest_cleared", "healed", "power_restored", "recovered",
     "released", "repaired", "bags_freed", "supplies_bought", "supplies_replenished",
-    "loot_received", "arrived",
+    "loot_received", "arrived", "faced", "attacking",
 })
+# A turn that moved the selected unit's plate this much nearer the centre line (fraction of
+# the image width), or onto it, faced the unit more. Smaller moves are within plate jitter.
+FACED_PROGRESS = 0.03
 
 
 def fingerprint(value) -> str:
@@ -58,6 +61,34 @@ def visual_features(pixels) -> dict[str, float]:
     return {f"screen.{y}.{x}.{c}": value / 255.0
             for y in range(9) for x in range(16)
             for c, value in enumerate(picture.getpixel((x, y)))}
+
+
+def detections(pixels, values: dict) -> dict:
+    """Where the client drew nameplates in this capture, as fractions of the image.
+
+    The selected unit's plate is the one bright plate in its reaction's colours; several
+    bright plates are reported as ambiguous rather than resolved by position here.
+    Detections are observations for the tutor and the effect judge, not identities.
+    """
+    from jev.perceive import units
+
+    height, width = pixels.shape[:2]
+    selected, ambiguous = None, False
+    if values.get("target.has") is True and values.get("target.hp") != 0:
+        bright = units.selected_plates(pixels, values.get("target.reaction"))
+        if len(bright) == 1:
+            plate = bright[0]
+            selected = {"x": round(float(plate.cx) / width, 4),
+                        "y": round(float(plate.cy) / height, 4)}
+        ambiguous = len(bright) > 1
+    others = []
+    for plate in units.find_plates(pixels):
+        x, y = round(float(plate.cx) / width, 4), round(float(plate.cy) / height, 4)
+        if selected and abs(x - selected["x"]) < 0.01 and abs(y - selected["y"]) < 0.01:
+            continue
+        others.append({"x": x, "y": y})
+    return {"version": 1, "selected_plate": selected, "ambiguous": ambiguous,
+            "plates": others[:8]}
 
 
 def context_for(graph, arm, state, values) -> dict:
@@ -126,6 +157,7 @@ class LiveObserver:
             "origin": list(frame.origin), "size": list(frame.size),
             "screen": {"width": frame.size[0], "height": frame.size[1]},
             "features": visual_features(frame.rgb),
+            "detections": detections(frame.rgb, values),
             "context": context_for(self.graph, arm, state, values), "synthetic": False,
             "freshness": {"paint_generation": generation},
         }
@@ -187,8 +219,17 @@ def measured_effects(before: dict, after: dict) -> tuple[list[str], float]:
             progress += ah - bh
             if bh == 0:
                 effects.append("target_dead")
-        if a.get("target.in_melee") is False and b.get("target.in_melee") is True:
-            effects.append("closer")  # broad interact range; never called melee reach
+        if ((a.get("target.in_melee") is False and b.get("target.in_melee") is True)
+                or (a.get("target.melee_range") is False and b.get("target.melee_range") is True)):
+            effects.append("closer")  # into ~11 yards, or into the Attack action's reach
+        plate_a = (before.get("detections") or {}).get("selected_plate")
+        plate_b = (after.get("detections") or {}).get("selected_plate")
+        if plate_a and plate_b:
+            was, now = abs(plate_a["x"] - 0.5), abs(plate_b["x"] - 0.5)
+            if was - now >= FACED_PROGRESS or (now <= 0.05 < was):
+                effects.append("faced")
+    if a.get("bars.attacking") is False and b.get("bars.attacking") is True:
+        effects.append("attacking")
     if (a.get("pos.zone_id") is not None and a.get("pos.zone_id") == b.get("pos.zone_id")
             and a.get("pos.coord_zone_id") == b.get("pos.coord_zone_id")
             and all(_number(v.get(k)) for v in (a, b) for k in ("pos.mx", "pos.my"))

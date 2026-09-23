@@ -204,6 +204,17 @@ end
 function HasAction(slot) return slot <= pick("actionSlots", 6) end
 function IsUsableAction(slot) return slot <= pick("usableSlots", 4), nil end
 function GetActionCooldown(slot) return 0, 0, 1 end
+-- The Attack action: absent unless a test places it, so the default character exercises
+-- the event fallback, exactly as a bar without Attack does on a live client.
+function IsAttackAction(slot) return slot == STATE.attackSlot end
+function IsCurrentAction(slot)
+    if slot == STATE.attackSlot then return pick("attacking", nil) end
+    return nil
+end
+function IsActionInRange(slot)
+    if slot == STATE.attackSlot then return pick("meleeRange", nil) end
+    return nil
+end
 
 function GetNumQuestLogEntries() return pick("questCount", 1), pick("questCount", 1) end
 function GetQuestLogTitle(i)
@@ -224,5 +235,8 @@ function GetQuestLink() return "|Hquest:7:3|h[Kobold Camp Cleanup]|h" end
 LootFrame, GossipFrame, MerchantFrame = newFrame(), newFrame(), newFrame()
 QuestFrame, ClassTrainerFrame, MailFrame = newFrame(), newFrame(), newFrame()
 STATICPOPUP_NUMDIALOGS = 4
+-- Two stock GlobalStrings, so UI_ERROR_MESSAGE can be matched the way the client does.
+ERR_BADATTACKFACING = "You are facing the wrong way!"
+ERR_OUT_OF_RANGE = "Out of range."
 function getglobal(name) return _G[name] end
 _G = _G or getfenv(0)

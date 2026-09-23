@@ -58,36 +58,46 @@ def _await_checked(coro, checkpoint, *, poll_s=0.05):
 
 
 def expected_for(action: dict, requested: str | None, bucket: str) -> str:
-    """A teacher cannot turn a failed attack into success by predicting 'observed'."""
+    """The effect an action is judged by, derived from the action and the situation.
+
+    The tutor is never asked for it. A requested effect is used only when it is one this
+    action can legitimately produce, so no prediction can turn a failed attack into
+    success by expecting 'observed'.
+    """
     kind = action["kind"]
+    facing = bucket in {"approach", "combat"}          # a living selected unit to turn to
     if kind in {"observe", "pointer"}:
         allowed, default = {"observed"}, "observed"
     elif kind == "camera":
-        allowed, default = {"scene_changed"}, "scene_changed"
+        allowed = {"scene_changed", "faced"}
+        default = "faced" if facing and action.get("axis") == "yaw" else "scene_changed"
     elif kind == "key":
         control = action["control"]
         if control in {"move_forward", "move_backward", "strafe_left", "strafe_right", "jump"}:
             allowed, default = {"closer", "moved", "arrived", "target_hp_decreased"}, (
                 "closer" if bucket == "approach" else "moved")
         elif control in {"turn_left", "turn_right"}:
-            allowed, default = {"scene_changed", "target_hp_decreased"}, "scene_changed"
+            allowed = {"faced", "scene_changed", "target_hp_decreased"}
+            default = "faced" if facing else "scene_changed"
         elif control in {"target_next", "target_previous", "target_self"}:
             allowed, default = {"selected"}, "selected"
         elif control == "attack_target":
-            allowed, default = {"target_hp_decreased", "target_dead"}, "target_hp_decreased"
+            allowed, default = {"attacking", "target_hp_decreased", "target_dead"}, "attacking"
         elif control == "escape":
             allowed, default = {"target_cleared", "ui_closed"}, "ui_closed"
         else:
             allowed, default = {"scene_changed", "ui_opened", "ui_closed"}, "scene_changed"
     elif kind == "action_slot":
-        allowed = {"target_hp_decreased", "target_dead", "healed", "power_restored", "scene_changed"}
+        allowed = {"attacking", "target_hp_decreased", "target_dead", "healed", "power_restored",
+                   "scene_changed"}
         default = "target_hp_decreased"
     elif kind == "click":
         if action["intent"] == "select":
             allowed, default = {"selected"}, "selected"
         elif action["intent"] == "interact":
-            allowed = {"ui_opened", "loot_received", "target_hp_decreased", "target_dead"}
-            default = "ui_opened"
+            allowed = {"ui_opened", "loot_received", "target_hp_decreased", "target_dead",
+                       "attacking"}
+            default = "loot_received" if action.get("expected_dead") else "ui_opened"
         else:
             allowed = {"ui_opened", "ui_closed", "quest_accepted", "quest_cleared", "quest_progress"}
             default = "ui_closed"
@@ -97,7 +107,8 @@ def expected_for(action: dict, requested: str | None, bucket: str) -> str:
                     "COMBAT_PROFILE": "target_dead", "LOOT": "loot_received",
                     "EAT_DRINK": "healed", "VENDOR_REPAIR": "repaired",
                     "BAG_MAKE_SPACE": "bags_freed", "BUY_AMMO_REAGENT_FOOD": "supplies_replenished",
-                    "RELEASE_SPIRIT": "released", "CORPSE_RUN": "recovered"}
+                    "RELEASE_SPIRIT": "released", "CORPSE_RUN": "recovered",
+                    "FACE_TARGET": "faced"}
         default = defaults.get(action["name"], "observed")
         allowed = {default, "power_restored"} if action["name"] == "EAT_DRINK" else {default}
     return requested if requested in allowed else default
@@ -148,12 +159,14 @@ def finished(first: dict, current: dict, *, observed_effects=()) -> bool:
 class PlayController:
     def __init__(self, *, observer, executor, teacher, learner, journal, controls: dict,
                  controls_fingerprint: str, knowledge_fingerprint: str,
-                 config: PlayConfig | None = None, say=print):
+                 config: PlayConfig | None = None, say=print, skills_for=None):
         self.observer, self.executor, self.teacher = observer, executor, teacher
         self.learner, self.journal, self.controls = learner, journal, controls
         self.controls_fingerprint = controls_fingerprint
         self.knowledge_fingerprint = knowledge_fingerprint
         self.config, self.say = config or PlayConfig(), say
+        # The routines the guide objective lets Jev run; the same set gates delegation.
+        self.skills_for = skills_for or (lambda arm: ())
         self.recent = deque(maxlen=12)
         self.learning_error = None
 
@@ -232,7 +245,8 @@ class PlayController:
                 else:
                     reply = _await_checked(self.teacher.decide(
                         current.data, current.png, controls=self.controls,
-                        recent=list(self.recent), timeout_s=self.config.teacher_timeout_s), checkpoint)
+                        recent=list(self.recent), timeout_s=self.config.teacher_timeout_s,
+                        skills=self.skills_for(arm)), checkpoint)
                     reply_doc = asdict(reply)
                     reply_doc["action"] = action_dict(reply.action) if reply.action else None
                     self.journal.append("teacher", {"decision_id": decision_id,

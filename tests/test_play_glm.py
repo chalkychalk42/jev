@@ -5,9 +5,9 @@ import json
 import httpx
 import pytest
 
-from jev.play import glm
+from jev.play import glm, tutor
 from jev.play.glm import BIGMODEL_BASE_URL, ZAI_BASE_URL, GLMVisionClient
-from jev.play.teacher import VisionTeacher, reply_schema
+from jev.play.teacher import VisionTeacher
 
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")
@@ -15,10 +15,12 @@ KEY = "synthetic-api-key-for-tests"
 
 
 def reply(**changes):
-    return {"observation_id": "screen-1", "capability": "observe",
-            "action": {"kind": "observe"}, "lookup": None,
-            "rationale": "Read the visible scene before moving.", "expected_effect": "observed",
-            **changes}
+    return {"observation_id": "screen-1", "action": "observe",
+            "why": "Read the visible scene before moving.", **changes}
+
+
+def reply_schema():
+    return tutor.schema(tutor.menu({}, {}))
 
 
 def completion(**changes):
@@ -79,7 +81,7 @@ def test_real_png_payload_and_verified_tutor_result(monkeypatch, base_url):
     assert result.ok
     assert result.model == "glm-4.6v-flash-served"
     assert (result.tokens_in, result.tokens_out) == (123, 45)
-    assert json.loads(result.text)["action"]["kind"] == "observe"
+    assert json.loads(result.text)["action"] == "observe"
     assert result.latency_ms > 0
     assert len(requests) == 1
     request = requests[0]
@@ -151,8 +153,27 @@ def test_http_failure_never_echoes_response_or_retries(monkeypatch, status):
     assert result.status == "transport"
     assert str(status) in result.detail
     assert KEY not in repr(result) and "private observation prompt" not in repr(result)
-    assert len(requests) == 1
+    assert len(requests) == 1, "the transport itself never retries"
+    assert (result.retry_after_s is not None) == (status >= 500)
     assert clients[0].is_closed and transports[0].closed
+
+
+@pytest.mark.parametrize(("code", "transient"), [
+    ("1305", True), ("1302", True), (1305, True), ("1113", False), ("1311", False),
+    ("not-a-code", False), (None, False)])
+def test_only_documented_transient_provider_codes_carry_a_retry_hint(monkeypatch, code, transient):
+    def handler(request):
+        return httpx.Response(429, json={"error": {"code": code, "message": KEY + " private"}})
+
+    mock_http(monkeypatch, handler)
+    result = ask(GLMVisionClient(api_key=KEY))
+    assert result.status == "transport"
+    assert (result.retry_after_s == glm.RETRY_AFTER_S) is transient
+    assert ("transient" in result.detail) is transient
+    if code in ("1305", 1305, "1113"):
+        assert f"code {code}" in result.detail
+    assert "not-a-code" not in result.detail
+    assert KEY not in repr(result) and "private" not in repr(result)
 
 
 def test_network_exception_is_redacted_and_not_retried(monkeypatch):
@@ -192,22 +213,22 @@ def test_oversized_prompt_and_schema_do_not_connect(monkeypatch):
     assert not clients
 
 
-def test_narrower_schema_is_sent_as_guidance_with_base_tutor_validation(monkeypatch):
+def test_the_menu_schema_is_guidance_and_the_reply_text_is_left_to_the_tutor(monkeypatch):
+    """One contract, validated in one place: the transport only transports."""
     schema = reply_schema()
-    schema["properties"]["action"] = {"type": "object", "properties": {
-        "kind": {"const": "observe"}}, "required": ["kind"]}
     requests = []
 
     def handler(request):
         requests.append(request)
         doc = completion()
-        doc["choices"][0]["message"]["content"] = json.dumps(reply(action={"kind": "shell"}))
+        doc["choices"][0]["message"]["content"] = json.dumps(reply(action="shell"))
         return httpx.Response(200, json=doc)
 
     mock_http(monkeypatch, handler)
     result = ask(GLMVisionClient(api_key=KEY), schema=schema)
-    assert result.status == "rejected"
+    assert result.ok and json.loads(result.text)["action"] == "shell"
     system = json.loads(requests[0].content)["messages"][0]["content"]
+    assert system.startswith(tutor.SYSTEM_PROMPT)
     assert json.loads(system.split("JSON Schema:\n", 1)[1]) == schema
 
 
@@ -223,18 +244,31 @@ def test_malformed_server_reply_is_redacted(body):
     {"finish_reason": "length"}, {"finish_reason": "tool_calls"},
     {"message": {"role": "assistant", "content": json.dumps(reply()),
                  "tool_calls": [{"function": {"name": "shell"}}]}},
-    {"message": {"role": "assistant", "content": json.dumps(reply(
-        action={"kind": "key", "control": "move_forward", "duration_s": 999}))}},
-    {"message": {"role": "assistant", "content": json.dumps(reply(untrusted=KEY))}},
-    {"message": {"role": "assistant", "content": "```json\n" + json.dumps(reply()) + "\n```"}},
-    {"message": {"role": "assistant", "content": '{"rationale": "a", "rationale": "b"}'}},
 ])
-def test_incomplete_tool_or_invalid_action_replies_cannot_be_executed(change):
+def test_truncated_or_tool_replies_cannot_supply_text(change):
     doc = completion()
     doc["choices"][0].update(change)
     result = GLMVisionClient(api_key=KEY).classify_response(json.dumps(doc).encode())
     assert result.status == "rejected" and result.text is None
     assert (result.tokens_in, result.tokens_out) == (123, 45)
+
+
+@pytest.mark.parametrize(("content", "status"), [
+    (json.dumps(reply(action="move_forward", seconds=999)), "invalid"),
+    (json.dumps(reply(action="shell")), "invalid"),
+    ('{"why": "a", "why": "b"}', "invalid"),
+    ("I think I should observe first.", "invalid"),
+    ("```json\n" + json.dumps(reply()) + "\n```", "ok"),
+    (json.dumps(reply(untrusted="ignored extra key")), "ok"),
+])
+def test_reply_text_is_validated_once_by_the_tutor(monkeypatch, content, status):
+    doc = completion()
+    doc["choices"][0]["message"]["content"] = content
+    mock_http(monkeypatch, lambda _: httpx.Response(200, json=doc))
+    teacher = VisionTeacher(GLMVisionClient(api_key=KEY))
+    result = asyncio.run(teacher.decide({"id": "screen-1"}, PNG, controls={}))
+    assert result.status == status
+    assert (result.action is not None) is (status == "ok")
     assert KEY not in repr(result)
 
 
@@ -326,22 +360,14 @@ def test_vision_teacher_preserves_actual_model_and_rejects_stale_observation(mon
     assert result.requested_model == "glm-api:glm-4.6v-flash"
 
 
-def test_rejected_action_diagnostic_names_known_field_without_echoing_its_value():
+def test_an_unavailable_action_is_named_in_the_diagnostic(monkeypatch):
     doc = completion()
-    doc["choices"][0]["message"]["content"] = json.dumps(reply(
-        action={"kind": "click", "button": "left", "intent": "ui", "ui_control": KEY},
-        expected_effect="ui_closed"))
-    result = GLMVisionClient(api_key=KEY).classify_response(json.dumps(doc).encode())
-    assert result.status == "rejected" and result.text is None
-    assert "action.click.ui_control:literal_error" in result.detail
-    assert KEY not in repr(result)
-    assert (result.tokens_in, result.tokens_out) == (123, 45)
-
-
-def test_rejected_extra_field_name_cannot_leak_into_diagnostics():
-    doc = completion()
-    doc["choices"][0]["message"]["content"] = json.dumps(reply(**{KEY: "private"}))
-    result = GLMVisionClient(api_key=KEY).classify_response(json.dumps(doc).encode())
-    assert result.status == "rejected" and result.text is None
-    assert "field:extra_forbidden" in result.detail
-    assert KEY not in repr(result) and "private" not in repr(result)
+    doc["choices"][0]["message"]["content"] = json.dumps(reply(action="interact_unit", x=0.5,
+                                                               y=0.5))
+    mock_http(monkeypatch, lambda _: httpx.Response(200, json=doc))
+    result = asyncio.run(VisionTeacher(GLMVisionClient(api_key=KEY)).decide(
+        {"id": "screen-1", "values": {"ui.modal": True}}, PNG, controls={}))
+    assert result.status == "invalid" and result.action is None
+    assert "'interact_unit' is not available" in result.detail
+    assert len(result.calls) == 2, "one re-ask, then the rejection stands"
+    assert (result.tokens_in, result.tokens_out) == (246, 90)

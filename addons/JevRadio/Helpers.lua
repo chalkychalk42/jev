@@ -718,6 +718,64 @@ local function CASTING()
     return castingByEvent
 end
 
+-- --------------------------------------------------------------------- melee
+--
+-- Stock 2.4.3 ActionButton_UpdateFlash flashes the Attack button when
+-- IsAttackAction(slot) and IsCurrentAction(slot) are both true, so that pair *is* the
+-- client's own auto-attack state. All six bar pages are scanned because the Attack
+-- action can sit on any of them; 120 HasAction calls are cheap next to a paint.
+--
+-- Without an Attack action anywhere, PLAYER_ENTER_COMBAT and PLAYER_LEAVE_COMBAT are the
+-- same state as edges. Before the first edge after loading nothing has been observed, and
+-- that is unknown (nil), not "not attacking".
+local attackingByEvent = nil
+
+local function attackSlot()
+    if not IsAttackAction then return nil end
+    for slot = 1, 120 do
+        if HasAction(slot) and IsAttackAction(slot) then return slot end
+    end
+    return nil
+end
+
+local function ATTACKING()
+    local slot = attackSlot()
+    if slot and IsCurrentAction then
+        return IsCurrentAction(slot) and true or false
+    end
+    return attackingByEvent
+end
+
+-- The range check the stock bar uses to redden the Attack hotkey: 1 in reach, 0 out,
+-- nil when the question has no answer (no target, or nothing to ask it about).
+local function MELEE_RANGE()
+    if not UnitExists("target") then return nil end
+    local slot = attackSlot()
+    if not slot or not IsActionInRange then return nil end
+    local r = IsActionInRange(slot)
+    if r == 1 then return true end
+    if r == 0 then return false end
+    return nil
+end
+
+-- `LAST_ERROR` is an edge painted once. A reader sampling at 2 Hz misses most of those,
+-- so the last error is also held for a short window and every error bumps a counter.
+local RECENT_ERROR_S = 1.5
+local recentError, recentErrorAt, errorCount = 0, nil, 0
+
+local function noteError(index)
+    recentError, recentErrorAt = index, GetTime()
+    errorCount = (errorCount + 1) % 15
+end
+
+local function RECENT_ERROR(which)
+    if which == "count" then return errorCount end
+    if recentErrorAt ~= nil and GetTime() - recentErrorAt <= RECENT_ERROR_S then
+        return recentError
+    end
+    return 0
+end
+
 -- --------------------------------------------------------------------- UI
 
 local function MODAL_UP()
@@ -758,6 +816,8 @@ watcher:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED")
 watcher:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 watcher:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 watcher:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+watcher:RegisterEvent("PLAYER_ENTER_COMBAT")
+watcher:RegisterEvent("PLAYER_LEAVE_COMBAT")
 
 watcher:SetScript("OnEvent", function(self, event, a1)
     -- 2.4.3 delivers event arguments in the globals arg1..argN; named handler parameters
@@ -770,7 +830,12 @@ watcher:SetScript("OnEvent", function(self, event, a1)
     if ev == "UI_ERROR_MESSAGE" then
         if type(p1) == "string" then
             lastError = errorIndex[p1] or 1   -- 1 = "other": something failed, we just do not model it
+            noteError(lastError)
         end
+    elseif ev == "PLAYER_ENTER_COMBAT" then
+        attackingByEvent = true               -- the swing timer started: auto-attack is on
+    elseif ev == "PLAYER_LEAVE_COMBAT" then
+        attackingByEvent = false
     elseif ev == "BAG_UPDATE" then
         inventoryRevision = (inventoryRevision + 1) % 65535
     elseif ev == "QUEST_LOG_UPDATE" then
@@ -848,6 +913,9 @@ JevRadioHelpers = {
     BAR_BITS = BAR_BITS,
     GCD_FRAC = GCD_FRAC,
     CASTING = CASTING,
+    ATTACKING = ATTACKING,
+    MELEE_RANGE = MELEE_RANGE,
+    RECENT_ERROR = RECENT_ERROR,
     MODAL_UP = MODAL_UP,
     LAST_ERROR = LAST_ERROR,
     CLASS_ID = CLASS_ID,

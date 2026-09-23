@@ -389,6 +389,30 @@ def find_plates(frame: np.ndarray,
     return out
 
 
+def plate_colours(reaction: int | None) -> tuple[RingColour, ...]:
+    """Plate colours a unit with this radio reaction can be drawn in.
+
+    Measured, not reasoned: hostile Kobold Vermin drew a *yellow* plate, so hostility
+    admits yellow as well as red. Friendly (5 and above) is green. Unknown admits all.
+    """
+    if reaction is None:
+        return PROPOSAL_COLOURS
+    if reaction >= 5:
+        return (RingColour.GREEN,)
+    return (RingColour.YELLOW, RingColour.RED)
+
+
+def selected_plates(frame: np.ndarray, reaction: int | None = None) -> list[Plate]:
+    """Nameplates drawn at full brightness in the selected unit's possible colours.
+
+    Selecting a unit fades every other stock nameplate (measured on merchants and wolves:
+    one bright plate, the rest dim), so with a target selected this is normally exactly
+    one plate. More than one is ambiguity for the caller to resolve, never a guess here.
+    Plates never appear on corpses, and not beyond the client's plate draw distance.
+    """
+    return find_plates(frame, plate_colours(reaction), selected=True)
+
+
 def _contains(bounds: Bounds, point: Point) -> bool:
     left, top, right, bottom = bounds
     return left <= point[0] < right and top <= point[1] < bottom
@@ -529,15 +553,45 @@ def corpse_candidates(frame: np.ndarray,
     return tuple(out[:limit])
 
 
-def revalidate_corpse(frame: np.ndarray, point: Point, *,
-                      colours: tuple[RingColour, ...] = PROPOSAL_COLOURS
-                      ) -> CorpseSighting | None:
-    """Require the explicit point still to be inside a current ring component's bounds."""
-    rings, _, plates = _observations(frame, colours)
-    if not _point_clear(point, frame, plates):
-        return None
-    for ring in rings:
-        sighting = CorpseSighting(ring, point)
-        if sighting.admits(point):
-            return sighting
-    return None
+# Where to look for a corpse, relative to the last plate seen while the unit lived. A
+# corpse has no plate, and a prone model lies around where the standing one was drawn:
+# in the measured wolf frames the body sat 50-100 px below its bar at melee range. The
+# grid is ordered nearest-first around that band; the side columns reach past the
+# character's own model, which covers a corpse lying straight ahead of it.
+CORPSE_DROPS = (100, 70, 130, 45, 160)
+CORPSE_COLUMNS = (0, -45, 45, -85, 85)
+# Without a plate the kill still left the corpse in front of the character, which the
+# camera draws on the centre line just above the character's head.
+CORPSE_CENTRE_Y = 0.46
+CORPSE_MERGE_PX = 12
+
+
+def corpse_probe_points(frame: np.ndarray, anchor: Plate | None = None, *,
+                        limit: int = 16) -> list[Point]:
+    """Ordered points worth hovering to find a selected corpse; none is a body claim.
+
+    Ring proposals first (cheap when a ring is visible), then a grid under the last living
+    plate, then the same grid on the centre line. Interface zones and plate surfaces are
+    excluded; points closer than a few pixels to an earlier one are merged.
+    """
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+        raise ValueError("probe limit must be a positive integer")
+    height, width = frame.shape[:2]
+    _, _, plates = _observations(frame, PROPOSAL_COLOURS)
+    ordered = [c.point for c in corpse_candidates(frame)]
+    anchors = [(anchor.cx, anchor.cy)] if anchor is not None else []
+    anchors.append((width / 2, height * CORPSE_CENTRE_Y))
+    grid = sorted(((dx, dy) for dy in CORPSE_DROPS for dx in CORPSE_COLUMNS),
+                  key=lambda d: abs(d[0]) + 0.7 * abs(d[1] - CORPSE_DROPS[0]))
+    for cx, cy in anchors:
+        ordered.extend((round(cx + dx), round(cy + dy)) for dx, dy in grid)
+    out: list[Point] = []
+    for point in ordered:
+        if not _point_clear(point, frame, plates):
+            continue
+        if any(abs(point[0] - q[0]) + abs(point[1] - q[1]) < CORPSE_MERGE_PX for q in out):
+            continue
+        out.append(point)
+        if len(out) >= limit:
+            break
+    return out

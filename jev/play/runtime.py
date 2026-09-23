@@ -25,6 +25,22 @@ from jev.teacher.bridge import BudgetClient
 from jev.world.state_v1 import State
 
 
+def delegable_skills(current: str, available) -> tuple[str, ...]:
+    """The routines Jev may run inside a guide objective armed with `current`.
+
+    Recovery arms delegate only themselves. Waits are not routines. Everything offered
+    must exist in the body's executor catalog. The tutor's menu and the delegation check
+    both use this one rule.
+    """
+    allowed = {current, "EAT_DRINK", "LOOT", "COMBAT_PROFILE", "FACE_TARGET"}
+    if current in {"GRIND_UNTIL", "ACCEPT_QUEST", "TURNIN_QUEST", "TRAVEL_TO"}:
+        allowed.add("TRAVEL_TO")
+    if current in {"RELEASE_SPIRIT", "CORPSE_RUN"}:
+        allowed = {current}
+    allowed -= {"ABORT_WAIT", "IDLE"}
+    return tuple(sorted(allowed & set(available)))
+
+
 class MotorLearningService:
     """Training never owns HID and cannot block the supervisor's stop clock."""
 
@@ -115,7 +131,7 @@ class PlayingBody:
             learner=self.learner, journal=self.journal, controls=self.manifest.to_dict(),
             controls_fingerprint=self.controls_fingerprint,
             knowledge_fingerprint=self.knowledge.fingerprint,
-            config=config or PlayConfig(mode=mode), say=spine.say)
+            config=config or PlayConfig(mode=mode), say=spine.say, skills_for=self.delegable)
         atomic_json(recorder.dir / "play-config.json", {
             "mode": mode, "config": asdict(self.controller.config),
             "controls": self.manifest.to_dict(), "controls_fingerprint": self.controls_fingerprint,
@@ -164,7 +180,26 @@ class PlayingBody:
         if error:
             return Result(SkillOutcome.ABORTED, error, "unsupported")
         focused_checkpoint()
-        return self.controller.run(arm, focused_checkpoint)
+        result = self.controller.run(arm, focused_checkpoint)
+        if result.code != "teacher_unavailable" or arm.decision.skill in {"ABORT_WAIT", "IDLE"}:
+            return result
+        # The system makes progress with zero teacher calls (ARCHITECTURE.md section 0).
+        # A tutor that cannot answer - provider down, overloaded past the deadline, or an
+        # invalid reply after its re-ask - hands this objective to the guide's own routine
+        # rather than stopping the run. The next objective asks Jev again. Waits are not
+        # routines: a dialog nobody can dismiss stays a stop for a human.
+        self.spine.say(f"tutor unavailable ({result.detail}); "
+                       f"the scripted {arm.decision.skill} routine plays this objective")
+        self.journal.append("actions", {"event": "scripted_fallback", "t": time.time(),
+                                        "arm_id": arm.arm_id, "skill": arm.decision.skill,
+                                        "reason": result.detail})
+        current = self.observer.observe(arm)
+        self.journal.observation(current.data)
+        return self.spine.execute(arm, State.model_validate(current.data["state"]),
+                                  focused_checkpoint)
+
+    def delegable(self, arm) -> tuple[str, ...]:
+        return () if arm is None else delegable_skills(arm.decision.skill, self.available)
 
     def _delegate(self, action):
         """Reuse the existing implementations under the same input worker and objective.
@@ -176,12 +211,7 @@ class PlayingBody:
         if arm is None:
             raise ValueError("no guide objective owns this skill request")
         current = arm.decision.skill
-        allowed = {current, "EAT_DRINK", "LOOT", "COMBAT_PROFILE"}
-        if current in {"GRIND_UNTIL", "ACCEPT_QUEST", "TURNIN_QUEST", "TRAVEL_TO"}:
-            allowed.add("TRAVEL_TO")
-        if current in {"RELEASE_SPIRIT", "CORPSE_RUN"}:
-            allowed = {current}
-        if action.name not in allowed:
+        if action.name not in self.delegable(arm):
             return Result(SkillOutcome.ABORTED, "skill does not serve the current guide objective", "unsupported")
         decision = arm.decision.model_copy(update={
             "skill": action.name, "params": action.params,

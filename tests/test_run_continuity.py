@@ -59,7 +59,7 @@ def test_hunt_loots_repairs_and_resumes_the_same_objective(tmp_path):
     live.client.quest_ids = world.quest_ids
     live.fight = SimpleNamespace(run=world.fight, top_up=lambda: True, detail="",
                                  pressed=[], closed=0, heals_landed=0, heals_ignored=0,
-                                 broken=False)
+                                 broken=False, last_plate=None)
     live.loot = SimpleNamespace(run=world.loot, detail="empty corpse")
     live.repair = SimpleNamespace(run=world.repair, detail="durability restored")
     recorder = Recorder(tmp_path)

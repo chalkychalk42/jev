@@ -56,6 +56,17 @@ dofile("addons/JevRadio/Helpers.lua")
 dofile("addons/JevRadio/Fields.lua")
 dofile("addons/JevRadio/JevRadio.lua")
 
+-- Client events, delivered through the addon's own watcher before the paint, in the
+-- 2.4.3 style: the handler receives the event name and its first argument.
+if STATE.events then
+    local w = _G["JevRadioWatcher"]
+    assert(w and w.scripts and w.scripts.OnEvent, "the addon registered no event watcher")
+    for _, e in ipairs(STATE.events) do
+        w.scripts.OnEvent(w, e[1], e[2])
+    end
+end
+if STATE.paintTime then STATE.time = STATE.paintTime end
+
 -- Drive the addon's own OnUpdate rather than calling an exported test hook. There is no
 -- hook, deliberately: a paint path that only tests can reach is not the paint path.
 local f = _G["JevRadioFrame"]

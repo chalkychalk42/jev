@@ -3,9 +3,11 @@
 A great many quests are "bring me eight of these", and the eight come off corpses rather
 than out of the air. Without this a kill counter can fill while the quest never does.
 
-A corpse lies on its selection ring. Shared Targeting proposes that measured pose,
-verifies dead selected-unit hover and fresh geometry, then delivers the input. This skill
-observes what changed; input delivery alone never establishes a take or an empty corpse.
+A corpse has no nameplate, so a fresh hover that reports the *selected* unit dead can only
+be its body. Shared `Targeting.click_corpse` hovers a bounded set of points - the column of
+the last plate seen while the unit lived, then the centre line the kill left it on - and
+clicks only where the client says the selected corpse is. This skill observes what changed;
+input delivery alone never establishes a take or an empty corpse.
 
 What counts as having looted
 ----------------------------
@@ -47,6 +49,7 @@ from enum import StrEnum
 
 from jev.clients.targeting import ClickCode, Targeting
 from jev.clients.windows import CloseCode, close_observed
+from jev.perceive.units import Plate
 from jev.run.evidence import event, traced
 
 # How long to wait for the bags or the loot frame to admit something happened.
@@ -84,11 +87,12 @@ class Loot:
 
     @traced("loot")
     def run(self, *, settle_s: float = SETTLE_S,
-            progress: Callable[[], tuple[int | None, int | None]] | None = None
-            ) -> Looted:
+            progress: Callable[[], tuple[int | None, int | None]] | None = None,
+            anchor: Plate | None = None) -> Looted:
         """`progress` is the objective counter, passed by whoever knows which quest is
         being worked. `Loot` has no idea and should not: it is handed a way to ask what
-        the server thinks, exactly as `Hunt` is."""
+        the server thinks, exactly as `Hunt` is. `anchor` is the last plate the unit had
+        while alive, when the caller saw one."""
         self.clicked = None
         self.detail = ""
         self._progress = progress
@@ -109,7 +113,7 @@ class Loot:
 
         targeting = self.targeting or Targeting(self.hid, self.read, read_frame=self.read_frame,
                                                 window_origin=self.window_origin)
-        action = targeting.click_selected(kind="corpse", expected_name_id=v.get("target.name_id"))
+        action = targeting.click_corpse(expected_name_id=v.get("target.name_id"), anchor=anchor)
         self.clicked, self.detail = action.point, action.detail
         event("loot.request", code=action.code.value,
               data={"point": self.clicked, "method": "verified_corpse"})

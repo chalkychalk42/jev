@@ -20,7 +20,7 @@ from jev.clients.loot import Loot
 from jev.clients.recover import Recover
 from jev.clients.repair import Repair
 from jev.clients.rest import Rest
-from jev.clients.targeting import Targeting
+from jev.clients.targeting import FaceCode, Targeting
 from jev.clients.vendor import Vendor
 from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
@@ -46,7 +46,7 @@ class LiveBody:
         "LOOT": "_loot", "EAT_DRINK": "_rest", "VENDOR_REPAIR": "_repair",
         "BAG_MAKE_SPACE": "_vendor", "BUY_AMMO_REAGENT_FOOD": "_vendor",
         "RELEASE_SPIRIT": "_release", "CORPSE_RUN": "_recover",
-        "IDLE": "_wait", "ABORT_WAIT": "_wait",
+        "IDLE": "_wait", "ABORT_WAIT": "_wait", "FACE_TARGET": "_face",
     }
     available = frozenset(HANDLERS)
 
@@ -331,13 +331,24 @@ class LiveBody:
     def _fight(self, state) -> Result:
         outcome = self.fight.run(None)
         if outcome.ok:
-            looted = self.loot.run(progress=self._progress)
+            looted = self.loot.run(progress=self._progress, anchor=self.fight.last_plate)
             if not looted.ok:
                 return self._result(looted, f"post-kill loot: {self.loot.detail}")
         return self._result(outcome, self.fight.detail)
 
+    def _face(self, state) -> Result:
+        """Turn toward the selected living unit: the shared facing primitive, nothing more."""
+        result = self.targeting.face_selected()
+        status = (SkillOutcome.SUCCEEDED if result.faced else
+                  SkillOutcome.PREEMPTED if result.code in (FaceCode.BLIND, FaceCode.INTERRUPTED)
+                  else SkillOutcome.ABORTED)
+        return Result(status, result.detail, result.code.value)
+
     def _loot(self, state) -> Result:
-        return self._result(self.loot.run(progress=self._progress), self.loot.detail)
+        # The last plate the most recent fight faced, when it is the corpse now selected.
+        anchor = self.fight.last_plate if self.fight.last_hp == 0.0 else None
+        return self._result(self.loot.run(progress=self._progress, anchor=anchor),
+                            self.loot.detail)
 
     def _rest(self, state) -> Result:
         if state.vitals.power_type is PowerType.MANA and state.vitals.power is not None and state.vitals.power < 0.35:
