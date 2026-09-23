@@ -37,7 +37,9 @@ class MeasuredTutor(Tutor):
         # A measured local delay models teacher latency. Without it this zero-work
         # fake teacher is faster than reading/evaluating a real student, correctly
         # failing the maintained-throughput gate rather than fabricating improvement.
-        await asyncio.sleep(0.02)
+        # 20 ms sat inside scheduling jitter on a loaded full-suite run, and the student
+        # sometimes measured slower and stayed in canary; real tutor calls take seconds.
+        await asyncio.sleep(0.2)
         return await super().decide(*args, **kwargs)
 
 

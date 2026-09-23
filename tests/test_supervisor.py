@@ -387,6 +387,28 @@ def test_a_fall_longer_than_any_jump_still_preempts(tmp_path):
     assert interruption(worker.arm, airborne, falling_s=2.0) != "falling"
 
 
+def test_a_body_that_keeps_its_routine_clock_is_timed_from_it(tmp_path):
+    import math
+
+    rt = runtime(tmp_path, [seen(0), seen(61), seen(62), seen(125)])
+    body = Body()
+    body.routine_clock = math.inf                   # a tutor's self-bounded episode
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        supervisor.step(61)
+        assert not worker.cancelled.is_set(), "the catalog timed the tutor's episode"
+        body.routine_clock = 62.0                   # the scripted routine took over
+        supervisor.step(62)
+        assert not worker.cancelled.is_set()
+        supervisor.step(125)
+        assert worker.cancelled.is_set() and worker.reason == "skill timeout"
+    finally:
+        supervisor.close()
+
+
 def test_a_catalog_timeout_is_a_counted_failure_not_a_retrying_preemption(tmp_path):
     rt = runtime(tmp_path, [seen(0), seen(61), seen(62)])
     body = Body()

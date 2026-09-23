@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from dataclasses import asdict, replace
@@ -106,6 +107,7 @@ class PlayingBody:
         self.spine, self.client, self.graph = spine, spine.client, spine.graph
         self.available = spine.available
         self._arm = None
+        self.routine_clock: float | None = None
         self._checkpoint = lambda: None
         self._closed = False
         self.journal = PlayJournal(recorder.dir, run_id=recorder.run_id)
@@ -173,6 +175,15 @@ class PlayingBody:
 
     def execute(self, arm, state, checkpoint):
         self._arm = arm
+        # The supervisor's skill budget: bounded by the teaching episode while the tutor
+        # plays, and the catalog's from the moment a scripted routine takes over.
+        self.routine_clock = math.inf
+        try:
+            return self._execute(arm, state, checkpoint)
+        finally:
+            self.routine_clock = None
+
+    def _execute(self, arm, state, checkpoint):
 
         def focused_checkpoint():
             checkpoint()
@@ -205,6 +216,7 @@ class PlayingBody:
                                         "reason": result.detail})
         current = self.observer.observe(arm)
         self.journal.observation(current.data)
+        self.routine_clock = time.monotonic()
         return self.spine.execute(arm, State.model_validate(current.data["state"]),
                                   focused_checkpoint)
 

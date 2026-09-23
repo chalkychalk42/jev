@@ -7,6 +7,7 @@ heartbeat: the supervisor is the main loop and recorder failures propagate to cl
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections.abc import Callable
@@ -156,11 +157,14 @@ class Worker:
 
 def interruption(arm: Armed, state: State, *, travelling: bool = False,
                  completion_observed: bool = False, handles_modal: bool = False,
-                 falling_s: float = FALL_GRACE_S) -> str | None:
+                 falling_s: float = FALL_GRACE_S,
+                 routine_age_s: float | None = None) -> str | None:
     """Why the armed skill must stop now, or `None`.
 
     `falling_s` is how long falling has been observed continuously; a caller that does
     not track it gets the conservative answer, a fall that has already lasted long enough.
+    `routine_age_s` is how long the body's current routine has run when the body keeps
+    that clock itself (see `Body.routine_clock`); otherwise the arm's age is used.
     """
     skill = arm.decision.skill
     if not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5:
@@ -181,7 +185,8 @@ def interruption(arm: Armed, state: State, *, travelling: bool = False,
     if arm.step_id != state.guide.step_id and not recovery and not completion_observed:
         return "playhead changed"
     spec = get(skill or "")
-    if spec and state.t - arm.at >= spec.timeout_s:
+    age = state.t - arm.at if routine_age_s is None else routine_age_s
+    if spec and age >= spec.timeout_s:
         return "skill timeout"
     return None
 
@@ -218,6 +223,14 @@ class Supervisor:
         else:
             self._falling_since = None
         falling_s = 0.0 if self._falling_since is None else now - self._falling_since
+        # A body that plays one objective in stages keeps its routine's clock: while a
+        # tutor is deciding, its own episode bounds apply (`inf`); when a scripted
+        # routine takes over, the catalog budget starts then. Measured 23 September: a
+        # tutor spent 25 s retrying an overloaded provider, and the scripted accept got
+        # the remaining 35 s of its 60 for an 82-yard walk and timed out on the way.
+        clock = getattr(self.body, "routine_clock", None)
+        routine_age = (None if clock is None else 0.0 if clock == math.inf
+                       else max(0.0, now - clock))
         exhausted = None
         if self.worker and self.worker.done.is_set():
             worker, self.worker = self.worker, None
@@ -312,7 +325,7 @@ class Supervisor:
             reason = interruption(self.worker.arm, state, travelling=self.body.travelling,
                                   completion_observed=self.worker.completion_observed,
                                   handles_modal=getattr(self.body, "handles_modal", False),
-                                  falling_s=falling_s)
+                                  falling_s=falling_s, routine_age_s=routine_age)
             # Hunt yields between pulls, after looting. Interrupting it as combat drops
             # would leave the killed corpse behind. A standalone travel leg can yield now.
             if reason is None and self.worker.arm.decision.skill == "TRAVEL_TO":

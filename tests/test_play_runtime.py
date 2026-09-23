@@ -400,6 +400,35 @@ def test_an_unavailable_tutor_hands_the_objective_to_the_scripted_routine(tmp_pa
                for row in rows)
 
 
+def test_the_scripted_routine_gets_its_budget_from_the_moment_it_takes_over(tmp_path):
+    """Measured 23 September: the tutor spent 25 s retrying an overloaded provider and the
+    scripted accept, timed from the arm, got 35 of its 60 s and timed out walking."""
+    import math
+    import time as clock
+
+    env = composition(tmp_path)
+    env.playing.controller.teacher = UnavailableTeacher()
+    seen = []
+    teaching = env.playing.controller.run
+
+    def run(arm, checkpoint):
+        seen.append(("teaching", env.playing.routine_clock))
+        return teaching(arm, checkpoint)
+
+    env.playing.controller.run = run
+    env.spine.execute = lambda arm, state, checkpoint: seen.append(
+        ("scripted", env.playing.routine_clock)) or Result(SkillOutcome.SUCCEEDED, "ok", "arrived")
+    before = clock.monotonic()
+    try:
+        env.playing.execute(env.arm, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert seen[0] == ("teaching", math.inf), "the tutor's episode bounds itself"
+    assert seen[1][0] == "scripted" and before <= seen[1][1] <= clock.monotonic()
+    assert env.playing.routine_clock is None, "the clock outlived the objective"
+
+
 def test_a_dialog_nobody_can_dismiss_is_not_handed_to_a_routine(tmp_path):
     env = composition(tmp_path)
     env.playing.controller.teacher = UnavailableTeacher()
