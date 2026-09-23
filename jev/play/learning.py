@@ -221,7 +221,7 @@ def _bind(action: dict[str, Any], observation: Mapping[str, Any]) -> dict[str, A
     return result
 
 
-def _features(observation: Mapping[str, Any]) -> dict[str, Any]:
+def _features(observation: Mapping[str, Any], *, visual: bool = True) -> dict[str, Any]:
     values = _flat(observation.get("state") or {})
     values.update(observation.get("values") or {})
     context = observation.get("context") or {}
@@ -235,19 +235,25 @@ def _features(observation: Mapping[str, Any]) -> dict[str, Any]:
             categories[f"{field}.{slot}"] = bool(bits & (1 << (slot - 1))) if isinstance(bits, int) else None
     numeric = {key: float(values[key]) for key in _NUMERIC if _number(values.get(key))}
     features = _flat(observation.get("features") or {})
-    visual = {key: float(value) for key, value in features.items() if _number(value)}
+    pixels = {key: float(value) for key, value in features.items() if _number(value)}
     screen = observation.get("screen") or {}
-    if not screen.get("sha256"):
-        visual = {}  # A numerical claim without an owned screen is not visual evidence.
-    return {"categorical": categories, "numeric": numeric, "visual": visual}
+    if not screen.get("sha256") or not visual:
+        # A numerical claim without an owned screen is not visual evidence. A choice that
+        # moves nothing in the world - a routine, a key tap, an action slot - is a decision
+        # about the game state, and needs no familiar scenery to transfer.
+        pixels = {}
+    return {"categorical": categories, "numeric": numeric, "visual": pixels}
 
 
 def _distance(a: dict[str, Any], b: dict[str, Any], scales: dict[str, float]) -> float:
+    """Distance from an observation `a` to a stored example or failure `b`."""
     if a["categorical"] != b["categorical"]:
         return math.inf
     distances = []
     for block in ("numeric", "visual"):
         left, right = a[block], b[block]
+        if block == "visual" and not right:
+            continue         # the example is a state decision; scenery does not decide it
         if left.keys() != right.keys():
             return math.inf  # Missing information is a new context, not an imputed zero.
         if left:
@@ -436,8 +442,8 @@ def _fit(rows: list[dict[str, Any]], config: LearningConfig, *,
     if (len(train) < config.min_train_examples or len(holdout) < config.min_holdout_examples
             or len({r["run_id"] for r in train}) < config.min_train_runs):
         return None, "insufficient disjoint training and held-out examples"
-    examples = [{"features": _features(row["before"]), "action": _label(row["action"]),
-                 "expected_effect": row["expected_effect"],
+    examples = [{"features": _features(row["before"], visual=_spatial(_label(row["action"]))),
+                 "action": _label(row["action"]), "expected_effect": row["expected_effect"],
                  "run_id": row["run_id"], "decision_id": row["decision_id"]} for row in train]
     examples = [row for row in examples if not _spatial(row["action"]) or row["features"]["visual"]]
     if len(examples) > config.max_train_examples:
@@ -473,7 +479,8 @@ def _fit(rows: list[dict[str, Any]], config: LearningConfig, *,
         return None, "no cross-run context support"
     radius = min(config.max_distance, sorted(radii)[int((len(radii) - 1) * 0.90)])
     train_runs = sorted({row["run_id"] for row in train})
-    failures = [{"features": _features(row["before"]), "action": _label(row["action"])}
+    failures = [{"features": _features(row["before"], visual=_spatial(_label(row["action"]))),
+                 "action": _label(row["action"])}
                 for row in rows if row["run_id"] in train_runs and _failed(row)
                 and _label(row.get("action") or {})]
     model = {"format": FORMAT, "examples": examples, "scales": scales, "radius": radius,
@@ -877,7 +884,9 @@ class MotorLearner:
                 and (row.get("encounter_id") is None or str(row["encounter_id"]) not in encounters)
                 and (row.get("before") or {}).get("synthetic") is not True]
         # New failures also constrain shadows, even when the teacher made the attempt.
-        state["failures"] = [{"features": _features(row["before"]), "action": _label(row["action"])}
+        state["failures"] = [{"features": _features(row["before"],
+                                                    visual=_spatial(_label(row["action"]))),
+                              "action": _label(row["action"])}
                              for row in live if _failed(row) and _label(row.get("action") or {})]
         live = [row for row in live if _stamp(row) > state.get("evidence_after", -math.inf)]
         shadow_attempts = [row for row in live if row["author"] in {"teacher", "human"}

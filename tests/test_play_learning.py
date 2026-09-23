@@ -557,3 +557,20 @@ def test_a_routine_with_graph_parameters_is_not_a_label(tmp_path):
     learner = MotorLearner(tmp_path / "motor", config=config())
     routine = {"kind": "skill", "name": "TRAVEL_TO", "params": {"x": 0.5, "y": 0.4}}
     assert teach(learner, capability="travel", action=routine) is None
+
+
+def test_a_state_decision_transfers_across_scenery_but_a_turn_does_not(tmp_path):
+    """Running COMBAT_PROFILE with a wolf selected is the same decision beside any tree;
+    how far to turn depends on the picture."""
+    routine = {"kind": "skill", "name": "COMBAT_PROFILE", "params": {}}
+    learner = MotorLearner(tmp_path / "routine", config=config())
+    teach(learner, capability="combat", action=routine)
+    elsewhere = observation(side=0)
+    elsewhere["features"] = {f"screen.{i}": 0.9 for i in range(12)}      # unfamiliar scene
+    elsewhere["screen"] = {"sha256": "screen-elsewhere"}
+    assert predict(learner, capability="combat", observation_value=elsewhere).action == routine
+
+    turns = MotorLearner(tmp_path / "turns", config=config())
+    teach(turns)
+    assert predict(turns, observation_value=elsewhere).action is None, \
+        "a turn learned in one picture was proposed for a different one"

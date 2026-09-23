@@ -59,9 +59,11 @@ parameter-error coverage without hand-picked pixel rounding. Held-out reporting 
 structural agreement, parameter coverage and exact agreement. Live canary outcomes remain
 the decisive evidence that a supported parameter choice works.
 
-Visual features form a separate distance term. Motion, camera and world-point proposals
-need an owned screenshot and its features. A familiar radio state cannot substitute for
-a familiar scene. Missingness, incompatible semantic state, conflicting action support,
+Visual features form a separate distance term, and only spatial actions carry it: motion,
+turning, camera and world-point proposals need an owned screenshot and a familiar scene.
+A state decision - a routine choice, a key tap, an action slot, an observe - is matched on
+the radio state alone, so running COMBAT_PROFILE with a wolf selected transfers between
+trees while a turn learned in one picture does not transfer to another. Missingness, incompatible semantic state, conflicting action support,
 unseen scenes, changed control/knowledge fingerprints, and relevant recorded failures
 cause abstention. Model matching excludes raw goal text, quest IDs, NPC names and absolute
 map positions. The current semantic skill, step kind and viewport geometry remain context.
@@ -71,7 +73,13 @@ pixel belongs to a target. Prediction rebinds expected identity from the current
 the executor must independently move the pointer and verify fresh matching world hover
 before delivering a button. Coordinate-free world clicks are excluded from reusable
 labels. UI clicks use the executor's painted semantic controls, not remembered pixels.
-Graph-level `skill` actions remain the existing coach's responsibility.
+A routine the tutor delegates inside an objective (COMBAT_PROFILE, LOOT, FACE_TARGET, ...)
+is a whole-action label when it carries no parameters of its own, so choosing the right
+routine can be handed over like any control. Arming guide-level skills remains the coach's.
+
+Episodes close at each verified unit of objective progress - a quest counter gain, accept,
+turn-in, or a kill toward a level - and the objective continues as a new episode. Progress
+earned before an action budget runs out is therefore learnable, not discarded.
 
 Failed attempts remain in the corpus and veto the same learned action in a covered
 context. Input refusal and cancellation are retained without pretending the attempted
