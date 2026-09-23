@@ -7,6 +7,7 @@ the runtime's arm, using the existing planner, locator, quest UI, Fight, Loot an
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable
 from typing import ClassVar
 
@@ -14,10 +15,11 @@ from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
 from jev.clients.fight import Fight
+from jev.clients.hearth import Hearth
 from jev.clients.interact import Interact
 from jev.clients.interact import Result as Interacted
 from jev.clients.loot import Loot
-from jev.clients.recover import Recover
+from jev.clients.recover import Recover, Recovered
 from jev.clients.repair import Repair
 from jev.clients.rest import Rest
 from jev.clients.targeting import FaceCode, Targeting
@@ -36,6 +38,11 @@ from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupp
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role
 from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.vendor import merchants, supplies_for
+
+# Dying again this soon after getting up at the body means the body lies where something
+# this character cannot beat still stands: the next recovery gets up at the graveyard's
+# Spirit Healer instead, and goes home by hearthstone.
+DEATH_TRAP_S = 180.0
 
 
 class LiveBody:
@@ -85,7 +92,11 @@ class LiveBody:
         self.repair = Repair(hid=client.hid, read=self._read, visit=self._visit_repairer,
                              window_origin=client.origin, window_size=client.size)
         self.recover = Recover(hid=client.hid, read=self._read, walk_to=self._corpse_walk,
+                               interact=lambda name: self.interact.open_on(name),
                                window_origin=client.origin, window_size=client.size)
+        self.hearth = Hearth(hid=client.hid, read=self._read,
+                             window_origin=client.origin, window_size=client.size)
+        self._revived_at: float | None = None
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
         client.travel.read_pos = self._position
@@ -463,8 +474,22 @@ class LiveBody:
         return self._approach((wx, wy, z))
 
     def _recover(self, state) -> Result:
+        # A body where the character keeps dying is not worth getting up at: run
+        # 20260923T181209-bc03ba got up beside a level 6 wolf at half health and died,
+        # four times. Up at the Spirit Healer instead, and home by hearthstone.
+        if self._revived_at is not None and time.monotonic() - self._revived_at < DEATH_TRAP_S:
+            up = self.recover.run_spirit_healer()
+            if up is Recovered.ALIVE:
+                self._revived_at = None
+                home = self.hearth.run()
+                self.say(f"  up at the Spirit Healer; hearthstone: {home.value} {self.hearth.detail}")
+                return self._result(up, f"up at the Spirit Healer; hearthstone {home.value}")
+            self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
         # Recover reads painted corpse coordinates. No guessed quest-node corpse.
-        return self._result(self.recover.run(self.recover.corpse), self.recover.detail)
+        outcome = self.recover.run(self.recover.corpse)
+        if outcome is Recovered.ALIVE:
+            self._revived_at = time.monotonic()
+        return self._result(outcome, self.recover.detail)
 
     def _release(self, state) -> Result:
         return self._result(self.recover.run(release_only=True), self.recover.detail)

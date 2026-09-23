@@ -422,3 +422,49 @@ def test_the_objective_name_is_the_armed_steps_creature_or_none():
     assert service._objective_name() is None, "an object is not a creature to fight"
     service.arm = None
     assert service._objective_name() is None
+
+
+def test_the_spirit_healer_raises_a_ghost_where_it_appeared(monkeypatch):
+    """Getting up beside the level 6 wolf that had just killed it, four times running
+    (run 20260923T181209-bc03ba). The Spirit Healer answers with the same painted button."""
+    import jev.clients.recover
+    monkeypatch.setattr(jev.clients.recover.time, "sleep", lambda seconds: None)
+    states = iter([
+        {"vitals.dead": True, "pos.mx": 0.45, "pos.my": 0.66},
+        {"vitals.ghost": True, "vitals.dead": False, "pos.mx": 0.39, "pos.my": 0.60},
+        {"vitals.ghost": True, "vitals.dead": False, "pos.mx": 0.39, "pos.my": 0.60},
+        {"vitals.ghost": True, "vitals.dead": False, "ui.modal": True,
+         "ui.advance_x": 0.5, "ui.advance_y": 0.2},
+        {"vitals.ghost": False, "vitals.dead": False},
+    ])
+    talked, walked = [], Mock()
+    recovery = Recover(hid=None, read=lambda: next(states), walk_to=walked,
+                       interact=lambda name: talked.append(name) or "no_window")
+    pressed = []
+    recovery._press = lambda values: pressed.append(values.get("ui.advance_x")) or True
+    assert recovery.run(release_only=True) is Recovered.RELEASED
+    assert recovery.graveyard == (0.39, 0.60)
+    assert recovery.run_spirit_healer() is Recovered.ALIVE
+    assert talked == ["Spirit Healer"] and 0.5 in pressed
+    walked.assert_not_called()                  # still beside it, no walk back
+
+
+@pytest.mark.parametrize(("since_revived", "healer"), [(60.0, True), (600.0, False), (None, False)])
+def test_a_body_that_killed_the_character_again_is_left_for_the_spirit_healer(
+        monkeypatch, since_revived, healer):
+    from jev.clients.hearth import Hearthed
+    from jev.run.body import DEATH_TRAP_S
+
+    b = body()
+    now = 10_000.0
+    monkeypatch.setattr("jev.run.body.time.monotonic", lambda: now)
+    b._revived_at = None if since_revived is None else now - since_revived
+    calls = []
+    b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+    b.recover.run = lambda corpse: calls.append("corpse") or Recovered.ALIVE
+    b.hearth.run = lambda: calls.append("hearth") or Hearthed.HOME
+    result = b._recover(seen())
+    assert result.code == "alive"
+    assert calls == (["healer", "hearth"] if healer else ["corpse"])
+    assert (b._revived_at is None) if healer else (b._revived_at == now)
+    assert DEATH_TRAP_S > 60.0
