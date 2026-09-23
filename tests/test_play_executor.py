@@ -325,6 +325,19 @@ def test_ui_changed_identity_and_merchant_frame_do_not_authorize_click():
     assert not h.hid.calls
 
 
+def test_reward_choice_clicks_the_painted_default_only_while_unchosen():
+    h = Harness()
+    h.values.update({"ui.quest_frame": True, "ui.choice_count": 2, "ui.choice_made": False,
+                     "ui.choice_x": 0.2, "ui.choice_y": 0.3, "cursor.world": False})
+    result = h.run(kind="click", button="left", intent="ui", ui_control="quest_reward")
+    assert result.delivered and result.point == (30, 44)
+    h = Harness()
+    h.values.update({"ui.quest_frame": True, "ui.choice_count": 2, "ui.choice_made": True,
+                     "ui.choice_x": 0.2, "ui.choice_y": 0.3, "cursor.world": False})
+    result = h.run(kind="click", button="left", intent="ui", ui_control="quest_reward")
+    assert result.code == "interrupted" and not h.hid.calls
+
+
 def test_camera_is_single_axis_mouse_look_without_claimed_facing():
     h = Harness()
     result = h.run(kind="camera", axis="yaw", pixels=-40)

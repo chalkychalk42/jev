@@ -63,8 +63,9 @@ class ClickAction(Strict):
     y: float | None = Field(default=None, ge=0.0, le=1.0)
     expected_target_id: int | None = Field(default=None, ge=0, le=65534)
     expected_dead: bool = False
-    ui_control: Literal["quest_advance", "gossip_line"] | None = Field(
-        default=None, description="Only painted quest advance or gossip list controls. "
+    ui_control: Literal["quest_advance", "quest_reward", "gossip_line"] | None = Field(
+        default=None, description="Only painted quest advance, reward choice or gossip list "
+                                  "controls. "
                                   "UI clicks cannot supply x/y; other UI controls are unavailable.")
     ui_name_id: int | None = Field(default=None, ge=0, le=65534)
 

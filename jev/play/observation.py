@@ -25,7 +25,7 @@ EFFECTS = frozenset({
     "closer", "moved", "scene_changed", "ui_opened", "ui_closed", "quest_progress",
     "quest_accepted", "quest_cleared", "healed", "power_restored", "recovered",
     "released", "repaired", "bags_freed", "supplies_bought", "supplies_replenished",
-    "loot_received", "arrived", "faced", "attacking",
+    "loot_received", "arrived", "faced", "attacking", "reward_chosen",
 })
 # A turn that moved the selected unit's plate this much nearer the centre line (fraction of
 # the image width), or onto it, faced the unit more. Smaller moves are within plate jitter.
@@ -250,6 +250,8 @@ def measured_effects(before: dict, after: dict) -> tuple[list[str], float]:
         effects.append("ui_opened")
     if any(a.get(k) is True and b.get(k) is False for k in windows):
         effects.append("ui_closed")
+    if a.get("ui.choice_made") is False and b.get("ui.choice_made") is True:
+        effects.append("reward_chosen")
     for field, effect in (("vitals.hp", "healed"), ("vitals.power", "power_restored"),
                           ("bags.durability_min", "repaired"), ("bags.free", "bags_freed")):
         if _increase(a, b, field):

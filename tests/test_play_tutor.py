@@ -55,6 +55,25 @@ def test_select_needs_an_objective_unit_and_ui_needs_painted_controls():
     assert "gossip_line" in names({"ui.gossip": True, "ui.list_hash1": 777})
 
 
+def test_a_reward_page_waiting_for_a_choice_offers_the_suggested_reward():
+    """Measured 23 September: Complete Quest did nothing until a reward was chosen."""
+    page = {"ui.quest_frame": True, "ui.advance_x": 0.1, "ui.choice_count": 2,
+            "ui.choice_made": False, "ui.choice_x": 0.05, "ui.choice_y": 0.4}
+    assert "quest_reward" in names(page)
+    assert "quest_reward" not in names({**page, "ui.choice_made": True})
+    assert "quest_reward" not in names({**page, "ui.choice_count": 0})
+    assert "quest_reward" not in names({**page, "ui.choice_made": None}), "unknown is not unchosen"
+    choice = tutor.TutorChoice(observation_id="o", action="quest_reward")
+    action = action_dict(tutor.to_action(choice, tutor.menu(
+        {"values": {**ALIVE, **page}, "context": {}}, CONTROLS), {"values": {**ALIVE, **page}}))
+    assert action["ui_control"] == "quest_reward"
+    assert expected_for(action, None, "interact") == "reward_chosen"
+    assert "reward_chosen" in EFFECTS
+    before = {"values": {**page}}
+    after = {"values": {**page, "ui.choice_made": True}}
+    assert "reward_chosen" in measured_effects(before, after)[0]
+
+
 def test_only_bound_and_usable_slots_are_offered_with_their_abilities():
     offered = {c.name: c for c in tutor.menu({"values": {**ALIVE, "bars.usable": 0b101}},
                                              CONTROLS)}

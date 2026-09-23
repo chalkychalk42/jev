@@ -98,6 +98,8 @@ def expected_for(action: dict, requested: str | None, bucket: str) -> str:
             allowed = {"ui_opened", "loot_received", "target_hp_decreased", "target_dead",
                        "attacking"}
             default = "loot_received" if action.get("expected_dead") else "ui_opened"
+        elif action.get("ui_control") == "quest_reward":
+            allowed, default = {"reward_chosen"}, "reward_chosen"
         else:
             allowed = {"ui_opened", "ui_closed", "quest_accepted", "quest_cleared", "quest_progress"}
             default = "ui_closed"

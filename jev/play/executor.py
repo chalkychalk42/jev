@@ -338,6 +338,10 @@ class Executor:
             if values.get("ui.quest_frame") is not True:
                 raise _Refusal("interrupted", "quest advance needs an observed quest frame")
             x, y = values.get("ui.advance_x"), values.get("ui.advance_y")
+        elif action.ui_control == "quest_reward":
+            if values.get("ui.quest_frame") is not True or values.get("ui.choice_made") is not False:
+                raise _Refusal("interrupted", "reward choice needs an open, unchosen reward page")
+            x, y = values.get("ui.choice_x"), values.get("ui.choice_y")
         else:
             matches = [i for i in range(5) if values.get(f"ui.list_hash{i}") == action.ui_name_id]
             if len(matches) != 1:

@@ -182,6 +182,11 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
     if values.get("ui.quest_frame") is True and values.get("ui.advance_x") is not None:
         clicks.append(Choice("quest_advance", (), (),
                              "click the quest window's Accept / Continue / Complete button"))
+    if (values.get("ui.quest_frame") is True and (values.get("ui.choice_count") or 0) > 0
+            and values.get("ui.choice_made") is False and values.get("ui.choice_x") is not None):
+        clicks.append(Choice("quest_reward", (), (),
+                             "choose the suggested reward (usable, then best quality); "
+                             "Complete Quest does nothing until a reward is chosen"))
     if (values.get("ui.gossip") is True or values.get("ui.quest_frame") is True) and any(
             values.get(f"ui.list_hash{i}") is not None for i in range(5)):
         clicks.append(Choice("gossip_line", ("line",), (), "click line N of the NPC's list"))
@@ -303,8 +308,8 @@ def to_action(choice: TutorChoice, choices: list[Choice], observation: dict):
         return ClickAction(button="right", intent="interact", x=choice.x, y=choice.y,
                            expected_target_id=values.get("target.name_id"),
                            expected_dead=name == "loot_corpse")
-    if name == "quest_advance":
-        return ClickAction(button="left", intent="ui", ui_control="quest_advance")
+    if name in ("quest_advance", "quest_reward"):
+        return ClickAction(button="left", intent="ui", ui_control=name)
     if name == "gossip_line":
         identity = values.get(f"ui.list_hash{choice.line - 1}")
         if identity is None:
