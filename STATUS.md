@@ -1803,3 +1803,30 @@ long teach sessions with the Claude tutor; watch `var/route-memory.json` fill as
   swing (schema 12 `combat.swings` from the combat log); reach expires so fleeing units are
   followed. Simulated: 25 yards to a swing in 2.9 s, forward pressed once. Schema 12 files
   are installed in the client (`f422149`).
+
+## 2026-09-23 — Anti-cheat review items 1-3, and a pathing fix they exposed
+
+The operator approved three changes from the anti-cheat review (the event runs a custom
+Warden). The Warden test itself waits until the bot is close to fully autonomous. The
+addon-ban fallback and the HID-device route are out. Offline only; committed locally
+(`e97dc44`, `87f1be9`, `7f1b197`, `6567477`), not pushed.
+
+- **Anonymous addon** (V54). One built file, `StatusStrip`, no globals, no named frames, no
+  comments, no project name. The Lua tests run that file. **Installed**: the old `JevRadio`
+  folder is in `captures/addon-backup/20260923T131115-JevRadio`, and `StatusStrip` loads
+  at the next login. Reinstall with `tools/gen_addon_fields.py --install`.
+- **Drawn timing** (V55). Every hold is within 15% and every control-loop wait within 25%.
+  The look-round's way, turn sizes and count, and the Tab burst, are drawn per search.
+  Waypoint offsets were built, measured and left out.
+- **Pathing** (V56). Simulating the drawn timing on the recorded fence failed 5 of 60 first
+  trips. The cause was a slide too slow to steer by but not "frozen", plus side-flipping
+  detours. Both are fixed: over 40 draws, the fence and trunk-and-wall routes arrived, learned
+  and then walked stuck-free every time.
+
+OPEN: the repository is public, so the new addon name is public once pushed. Making it
+private is the operator's call. `Humaniser.for_client` seeds from `hash(client_id)`, which
+Python randomises per process: timing differs every run, and a replay does not reproduce it
+as the docstring claims.
+
+NEXT: unchanged - restart the client (loads `StatusStrip` with schema 12), hand in quest
+15, then long Claude-tutor sessions. Watch the first fights for the drawn look-round.
