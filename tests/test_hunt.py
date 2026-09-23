@@ -367,7 +367,7 @@ def test_a_hunt_stands_where_its_target_spawns_when_the_guide_knows():
     from jev.run.hunt import SPAWN_LAPS
 
     spawns = ((24.0, 0.0, 80.0), (0.0, 36.0, 80.0), (30.0, 5.0, 80.0), (60.0, 60.0, 80.0))
-    h, walked = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
+    h, _walked = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
     assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=spawns) is Hunted.UNREACHABLE
     assert h.moves == 3 * SPAWN_LAPS, "a spawn ten yards from a station is the same stance"
 
