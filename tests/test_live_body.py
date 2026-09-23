@@ -487,7 +487,29 @@ def test_a_unit_with_no_nameplate_on_show_is_talked_to_where_a_hover_finds_it():
                            "fixture")
 
     b.targeting.probe = probe
+    b.targeting.wait_for_paint = lambda: SimpleNamespace(after={"ui.error_count": None})
     clicks = []
     b.client.hid.click = lambda x, y, right=False: clicks.append((x, y, right)) or True
     assert b._talk_to("Spirit Healer") == "hovered"
     assert clicks == [(*hovered[1], True)], "right-clicked where the hover found it, once"
+
+
+def test_a_unit_out_of_reach_is_stepped_toward_and_clicked_again():
+    """Run 20260923T182544-7dad55: the right-click on the Spirit Healer answered "You are
+    too far away!" and nothing else happened."""
+    from jev.clients.targeting import HoverCode, HoverResult
+    from jev.perceive.radio_frame import UI_ERROR_KEYS, name_id
+
+    b = body()
+    b.interact = SimpleNamespace(open_on=lambda name: Interacted.NOT_VISIBLE)
+    healer = {"cursor.has": True, "cursor.name_id": name_id("Spirit Healer"), "ui.error_count": 4}
+    b.targeting.probe = lambda point, require_target=True: HoverResult(
+        HoverCode.OTHER, point, None, healer, "fixture")
+    far = {"ui.error_last": UI_ERROR_KEYS.index("out_of_range"), "ui.error_count": 5}
+    answers = iter([far, {"ui.modal": True, "ui.error_count": 5}])
+    b.targeting.wait_for_paint = lambda: SimpleNamespace(after=next(answers))
+    clicks, steps = [], []
+    b.client.hid.click = lambda x, y, right=False: clicks.append(right) or True
+    b.client.hid.hold = lambda key, seconds, **_: steps.append(key) or True
+    assert b._talk_to("Spirit Healer") == "hovered"
+    assert clicks == [True, True] and steps == ["w"], "one step closer between two clicks"

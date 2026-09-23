@@ -31,7 +31,7 @@ from jev.guide.graph import Graph
 from jev.guide.objectives import progress, select_objective, target_progress
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
-from jev.perceive.radio_frame import list_lines, name_id
+from jev.perceive.radio_frame import UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FOCUS_QUICK_S, Client
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
@@ -48,6 +48,10 @@ DEATH_TRAP_S = 180.0
 # the centre of the screen, with its plate drawn behind the strip at the top.
 HOVER_POINTS = ((0.5, 0.35), (0.5, 0.45), (0.5, 0.25), (0.45, 0.35), (0.55, 0.35),
                 (0.5, 0.55), (0.4, 0.3), (0.6, 0.3))
+# A right-click from out of reach answers "You are too far away!": step toward the unit,
+# which the hover found in front of the character, and click again.
+HOVER_STEPS = 5
+HOVER_STEP_S = 0.35
 
 
 class LiveBody:
@@ -488,14 +492,29 @@ class LiveBody:
     def _hover_interact(self, name: str) -> bool:
         """Right-click where a fresh hover says `name` is, for a unit whose nameplate does
         not show: run 20260923T182125-9c54ea's ghost stood under the Spirit Healer, its plate
-        behind the strip, and the plate-first interaction found none."""
+        behind the strip, and the plate-first interaction found none. Out of reach (run
+        ...182544-7dad55: "You are too far away!"), it steps closer and clicks again."""
         wanted = name_id(name)
         (ox, oy), (w, h) = self.client.origin, self.client.size
-        for fx, fy in HOVER_POINTS:
-            point = (ox + round(fx * w), oy + round(fy * h))
-            after = self.targeting.probe(point, require_target=False).after or {}
-            if after.get("cursor.has") is True and after.get("cursor.name_id") == wanted:
-                return self.client.hid.click(*point, right=True) is not False
+        too_far = UI_ERROR_KEYS.index("out_of_range")
+        for _ in range(HOVER_STEPS + 1):
+            point = None
+            for fx, fy in HOVER_POINTS:
+                candidate = (ox + round(fx * w), oy + round(fy * h))
+                after = self.targeting.probe(candidate, require_target=False).after or {}
+                if after.get("cursor.has") is True and after.get("cursor.name_id") == wanted:
+                    point, errors = candidate, after.get("ui.error_count")
+                    break
+            if point is None:
+                return False
+            if self.client.hid.click(*point, right=True) is False:
+                return False
+            answer = self.targeting.wait_for_paint().after or {}
+            if not (answer.get("ui.error_last") == too_far
+                    and answer.get("ui.error_count") != errors):
+                return True
+            if not self.client.hid.hold("w", HOVER_STEP_S):
+                return False
         return False
 
     def _recover(self, state) -> Result:
