@@ -605,3 +605,14 @@ def test_new_key_bindings_still_start_a_new_generation(tmp_path):
                               controls_fingerprint="controls-v2",
                               knowledge_fingerprint="knowledge-v1")
     assert rebound.action is None and "controls" in rebound.reason
+
+
+def test_an_unfinished_episode_reads_no_records_when_no_student_can_have_acted(tmp_path, monkeypatch):
+    """Scanning every record under the store's lock, for a student that was not playing,
+    made other writers wait past Windows' ten-second lock (PermissionError [Errno 13])."""
+    learner = MotorLearner(tmp_path, config=config())
+    learner.record(record("run-a", 0))
+    monkeypatch.setattr(learner, "records", lambda: (_ for _ in ()).throw(AssertionError("scanned")))
+    assert learner.finish_episode("episode-run-a", run_id="run-a",
+                                  outcome={"verified": True, "success": False, "progress": 0,
+                                           "elapsed_s": 5})

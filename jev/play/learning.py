@@ -645,8 +645,14 @@ class MotorLearner:
                     raise ValueError("conflicting terminal outcome for episode")
                 return False
             atomic_json(path, row)
-            if not _episode_qualified(outcome):
-                registry = self._registry()
+            registry = self._registry() if not _episode_qualified(outcome) else None
+            # Only a student's actions are answerable for an episode, and a student acts only
+            # with a capability in canary or active mode. Without one there is nothing to
+            # find, and reading every record under the lock is what made other writers wait
+            # past Windows' ten-second lock (PermissionError [Errno 13]).
+            if registry is not None and any(
+                    state.get("mode") in ("canary", "active")
+                    for state in registry["capabilities"].values()):
                 changed = False
                 for record in self.records():
                     if (record["run_id"] != run_id or record["episode_id"] != episode_id

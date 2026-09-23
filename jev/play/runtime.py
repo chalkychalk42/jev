@@ -53,8 +53,11 @@ def delegable_skills(current: str, available) -> tuple[str, ...]:
 class MotorLearningService:
     """Training never owns HID and cannot block the supervisor's stop clock."""
 
-    def __init__(self, learner, runs: Path, *, interval_s: float = 30):
+    def __init__(self, learner, runs: Path, *, interval_s: float = 30, live: Path | None = None):
         self.learner, self.runs, self.interval_s = learner, Path(runs), interval_s
+        # The run in progress: its controller records every row itself, and re-reading it
+        # each cycle held the store's lock in bursts the controller had to wait through.
+        self.live = Path(live) if live is not None else None
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, name="jev-motor-learner", daemon=True)
         self.error = None
@@ -76,6 +79,8 @@ class MotorLearningService:
                 for directory in sorted(self.runs.iterdir()) if self.runs.exists() else ():
                     if self.stop.is_set():
                         break
+                    if directory == self.live:
+                        continue
                     if directory.is_dir() and (directory / "play-actions.jsonl").exists():
                         stamp = tuple((p.stat().st_size, p.stat().st_mtime_ns) if p.exists() else None
                                       for p in (directory / "play-actions.jsonl",
@@ -166,7 +171,8 @@ class PlayingBody:
             "learning_store": str(self.learner.directory), "live_validated": False,
         })
         if start_learning:
-            self.learning_service = MotorLearningService(self.learner, recorder.dir.parent).start()
+            self.learning_service = MotorLearningService(self.learner, recorder.dir.parent,
+                                                         live=recorder.dir).start()
 
     @property
     def travelling(self):

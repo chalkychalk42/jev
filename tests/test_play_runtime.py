@@ -529,3 +529,31 @@ def test_background_rereads_a_run_only_when_its_play_files_change(tmp_path):
     finally:
         service.close()
     assert sorted(ingested) == ["live", "live", "quiet"]
+
+
+def test_background_leaves_the_run_in_progress_to_its_own_controller(tmp_path):
+    """The live run's controller records every row itself; re-reading it each cycle held
+    the store's lock in bursts the controller had to wait through (Errno 13 on Windows)."""
+    runs, store = tmp_path / "runs", tmp_path / "learning"
+    store.mkdir()
+    for name in ("earlier", "live"):
+        (runs / name).mkdir(parents=True)
+        (runs / name / "play-actions.jsonl").write_text("")
+    cycled = threading.Event()
+    ingested = []
+
+    class OfflineLearner:
+        directory = store
+        def ingest_run(self, directory):
+            ingested.append(directory.name)
+            return {"errors": []}
+        def update(self, *, cancelled):
+            cycled.set()
+            return {"candidates": 0}
+
+    service = MotorLearningService(OfflineLearner(), runs, interval_s=60, live=runs / "live").start()
+    try:
+        assert cycled.wait(3)
+    finally:
+        service.close()
+    assert ingested == ["earlier"]
