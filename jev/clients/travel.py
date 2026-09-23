@@ -420,14 +420,16 @@ class Travel:
                                     f"ran out of time on leg {i} of {len(legs) - 1}")
             last = self.to(leg, timeout_s=remaining, abort=abort, allow_detour=False)
 
-            if last.outcome is Outcome.STUCK and replan is not None and replans < max_replans:
+            if last.outcome is Outcome.STUCK:
                 # Blocked. Ask the planner from here instead of improvising: the mesh
                 # knows the way round, and a follower that invents one is the thing this
                 # whole file stopped doing.
-                replans += 1
                 position = self.position()
-
-                fresh = replan(position) if position is not None else None
+                fresh = None
+                asked = replan is not None and replans < max_replans
+                if asked:
+                    replans += 1
+                    fresh = replan(position) if position is not None else None
 
                 # ...unless the planner has nothing new to say. A re-plan is only worth
                 # anything if its answer changed, and the mesh does not know about the
@@ -440,7 +442,13 @@ class Travel:
                 #
                 # Comparing answers rather than positions, because a leg that walks eighty
                 # yards and *then* wedges has moved, and that one spins just as happily.
-                if self._same_answer(fresh, position, leg):
+                #
+                # Nor when it can no longer be asked. The re-plans are a budget for the
+                # walk, and a blocked leg with none left used to end it: a 366-yard walk to
+                # Echo Ridge Mine spent all three on the Abbey's corners, met a pit prop at
+                # the mine's mouth, and stopped 95 yards short without trying the wall
+                # heuristic once (run 20260923T184413-a386ff).
+                if not asked or self._same_answer(fresh, position, leg):
                     # A fresh obstacle, not the last one continued.
                     self.detours = 0
                     self._sweep = self._sweep_left = 1

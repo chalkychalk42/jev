@@ -92,6 +92,9 @@ class WalkWorld:
             self._step(dt)
             remaining -= dt
             self.t += dt
+        # A sliver too short to move in still passes: a loop that sleeps what is left of a
+        # wait would otherwise sleep the same float residue forever.
+        self.t += remaining
 
     def _step(self, dt: float) -> None:
         if "d" in self.keys:

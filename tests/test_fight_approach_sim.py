@@ -13,9 +13,13 @@ import math
 import pytest
 
 import jev.clients.fight as fight_module
-from jev.clients.fight import Fight
-from jev.clients.walk_sim import SimHid, SimTime, WalkWorld
+from jev.clients.fight import MAX_APPROACH_S, MAX_CLOSE_BURSTS, Fight
+from jev.clients.walk_sim import Circle, Segment, SimHid, SimTime, WalkWorld
+from jev.guide.coords import ZoneBounds
 from jev.perceive.units import Plate, RingColour
+
+ELWYNN = ZoneBounds(area_id=12, map_id=0, left=1535.4166, right=-1935.4166,
+                    top=-7939.583, bottom=-10254.166)
 
 WOLF = 2864
 REACH_YARDS = 5.0
@@ -51,7 +55,9 @@ class Target:
 
     def values(self) -> dict:
         self.update()
-        return {"target.has": True, "target.name_id": WOLF, "target.hp": 1.0,
+        mx, my = self.world.map_position()
+        return {"pos.mx": mx, "pos.my": my,
+                "target.has": True, "target.name_id": WOLF, "target.hp": 1.0,
                 "target.in_melee": self.distance() <= NEAR_YARDS,
                 "target.attacking_me": self.charges, "target.melee_range": None,
                 "combat.swings": self.swings % 15, "vitals.dead": False, "ui.modal": False,
@@ -116,3 +122,75 @@ def test_a_unit_running_at_the_character_is_met_not_passed(monkeypatch):
 def test_a_unit_off_to_one_side_is_steered_onto_while_walking(side, monkeypatch):
     reached, _, target, _, _ = approach((22.0, side), monkeypatch=monkeypatch)
     assert reached and target.distance() <= REACH_YARDS
+
+
+def fight_to(target_at, obstacles, *, monkeypatch):
+    """Approach after approach, facing the unit before each, as `Fight.run` does."""
+    world = WalkWorld(x=0.0, y=0.0, heading=0.0, obstacles=tuple(obstacles))
+    target = Target(world, *target_at)
+    monkeypatch.setattr(fight_module, "time", SimTime(world))
+    steering = Steering(world, target)
+    fight = Fight(hid=SimHid(world), read=target.values, read_frame=lambda: None,
+                  targeting=steering, bounds=ELWYNN)
+    fight._selected_name_id = WOLF
+    fight._swings = 0
+    fight.last_plate = Plate(800.0, 400.0, 147, RingColour.RED)
+    for _ in range(MAX_CLOSE_BURSTS):
+        if fight._approach_s >= MAX_APPROACH_S:
+            break
+        while abs(target.bearing_off()) > math.radians(2):     # face it: engage's job
+            world.heading += target.bearing_off()
+        if fight._close(target.values(), near=target.distance() <= NEAR_YARDS):
+            return True, world, target, fight
+    return False, world, target, fight
+
+
+PIT_PROP = Circle(8.0, 0.0, 1.0)
+
+
+def test_a_unit_behind_a_post_is_reached_by_stepping_round_it(monkeypatch):
+    """Measured 23 September at Echo Ridge Mine (run 20260923T184413-a386ff): a Kobold
+    Laborer in plain view past a pit prop, and three walks of six seconds each pressed into
+    the prop until the fight gave up, "closed 3 times over 18s and never came within
+    reach"."""
+    reached, _, target, fight = fight_to((20.0, 0.0), [PIT_PROP], monkeypatch=monkeypatch)
+    assert reached and target.distance() <= REACH_YARDS
+    assert fight.sidesteps >= 1
+
+
+def test_a_post_walled_on_the_first_side_is_rounded_on_the_other(monkeypatch):
+    """The first step goes right here, into rock: the search goes the other way."""
+    rock = Segment(2.0, 1.3, 9.0, 1.3)
+    reached, _, target, fight = fight_to((20.0, 0.0), [PIT_PROP, rock], monkeypatch=monkeypatch)
+    assert reached and target.distance() <= REACH_YARDS
+    assert fight.sidesteps >= 2
+
+
+def test_near_a_unit_a_step_that_goes_nowhere_is_stepped_round_too(monkeypatch):
+    """Within `in_melee` the approach steps rather than walks, and a post in the way
+    stopped every step just the same."""
+    reached, _, target, fight = fight_to((9.5, 0.0), [Circle(5.0, 0.0, 0.8)],
+                                         monkeypatch=monkeypatch)
+    assert reached and target.distance() <= REACH_YARDS
+    assert fight.sidesteps >= 1
+
+
+def test_open_ground_takes_no_sidestep(monkeypatch):
+    reached, _, _, fight = fight_to((25.0, 3.0), [], monkeypatch=monkeypatch)
+    assert reached and fight.sidesteps == 0
+
+
+def test_which_side_the_first_sidestep_takes_is_drawn_per_fight():
+    """One fixed side at every post is a pattern; with a humaniser the side is drawn."""
+    import random
+
+    from jev.clients.hid import Humaniser
+
+    sides = set()
+    for seed in range(12):
+        world = WalkWorld(x=0.0, y=0.0, heading=0.0)
+        fight = Fight(hid=SimHid(world, Humaniser(rng=random.Random(seed))),
+                      read=lambda: None, read_frame=lambda: None, bounds=ELWYNN)
+        fight.run(WOLF)
+        sides.add(fight._side)
+    assert sides == {1, -1}

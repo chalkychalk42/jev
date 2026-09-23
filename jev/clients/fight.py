@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -63,7 +64,8 @@ import numpy as np
 
 from jev.clients.hid import held, humaniser, pace
 from jev.clients.targeting import FACE_SEARCH_MAX_S, FaceCode, HoverCode, PaintCode, Targeting
-from jev.clients.travel import TURN_RATE_SEED
+from jev.clients.travel import MIN_TRAVEL_FOR_HEADING, TURN_RATE_SEED
+from jev.guide.coords import ZoneBounds, distance_yards
 from jev.perceive.radio_frame import UI_ERROR_KEYS
 from jev.perceive.units import (
     PROPOSAL_COLOURS,
@@ -144,6 +146,22 @@ MAX_APPROACH_S = 15.0
 # so none for longer means the target moved out of reach - a kobold at low health runs -
 # and the character closes again instead of swinging at air.
 REACH_HOLD_S = 4.5
+# Forward held this long without a heading's worth of travel is blocked: travel's stuck
+# test. At Echo Ridge Mine on 23 September a Kobold Laborer stood in plain view past a pit
+# prop, and three walks of six seconds each pressed into the prop until the fight gave up,
+# "closed 3 times over 18s and never came within reach" (run 20260923T184413-a386ff).
+BLOCKED_AFTER_S = 1.5
+BLOCKED_YARDS = MIN_TRAVEL_FOR_HEADING
+# Near, a step of a yard and a half that moved less than this went nowhere; this many in a
+# row is blocked.
+STEP_STILL_YARDS = 0.5
+STILL_STEPS = 2
+# Blocked, the character strafes off the line, and the next approach faces the unit again.
+# First one way and then twice as long the other, as travel's detour searches: a post is
+# cleared on whichever side is open, and a side walled off is not tried twice at the same
+# length. Half a second is three and a half yards at run speed; a pit prop is one.
+SIDESTEP_S = 0.5
+MAX_SIDESTEP_S = 2.0
 
 # A toggle's new state reaches the radio a paint or two after the key. Pressing it again
 # inside this window would read the old state and switch it straight back.
@@ -228,6 +246,9 @@ class Fight:
     # the camera is already level, which nothing was, for an evening.
     level: Callable[[], object] | None = None
     targeting: Targeting | None = None
+    # The zone's map box, to measure the approach in yards; without it, blocked walks are
+    # not noticed.
+    bounds: ZoneBounds | None = None
 
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
@@ -258,6 +279,11 @@ class Fight:
     _xp_start: tuple | None = field(default=None, init=False)
     _strides: int = field(default=0, init=False)
     _approach_s: float = field(default=0.0, init=False)
+    # Strafes off a blocked approach this fight, the side the next one goes, and how long.
+    sidesteps: int = field(default=0, init=False)
+    _side: int = field(default=1, init=False)
+    _sidestep_s: float = field(default=SIDESTEP_S, init=False)
+    _still_steps: int = field(default=0, init=False)
     # The last evidence a swing reached (a resolved swing or damage), and the swing count.
     _reach_at: float | None = field(default=None, init=False)
     _swings: int | None = field(default=None, init=False)
@@ -293,6 +319,10 @@ class Fight:
         self._xp_start = None
         self._strides = 0
         self._approach_s = 0.0
+        self.sidesteps = self._still_steps = 0
+        self._sidestep_s = SIDESTEP_S
+        h = humaniser(self.hid)
+        self._side = -1 if h is not None and h.rng.random() < 0.5 else 1
         self._ahead = False
         self._error_count = None
         self._damage_at = time.monotonic()
@@ -737,12 +767,13 @@ class Fight:
         """
         began = time.monotonic()
         try:
-            return self._approach(near, deadline)
+            return self._approach(near, deadline, values)
         finally:
             self._approach_s += time.monotonic() - began
 
-    def _approach(self, near: bool, deadline: float | None) -> bool:
+    def _approach(self, near: bool, deadline: float | None, values: dict | None = None) -> bool:
         if near:
+            before = self._position(values)
             event("approach.request", data={"key": "w", "mode": "step",
                                             "duration_s": CLOSE_STEP_S, "closed": self.closed})
             if not self.hid.hold("w", CLOSE_STEP_S):
@@ -754,14 +785,25 @@ class Fight:
             wait_until = time.monotonic() + SWING_WAIT_S
             if deadline is not None:
                 wait_until = min(wait_until, deadline)
+            last = None
             while time.monotonic() < wait_until:
                 time.sleep(min(pace(self.hid, CLOSE_LOOK_S),
                                max(0.0, wait_until - time.monotonic())))
-                v = self.read()
+                v = last = self.read()
                 if v is None or not self._same_fight(v):
                     return False
                 if self._note_damage(v) or self._note_swing(v):
                     return True
+            after = self._position(last)
+            if before is None or after is None:
+                return False
+            if distance_yards(before, after, self.bounds) >= STEP_STILL_YARDS:
+                self._still_steps = 0
+                return False
+            self._still_steps += 1
+            if self._still_steps >= STILL_STEPS:
+                self._still_steps = 0
+                self._sidestep("step")
             return False
 
         targeting = self._targeting()
@@ -777,6 +819,8 @@ class Fight:
         stop_at = started + CLOSE_MAX_S if deadline is None else min(started + CLOSE_MAX_S, deadline)
         steer_at = started + pace(self.hid, CLOSE_STEER_S)
         near_at = None
+        trail: deque = deque()
+        blocked = False
         try:
             while time.monotonic() < stop_at:
                 time.sleep(min(pace(self.hid, CLOSE_LOOK_S),
@@ -794,6 +838,9 @@ class Fight:
                     near_at = near_at if near_at is not None else time.monotonic()
                     if time.monotonic() - near_at >= NEAR_OVERRUN_S:
                         return False
+                if self._blocked(trail, v):
+                    blocked = True
+                    break
                 if time.monotonic() >= steer_at:
                     steer_at = time.monotonic() + pace(self.hid, CLOSE_STEER_S)
                     seen = targeting.track_selected(plate, window_dy=CLOSE_TRACK_DY)
@@ -804,9 +851,45 @@ class Fight:
                             self._input_refused = True
                             self.detail = "turn input refused"
                             return False
-            return False
         finally:
             self.hid.key_up("w")
+        if blocked:
+            self._sidestep("walk")
+        return False
+
+    def _position(self, values: dict | None) -> tuple[float, float] | None:
+        """Where the character is, as a map fraction; `None` unread, or with no zone box."""
+        if self.bounds is None or not values:
+            return None
+        mx, my = values.get("pos.mx"), values.get("pos.my")
+        return None if mx is None or my is None else (mx, my)
+
+    def _blocked(self, trail: deque, values: dict) -> bool:
+        """Forward held `BLOCKED_AFTER_S` with less than `BLOCKED_YARDS` to show for it."""
+        here = self._position(values)
+        if here is None:
+            return False
+        now = time.monotonic()
+        trail.append((now, here))
+        while len(trail) > 1 and now - trail[1][0] >= BLOCKED_AFTER_S:
+            trail.popleft()
+        return (now - trail[0][0] >= BLOCKED_AFTER_S
+                and distance_yards(trail[0][1], here, self.bounds) < BLOCKED_YARDS)
+
+    def _sidestep(self, mode: str) -> None:
+        """Strafe off a blocked line to the unit; the next approach faces it again."""
+        key = (getattr(self.hid, "STRAFE_RIGHT", "e") if self._side > 0
+               else getattr(self.hid, "STRAFE_LEFT", "q"))
+        seconds = self._sidestep_s
+        self.sidesteps += 1
+        event("approach.sidestep", data={"key": key, "seconds": round(seconds, 3),
+                                          "mode": mode, "closed": self.closed})
+        if not self.hid.hold(key, seconds):
+            self._input_refused = True
+            self.detail = "sidestep input refused"
+            return
+        self._side = -self._side
+        self._sidestep_s = min(MAX_SIDESTEP_S, 2 * self._sidestep_s)
 
     def _same_fight(self, values: dict) -> bool:
         """Still this fight's living target, and nothing that stops a fight."""

@@ -97,7 +97,7 @@ class LiveBody:
                                       window_origin=client.origin, window_size=client.size)
         self.fight = Fight(hid=client.hid, read=self._read, read_frame=self._frame,
                            window_origin=client.origin, window_centre_x=w // 2,
-                           targeting=self.targeting)
+                           targeting=self.targeting, bounds=client.bounds)
         self.rest = Rest(hid=client.hid, read=self._read)
         self.loot = Loot(hid=client.hid, read=self._read, read_frame=self._frame,
                          window_origin=client.origin, targeting=self.targeting)

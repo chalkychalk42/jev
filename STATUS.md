@@ -1856,3 +1856,21 @@ handed in quest 15 at Marshal McBride (level 4), accepted quest 21 (12 Kobold La
 OPEN: the character's gear took 25% durability per Spirit Healer rez; the tutor spends
 ~40 s on map lookups before long walks; `test_real_worker_controller_and_executor_use_one_
 input_owner` failed once under load (passes alone and in a quiet full run).
+
+## 2026-09-23 — Echo Ridge Mine: a pit prop stopped the walk and then the fight (V64)
+
+Session 15 (`runs/20260923T184413-a386ff`) walked 366 yards from Marshal McBride toward the
+quest 21 kobolds and stopped 95 yards short in the mine's mouth. The follower had spent all
+three re-plans on the Abbey's corners, so the pit prop ended the walk without one detour.
+The tutor then had the fight walk at a Kobold Laborer in plain view past the same prop:
+three six-second walks pressed into it (the position did not move), "never came within
+reach", and the watchdog stopped the run at level 4 with 0/12.
+
+Both are fixed (V64). The fight's approach notices a blocked walk or step with travel's
+stuck test and strafes off the line, first on a drawn side and then twice as long the
+other way. A planned leg blocked with no re-plans left gets the wall heuristic once.
+Simulated with the real code: post, post walled on one side, post within melee range, and
+four walls on one route all reached. `walk_sim` time now passes for sleeps below a
+substep; the first step-mode simulation spun on a float residue.
+
+NEXT: session 16 at Echo Ridge.

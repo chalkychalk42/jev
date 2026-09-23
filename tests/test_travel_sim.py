@@ -126,3 +126,14 @@ def test_open_ground_is_walked_without_any_recovery(monkeypatch):
                      monkeypatch=monkeypatch)
     assert result.outcome is Outcome.ARRIVED
     assert result.stuck_events == 0 and result.detours == 0
+
+
+def test_a_walk_that_has_spent_its_re_plans_still_rounds_the_next_obstacle(monkeypatch):
+    """Measured 23 September (run 20260923T184413-a386ff): a 366-yard walk to Echo Ridge
+    Mine spent its re-plans on the Abbey's corners, then met a pit prop at the mine's mouth
+    with none left, and stopped 95 yards short without trying the wall heuristic once."""
+    walls = [Segment(-6, -20 - 40 * k, 6, -20 - 40 * k) for k in range(4)]
+    result, _ = walk([(0, 0), (0, -40), (0, -80), (0, -120), (0, -160)], walls,
+                     -math.pi / 2, monkeypatch=monkeypatch)
+    assert result.outcome is Outcome.ARRIVED, result.detail
+    assert result.stuck_events >= len(walls), "a wall was never met"
