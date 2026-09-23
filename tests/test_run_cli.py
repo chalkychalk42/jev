@@ -87,7 +87,7 @@ def test_input_contention_never_attaches_or_constructs_background(tmp_path, monk
     background.assert_not_called()
 
 
-def fake_live(monkeypatch, tmp_path, *, disconnected=False):
+def fake_live(monkeypatch, tmp_path, *, disconnected=False, character=0x26A9640B):
     events = []
     client = SimpleNamespace(
         client_id="slice", origin=(0, 0), size=(1600, 900), _capturing=threading.RLock(),
@@ -97,7 +97,9 @@ def fake_live(monkeypatch, tmp_path, *, disconnected=False):
         focused=lambda *args, **kwargs: True,
         frame=lambda: None, quest_ids=lambda: (),
         close=lambda: events.append("client closed"), restored=not disconnected)
-    client.read = lambda: {"pos.zone_id": 1} if client.restored else None
+    client.character = character
+    client.read = lambda: ({"pos.zone_id": 1, "char.key": client.character}
+                           if client.restored else None)
     monkeypatch.setattr(cli, "ROOT", tmp_path)
     monkeypatch.setattr(cli, "input_lock_path", lambda: tmp_path / "input.lock")
     monkeypatch.setattr(cli, "attach", lambda client_id: client)
@@ -128,6 +130,7 @@ def fake_live(monkeypatch, tmp_path, *, disconnected=False):
         failure = None
         def __init__(self, runtime, body, **kwargs):
             events.append("supervisor created")
+            client.runtime = runtime
         def run(self, seconds, **kwargs):
             events.append("supervisor ran")
         def close(self):
@@ -488,3 +491,34 @@ def test_supervision_observes_focus_and_reconnects_through_the_shared_body_owner
         reconnect.assert_called_once_with(client, checkpoint, env_file=env_file)
     else:
         reconnect.assert_not_called()
+
+
+def test_each_character_keeps_its_own_playhead(tmp_path, monkeypatch, capsys):
+    """A fresh level 1 launched on one saved position would have started at another
+    character's quest 21, Northshire's first five quests marked done."""
+    from jev.guide import playhead
+
+    graph = route_file(tmp_path)
+    client, _events = fake_live(monkeypatch, tmp_path)
+    veteran = playhead.for_character(0x26A9640B, tmp_path / playhead.CHARACTERS)
+    playhead.save(Graph.load(graph).graph_id, None, {7, 33}, veteran)
+    assert cli.main(["--graph", str(graph), "--run-for", "1"]) == 0
+    assert client.runtime.completed == {7, 33}
+    assert client.runtime.character_key == 0x26A9640B
+    assert "character 26a9640b" in capsys.readouterr().out
+
+    client.character = 0x1234                     # a fresh character: nothing remembered
+    assert cli.main(["--graph", str(graph), "--run-for", "1"]) == 0
+    assert client.runtime.completed == set() and client.runtime.character_key == 0x1234
+    client.runtime.on_progress("step", {21}, None)
+    assert playhead.load(Graph.load(graph).graph_id, veteran).completed == {7, 33}, \
+        "one character's progress was written into another's"
+    fresh = playhead.for_character(0x1234, tmp_path / playhead.CHARACTERS)
+    assert playhead.load(Graph.load(graph).graph_id, fresh).completed == {21}
+
+
+def test_a_strip_that_does_not_name_its_character_is_not_guessed_at(tmp_path, monkeypatch, capsys):
+    graph = route_file(tmp_path)
+    fake_live(monkeypatch, tmp_path, character=None)
+    assert cli.main(["--graph", str(graph), "--run-for", "1"]) != 0
+    assert "which character" in capsys.readouterr().out

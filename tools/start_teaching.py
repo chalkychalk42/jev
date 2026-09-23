@@ -1,7 +1,8 @@
 """Review or run the prepared teaching configuration; default is an offline check.
 
 Use Windows Python. --run is the explicit live entrypoint. Subsequent clean sessions
-share the saved playhead and learning store; errors and operator stops never restart.
+share the learning store and each character's own saved playhead; errors and operator
+stops never restart.
 """
 
 from __future__ import annotations
@@ -48,16 +49,20 @@ def replace_option(args, name, value):
 
 
 def route_done(args) -> bool:
-    """Bound repeat collection by confirmed quest completion, never by process success."""
+    """Bound repeat collection by confirmed quest completion, never by process success.
+
+    Each character keeps its own playhead, and which one is logged in is known only once
+    a run reads the strip, so without an explicit `--playhead` the run itself decides.
+    """
     from jev.guide import playhead
     from jev.guide.graph import Graph
     from jev.guide.route import compile_route
     from jev.run.body import LiveBody
 
+    if option(args, "--playhead") is None:
+        return False
     graph = Graph.load(Path(option(args, "--graph", str(ROOT / "content/tbc/ally_human_1_12.json"))))
-    client_id = option(args, "--client-id", "slice")
-    default_memory = ROOT / ("var/playhead.json" if client_id == "slice" else f"var/playheads/{client_id}.json")
-    path = Path(option(args, "--playhead", str(default_memory)))
+    path = Path(option(args, "--playhead"))
     memory = playhead.load(graph.graph_id, path)
     if option(args, "--route-mode", "full") == "supported":
         graph = compile_route(graph, available_skills=LiveBody.available,

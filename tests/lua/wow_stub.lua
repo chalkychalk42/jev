@@ -133,8 +133,11 @@ function UnitExists(u)
 end
 function UnitName(u)
     if u == "mouseover" then return pick("mouseoverName", nil) end
+    if u == "player" then return pick("playerName", "Testvii") end
     return pick("targetName", "Kobold Vermin")
 end
+function GetRealmName() return pick("realm", "Forever Dev") end
+UNKNOWNOBJECT = "Unknown"
 function UnitReaction() return pick("reaction", 2) end
 function UnitClassification() return pick("classification", "normal") end
 function UnitIsUnit(a, b)

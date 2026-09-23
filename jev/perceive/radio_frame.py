@@ -68,17 +68,32 @@ _FNV_PRIME = 16777619
 _UINT32 = 0xFFFFFFFF
 
 
-def fnv1a16(s: str) -> int:
-    """FNV-1a over the UTF-8 bytes, folded from 32 bits to 16 by xor.
-
-    Folded rather than truncated because that is FNV's own recommendation: truncation
-    discards the mixing the high half performed. Lua strings are bytes, so UTF-8 is what
-    the addon hashes for any locale whose names are not plain ASCII.
-    """
+def fnv1a32(s: str) -> int:
+    """FNV-1a over the UTF-8 bytes. Lua strings are bytes, so UTF-8 is what the addon
+    hashes for any locale whose names are not plain ASCII."""
     h = _FNV_OFFSET
     for byte in s.encode("utf-8"):
         h = ((h ^ byte) * _FNV_PRIME) & _UINT32
+    return h
+
+
+def fnv1a16(s: str) -> int:
+    """FNV-1a folded from 32 bits to 16 by xor.
+
+    Folded rather than truncated because that is FNV's own recommendation: truncation
+    discards the mixing the high half performed.
+    """
+    h = fnv1a32(s)
     return ((h >> 16) ^ h) & 0xFFFF
+
+
+def character_key(name: str, realm: str) -> int:
+    """The code the addon paints for the player, `char.key`: its name and realm, 31 bits.
+
+    A character's own place in the guide is saved under it, so two characters never share
+    one. 31 bits leave the all-ones code free for not-available.
+    """
+    return fnv1a32(f"{name}-{realm}") % 0x7FFFFFFF
 
 
 def name_id(name: str) -> int:
@@ -800,6 +815,7 @@ def to_state(reading: RadioReading, *, t: float, client_id: str,
 
     race = RACE_BY_ID.get(v["char.race_id"])
     char = Char(
+        key=v.get("char.key"),
         cls=CLASS_BY_ID.get(v["char.class_id"]),
         race=race,
         faction=FACTION_BY_RACE.get(race) if race else None,

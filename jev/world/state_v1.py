@@ -154,6 +154,8 @@ class SenseFault(StrEnum):
 
 class Char(Frozen):
     name: str | None = None
+    # Which character this is (`radio_frame.character_key`), for its own saved playhead.
+    key: int | None = None
     cls: str | None = None            # lowercase: mage, warrior, ...
     race: str | None = None
     faction: Literal["alliance", "horde"] | None = None

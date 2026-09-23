@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 12                                   # bump when the field table changes shape
+SCHEMA = 13                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -66,6 +66,8 @@ with it only for human paladins.
 8: read-only mouseover identity and world/UI mouse focus for measured click verification.
 9: melee auto-attack state, melee range of the Attack action, and a UI error held long
 enough for a 2 Hz reader to see it, so a toggle is never pressed without its state.
+13: which character is painting (`char.key`, name and realm hashed), so every character
+keeps its own saved place in the guide.
 Old schema 6, 7 and 8 reads remain supported, with appended observations unknown."""
 
 # Quantisation step: nibble n renders as n * STEP, so 15 -> 255 exactly.
@@ -487,6 +489,12 @@ FIELDS: tuple[Field, ...] = (
     Field("combat.swings", 4, Kind.UINT, "return SWINGS()",
           "the character's resolved melee swings since the addon loaded, modulo 15"),
 
+    # Which character this is, so each keeps its own place in the guide. A fresh character
+    # launched on the one saved position would have started at another character's quest
+    # 21 with Northshire's first five quests marked done.
+    Field("char.key", 31, Kind.UINT, "return CHARACTER_KEY()",
+          "the player's name and realm, FNV-1a mod 2^31-1 (radio_frame.character_key)"),
+
 )
 
 # --------------------------------------------------------------------------- layout
@@ -495,13 +503,14 @@ FIELDS: tuple[Field, ...] = (
 # captures and installed addons readable without inventing merchant or cursor telemetry.
 # Preserve this prefix when adding future schemas; migrations are declared, not guessed.
 SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS[:121],
-                 10: FIELDS[:125], 11: FIELDS[:126], 12: FIELDS}
+                 10: FIELDS[:125], 11: FIELDS[:126], 12: FIELDS[:127], 13: FIELDS}
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 assert sum(f.bits for f in SCHEMA_FIELDS[8]) == 1059
 assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073
 assert sum(f.bits for f in SCHEMA_FIELDS[10]) == 1100
 assert sum(f.bits for f in SCHEMA_FIELDS[11]) == 1102
+assert sum(f.bits for f in SCHEMA_FIELDS[12]) == 1106
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

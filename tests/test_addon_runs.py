@@ -430,3 +430,22 @@ def test_the_characters_own_resolved_swings_are_counted_hits_and_misses():
     values = radio.unpack(payload(paint({"events": events}))[:PAYLOAD_CELLS])
     assert values["combat.swings"] == 2
     assert radio.unpack(payload(paint({}))[:PAYLOAD_CELLS])["combat.swings"] == 0
+
+
+def test_the_strip_says_which_character_it_is_painted_for():
+    """Each character keeps its own place in the guide. With one saved position, a fresh
+    level 1 would have started at another character's quest 21, Northshire's first five
+    quests marked done."""
+    from jev.perceive.radio_frame import character_key
+
+    values = radio.unpack(payload(paint())[:PAYLOAD_CELLS])
+    assert values["char.key"] == character_key("Testvii", "Forever Dev")
+    other = radio.unpack(payload(paint({"playerName": "Newpally"}))[:PAYLOAD_CELLS])
+    assert other["char.key"] == character_key("Newpally", "Forever Dev") != values["char.key"]
+
+
+def test_a_name_the_client_has_not_loaded_is_no_character():
+    """Until the client has the name it answers "Unknown": a key made from that would be
+    every character's."""
+    values = radio.unpack(payload(paint({"playerName": "Unknown"}))[:PAYLOAD_CELLS])
+    assert values["char.key"] is None

@@ -1903,4 +1903,9 @@ qualified examples; the best had 4); only 14 of 39 tutor episodes succeeded; the
 learner kept 6 good decisions from 58 runs. `tools/run_summary.py` now reports the learner
 every session, and the tutor's two biggest leaks are closed (V69).
 
-NEXT: session 18. Hard spots get one session, then the fail-over ladder.
+Every character now keeps its own playhead (V70): schema 13 names the character on the
+strip, the run loads that character's file, and a new character starts from its own quest
+log. Installed to the client (loads at the next login); the old save moved to Testvii's
+key, `var/playheads/character-26a9640b.json`.
+
+NEXT: restart the client when the PC is free, then a fresh level 1 human paladin.

@@ -16,6 +16,14 @@ step rather than the entry**, which means it can still move forward over anythin
 done — a log read at startup is always believed over the file — but it cannot walk
 backwards into a quest it has already finished.
 
+One per character
+-----------------
+Each character keeps its own, named by the key the strip paints for it (`char.key`, its
+name and realm hashed), and the run reads that key before anything is loaded. With one
+file for the installation, a fresh level 1 would have started at another character's
+quest 21, Northshire's first five quests marked done. A character with no file yet is new
+to the bot and starts from its own quest log.
+
 Deliberately not a save file
 ----------------------------
 The step, the graph it belongs to, and the way back from a grind rib. Anything richer is a
@@ -35,6 +43,12 @@ from dataclasses import dataclass
 from jev.persist import atomic_json
 
 DEFAULT_PATH = pathlib.Path("var/playhead.json")
+CHARACTERS = pathlib.Path("var/playheads")
+
+
+def for_character(key: int, root: pathlib.Path = CHARACTERS) -> pathlib.Path:
+    """Where one character's playhead lives, by the key the strip paints for it."""
+    return root / f"character-{key:08x}.json"
 
 
 @dataclass(frozen=True)

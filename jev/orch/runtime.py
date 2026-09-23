@@ -118,6 +118,10 @@ class ClientRuntime:
     start_rejoin: str | None = None
     # (step, completed quests, where the step leads back to when that is not its next)
     on_progress: Callable[[str, set[int], str | None], None] | None = None
+    # The character whose playhead this run keeps (`char.key`). Another character's state
+    # is not tracked, recorded or saved: it sets `foreign`, and the run stops.
+    character_key: int | None = None
+    foreign: int | None = field(default=None, init=False)
     last_state: State | None = field(default=None, init=False)
     _was_dead: bool = field(default=False, init=False)
     _decision_seq: int = field(default=0, init=False)
@@ -167,6 +171,13 @@ class ClientRuntime:
         state = self.source.read() if state is None else state
         if state.client_id != self.client_id:
             raise ValueError(f"source client {state.client_id!r} != runtime {self.client_id!r}")
+        if (self.character_key is not None and state.char.key is not None
+                and state.char.key != self.character_key):
+            # Logged out and another character logged in. Its quest log is not this
+            # playhead's, and tracking it would write one character's progress into the
+            # other's file.
+            self.foreign = state.char.key
+            return state
         self.counters.ticks += 1
         if not state.sense.addon_ok:
             self.counters.blind_ticks += 1

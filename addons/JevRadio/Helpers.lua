@@ -104,7 +104,7 @@ local function xor8(a, b)
     return r
 end
 
-local function fnv1a16(s)
+local function fnv1a32(s)
     if s == nil then return nil end
     local h = FNV_OFFSET
     for i = 1, string.len(s) do
@@ -117,6 +117,12 @@ local function fnv1a16(s)
         local lo = h % 65536
         h = (lo * FNV_PRIME + ((hi * FNV_PRIME) % 65536) * 65536) % UINT32
     end
+    return h
+end
+
+local function fnv1a16(s)
+    local h = fnv1a32(s)
+    if h == nil then return nil end
     -- Fold 32 bits to 16 by xor, not truncation: that is FNV's own recommendation, and
     -- truncating throws away the mixing the high half did.
     local hi = math.floor(h / 65536)
@@ -132,6 +138,26 @@ local function nameid(s)
     -- phantom empty target, so collapse rather than report nothing.
     if h == 65535 then return 65534 end
     return h
+end
+
+-- --------------------------------------------------------------------- the character
+--
+-- Which character this strip is painted for: its name and realm, hashed to 31 bits, so
+-- the bot keeps each character's place in the guide apart. Cached once known - it cannot
+-- change without a logout, which reloads this file - and not before: until the client has
+-- the name it answers "Unknown", and a key made from that would be every character's.
+
+local characterKey
+
+local function CHARACTER_KEY()
+    if characterKey == nil then
+        local name, realm = UnitName("player"), GetRealmName()
+        if not name or name == "" or name == UNKNOWNOBJECT or not realm or realm == "" then
+            return nil
+        end
+        characterKey = fnv1a32(name .. "-" .. realm) % 2147483647
+    end
+    return characterKey
 end
 
 -- --------------------------------------------------------------------- enum tables
@@ -952,6 +978,7 @@ return {
     clamp = clamp,
     nameid = nameid,
     fnv1a16 = fnv1a16,
+    CHARACTER_KEY = CHARACTER_KEY,
     ZONE_ID = ZONE_ID,
     PLAYER_FACING = PLAYER_FACING,
     BAG_FREE = BAG_FREE,

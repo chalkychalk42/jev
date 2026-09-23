@@ -550,3 +550,28 @@ def test_a_stalled_step_is_failed_over_before_the_run_is_stopped(tmp_path):
     finally:
         body.allow_finish.set()
         supervisor.close()
+
+
+def test_another_character_logging_in_stops_the_run_with_this_ones_playhead_saved(tmp_path):
+    """Each character keeps its own playhead. A state from another character - logged
+    out, and someone else logged in - is not tracked or saved, and the run stops."""
+    from jev.world.state_v1 import Char
+
+    mine, theirs = Char(key=1, level=4), Char(key=2, level=1)
+    states = [seen(0, char=mine), seen(0.25, char=mine), seen(0.5, char=theirs),
+              seen(0.75, char=theirs)]
+    saved = []
+    rt = runtime(tmp_path, states, character_key=1,
+                 on_progress=lambda step, done, rejoin: saved.append(step))
+    body = Body()
+    supervisor = Supervisor(rt, body, say=lambda line: None)
+    try:
+        supervisor.step(0)
+        supervisor.step(0.25)
+        before = list(saved)
+        supervisor.step(0.5)
+        assert supervisor.stopped.is_set() and "another character" in supervisor.failure
+        assert rt.foreign == 2 and saved == before, "the other character's state was saved"
+    finally:
+        body.allow_finish.set()
+        supervisor.close()

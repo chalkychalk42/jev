@@ -120,17 +120,12 @@ def main(argv: list[str] | None = None) -> int:
         args.screenshots = args.learn = True
     if not re.fullmatch(r"[A-Za-z0-9_-]+", args.client_id):
         parser.error("client-id must contain only letters, numbers, underscores or hyphens")
-    if args.playhead is None:
-        args.playhead = ROOT / ("var/playhead.json" if args.client_id == "slice"
-                                else f"var/playheads/{args.client_id}.json")
     graph = Graph.load(args.graph)
-    memory = playhead.load(graph.graph_id, args.playhead)
-    route = compile_route(graph, available_skills=LiveBody.available,
-                          completed_quests=memory.completed)
-    if args.route_mode == "supported":
-        graph = route.graph
-        memory = playhead.load(graph.graph_id, args.playhead)
     if args.check:
+        # Offline there is no character, so nothing is taken as done yet.
+        route = compile_route(graph, available_skills=LiveBody.available)
+        if args.route_mode == "supported":
+            graph = route.graph
         unavailable = sorted({s for n in graph.nodes for s in n.skills} - LiveBody.available)
         target_kinds = {StepKind.QUEST_ACCEPT, StepKind.QUEST_TURNIN,
                         StepKind.QUEST_OBJECTIVE, StepKind.GRIND, StepKind.REPAIR}
@@ -170,13 +165,33 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         with _termination_cleanup(), file_lock(input_lock_path(), blocking=False):
-            return _live(args, graph, memory, route)
+            return _live(args, graph)
     except BlockingIOError:
         print("another live supervisor owns this user's input; no client was attached")
         return 2
 
 
-def _live(args, graph, memory, route) -> int:
+def remembered(args, graph, key: int | None):
+    """This character's playhead and route: its own file, found by the key the strip
+    paints, so each character keeps its own place in the guide (`playhead`)."""
+    if args.playhead is not None:
+        path = args.playhead
+    elif key is None:
+        raise NotRunning("the strip does not say which character this is (an addon older "
+                         "than schema 13): install it with tools/gen_addon_fields.py "
+                         "--install and restart the client")
+    else:
+        path = playhead.for_character(key, ROOT / playhead.CHARACTERS)
+    memory = playhead.load(graph.graph_id, path)
+    route = compile_route(graph, available_skills=LiveBody.available,
+                          completed_quests=memory.completed)
+    if args.route_mode == "supported":
+        graph = route.graph
+        memory = playhead.load(graph.graph_id, path)
+    return path, memory, route, graph
+
+
+def _live(args, graph) -> int:
     try:
         client = attach(args.client_id)
     except NotRunning as exc:
@@ -214,6 +229,11 @@ def _live(args, graph, memory, route) -> int:
         startup_checkpoint()
         if values is None or client.quest_ids() is None:
             raise NotRunning("radio or complete quest log unavailable")
+        # Which character is logged in decides whose playhead this run keeps.
+        character = values.get("char.key")
+        path, memory, route, graph = remembered(args, graph, character)
+        print(f"character {character:08x}: playhead {path}" if character is not None
+              else f"playhead {path}")
         zones = bounds_by_radio_id(str(ROOT / "data/zones-tbc-243.json"))
         bounds = navigation_frame(graph.coord_zone_id, values.get("pos.zone_id"), zones)
         if bounds is None:
@@ -253,7 +273,8 @@ def _live(args, graph, memory, route) -> int:
             keys_down=client.hid.keys_down, start_step=memory.step_id,
             start_rejoin=memory.rejoin_to, completed=set(memory.completed),
             on_progress=lambda step, done, rejoin: playhead.save(
-                graph.graph_id, step, done, args.playhead, rejoin_to=rejoin),
+                graph.graph_id, step, done, path, rejoin_to=rejoin),
+            character_key=character,
             available_skills=body.available,
             validate_action=body.validate,
         )

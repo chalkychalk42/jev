@@ -282,6 +282,12 @@ class Supervisor:
                   and not self.stopped.is_set())
         record = now >= self.next_record
         state = self.runtime.tick(choose=choose, record=record, state=state)
+        if getattr(self.runtime, "foreign", None) is not None and not self.stopped.is_set():
+            self.failure = ("another character is logged in; each keeps its own playhead, "
+                            "so this run stops with this one's saved")
+            self.stopped.set()
+            if self.worker:
+                self.worker.cancel(self.failure)
         if self.watchdog:
             self.watchdog.observe(state, now)
             if self.watchdog.escalate:
