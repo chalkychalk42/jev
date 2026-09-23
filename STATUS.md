@@ -1830,3 +1830,29 @@ as the docstring claims.
 
 NEXT: unchanged - restart the client (loads `StatusStrip` with schema 12), hand in quest
 15, then long Claude-tutor sessions. Watch the first fights for the drawn look-round.
+
+## 2026-09-23 — Live: ten teach sessions, a death spiral found and fixed, quest 15 handed in
+
+The operator handed over the PC. Client restarted; `StatusStrip` (schema 12) loads and
+decodes live. Sessions 6-15 (`captures/live-teach-6..15.log`) each found something; every
+fix is in its shared owner, tested, and committed locally (not pushed).
+
+| found live | fix | verified |
+|---|---|---|
+| A fight waited 30 s on the tutor: full health to dead, no swing | reflexes (V57) | live |
+| Death popup is modal: tutor pressed Esc five times | reflexes (V57) | live |
+| Failed hand-in's rib led past it; playhead lost the way back | retry once, save rejoin (V58) | live resume |
+| Step clock counted death, fights and walking | working clock (V59) | offline |
+| One rib for 1-12: level 5-6 boars; three deaths at level 3 | ribs per level window (V60) | offline |
+| First fight levelled the camera for 5 s at 12% health | level while safe (V61) | live |
+| Lost reflex fight stopped the run ("1 failed attempts") | not a step failure (V57) | offline |
+| Red plates 5 px: facing never found hostile units | red floor, red search, turn round (V62) | live: 11/11 faced |
+| Got up beside the killer, died again, four times | Spirit Healer + hearth (V63) | live |
+
+Heals now land (Holy Light self-cast, V50): four heals kept a resurrected character alive
+at 50% against a level 5 caster. Session 15: repaired (durability 0% after the deaths),
+handed in quest 15 at Marshal McBride (level 4), accepted quest 21 (12 Kobold Laborers).
+
+OPEN: the character's gear took 25% durability per Spirit Healer rez; the tutor spends
+~40 s on map lookups before long walks; `test_real_worker_controller_and_executor_use_one_
+input_owner` failed once under load (passes alone and in a quiet full run).
