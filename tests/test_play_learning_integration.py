@@ -89,7 +89,7 @@ def test_actual_controller_corpus_trains_shadows_hands_over_and_rolls_back(tmp_p
         assert teacher.requests == []
     learner.update()
     state = learner.status()["capabilities"]["approach"]
-    assert state["mode"] == "active"
+    assert state["mode"] == "active", (state.get("reason"), state.get("metrics"))
     assert state["metrics"]["student_examples"] == 2
     for row in learner.records():
         if row["author"] == "student":

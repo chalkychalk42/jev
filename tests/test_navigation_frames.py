@@ -128,3 +128,34 @@ def test_guide_actions_name_the_coordinate_frame_not_a_false_current_region():
     b.arm.decision = plan
     assert "different map coordinate frames" in LiveBody._parameters(b)
     assert not verify(plan, wrong, frozenset({"TURNIN_QUEST"})).ok
+
+
+def test_a_replan_starts_at_the_height_of_the_route_that_got_us_here():
+    """Measured 23 September: on Northshire Abbey's stone ledge, off the navmesh on both
+    sides of the back wall, a start at Marshal McBride's floor height snapped inside and
+    every re-plan walked straight into the wall (27 stuck events, 8.2 yards away)."""
+    from jev.clients.travel import Outcome
+    from jev.guide.path import Path, PathStatus
+
+    client, _values = client_in("Elwynn", (0.49, 0.42))
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    mcbride = (here[0] + 8.0, here[1] - 3.0, 82.0)
+    outside = Path(PathStatus.COMPLETE, ((here[0] - 2.0, here[1], 80.6),
+                                         (here[0] - 6.0, here[1] + 10.0, 81.1), mcbride))
+    asked = []
+
+    def path(map_id, start, end):
+        asked.append(start[2])
+        return outside
+
+    client.query.path = path
+    client.travel.position = lambda: (0.49, 0.42)
+
+    def follow(route, *, timeout_s, replan):
+        replan((0.49, 0.42))
+        return SimpleNamespace(outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0,
+                               stuck_events=1, detail="")
+
+    client.travel.follow = follow
+    assert client.approach(mcbride)
+    assert asked == [82.0, 80.6], "the re-plan borrowed the destination's height"

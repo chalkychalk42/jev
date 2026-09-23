@@ -16,6 +16,7 @@ already take, and it keeps them testable with a lambda.
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections.abc import Callable
@@ -234,9 +235,21 @@ class Client:
         if not path.usable:
             return False
 
+        followed = [path]
+
         def replan(here_map):
+            # The start's height is unknown (the radio paints map x/y). The destination's
+            # snapped a character on Northshire Abbey's stone ledge - off the navmesh on
+            # both sides of the back wall - onto the interior floor, and each re-plan was
+            # a straight line into the wall: measured 23 September, 27 stuck events 8.2
+            # yards from Marshal McBride. The route being followed got the character
+            # there, so its nearest point's height is the side of the wall it is on.
             w = map_to_world(here_map[0], here_map[1], self.bounds)
-            return self.query.path(self.bounds.map_id, (w[0], w[1], world[2]), world)
+            z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
+            planned = self.query.path(self.bounds.map_id, (w[0], w[1], z), world)
+            if planned.usable:
+                followed.append(planned)
+            return planned
 
         result = self.travel.follow(path, timeout_s=timeout_s, replan=replan)
         if result.outcome is Outcome.REFUSED:
