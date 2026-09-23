@@ -1691,3 +1691,41 @@ local student, so delegating a working routine can itself be handed over.
 
 NOW: the next live window, with the operator's desktop free: repeated kill -> corpse loot ->
 Tough Wolf Meat progress with the scripted body, then the same with Jev choosing.
+
+## 2026-09-23 — Scripted spine: kill, loot and quest progress, live and repeated
+
+DID: four supervised scripted runs on quest 33 with one-second screenshots, each gap fixed
+in its shared owner and pushed (`75e938f`, `dcfa7e3`, `d510dfb`).
+
+| run | length | kills | loots | Tough Wolf Meat | notes |
+|---|---|---|---|---|---|
+| `20260923T094917-57131b` | 6 min | 1 | 0 | 0/8 | 28 fights on one stale far selection; stopped in a fence-jump loop |
+| `20260923T100704-98a757` | 8 min | 5 | 5 | 0 -> 3 | level 2 -> 3; flower hovers 96 -> 3 |
+| `20260923T101745-0798fb` | 8 min | 5 | 5 | 3 -> 7 | look-round acquisition; no lost or unseen fights |
+
+MEASURED GAPS, each fixed in its shared owner:
+- **Stale selection.** A Tab pick with no plate stayed selected for five minutes and
+  absorbed 28 fights while the hunt walked between spots. A kept selection whose plate is
+  not on screen is now dropped for a fresh acquisition.
+- **Fence-jump loop.** Every unstick jump read as falling for 0.5-1.06 s and the supervisor
+  cancelled the leg mid-air, 17 times in 45 s. Falling now interrupts only after 2.5 s
+  (slopes measured up to 2.05 s at the half-second tick).
+- **Corpse search order.** All sixteen probes went to grass ring proposals; the grid under
+  the last living plate now goes first. Every kill since has been looted.
+- **Flower hovers.** Plate candidates whose fill width disagrees with the target's health
+  are not hovered (96 wasted hovers -> 3).
+- **Paint counter.** 255 is the not-available code, so the sequence decoded as missing once
+  every 256 paints and read as blindness. It now wraps at 255, and waiting for paint treats
+  one unordered paint as the next baseline.
+- **Plates are near.** Nameplates are drawn only within about twenty yards and the camera
+  shows about a hundred degrees, so 43 of 52 fights found nothing. Acquisition now looks round
+  in quarter turns for a hover-proved plate before Tab (43 -> 29 empty looks, no unseen
+  fights).
+- **Tab reaches past plates.** Four blind walks at plateless Tab picks found none. The
+  ring and name the client draws at selection are now located by the colour that appears
+  between frames either side of the key (`units.selection_marks`); the fight turns toward
+  that mark before walking, and does not walk without one. Not yet exercised live.
+
+TEACHING: the first teach-mode session (`20260923T102857-75d538`) met four consecutive
+"overloaded" replies (1305) from the free `glm-4.6v-flash` and handed the objective to the
+scripted routine, as designed. GLM availability, not the loop, is what limits teaching now.
