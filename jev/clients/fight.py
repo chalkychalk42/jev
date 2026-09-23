@@ -297,6 +297,8 @@ class Fight:
     # Where the Tab pick's selection mark appeared, as a fraction of the width off centre.
     _mark_offset: float | None = field(default=None, init=False)
     _error_count: int | None = field(default=None, init=False)
+    # Facing by the client's own errors, the selected plate unproved: an attacker in melee.
+    _blind_melee: bool = field(default=False, init=False)
     _damage_seen: bool = field(default=False, init=False)
     _input_refused: bool = field(default=False, init=False)
     detail: str = field(default="", init=False)
@@ -329,6 +331,7 @@ class Fight:
         h = humaniser(self.hid)
         self._side = -1 if h is not None and h.rng.random() < 0.5 else 1
         self._ahead = False
+        self._blind_melee = False
         self._error_count = None
         self._damage_at = time.monotonic()
         self.last_hp = None
@@ -394,7 +397,7 @@ class Fight:
             self._selected_name_id = v.get("target.name_id")
             self._damage_mark = v.get("target.hp")
             self.selected_plate = None
-        if not self.engage(v):
+        if not self.engage(v) and not self._fight_blind(v):
             if not (chosen and self._aim_code is FaceCode.NOT_VISIBLE):
                 return self._aim_failure()
             # Kept from before this fight and not on screen: nothing says it is ahead or
@@ -483,9 +486,16 @@ class Fight:
             stalled = now - max(self._damage_at, self._last_aim_at,
                                 self._reach_at or 0.0) > REAIM_AFTER_S
             wrong_way = self._new_error(v) == "not_facing"
-            if in_reach:
+            if self._blind_melee and v.get("target.in_melee") is not True:
+                self._blind_melee = False          # it left reach: aim by its plate again
+            if self._blind_melee:
+                # The client says where it is: a swing at something behind is "facing the
+                # wrong way", and melee reaches the whole front half, so round is enough.
+                if wrong_way and not self._turn_round():
+                    return Fought.REFUSED
+            elif in_reach:
                 # Stand and swing. Turn back only on evidence the swings are not landing.
-                if (wrong_way or stalled) and not self.engage(v):
+                if (wrong_way or stalled) and not self.engage(v) and not self._fight_blind(v):
                     return self._aim_failure()
             elif self._strides < MAX_CLOSE_BURSTS and self._approach_s < MAX_APPROACH_S:
                 # Not while casting: movement cancels a cast, and the only thing being
@@ -993,6 +1003,34 @@ class Fight:
         self._error_count = count
         error = values.get("ui.error_last")
         return UI_ERROR_KEYS[error] if isinstance(error, int) and 0 < error < len(UI_ERROR_KEYS) else None
+
+    def _fight_blind(self, values: dict) -> bool:
+        """Fight an attacker in melee whose plate could not be proved. `True` if taken up.
+
+        A plate is proved by hovering the body beneath it, and two of a kind side by side
+        answer for each other: two Defias Thugs, one hover landing on the other, three
+        fights in a row gave up "not visible" while the pair beat the character to death
+        (run 20260924T002817-cee9c2). Something hitting us in melee is within reach; the
+        swing is on, and "facing the wrong way" is the only bearing needed.
+        """
+        if (self._aim_code is not FaceCode.NOT_VISIBLE or values.get("vitals.combat") is not True
+                or values.get("target.attacking_me") is not True
+                or values.get("target.in_melee") is not True):
+            return False
+        event("engage.blind_melee", data={"name_id": values.get("target.name_id")})
+        self._blind_melee = True
+        self._last_aim_at = time.monotonic()
+        return self._ensure_attacking()
+
+    def _turn_round(self) -> bool:
+        turn = getattr(self.hid, "TURN_RIGHT", "d")
+        seconds = math.pi / TURN_RATE_SEED
+        event("engage.turn_round", data={"key": turn, "seconds": round(seconds, 3)})
+        if not self.hid.hold(turn, seconds, exact=True):
+            self._input_refused = True
+            self.detail = "turn input refused"
+            return False
+        return True
 
     def _aim_failure(self) -> Fought:
         if self._input_refused:

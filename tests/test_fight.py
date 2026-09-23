@@ -1372,3 +1372,28 @@ def test_a_selection_that_moves_on_without_experience_is_lost(combat_clock):
     f.acquire = lambda name_id, **_: None
     f.engage = lambda *_: True
     assert f.run(1161) is Fought.LOST and "changed" in f.detail
+
+
+def test_an_attacker_in_melee_whose_plate_cannot_be_proved_is_fought_by_the_clients_errors(
+        combat_clock):
+    """Two Defias Thugs side by side: every hover below the selected one's plate landed on
+    the other, and three fights in a row gave up "not visible" while the pair beat the
+    character to death (run 20260924T002817-cee9c2). Something hitting us in melee is in
+    reach; the swing goes on, and "facing the wrong way" turns the character round."""
+    hit = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": True,
+           "target.hp": 0.8, "ui.error_count": 3, "ui.error_last": 0, "bars.attacking": True}
+    behind = {**hit, "ui.error_count": 4, "ui.error_last": 3}          # 3 = not_facing
+    dead = {**behind, "target.hp": 0.0}
+    f = _fight([hit, hit, behind, behind, dead])
+    f.targeting.face = NOT_VISIBLE
+    outcome = f.run(1161, timeout_s=10.0)
+    assert outcome is Fought.KILLED, f.detail
+    turns = [h for h in f.hid.holds if h[0] == "d" and h[1] > 1.0]
+    assert len(turns) == 1, "did not turn round on 'facing the wrong way'"
+
+
+def test_an_unproved_plate_is_still_not_fought_blind_out_of_melee():
+    far = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": False}
+    f = _fight([far])
+    f.targeting.face = NOT_VISIBLE
+    assert f.run(1161, timeout_s=2.0) is Fought.NOT_VISIBLE
