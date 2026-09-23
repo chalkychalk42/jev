@@ -378,7 +378,7 @@ def fake_hid(monkeypatch):
     monkeypatch.setattr(win32, "scan_code", lambda key: key)
     monkeypatch.setattr(win32, "send_inputs", lambda inputs: sent.extend(inputs) or len(inputs))
     hid = Hid(require_focus=False)
-    hid._sleep = lambda delay: None
+    hid._sleep = lambda delay, **_: None
     return hid, sent
 
 

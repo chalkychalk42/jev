@@ -167,9 +167,22 @@ BAR_MIN_W = 30
 
 # A health bar has a surface, not just a horizontal edge. The yellow stock nameplate
 # border produced a solid 37x1 component at (990,391); clicking it selected a rabbit
-# behind the label. Every measured green/yellow bar is 5-7 pixels high;
-# excluding single-row strokes keeps those surfaces and rejects this border exactly.
-BAR_MIN_H = 2
+# behind the label. Every measured green/yellow bar is 5-8 pixels high. On 23 September
+# a yellow chat line under the system messages measured 40x3 at (118,643) and was taken
+# for a plate; four pixels keeps every measured bar and rejects both strokes.
+BAR_MIN_H = 4
+
+# A nameplate has one width at a given interface size; only its coloured *fill* shrinks
+# with the unit's health, anchored at the bar's left edge. Measured full bars: 146-149 px
+# on a 1611 px client, 145 px on 1600 px. Below about 57% health the fill fails the bar
+# aspect test entirely (a 7 px bar needs 84 px of fill), so a damaged unit's plate is
+# recognised separately and centred from its left edge.
+PLATE_FULL_W_FRAC = 0.0912
+# Partial bars: measured nameplate fills are 7-8 px tall here; most yellow flower blobs
+# are 4-5. A fill below 12 px is under 8% health. Candidates still need proof of identity.
+PARTIAL_BAR_MIN_H = 6
+PARTIAL_BAR_MAX_H = 12       # taller solid colour is not a health bar
+PARTIAL_BAR_MIN_W = 12
 
 # How far a plate may sit from a ring, horizontally, and still belong to the same unit.
 # Generous, because the ring's centroid is pulled sideways by grass occluding one arc.
@@ -389,6 +402,41 @@ def find_plates(frame: np.ndarray,
     return out
 
 
+def _partial_plate(blob: _Blob, colour: RingColour, shape: tuple[int, int]) -> Plate | None:
+    """A health bar at any fill: bar-shaped, solid, no wider than a full plate."""
+    full = PLATE_FULL_W_FRAC * shape[1]
+    if (blob.h < PARTIAL_BAR_MIN_H or blob.h > PARTIAL_BAR_MAX_H or blob.w < PARTIAL_BAR_MIN_W
+            or blob.w > 1.25 * full or not _outside_interface(blob, shape)):
+        return None
+    if blob.area / max(1.0, blob.w * blob.h) < BAR_FILL_MIN or blob.w < blob.h:
+        return None
+    left = blob.bounds[0] if blob.bounds else blob.cx - blob.w / 2
+    # The fill grows rightward from the plate's left edge; the plate's centre is where
+    # the unit is, whatever its health.
+    cx = blob.cx if blob.w >= 0.9 * full else left + full / 2
+    return Plate(cx=cx, cy=blob.cy, w=int(blob.w), colour=colour, h=int(blob.h),
+                 bounds=blob.bounds)
+
+
+def plate_candidates(frame: np.ndarray, colours: tuple[RingColour, ...] = PROPOSAL_COLOURS
+                     ) -> list[Plate]:
+    """Every health-bar-shaped component in these colours, at any health, nearest centre first.
+
+    Candidates only: flowers and interface strokes can pass a shape test, so a caller must
+    establish which (if any) belongs to the selected unit - by exact hover ownership, or by
+    tracking a plate it has already proved. Colour follows reaction and combat: a neutral
+    wolf's plate turned red once it fought back.
+    """
+    shape = frame.shape[:2]
+    out = []
+    for colour in colours:
+        for blob in _blobs(_PLATE_RULES[colour].mask(frame)):
+            if (plate := _partial_plate(blob, colour, shape)) is not None:
+                out.append(plate)
+    out.sort(key=lambda p: abs(p.cx - shape[1] / 2))
+    return out
+
+
 def plate_colours(reaction: int | None) -> tuple[RingColour, ...]:
     """Plate colours a unit with this radio reaction can be drawn in.
 
@@ -403,12 +451,13 @@ def plate_colours(reaction: int | None) -> tuple[RingColour, ...]:
 
 
 def selected_plates(frame: np.ndarray, reaction: int | None = None) -> list[Plate]:
-    """Nameplates drawn at full brightness in the selected unit's possible colours.
+    """Whole nameplates in the colours the selected unit's reaction can take.
 
-    Selecting a unit fades every other stock nameplate (measured on merchants and wolves:
-    one bright plate, the rest dim), so with a target selected this is normally exactly
-    one plate. More than one is ambiguity for the caller to resolve, never a guess here.
-    Plates never appear on corpses, and not beyond the client's plate draw distance.
+    A candidate set, not an identity. Selection does not reliably fade other plates: on
+    23 September a rabbit's plate measured as bright (median 129,121,8) as a selected
+    wolf's. Which plate is the target's needs exact hover ownership (see
+    `Targeting.face_selected`). Plates never appear on corpses, nor beyond the client's
+    nameplate distance.
     """
     return find_plates(frame, plate_colours(reaction), selected=True)
 

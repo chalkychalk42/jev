@@ -43,7 +43,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
-from jev.clients.targeting import FaceCode, PaintCode, Targeting
+from jev.clients.targeting import FACE_SEARCH_MAX_S, FaceCode, HoverCode, PaintCode, Targeting
 from jev.perceive.radio_frame import UI_ERROR_KEYS
 from jev.perceive.units import Plate, find_plates
 from jev.run.evidence import event, operation, traced
@@ -83,6 +83,10 @@ CROWD_PX = 260
 MIN_START_HP = 0.55
 FLEE_HP = 0.30
 
+# After a target vanishes, how long to watch for the experience that proves a kill.
+SETTLE_LOOKS = 3
+SETTLE_LOOK_S = 0.25
+
 # Tab presses before giving up on finding something attackable.
 MAX_SELECTS = 4
 
@@ -105,6 +109,11 @@ MAX_CLOSE_BURSTS = 12
 # A toggle's new state reaches the radio a paint or two after the key. Pressing it again
 # inside this window would read the old state and switch it straight back.
 TOGGLE_SETTLE_S = 1.0
+
+# Turning to look for a freshly selected unit with no plate on screen. Two steps cover
+# about eighty degrees; a unit Tab chose ahead but beyond nameplate range is not found
+# by turning further, and a full turn costs three seconds per look.
+FRESH_SEARCH_S = 0.6
 
 # Re-face after this long without the target losing any health, or at once when the
 # client reports "facing the wrong way". Health coming off the target is the only evidence
@@ -195,6 +204,9 @@ class Fight:
     _aim_code: FaceCode | None = field(default=None, init=False)
     # The selected unit's plate at the last facing look: where a corpse will lie.
     last_plate: Plate | None = field(default=None, init=False)
+    # The name of the unit the last fight killed, for finding its corpse by hover.
+    killed_name_id: int | None = field(default=None, init=False)
+    _xp_start: tuple | None = field(default=None, init=False)
     _strides: int = field(default=0, init=False)
     _error_count: int | None = field(default=None, init=False)
     _damage_seen: bool = field(default=False, init=False)
@@ -220,6 +232,8 @@ class Fight:
         self._selected_name_id = None
         self._aim_code = None
         self.last_plate = None
+        self.killed_name_id = None
+        self._xp_start = None
         self._strides = 0
         self._error_count = None
         self._damage_at = time.monotonic()
@@ -233,6 +247,7 @@ class Fight:
         if v is None:
             return Fought.BLIND
         self._error_count = v.get("ui.error_count")   # errors before the fight are not news
+        self._xp_start = (v.get("char.level"), v.get("char.xp_pct"))
         # The health guard is about **picking** fights, not about surviving one already
         # under way. Refusing to swing back because health is low is how a character
         # stands there being hit at 49%, declines to eat because it is in combat, and
@@ -273,7 +288,7 @@ class Fight:
             self._selected_name_id = v.get("target.name_id")
             self._damage_mark = v.get("target.hp")
             self.selected_plate = None
-        if not self.engage():
+        if not self.engage(v):
             return self._aim_failure()
         # Acquisition/verification time is not time spent trying to deal damage.
         self._damage_at = self._last_aim_at = time.monotonic()
@@ -304,7 +319,7 @@ class Fight:
                 return Fought.LOSING
 
             if v.get("target.has") is not True:
-                return self._settle()
+                return self._settle(v)
             if (self._selected_name_id is not None
                     and v.get("target.name_id") != self._selected_name_id):
                 self.detail = "selected target changed during fight"
@@ -313,7 +328,7 @@ class Fight:
             if hp is not None:
                 self.last_hp = hp
             if hp == DEAD_HP:
-                return self._settle()
+                return self._settle(v)
 
             # Walking and swinging are the same loop, not one after the other.
             #
@@ -348,13 +363,13 @@ class Fight:
             wrong_way = self._new_error(v) == "not_facing"
             if in_reach:
                 # Stand and swing. Turn back only on evidence the swings are not landing.
-                if (wrong_way or stalled) and not self.engage():
+                if (wrong_way or stalled) and not self.engage(v):
                     return self._aim_failure()
             elif self._strides < MAX_CLOSE_BURSTS:
                 # Not while casting: movement cancels a cast, and the only thing being
                 # cast here is a heal that is keeping us alive.
                 if v.get("bars.casting") is not True:
-                    if not self.engage():      # face before every stride, never walk blind
+                    if not self.engage(v):     # face before every stride, never walk blind
                         return self._aim_failure()
                     duration = (CLOSE_BURST_S if not near else
                                 CLOSE_STEP_S if melee is False else CLOSE_NUDGE_S)
@@ -397,11 +412,27 @@ class Fight:
         frame = self.read_frame()
         if frame is not None:
             for plate in self._candidates(frame):
+                point = (self.window_origin[0] + round(plate.cx),
+                         self.window_origin[1] + round(plate.cy))
+                # Ask the client whose plate this is before selecting it. Clicking the
+                # nearest plate selected a rabbit on every look of the first live run.
+                # Self-defence has no name to ask for: whatever is attacking us is chosen
+                # by the radio after the click, exactly as before.
+                if name_id is not None and not defend:
+                    hover = self._targeting().probe(point, require_target=False)
+                    event("selection.hover", code=hover.code.value,
+                          data={"point": list(point), "wanted_name_id": name_id,
+                                "name_id": (hover.after or {}).get("cursor.name_id")})
+                    if hover.code in (HoverCode.REFUSED, HoverCode.BLIND):
+                        self.detail = hover.detail
+                        return Fought.REFUSED if hover.code is HoverCode.REFUSED else Fought.BLIND
+                    after = hover.after or {}
+                    if (after.get("cursor.has") is not True or after.get("cursor.dead") is True
+                            or after.get("cursor.name_id") != name_id):
+                        continue
                 event("selection.request", data={"method": "plate", "wanted_name_id": name_id,
-                      "point": [self.window_origin[0] + round(plate.cx),
-                                self.window_origin[1] + round(plate.cy)]})
-                if not self.hid.click(self.window_origin[0] + round(plate.cx),
-                                      self.window_origin[1] + round(plate.cy)):
+                      "point": list(point)})
+                if not self.hid.click(*point):
                     self.detail = "selection input refused"
                     return Fought.REFUSED
                 paint = self._targeting().wait_for_paint()
@@ -409,7 +440,7 @@ class Fight:
                     self.detail = paint.detail
                     return Fought.BLIND
                 if self._acceptable(name_id, defend=defend, values=paint.after) is True:
-                    self.selected_plate = plate
+                    self.selected_plate = self.last_plate = plate
                     return None
         return self.select(name_id, defend=defend)
 
@@ -498,13 +529,21 @@ class Fight:
                                            window_origin=self.window_origin)
 
     @traced("target.engage")
-    def engage(self) -> bool:
+    def engage(self, values: dict | None = None) -> bool:
         """Face the selected unit, then have melee auto-attack on. Damage stays observed.
 
         Facing is the shared `Targeting.face_selected`: turn until the unit's own plate is
         on the centre line. Auto-attack is pressed only when the radio says it is off.
+        `values` is the caller's latest reading, used only to size the search.
         """
-        result = self._targeting().face_selected(expected_name_id=self._selected_name_id)
+        v = values or {}
+        # A unit already fighting us can be anywhere, including behind: search a full turn.
+        # A fresh selection with no plate is usually beyond nameplate range ahead, where
+        # turning cannot help; a short look settles it and the hunt moves on.
+        fighting = v.get("vitals.combat") is True or v.get("target.attacking_me") is True
+        result = self._targeting().face_selected(
+            expected_name_id=self._selected_name_id, hint=self.last_plate,
+            search_s=FACE_SEARCH_MAX_S if fighting else FRESH_SEARCH_S)
         self._aim_code = result.code
         self.detail = result.detail
         event("engage.request", code=result.code.value,
@@ -752,18 +791,40 @@ class Fight:
             self._pending_heal = None
 
     @traced("fight.settle")
-    def _settle(self) -> Fought:
+    def _settle(self, values: dict | None = None) -> Fought:
         """It is gone. Did we kill it?
 
-        The last health seen decides, because vanishing is one observation with two
-        causes. A caller that needs certainty counts `quests.o0_have`, which is the
-        server's tally and not an inference.
+        Vanishing is one observation with two causes. Health seen at zero decides it, and
+        so does experience: the client cleared the selection at the moment of a live kill
+        (23 September, the wolf at 20% one paint and gone the next, with XP arriving on the
+        same tick), and in a fight nothing but a kill grants experience. Experience can
+        lag the disappearance by a paint, so a vanished target is watched briefly for it.
+        A caller that needs certainty still counts `quests.o0_have`.
         """
         event("fight.last_health", data={"target_hp": self.last_hp})
-        if self.last_hp == 0.0:
+        if self.last_hp == 0.0 or self._gained(values):
+            self.killed_name_id = self._selected_name_id
             return Fought.KILLED
+        for _ in range(SETTLE_LOOKS):
+            time.sleep(SETTLE_LOOK_S)
+            later = self.read()
+            self._observe(later)
+            if self._gained(later):
+                self.killed_name_id = self._selected_name_id
+                return Fought.KILLED
         self.detail = "target disappeared without observed death"
         return Fought.LOST
+
+    def _gained(self, values: dict | None) -> bool:
+        """Experience or a level above what the fight started with."""
+        if values is None or self._xp_start is None:
+            return False
+        level, xp = values.get("char.level"), values.get("char.xp_pct")
+        start_level, start_xp = self._xp_start
+        if isinstance(level, int) and isinstance(start_level, int) and level > start_level:
+            return True
+        return (level == start_level and isinstance(xp, (int, float))
+                and isinstance(start_xp, (int, float)) and xp > start_xp)
 
     @staticmethod
     def _observe(values: dict | None) -> None:

@@ -245,19 +245,19 @@ def test_direct_combat_does_not_hide_post_kill_loot_failure(outcome, status):
     b = body()
     plate = object()
     b.fight = SimpleNamespace(run=Mock(return_value=Fought.KILLED), detail="observed death",
-                              last_plate=plate)
+                              last_plate=plate, killed_name_id=2864)
     b.loot = SimpleNamespace(run=Mock(return_value=outcome), detail="uncompleted corpse action")
     result = b._fight(seen())
     assert result.outcome is status and result.code == outcome.value
     assert result.detail == "post-kill loot: uncompleted corpse action"
-    b.loot.run.assert_called_once_with(progress=b._progress, anchor=plate)
+    b.loot.run.assert_called_once_with(progress=b._progress, anchor=plate, name_id=2864)
 
 
 @pytest.mark.parametrize("outcome", [Looted.TOOK, Looted.NOTHING])
 def test_direct_combat_keeps_success_after_observed_loot_outcome(outcome):
     b = body()
     b.fight = SimpleNamespace(run=lambda _: Fought.KILLED, detail="observed death",
-                              last_plate=None)
+                              last_plate=None, killed_name_id=None)
     b.loot = SimpleNamespace(run=lambda **_: outcome, detail="observed corpse outcome")
     result = b._fight(seen())
     assert result.outcome is SkillOutcome.SUCCEEDED and result.code == "killed"

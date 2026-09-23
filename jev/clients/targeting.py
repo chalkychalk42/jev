@@ -57,12 +57,20 @@ FACE_MAX_TURNS = 8
 FACE_SEARCH_STEP_S = 0.3
 FACE_SEARCH_MAX_S = 2.8
 _FACE_RATE_BOUNDS = (0.08, 4.0)   # offset per second; outside this a reading is noise
+# Which plate is the target's. Selection does not reliably fade other plates - a rabbit's
+# plate measured as bright as a selected wolf's - so a plate is proved by exact hover
+# ownership once, then tracked: the nearest candidate to where the last proved plate was
+# predicted to move. A health bar's fill shrinks, but its left edge and centre do not.
+FACE_HOVER_PROBES = 3
+TRACK_DX, TRACK_DY = 0.06, 0.05      # fractions of the client width / height
+# A turn's outcome is uncertain by a share of its own size (the rate is still being
+# measured), so the horizontal window grows with the predicted shift.
+TRACK_SHIFT_SHARE = 0.6
 
 
 class FaceCode(StrEnum):
     FACED = "faced"              # the selected unit's plate is on the centre line
     NOT_VISIBLE = "not_visible"  # no plate for it after a bounded search
-    AMBIGUOUS = "ambiguous"      # several bright plates and none proved to be the target
     UNSETTLED = "unsettled"      # turns ran out before the plate reached the centre
     NO_TARGET = "no_target"
     WRONG_TARGET = "wrong_target"
@@ -162,14 +170,17 @@ class Targeting:
                 or self.wait_s <= 0 or self.poll_s <= 0):
             raise ValueError("hover wait and polling interval must be positive and finite")
 
-    def probe(self, point: tuple[int, int]) -> HoverResult:
+    def probe(self, point: tuple[int, int], *, require_target: bool = True) -> HoverResult:
         """Move to screen coordinates and observe fresh, exact selected-unit equality.
 
         Name hashes are retained for diagnosis and detecting an obvious selection
         change. They never establish equality: two wolves can have the same name.
+        Without `require_target` it reports what is under the pointer (OTHER for any
+        unit that is not the selection) for callers that identify a unit before, or
+        without, selecting it - its name and death come from the fresh paint.
         """
         with operation("target.hover", data={"point": list(point)}) as span:
-            result = self._probe(point)
+            result = self._probe(point, require_target)
             if span.enabled:
                 span.finish(code=result.code.value, detail=result.detail, data={
                     "before": result.before, "after": result.after,
@@ -211,7 +222,7 @@ class Targeting:
         return PaintResult(PaintCode.UNKNOWN, baseline, after,
                            "no new paint after action before timeout")
 
-    def _probe(self, point: tuple[int, int]) -> HoverResult:
+    def _probe(self, point: tuple[int, int], require_target: bool = True) -> HoverResult:
         self._checkpoint()
         before = self.read()
 
@@ -220,7 +231,7 @@ class Targeting:
 
         if before is None:
             return result(HoverCode.BLIND, "no radio before pointer movement")
-        if before.get("target.has") is not True:
+        if require_target and before.get("target.has") is not True:
             return result(HoverCode.NO_TARGET, "no observed selected unit")
         if not self.hid.move_to(*point):
             return result(HoverCode.REFUSED, "pointer movement was not delivered")
@@ -241,9 +252,10 @@ class Targeting:
         if cursor_position is not None and cursor_position() != point:
             return result(HoverCode.UNKNOWN, "pointer changed while waiting for paint", paint.after)
         after = paint.after
-        if after.get("target.has") is not True:
+        if require_target and after.get("target.has") is not True:
             return result(HoverCode.NO_TARGET, "selected unit lost during hover", after)
-        if after.get("target.name_id") != before.get("target.name_id"):
+        if (after.get("target.has") is True or before.get("target.has") is True) and (
+                after.get("target.name_id") != before.get("target.name_id")):
             return result(HoverCode.TARGET_CHANGED, "selection name changed during hover", after)
         world = after.get("cursor.world")
         has = after.get("cursor.has")
@@ -303,7 +315,8 @@ class Targeting:
 
     def face_selected(self, *, expected_name_id: int | None = None,
                       tolerance: float = FACE_TOLERANCE, max_turns: int = FACE_MAX_TURNS,
-                      search_s: float = FACE_SEARCH_MAX_S) -> FaceResult:
+                      search_s: float = FACE_SEARCH_MAX_S,
+                      hint: units.Plate | None = None) -> FaceResult:
         """Turn until the selected living unit's own nameplate is on the centre line.
 
         The one facing primitive for closing to melee, turning back to a unit that walked
@@ -316,19 +329,22 @@ class Targeting:
             raise ValueError("facing tolerance and turn budget are out of range")
         if not math.isfinite(search_s) or search_s < 0:
             raise ValueError("facing search budget must be finite and non-negative")
-        with operation("target.face", data={"wanted_name_id": expected_name_id}) as span:
-            result = self._face(expected_name_id, tolerance, max_turns, search_s)
+        with operation("target.face", data={"wanted_name_id": expected_name_id,
+                       "hint": None if hint is None else [round(hint.cx), round(hint.cy)]}) as span:
+            result = self._face(expected_name_id, tolerance, max_turns, search_s, hint)
             span.finish(code=result.code.value, detail=result.detail,
                         data={"offset": result.offset, "turns": result.turns,
                               "turned_s": round(result.turned_s, 3)})
             return result
 
-    def _face(self, wanted, tolerance, max_turns, search_s) -> FaceResult:
+    def _face(self, wanted, tolerance, max_turns, search_s, hint) -> FaceResult:
         left = getattr(self.hid, "TURN_LEFT", "a")
         right = getattr(self.hid, "TURN_RIGHT", "d")
         turns, turned, searched = 0, 0.0, 0.0
         rate = 1.0 / FACE_GAIN_S
         before = pulse = None          # offset measured before the last pulse, and its length
+        tracked = (hint.cx, hint.cy) if hint is not None else None
+        slack = 0.0                     # extra horizontal tracking tolerance, pixels
         search_key = left
 
         def done(code: FaceCode, detail: str, offset=None, plate=None) -> FaceResult:
@@ -340,13 +356,14 @@ class Targeting:
             if error is not None:
                 return done(_FACE_FROM_CLICK.get(error, FaceCode.BLIND),
                             f"target observation: {view.fault}")
-            plate = self._selected_plate(view)
+            plate = self._target_plate(view, tracked, slack)
             if isinstance(plate, FaceResult):
                 return done(plate.code, plate.detail)
             if plate is None:
+                tracked = None
                 if searched >= search_s:
                     return done(FaceCode.NOT_VISIBLE,
-                                "no plate for the selected unit after the search turn")
+                                "no plate proved to be the selected unit's after the search turn")
                 event("face.search", data={"key": search_key, "seconds": FACE_SEARCH_STEP_S,
                                            "searched_s": round(searched, 3)})
                 if not self.hid.hold(search_key, FACE_SEARCH_STEP_S):
@@ -382,15 +399,27 @@ class Targeting:
             turns += 1
             turned += pulse
             before = offset
+            # Where this pulse should have carried the proved plate: toward the centre.
+            shift = min(abs(offset), rate * pulse) * width
+            tracked = (plate.cx - shift if offset > 0 else plate.cx + shift, plate.cy)
+            slack = TRACK_SHIFT_SHARE * shift
             self.wait_for_paint()
 
-    def _selected_plate(self, view: TargetView) -> units.Plate | FaceResult | None:
-        """The selected unit's plate, `None` when none is drawn, or a terminal result."""
-        plates = units.selected_plates(view.frame, view.values.get("target.reaction"))
-        if len(plates) <= 1:
-            return plates[0] if plates else None
-        width = view.frame.shape[1]
-        for plate in sorted(plates, key=lambda p: abs(p.cx - width / 2))[:3]:
+    def _target_plate(self, view: TargetView, tracked,
+                      slack: float = 0.0) -> units.Plate | FaceResult | None:
+        """The selected unit's plate: tracked from a proved one, else proved by hover."""
+        height, width = view.frame.shape[:2]
+        candidates = units.plate_candidates(view.frame,
+                                            units.plate_colours(view.values.get("target.reaction")))
+        if tracked is not None:
+            near = [p for p in candidates if abs(p.cx - tracked[0]) <= TRACK_DX * width + slack
+                    and abs(p.cy - tracked[1]) <= TRACK_DY * height]
+            if near:
+                return min(near, key=lambda p: math.hypot(p.cx - tracked[0], p.cy - tracked[1]))
+        full = units.PLATE_FULL_W_FRAC * width
+        # Whole bars first: a fresh unit's plate is full, and flowers are not 147 px wide.
+        ordered = sorted(candidates, key=lambda p: (p.w < 0.9 * full, abs(p.cx - width / 2)))
+        for plate in ordered[:FACE_HOVER_PROBES]:
             point = (self.window_origin[0] + round(plate.cx),
                      self.window_origin[1] + round(plate.cy))
             hover = self.probe(point)
@@ -403,19 +432,23 @@ class Targeting:
             if hover.code in (HoverCode.NO_TARGET, HoverCode.TARGET_CHANGED):
                 return FaceResult(FaceCode.NO_TARGET if hover.code is HoverCode.NO_TARGET
                                   else FaceCode.WRONG_TARGET, hover.detail)
-        return FaceResult(FaceCode.AMBIGUOUS,
-                          f"{len(plates)} bright plates and no hover proved the target")
+        return None
 
     def click_corpse(self, *, expected_name_id: int | None = None,
                      anchor: units.Plate | None = None, max_probes: int = 16,
                      timeout_s: float = 8.0) -> ClickResult:
-        """Right-click the selected corpse where a fresh hover reports it dead.
+        """Right-click the corpse where a fresh hover reports it dead.
 
-        A dead unit has no nameplate, so a fresh hover that reports the *selected* unit
-        dead can only be its body - the nameplate ambiguity that forbids trusting a living
-        unit's hover does not exist here. A corpse does not move, so the verified pointer
-        is still on it when the button goes down. Proposals are the last living plate's
-        column, then the centre line; ownership alone authorizes the click.
+        A dead unit has no nameplate, so a fresh hover that reports a dead unit can only
+        be its body - the nameplate ambiguity that forbids trusting a living unit's hover
+        does not exist here. A corpse does not move, so the verified pointer is still on
+        it when the button goes down. Proposals are the last living plate's column, then
+        the centre line.
+
+        With the corpse selected, the hover must be exactly the selection. The client
+        can also clear the selection at the kill (measured on 23 September: the target
+        vanished the moment XP arrived); then a dead unit of the killed unit's name is
+        the corpse to take, and `expected_name_id` is required.
         """
         if type(max_probes) is not int or max_probes <= 0:
             raise ValueError("max_probes must be a positive integer")
@@ -432,7 +465,15 @@ class Targeting:
     def _click_corpse(self, wanted, anchor, max_probes, timeout_s) -> ClickResult:
         deadline = time.monotonic() + timeout_s
         view = self._view()
-        error = self._eligible(view.values, wanted, "corpse")
+        values = view.values
+        selected = values is not None and values.get("target.has") is True
+        if selected or values is None:
+            error = self._eligible(values, wanted, "corpse")
+        elif (values.get("ui.modal") is True or values.get("vitals.dead") is True
+              or values.get("vitals.ghost") is True):
+            error = ClickCode.INTERRUPTED
+        else:
+            error = ClickCode.NO_TARGET if wanted is None else None
         if error is not None:
             self._retain("corpse-unavailable", view)
             return ClickResult(error, None, f"target observation: {view.fault}")
@@ -449,14 +490,18 @@ class Targeting:
                 break
             screen = (local[0] + self.window_origin[0], local[1] + self.window_origin[1])
             attempts += 1
-            hover = self.probe(screen)
+            hover = self.probe(screen, require_target=selected)
             if hover.code in terminal:
                 self._retain("corpse-rejected", view)
                 return ClickResult(terminal[hover.code], screen,
                                    f"hover: {hover.code}: {hover.detail}", attempts)
-            if hover.code is not HoverCode.MATCH:
+            after = hover.after or {}
+            if selected and hover.code is not HoverCode.MATCH:
                 continue
-            if hover.after.get("cursor.dead") is not True:
+            if not selected and (hover.code is not HoverCode.OTHER
+                                 or after.get("cursor.name_id") != wanted):
+                continue
+            if after.get("cursor.dead") is not True:
                 last = ClickResult(ClickCode.WRONG_KIND, screen,
                                    "selected unit under the pointer is not observed dead",
                                    attempts)

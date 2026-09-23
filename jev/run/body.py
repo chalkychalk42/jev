@@ -331,7 +331,8 @@ class LiveBody:
     def _fight(self, state) -> Result:
         outcome = self.fight.run(None)
         if outcome.ok:
-            looted = self.loot.run(progress=self._progress, anchor=self.fight.last_plate)
+            looted = self.loot.run(progress=self._progress, anchor=self.fight.last_plate,
+                                   name_id=self.fight.killed_name_id)
             if not looted.ok:
                 return self._result(looted, f"post-kill loot: {self.loot.detail}")
         return self._result(outcome, self.fight.detail)
@@ -345,10 +346,11 @@ class LiveBody:
         return Result(status, result.detail, result.code.value)
 
     def _loot(self, state) -> Result:
-        # The last plate the most recent fight faced, when it is the corpse now selected.
-        anchor = self.fight.last_plate if self.fight.last_hp == 0.0 else None
-        return self._result(self.loot.run(progress=self._progress, anchor=anchor),
-                            self.loot.detail)
+        # Where and what the most recent fight killed, when it killed something.
+        killed = self.fight.killed_name_id
+        anchor = self.fight.last_plate if killed is not None else None
+        return self._result(self.loot.run(progress=self._progress, anchor=anchor,
+                                          name_id=killed), self.loot.detail)
 
     def _rest(self, state) -> Result:
         if state.vitals.power_type is PowerType.MANA and state.vitals.power is not None and state.vitals.power < 0.35:

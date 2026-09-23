@@ -432,3 +432,37 @@ def test_geometry_and_selection_are_decoded_from_the_same_real_frame():
     result = targeting.click_selected(expected_name_id=2864)
     assert result.code is ClickCode.WRONG_TARGET
     assert hid.moves == hid.buttons == []
+
+
+DESELECTED = {"target.has": False, "target.name_id": None, "target.hp": None}
+
+
+def _deselected_corpse_harness(harness, **hovered):
+    harness.observations = [radio(1, **DESELECTED)]
+    under = {**DESELECTED, "cursor.has": True, "cursor.is_target": False, "cursor.world": True,
+             "cursor.dead": True, "cursor.name_id": 2864, **hovered}
+    harness.samples = [radio(1, **DESELECTED), radio(2, **under), radio(3, **under)]
+    return harness
+
+
+def test_a_corpse_the_kill_deselected_is_found_by_its_dead_hover_and_name(harness):
+    """Live, 23 Sep: the selection cleared at the kill. A dead unit has no nameplate, so a
+    fresh dead hover of the killed unit's name is its body."""
+    result = _deselected_corpse_harness(harness).targeting.click_corpse(expected_name_id=2864)
+    assert result.code is ClickCode.CLICKED
+    assert harness.hid.buttons == [((), {"right": True})]
+
+
+@pytest.mark.parametrize("hovered", [{"cursor.dead": False}, {"cursor.name_id": 1648},
+                                     {"cursor.has": False, "cursor.name_id": None}])
+def test_a_deselected_corpse_needs_a_dead_hover_of_the_killed_name(harness, hovered):
+    result = _deselected_corpse_harness(harness, **hovered).targeting.click_corpse(
+        expected_name_id=2864)
+    assert result.code is not ClickCode.CLICKED
+    assert harness.hid.buttons == []
+
+
+def test_without_a_selection_or_a_name_there_is_no_corpse_to_look_for(harness):
+    result = _deselected_corpse_harness(harness).targeting.click_corpse()
+    assert result.code is ClickCode.NO_TARGET
+    assert harness.hid.moves == harness.hid.buttons == []

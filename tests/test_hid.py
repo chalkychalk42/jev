@@ -171,7 +171,7 @@ def test_a_shifted_character_is_sent_as_a_chord_not_as_its_unshifted_key():
 def delivered_input(monkeypatch):
     hid = Hid()
     monkeypatch.setattr(hid, "ready", lambda: True)
-    monkeypatch.setattr(hid, "_sleep", lambda _: None)
+    monkeypatch.setattr(hid, "_sleep", lambda *_, **__: None)
     monkeypatch.setattr(hid, "_abs", lambda x, y: (x, y))
     monkeypatch.setattr(win32, "user32", SimpleNamespace(GetCursorPos=lambda _: 1))
     monkeypatch.setattr(win32, "scan_code", lambda vk: vk)
@@ -266,3 +266,15 @@ def test_all_callers_observe_refused_cleanup(delivered_input, monkeypatch):
         hid.release_all()
     assert len(events) == len(Hid.MOVEMENT_KEYS) + 1
     assert hid.held == {"w"} and hid.held_buttons == {True}
+
+
+def test_a_long_drag_pays_the_client_stagger_once_not_per_step(monkeypatch):
+    """A 2,500 px camera drag in 10 px steps took 21 s when every step paid the stagger."""
+    hid = Hid(humaniser=Humaniser(stagger_ms=63.0))
+    staggered = []
+    monkeypatch.setattr("jev.clients.hid.time.sleep", lambda seconds: staggered.append(seconds))
+    monkeypatch.setattr(hid, "_guard", lambda: True)
+    monkeypatch.setattr(hid, "_send", lambda event: True)
+    assert hid.move_by(0, 2000)
+    assert len(staggered) == 200
+    assert max(staggered) < 0.03, "a drag step waited for the client stagger"

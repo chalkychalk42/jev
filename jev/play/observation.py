@@ -66,9 +66,10 @@ def visual_features(pixels) -> dict[str, float]:
 def detections(pixels, values: dict) -> dict:
     """Where the client drew nameplates in this capture, as fractions of the image.
 
-    The selected unit's plate is the one bright plate in its reaction's colours; several
-    bright plates are reported as ambiguous rather than resolved by position here.
-    Detections are observations for the tutor and the effect judge, not identities.
+    `selected_plate` is the only whole plate in the colours the target's reaction can
+    take, when there is exactly one - a likely target plate, not a proved one (selection
+    does not fade other plates). Several are reported as ambiguous. Detections inform
+    the tutor and the effect judge; identity comes from hover, never from here.
     """
     from jev.perceive import units
 
@@ -209,6 +210,11 @@ def measured_effects(before: dict, after: dict) -> tuple[list[str], float]:
         effects.append("selected")
     if a.get("target.has") is True and b.get("target.has") is False:
         effects.append("target_cleared")
+        # The client can clear the selection at the kill itself (measured 23 September:
+        # the wolf at 20% one paint, gone the next, experience arriving with it). In a
+        # fight nothing else grants experience, so that pairing is the kill.
+        if _increase(a, b, "char.xp_pct") or _increase(a, b, "char.level"):
+            effects.append("target_dead")
     same = (a.get("target.has") is True and b.get("target.has") is True
             and a.get("target.name_id") is not None
             and a.get("target.name_id") == b.get("target.name_id"))

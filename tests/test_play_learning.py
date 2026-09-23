@@ -540,3 +540,20 @@ def test_active_policy_rolls_back_when_successful_work_becomes_slower(tmp_path):
     learner.update()
     assert learner.status()["capabilities"]["approach"]["mode"] == "blocked"
     assert "throughput" in learner.status()["capabilities"]["approach"]["reason"]
+
+
+def test_a_routine_jev_chose_is_learned_as_a_whole_action(tmp_path):
+    """Delegating COMBAT_PROFILE in the right situation is a decision the student can take
+    over; only routines without parameters of their own become labels."""
+    learner = MotorLearner(tmp_path / "motor", config=config())
+    routine = {"kind": "skill", "name": "COMBAT_PROFILE", "params": {}}
+    model = teach(learner, capability="combat", action=routine)
+    assert model is not None
+    prediction = predict(learner, capability="combat")
+    assert prediction.action == routine
+
+
+def test_a_routine_with_graph_parameters_is_not_a_label(tmp_path):
+    learner = MotorLearner(tmp_path / "motor", config=config())
+    routine = {"kind": "skill", "name": "TRAVEL_TO", "params": {"x": 0.5, "y": 0.4}}
+    assert teach(learner, capability="travel", action=routine) is None

@@ -167,7 +167,7 @@ def test_tutor_sees_goal_state_plate_history_and_only_the_available_actions():
     prompt, image, schema, _ = client.requests[0]
     assert "observation_id: observation-1" in prompt
     assert "Unit to find: Young Wolf" in prompt
-    assert "0.31 right of centre: turn right to face it" in prompt
+    assert "(0.31 right of centre: turn right to face it)" in prompt
     assert "turn_right 0.25s -> worked (delivered); effects: faced" in prompt
     assert "- skill:COMBAT_PROFILE:" in prompt and "loot_corpse" not in prompt
     assert image == PNG

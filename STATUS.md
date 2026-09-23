@@ -1651,3 +1651,43 @@ VERIFICATION: full suite passes; Ruff (`jev tools tests`) and `git diff --check`
 New tests cover facing in a simulated world with real plate pixels, toggle state, closing on
 range, corpse hover search, every menu rule, strict parsing, re-asks, transient retries and
 the scripted fallback. Offline evidence does not establish that a live swing lands.
+
+## 2026-09-23 — First live test of turn-to-face: a wolf killed, and six measured gaps
+
+DID: deployed the schema 9 addon (backup of the schema 8 files kept locally), enabled
+Blizzard_TimeManager for the character (its disabled state raised the "Couldn't load"
+dialog at every login; the next login showed no dialog), and ran the scripted body on quest
+33 for about two and a half minutes (`20260923T084254-eb70bb`, one-second screenshots,
+stopped with the stop file; all keys and buttons released afterwards).
+
+LIVE EVIDENCE: facing works. `Targeting.face_selected` centred the wolf's plate in 0-3 turns
+each look; Fight pressed the Attack toggle once, strode and re-faced, and the wolf went
+100% -> 60% -> 20% while the character took 4%. XP rose 61.8% -> 67.7% ("XP: 53" on screen)
+and the corpse lay at the character's feet: the first facing-based kill. Schema 9 decodes
+live; `bars.attacking` reads, but `target.melee_range` stays unknown because 2.4.3 gives the
+Attack action no range, so closing still ends on damage.
+
+MEASURED GAPS, each fixed in its shared owner:
+- The client **cleared the selection at the kill** (wolf at 20% one paint, no target the
+  next, XP arriving with it), so Fight reported `lost` and Loot found no corpse. Kills are now
+  also proved by experience gained (Fight._settle and the judge's `target_dead`), and
+  `Targeting.click_corpse` finds a deselected corpse by a fresh dead hover of the killed
+  unit's name, under the last plate it had alive.
+- **Selection does not fade other plates**: a rabbit's plate measured as bright (median
+  129,121,8) as a selected wolf's. Facing now proves the target's plate by exact hover once
+  and then tracks it, with a window that grows with each turn's uncertainty.
+- A **health bar's fill shrinks** with health; below about 57% the wolf's plate failed the
+  bar shape test. `units.plate_candidates` accepts any fill and centres a partial bar from
+  its left edge and the measured full plate width (0.0912 of the client width).
+- A **yellow chat line** (40x3 px) passed as a plate; bars under 4 px tall are rejected
+  (every measured bar is 5-8 px).
+- **Acquisition clicked rabbits**: Fight now hovers each plate and selects only a unit
+  whose client-reported name is the wanted one; self-defence keeps the old radio check.
+- **Camera calibration took 21 s**: every 10 px step of the drag paid the per-client
+  stagger. The stagger is now paid once per gesture (about 4 s expected).
+
+The routine choices Jev makes (COMBAT_PROFILE, LOOT, ...) are now learnable labels for the
+local student, so delegating a working routine can itself be handed over.
+
+NOW: the next live window, with the operator's desktop free: repeated kill -> corpse loot ->
+Tough Wolf Meat progress with the scripted body, then the same with Jev choosing.

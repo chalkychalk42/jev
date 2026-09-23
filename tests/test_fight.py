@@ -29,6 +29,8 @@ from jev.clients.targeting import (
     ClickResult,
     FaceCode,
     FaceResult,
+    HoverCode,
+    HoverResult,
     PaintCode,
     PaintResult,
 )
@@ -68,6 +70,7 @@ class _Targeting:
         self.face = face or FACED
         self.action = action or ClickResult(ClickCode.CLICKED, (710, 438), "delivered", 1)
         self.faces = []        # facing requests
+        self.hover_name = 1161
         self.requests = []     # living-unit click requests (Interact)
         self.paints = 0
 
@@ -80,6 +83,12 @@ class _Targeting:
     def face_selected(self, **request):
         self.faces.append(request)
         return self.face
+
+    def probe(self, point, require_target=True):
+        """Every plate is the wanted unit's, unless a test says otherwise."""
+        after = {"cursor.has": True, "cursor.dead": False,
+                 "cursor.name_id": self.hover_name, "cursor.world": True}
+        return HoverResult(HoverCode.OTHER, point, None, after, "fixture hover")
 
     def click_selected(self, **request):
         self.requests.append(request)
@@ -159,7 +168,7 @@ def test_engaging_never_clicks_the_body_it_turns_and_starts_the_swing():
     assert f.engage() is True
     assert hid.clicks == [], "aimed by clicking, which does not turn the character"
     assert hid.taps == ["1"], "faced the unit and never started swinging"
-    assert f.targeting.faces == [{"expected_name_id": None}]
+    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.6}]
 
 
 def test_a_vanishing_target_at_full_health_is_not_a_kill():
@@ -355,7 +364,7 @@ def test_a_losing_fight_is_broken_off_rather_than_finished():
     sinking = {**ALIVE, "vitals.hp": 0.1}
     f = _fight([ALIVE, sinking])
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: True
+    f.engage = lambda *_: True
     assert f.run(timeout_s=5) is Fought.LOSING
     assert "broke off" in f.detail
 
@@ -399,7 +408,7 @@ def test_walking_at_it_and_swinging_at_it_are_the_same_loop():
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: True
+    f.engage = lambda *_: True
     f.run(timeout_s=2)
     assert f.pressed, "walked at it and never swung"
     assert f.closed > 0, "swung at it and never closed"
@@ -416,7 +425,7 @@ def test_a_target_that_never_takes_damage_is_given_up_not_waited_out():
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)          # rotation is live; it will press the seal
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: True
+    f.engage = lambda *_: True
     f.closed = MAX_CLOSE_BURSTS
     assert f.run(timeout_s=5) is Fought.UNREACHABLE
     assert "cannot reach" in f.detail
@@ -454,7 +463,7 @@ def test_a_guard_does_not_freeze_a_fight_already_started():
     sinking = {**ALIVE, "vitals.hp": 0.1, "vitals.combat": True}
     f = _fight([sinking], hid=hid)
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: True
+    f.engage = lambda *_: True
     f.run(timeout_s=1)
     assert f.pressed, "stood at 10% health in combat and pressed nothing"
 
@@ -462,7 +471,7 @@ def test_a_guard_does_not_freeze_a_fight_already_started():
     free = {**ALIVE, "vitals.hp": 0.1, "vitals.combat": False}
     g = _fight([ALIVE, free])
     g.acquire = lambda name_id, **_: None
-    g.engage = lambda: True
+    g.engage = lambda *_: True
     assert g.run(timeout_s=5) is Fought.LOSING
 
 
@@ -492,7 +501,7 @@ def test_every_stride_is_preceded_by_facing():
     f = _fight([ALIVE], hid=hid)
     engages = []
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: engages.append(1) or True
+    f.engage = lambda *_: engages.append(1) or True
     f.run(timeout_s=6)
     assert f.closed > 1, "did not stride at all"
     assert len(engages) == f.closed + 1, "strode without facing first"
@@ -543,7 +552,7 @@ def test_giving_up_on_a_heal_outlives_the_fight_it_was_learned_in():
     f = _fight([hurt], hid=hid)
     f.heals_ignored, f.heals_landed = HEAL_GIVE_UP, 0
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: True
+    f.engage = lambda *_: True
 
     f.run(timeout_s=1)
     assert "3" not in f.pressed_keys(), "a new fight forgot what the last one proved"
@@ -639,7 +648,7 @@ def test_it_re_aims_when_the_target_stops_taking_damage():
     def acquired(name_id, **_):
         f._damage_mark = 1.0  # health at confirmed selection, before the observed drop
     f.acquire = acquired
-    f.engage = lambda: engages.append(1) or True
+    f.engage = lambda *_: engages.append(1) or True
     # Real time, because `run` starts the damage clock itself. The target's health never
     # moves in this frame, which is the whole point.
     f.run(timeout_s=REAIM_AFTER_S + 1.5)
@@ -659,7 +668,7 @@ def test_it_creeps_the_last_yards_rather_than_stopping_or_charging_through():
     near = {**ALIVE, "target.in_melee": True}
     f = _fight([near], hid=hid)
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: True
+    f.engage = lambda *_: True
     f.run(timeout_s=1.5)
     assert hid.holds, "stood still eleven yards from something it needed to be five from"
     assert all(secs == CLOSE_NUDGE_S for _k, secs in hid.holds), "charged through it"
@@ -667,7 +676,7 @@ def test_it_creeps_the_last_yards_rather_than_stopping_or_charging_through():
     far = {**ALIVE, "target.in_melee": False}
     g = _fight([far], hid=hid)
     g.acquire = lambda name_id, **_: None
-    g.engage = lambda: True
+    g.engage = lambda *_: True
     g.run(timeout_s=1.5)
     assert any(secs == CLOSE_BURST_S for _k, secs in g.hid.holds), "crept from far away"
 
@@ -679,7 +688,7 @@ def test_the_attack_actions_range_check_ends_closing_exactly():
     reach = {**ALIVE, "target.in_melee": True, "target.melee_range": True}
     f = _fight([reach], hid=hid)
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: True
+    f.engage = lambda *_: True
     f.run(timeout_s=1.0)
     assert hid.holds == [], "walked while a swing already reached"
     assert f.pressed, "stood in reach and never swung"
@@ -687,7 +696,7 @@ def test_the_attack_actions_range_check_ends_closing_exactly():
     step = {**ALIVE, "target.in_melee": True, "target.melee_range": False}
     g = _fight([step])
     g.acquire = lambda name_id, **_: None
-    g.engage = lambda: True
+    g.engage = lambda *_: True
     g.run(timeout_s=1.0)
     assert g.hid.holds and all(secs == CLOSE_STEP_S for _k, secs in g.hid.holds)
 
@@ -700,7 +709,7 @@ def test_a_new_facing_error_turns_back_to_the_target():
     wrong = {**first, "ui.error_count": 4, "ui.error_last": 3}      # 3 = not_facing
     f = _fight([first, first, wrong, wrong])
     f.acquire = lambda name_id, **_: None
-    f.engage = lambda: engages.append(1) or True
+    f.engage = lambda *_: engages.append(1) or True
     f.run(timeout_s=0.9)
     assert len(engages) == 2, "a facing error did not re-face, or an old one did"
     assert f.hid.holds == []
@@ -713,7 +722,7 @@ def test_an_unfaced_unit_is_never_walked_at_or_clicked():
     f.targeting.face = FaceResult(FaceCode.UNSETTLED, "plate still off centre", 0.2)
     assert f.run(timeout_s=1) is Fought.NOT_VISIBLE
     assert hid.clicks == [] and hid.holds == []
-    assert f.targeting.faces == [{"expected_name_id": None}]
+    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.6}]
 
 
 @pytest.mark.parametrize("last_hp", [None, 1.0, 0.03])
@@ -945,3 +954,57 @@ def test_unready_heal_slot_without_health_gain_is_not_a_landed_heal(combat_clock
     f._watch_heal({**hurt, "bars.ready": unready}, unready)
     assert f.heals_landed == 0 and f.heals_ignored == 1
     assert f._pending_heal is None
+
+
+def test_a_unit_fighting_us_is_searched_for_all_the_way_round():
+    from jev.clients.targeting import FACE_SEARCH_MAX_S
+
+    f = _fight([ALIVE])
+    f.engage({**ALIVE, "vitals.combat": True})
+    f.engage({**ALIVE, "target.attacking_me": True})
+    f.engage(ALIVE)
+    assert [r["search_s"] for r in f.targeting.faces] == [FACE_SEARCH_MAX_S, FACE_SEARCH_MAX_S,
+                                                           0.6]
+
+
+def test_the_last_proved_plate_is_the_hint_for_the_next_look():
+    from jev.perceive.units import Plate, RingColour
+
+    plate = Plate(810.0, 400.0, 147, RingColour.YELLOW)
+    f = _fight([ALIVE])
+    f.targeting.face = FaceResult(FaceCode.FACED, "centred", 0.0, plate, 0, 0.0)
+    f.engage(ALIVE)
+    f.engage(ALIVE)
+    assert [r["hint"] for r in f.targeting.faces] == [None, plate]
+
+
+def test_plate_acquisition_skips_units_whose_hover_is_not_the_wanted_name(monkeypatch):
+    """The first live run clicked the nearest plate every look and selected a rabbit."""
+    from jev.perceive.units import Plate, RingColour
+
+    hid = _Hid()
+    f = _fight([{**ALIVE, "target.has": False}, ALIVE], hid=hid)
+    monkeypatch.setattr(f, "_candidates", lambda _: [Plate(700, 300, 147, RingColour.YELLOW)])
+    f.targeting.hover_name = 1648                    # a rabbit
+    assert f.acquire(1161) is not None or hid.clicks == []
+    assert hid.clicks == [], "clicked a plate the client said was someone else's"
+    f.targeting.hover_name = 1161
+    assert f.acquire(1161) is None
+    assert hid.clicks == [(710, 338, False)]
+
+
+def test_a_kill_that_clears_the_selection_is_proved_by_experience(monkeypatch):
+    """Live, 23 Sep: the wolf at 20% one paint and gone the next, XP arriving with it."""
+    monkeypatch.setattr("jev.clients.fight.time.sleep", lambda _: None)
+    before = {**ALIVE, "char.level": 2, "char.xp_pct": 0.618}
+    gone = {**before, "target.has": False, "target.hp": None, "target.name_id": None}
+    f = _fight([gone, {**gone, "char.xp_pct": 0.677}])
+    f._xp_start = (2, 0.618)
+    f._selected_name_id = 2864
+    f.last_hp = 0.2
+    assert f._settle(gone) is Fought.KILLED, "experience that lags a paint still proves it"
+    assert f.killed_name_id == 2864
+    g = _fight([gone, gone, gone, gone])
+    g._xp_start = (2, 0.618)
+    g.last_hp = 0.2
+    assert g._settle(gone) is Fought.LOST, "without experience a vanished unit is not a kill"

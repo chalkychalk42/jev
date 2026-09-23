@@ -153,8 +153,14 @@ class Hid:
         self.sent += 1
         return True
 
-    def _sleep(self, seconds: float) -> None:
-        if self.h.stagger_ms:
+    def _sleep(self, seconds: float, *, stagger: bool = True) -> None:
+        """A drawn pause, offset once per gesture by this client's stagger.
+
+        The stagger separates clients' timing (PLAN 8.5); it is not a per-step delay. Added
+        to every ten-pixel step of a camera drag it turned 250 steps into twenty seconds of
+        calibration (measured 21 s on 23 September), so steps inside one gesture skip it.
+        """
+        if stagger and self.h.stagger_ms:
             seconds += self.h.stagger_ms / 1000.0
         time.sleep(max(0.0, seconds))
 
@@ -386,7 +392,7 @@ class Hid:
                                   time=0, dwExtraInfo=None)
             if not self._send(win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)):
                 return False
-            self._sleep(self.h.rng.uniform(4.0, 14.0) / 1000.0)
+            self._sleep(self.h.rng.uniform(4.0, 14.0) / 1000.0, stagger=False)
         return True
 
     def button(self, down: bool, right: bool = False) -> bool:
@@ -436,7 +442,7 @@ class Hid:
                                   dwExtraInfo=None)
             if not self._send(win32.INPUT(type=win32.INPUT_MOUSE, mi=mi)):
                 return False
-            self._sleep(self.h.rng.uniform(8.0, 22.0) / 1000.0)
+            self._sleep(self.h.rng.uniform(8.0, 22.0) / 1000.0, stagger=False)
             left -= take
         return True
 

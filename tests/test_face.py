@@ -70,14 +70,28 @@ class World:
         # beside the character barely moves at first (spread < 1).
         return 0.5 * math.sin(math.radians(angle)) * self.spread / math.sin(math.radians(50))
 
-    def frame(self):
-        frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    def target_x(self):
         offset = self.offset()
         if self.visible and offset is not None and abs(offset) < 0.45:
-            self._plate(frame, WIDTH / 2 + offset * WIDTH)
+            return WIDTH / 2 + offset * WIDTH
+        return None
+
+    def frame(self):
+        frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        if (x := self.target_x()) is not None:
+            self._plate(frame, x)
         for cx in self.extra_plates:
             self._plate(frame, cx)
         return frame
+
+    def hover(self, point):
+        """The client's answer: the target's own plate is the selection, others are not."""
+        x = self.target_x()
+        if x is not None and abs(point[0] - x) < 20 and abs(point[1] - 383) < 10:
+            return HoverCode.MATCH
+        if any(abs(point[0] - cx) < 20 for cx in self.extra_plates):
+            return HoverCode.OTHER
+        return HoverCode.GROUND
 
     @staticmethod
     def _plate(frame, cx):
@@ -96,9 +110,9 @@ def targeting_for(world, monkeypatch, *, hover=None):
                         lambda: PaintResult(PaintCode.FRESH, None, world.values, "fresh"))
     probes = []
 
-    def probe(point):
+    def probe(point, require_target=True):
         probes.append(point)
-        code = hover(point) if hover else HoverCode.GROUND
+        code = (hover or world.hover)(point)
         return HoverResult(code, point, world.values, world.values, str(code))
 
     monkeypatch.setattr(targeting, "probe", probe)
@@ -158,26 +172,46 @@ def test_a_unit_with_no_plate_anywhere_is_not_visible_after_one_search_turn(monk
     assert all(key == "a" for key, _ in world.holds), "searched back and forth"
 
 
-def test_two_bright_plates_are_settled_by_hover_ownership_not_position(monkeypatch):
+def test_the_selected_plate_is_proved_by_hover_then_tracked_without_more_hovers(monkeypatch):
+    """A rabbit's plate measured as bright as a selected wolf's: brightness is no identity."""
     world = World(bearing=30.0, extra_plates=[300.0])
-    own = []
-
-    def hover(point):
-        own.append(point)
-        # The fixed plate at x=300 belongs to another unit; the moving one is the target.
-        return HoverCode.OTHER if abs(point[0] - 300) < 20 else HoverCode.MATCH
-
-    result = targeting_for(world, monkeypatch, hover=hover).face_selected()
-    assert result.faced, result.detail
-    assert own, "chose between two plates without asking the client"
-
-
-def test_two_bright_plates_that_hover_cannot_settle_are_ambiguous(monkeypatch):
-    world = World(bearing=30.0, extra_plates=[300.0])
-    targeting = targeting_for(world, monkeypatch, hover=lambda _p: HoverCode.OTHER)
+    targeting = targeting_for(world, monkeypatch)
     result = targeting.face_selected()
-    assert result.code is FaceCode.AMBIGUOUS
-    assert world.holds == [], "turned toward a plate nothing proved was the target"
+    assert result.faced, result.detail
+    target_x = WIDTH / 2 + World(30.0).offset() * WIDTH
+    assert targeting.probes[0] == (300, 383), "the other plate, nearer the centre, is asked first"
+    assert len(targeting.probes) == 2 and abs(targeting.probes[1][0] - target_x) < 2, \
+        "proved once, then tracked through every turn"
+    assert result.turns >= 1
+
+
+def test_a_hint_from_the_last_look_needs_no_hover(monkeypatch):
+    from jev.perceive.units import Plate, RingColour
+
+    world = World(bearing=20.0)
+    targeting = targeting_for(world, monkeypatch)
+    hint = Plate(cx=world.target_x(), cy=383.0, w=147, colour=RingColour.YELLOW)
+    result = targeting.face_selected(hint=hint)
+    assert result.faced and targeting.probes == []
+
+
+def test_plates_that_hover_proves_are_other_units_are_never_faced(monkeypatch):
+    world = World(bearing=30.0, visible=False, extra_plates=[300.0, 1300.0])
+    targeting = targeting_for(world, monkeypatch)
+    result = targeting.face_selected(search_s=0.3)
+    assert result.code is FaceCode.NOT_VISIBLE
+    assert all(key == "a" and seconds == FACE_SEARCH_STEP_S for key, seconds in world.holds), \
+        "turned toward a plate that is not the target's"
+
+
+def test_a_damaged_units_shrunken_bar_is_still_its_plate(monkeypatch):
+    """Health fill shrinks from the right; the plate's left edge and centre stay put."""
+    from jev.perceive import units
+
+    frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+    frame[380:387, 727:756] = YELLOW                 # 20% of a 146 px plate from x=727
+    [plate] = units.plate_candidates(frame)
+    assert abs(plate.cx - (727 + units.PLATE_FULL_W_FRAC * WIDTH / 2)) < 1
 
 
 def test_a_refused_turn_stops_facing(monkeypatch):

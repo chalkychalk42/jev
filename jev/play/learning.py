@@ -183,7 +183,11 @@ def _label(action: Mapping[str, Any]) -> dict[str, Any] | None:
     except (TypeError, ValueError):
         return None
     if _kind(clean) == "skill":
-        return None  # Existing coach learns graph parameters; this student learns controls.
+        # A routine Jev chose inside an objective is a whole action: which routine, in
+        # which situation, and whether the episode it served succeeded. Parameters would
+        # be graph facts the coach owns, so only parameterless choices become labels -
+        # the tutor's contract never sends any; the body binds the rest itself.
+        return clean if not clean.get("params") else None
     if _kind(clean) == "click":
         if clean.get("intent") == "ui":
             if not clean.get("ui_control"):

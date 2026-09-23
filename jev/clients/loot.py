@@ -88,11 +88,13 @@ class Loot:
     @traced("loot")
     def run(self, *, settle_s: float = SETTLE_S,
             progress: Callable[[], tuple[int | None, int | None]] | None = None,
-            anchor: Plate | None = None) -> Looted:
+            anchor: Plate | None = None, name_id: int | None = None) -> Looted:
         """`progress` is the objective counter, passed by whoever knows which quest is
         being worked. `Loot` has no idea and should not: it is handed a way to ask what
         the server thinks, exactly as `Hunt` is. `anchor` is the last plate the unit had
-        while alive, when the caller saw one."""
+        while alive and `name_id` the name of the unit killed, when the caller knows them:
+        the client can clear the selection at the kill, and then the corpse is found by
+        a dead hover of that name."""
         self.clicked = None
         self.detail = ""
         self._progress = progress
@@ -113,7 +115,8 @@ class Loot:
 
         targeting = self.targeting or Targeting(self.hid, self.read, read_frame=self.read_frame,
                                                 window_origin=self.window_origin)
-        action = targeting.click_corpse(expected_name_id=v.get("target.name_id"), anchor=anchor)
+        wanted = v.get("target.name_id") if v.get("target.has") is True else name_id
+        action = targeting.click_corpse(expected_name_id=wanted, anchor=anchor)
         self.clicked, self.detail = action.point, action.detail
         event("loot.request", code=action.code.value,
               data={"point": self.clicked, "method": "verified_corpse"})

@@ -418,13 +418,18 @@ def render(observation: dict, *, choices: list[Choice], knowledge: dict | None =
     plate = detections.get("selected_plate")
     if plate:
         side = plate["x"] - 0.5
-        where = ("centred: you are facing it" if abs(side) <= 0.05 else
+        where = ("centred: facing it" if abs(side) <= 0.05 else
                  f"{abs(side):.2f} {'right' if side > 0 else 'left'} of centre: turn "
                  f"{'right' if side > 0 else 'left'} to face it")
-        lines.append(f"- Selected unit's nameplate at x={plate['x']:.2f}, y={plate['y']:.2f} ({where})")
+        lines.append(f"- Likely the selected unit's nameplate (the only one in its colours): "
+                     f"x={plate['x']:.2f}, y={plate['y']:.2f} ({where}). Check the name above "
+                     "it in the image.")
+    elif detections.get("ambiguous"):
+        lines.append("- Several nameplates share the selected unit's colours; read the names "
+                     "above them in the image to find it.")
     elif values.get("target.has") is True and values.get("target.hp") != 0:
-        lines.append("- The selected unit's nameplate is not on screen (behind you, hidden, "
-                     "or too far away for a nameplate)")
+        lines.append("- No nameplate in the selected unit's colours is on screen (behind you, "
+                     "hidden, or too far away for a nameplate)")
     others = detections.get("plates") or []
     if others:
         lines.append("- Other nameplates at: " + ", ".join(
