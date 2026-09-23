@@ -468,3 +468,26 @@ def test_a_body_that_killed_the_character_again_is_left_for_the_spirit_healer(
     assert calls == (["healer", "hearth"] if healer else ["corpse"])
     assert (b._revived_at is None) if healer else (b._revived_at == now)
     assert DEATH_TRAP_S > 60.0
+
+
+def test_a_unit_with_no_nameplate_on_show_is_talked_to_where_a_hover_finds_it():
+    """The Spirit Healer's plate was behind the strip (run 20260923T182125-9c54ea)."""
+    from jev.clients.targeting import HoverCode, HoverResult
+    from jev.perceive.radio_frame import name_id
+
+    b = body()
+    b.interact = SimpleNamespace(open_on=lambda name: Interacted.NOT_VISIBLE)
+    hovered = []
+
+    def probe(point, require_target=True):
+        hovered.append(point)
+        on = len(hovered) == 2
+        return HoverResult(HoverCode.OTHER, point, None,
+                           {"cursor.has": on, "cursor.name_id": name_id("Spirit Healer") if on else None},
+                           "fixture")
+
+    b.targeting.probe = probe
+    clicks = []
+    b.client.hid.click = lambda x, y, right=False: clicks.append((x, y, right)) or True
+    assert b._talk_to("Spirit Healer") == "hovered"
+    assert clicks == [(*hovered[1], True)], "right-clicked where the hover found it, once"

@@ -43,6 +43,11 @@ from jev.world.vendor import merchants, supplies_for
 # this character cannot beat still stands: the next recovery gets up at the graveyard's
 # Spirit Healer instead, and goes home by hearthstone.
 DEATH_TRAP_S = 180.0
+# Where to hover for a unit too close and tall for its nameplate to show, as fractions of
+# the client: down the middle first. The Spirit Healer stands over a fresh ghost and fills
+# the centre of the screen, with its plate drawn behind the strip at the top.
+HOVER_POINTS = ((0.5, 0.35), (0.5, 0.45), (0.5, 0.25), (0.45, 0.35), (0.55, 0.35),
+                (0.5, 0.55), (0.4, 0.3), (0.6, 0.3))
 
 
 class LiveBody:
@@ -92,7 +97,7 @@ class LiveBody:
         self.repair = Repair(hid=client.hid, read=self._read, visit=self._visit_repairer,
                              window_origin=client.origin, window_size=client.size)
         self.recover = Recover(hid=client.hid, read=self._read, walk_to=self._corpse_walk,
-                               interact=lambda name: self.interact.open_on(name),
+                               interact=self._talk_to,
                                window_origin=client.origin, window_size=client.size)
         self.hearth = Hearth(hid=client.hid, read=self._read,
                              window_origin=client.origin, window_size=client.size)
@@ -472,6 +477,26 @@ class LiveBody:
             return False
         z = min(placed, key=lambda n: math.dist(n.world[:2], (wx, wy))).world[2]
         return self._approach((wx, wy, z))
+
+    def _talk_to(self, name: str):
+        """Right-click a named unit: by its nameplate, or where a fresh hover finds it."""
+        opened = self.interact.open_on(name)
+        if opened in (Interacted.NOT_VISIBLE, Interacted.NO_TARGET):
+            return "hovered" if self._hover_interact(name) else opened
+        return opened
+
+    def _hover_interact(self, name: str) -> bool:
+        """Right-click where a fresh hover says `name` is, for a unit whose nameplate does
+        not show: run 20260923T182125-9c54ea's ghost stood under the Spirit Healer, its plate
+        behind the strip, and the plate-first interaction found none."""
+        wanted = name_id(name)
+        (ox, oy), (w, h) = self.client.origin, self.client.size
+        for fx, fy in HOVER_POINTS:
+            point = (ox + round(fx * w), oy + round(fy * h))
+            after = self.targeting.probe(point, require_target=False).after or {}
+            if after.get("cursor.has") is True and after.get("cursor.name_id") == wanted:
+                return self.client.hid.click(*point, right=True) is not False
+        return False
 
     def _recover(self, state) -> Result:
         # A body where the character keeps dying is not worth getting up at: run
