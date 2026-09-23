@@ -206,8 +206,14 @@ def measured_effects(before: dict, after: dict) -> tuple[list[str], float]:
     progress = 0.0
     wanted = before.get("context", {}).get("target_name_id")
     selected = b.get("target.has") is True and b.get("target.name_id") is not None
+    # A corpse does not get up within one action: a selection that was dead and is now
+    # alive is another unit, even of the same name - the next kobold after a kill, which
+    # a name-only test never credited (run 20260923T191946-2b79ed).
+    revived = (a.get("target.has") is True and a.get("target.hp") == 0
+               and _number(b.get("target.hp")) and b.get("target.hp") > 0)
     if selected and (wanted is None or b.get("target.name_id") == wanted) and (
-            a.get("target.has") is False or a.get("target.name_id") != b.get("target.name_id")):
+            a.get("target.has") is False or a.get("target.name_id") != b.get("target.name_id")
+            or revived):
         effects.append("selected")
     if a.get("target.has") is True and b.get("target.has") is False:
         effects.append("target_cleared")

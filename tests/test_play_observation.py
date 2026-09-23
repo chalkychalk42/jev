@@ -103,6 +103,19 @@ def test_newly_selected_injured_target_is_not_damage_caused_by_selection():
     assert outcome(before, after, "selected", action={"kind": "key", "control": "target_next"})["success"]
 
 
+def test_tab_from_a_corpse_to_a_living_unit_of_the_same_name_is_a_selection():
+    """After a kill the corpse stays selected. Tab to the next living kobold keeps the
+    name, and a name-only test never credited it (run 20260923T191946-2b79ed); a corpse
+    cannot get up within one action, so dead to alive is another unit."""
+    tab = {"kind": "key", "control": "target_next"}
+    corpse = view(values={"target.hp": 0.0})
+    assert outcome(corpse, view(11, values={"target.hp": 1.0}), "selected", action=tab)["success"]
+    assert not outcome(corpse, view(11, values={"target.hp": 0.0}), "selected",
+                       action=tab)["success"], "still the corpse"
+    assert not outcome(view(), view(11), "selected", action=tab)["success"], \
+        "the same living unit, or another just like it, proves nothing"
+
+
 @pytest.mark.parametrize("action", [{"kind": "key", "control": "target_next"},
                                    {"kind": "key", "control": "target_previous"},
                                    {"kind": "click", "intent": "select"}])

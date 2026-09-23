@@ -1,17 +1,23 @@
 """Summarise what a recorded run actually did: fights, facing, loot, progress. Read-only.
 
-    python tools/run_summary.py runs/RUN
+    python tools/run_summary.py runs/RUN [--store LEARNING_STORE]
 
 Every number comes from the run's own records (`executions.jsonl`, `ticks.jsonl`,
-`play-*.jsonl`); nothing is inferred from logs or screenshots.
+`play-*.jsonl`); nothing is inferred from logs or screenshots. `learner` is what the motor
+learner holds and what this run added to it, by the learner's own qualification rules and
+training gates: game progress alone does not say whether the tutor's play taught anything.
+The store defaults to the one the teaching launcher records (`var/teaching-launch.json`).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import Counter
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _rows(path: Path) -> list[dict]:
@@ -86,11 +92,56 @@ def summarise(run: Path) -> dict:
     }
 
 
+def default_store() -> Path | None:
+    """The learning store the teaching launcher passes, as a path this Python can open."""
+    launch = ROOT / "var" / "teaching-launch.json"
+    if not launch.exists():
+        return None
+    args = json.loads(launch.read_text(encoding="utf-8")).get("args") or []
+    if "--learning-store" not in args[:-1]:
+        return None
+    value = args[args.index("--learning-store") + 1]
+    windows = PureWindowsPath(value)
+    if sys.platform != "win32" and windows.drive:
+        return Path("/mnt", windows.drive.rstrip(":").lower(), *windows.parts[1:])
+    return Path(value)
+
+
+def learner(run_id: str, store: Path | None) -> dict | None:
+    """What the motor learner holds, and what this run added, by its own rules and gates."""
+    if store is None or not (store / "motor").exists():
+        return None
+    sys.path.insert(0, str(ROOT))
+    from jev.play.learning import LearningConfig, MotorLearner, _label, _qualified
+
+    motor = MotorLearner(store / "motor")
+    config = LearningConfig()
+    need_runs = config.min_train_runs + config.min_holdout_runs
+    need_rows = config.min_train_examples + config.min_holdout_examples
+    records = motor.records()
+    usable = [r for r in records if _qualified(r) and _label(r.get("action") or {})]
+    progress = {}
+    for capability in sorted({r.get("capability") for r in records if r.get("capability")}):
+        mine = [r for r in usable if r.get("capability") == capability]
+        progress[capability] = {
+            "runs": f"{len({r['run_id'] for r in mine})}/{need_runs}",
+            "examples": f"{len(mine)}/{need_rows}",
+            "this_run": sum(r["run_id"] == run_id for r in mine),
+            "this_run_actions": sum(r["run_id"] == run_id and r.get("capability") == capability
+                                    for r in records),
+        }
+    return {"trained": sorted(motor.status().get("capabilities") or {}), "capabilities": progress}
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run", type=Path)
+    parser.add_argument("--store", type=Path, default=None,
+                        help="learning store (default: the teaching launcher's)")
     args = parser.parse_args(argv)
-    print(json.dumps(summarise(args.run), indent=2))
+    summary = summarise(args.run)
+    summary["learner"] = learner(args.run.name, args.store or default_store())
+    print(json.dumps(summary, indent=2))
     return 0
 
 

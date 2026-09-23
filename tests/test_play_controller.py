@@ -196,6 +196,26 @@ def test_repeated_camera_motion_has_a_bounded_stop(tmp_path):
     assert len(teacher.requests) == 2
 
 
+def test_the_same_action_repeated_without_effect_hands_back_to_jev(tmp_path):
+    """Tab showed its effect in none of 15 presses in the first recorded runs: the tutor
+    pressed it again and again for minutes. Three in a row without effect end the
+    episode, well inside the no-effect budget, and Jev's own routine plays on."""
+    tab = ({"kind": "key", "control": "target_next", "duration_s": 0.0}, "selected")
+    env, _teacher, _journal, controller = setup(tmp_path, [tab] * 6, max_no_effect=8)
+    result = controller.run(arm(), lambda: None)
+    assert result.code == "teaching_stalled" and "repeated target_next 3 times" in result.detail
+    assert len(env.actions) == 3
+
+
+def test_different_attempts_without_effect_are_exploration_not_a_loop(tmp_path):
+    tab = ({"kind": "key", "control": "target_next", "duration_s": 0.0}, "selected")
+    turn = ({"kind": "key", "control": "turn_left", "duration_s": 0.2}, None)
+    env, _teacher, _journal, controller = setup(tmp_path, [tab, turn, tab, turn, tab],
+                                                max_no_effect=5)
+    controller.run(arm(), lambda: None)
+    assert len(env.actions) == 5, "alternating attempts ended as a loop"
+
+
 def test_cancellation_reaps_pending_teacher_before_return():
     count, state = [0], []
 

@@ -1895,4 +1895,12 @@ ends circling near a point (a real bug the simulation found: 16 of 72 short walk
 watchdog failing a stalled step into its rib before stopping, and backing off when a
 sidestep goes nowhere.
 
-NEXT: debrief with the operator before session 18.
+Operator debrief (voice note): every fix for the bigger picture, never a scenario unless it
+recurs (caves do); the learner must keep learning from Jev and its Claude fallback, so each
+new character reaches level 20 with fewer bugs. Measured against that: the motor learner
+held 90 examples from 9 runs and had trained nothing (each capability needs 5 runs and 60
+qualified examples; the best had 4); only 14 of 39 tutor episodes succeeded; the policy
+learner kept 6 good decisions from 58 runs. `tools/run_summary.py` now reports the learner
+every session, and the tutor's two biggest leaks are closed (V69).
+
+NEXT: session 18. Hard spots get one session, then the fail-over ladder.

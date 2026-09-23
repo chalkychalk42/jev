@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import math
 import time
 import uuid
@@ -27,6 +28,13 @@ class PlayConfig:
     outcome_wait_s: float = 5
     max_actions: int = 64
     max_no_effect: int = 8
+    # The same action, with no effect, this many times in a row ends the episode and Jev's
+    # own routine plays on. Tab was the tutor's most used action across the first 90
+    # recorded examples and showed its effect in none of its 15 presses: after a kill the
+    # corpse stayed selected, nothing living stood in front, and it pressed again for
+    # minutes (runs 20260923T184413-a386ff to ...191946-2b79ed). Different attempts that
+    # fail are exploration, bounded by `max_no_effect`; the same one is a loop.
+    max_repeats: int = 3
     poll_s: float = 0.1
 
     def __post_init__(self):
@@ -34,7 +42,7 @@ class PlayConfig:
             raise ValueError("playing mode must be teach or adaptive")
         if any(not math.isfinite(v) or v <= 0 for v in (
                 self.teacher_timeout_s, self.outcome_wait_s, self.poll_s,
-                self.max_actions, self.max_no_effect)):
+                self.max_actions, self.max_no_effect, self.max_repeats)):
             raise ValueError("playing limits must be finite and positive")
 
 
@@ -255,7 +263,8 @@ class PlayController:
         started = time.time()
         try:
             first = current = self._observe(arm, checkpoint)
-            no_effect = 0
+            no_effect = repeats = 0
+            last_futile = None
             while count < self.config.max_actions:
                 checkpoint()
                 if finished(first.data, current.data):
@@ -402,10 +411,20 @@ class PlayController:
                     segment += 1
                     episode_id = f"{base_id}:{segment}"
                     first, count, observed_effects, started = current, 0, set(), time.time()
-                    no_effect = 0
+                    no_effect = repeats = 0
+                    last_futile = None
                     continue
                 useful = (outcome["success"] and expected not in {"observed", "scene_changed", "moved"})
                 no_effect = 0 if useful else no_effect + 1
+                same = json.dumps(doc, sort_keys=True)
+                repeats = 0 if useful else (repeats + 1 if same == last_futile else 1)
+                last_futile = None if useful else same
+                if repeats >= self.config.max_repeats:
+                    label = doc.get("name") or doc.get("control") or doc.get("kind")
+                    result = Result(SkillOutcome.ABORTED,
+                                    f"the tutor repeated {label} {repeats} times without effect",
+                                    "teaching_stalled")
+                    return result
                 if no_effect >= self.config.max_no_effect:
                     result = Result(SkillOutcome.ABORTED,
                                     "bounded teaching episode made no verified useful progress", "teaching_stalled")
