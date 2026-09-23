@@ -27,7 +27,7 @@ def rows(path):
     return [json.loads(line) for line in (path / "manifest.jsonl").read_text().splitlines()]
 
 
-def test_lossless_frames_and_timestamps_are_written_off_the_calling_thread(tmp_path):
+def test_periodic_frames_and_timestamps_are_written_off_the_calling_thread(tmp_path):
     pixels = np.arange(12 * 8 * 3, dtype=np.uint8).reshape(8, 12, 3)
     calls = []
 
@@ -50,6 +50,22 @@ def test_lossless_frames_and_timestamps_are_written_off_the_calling_thread(tmp_p
         assert row["status"] == "ok"
         assert row["kind"] == "periodic"
         assert "label" not in row and "event_t" not in row
+        assert row["file"].endswith(".jpg"), "watching a run does not need lossless frames"
+        with Image.open(tmp_path / row["file"]) as saved:
+            # Near-lossless: quality 92 with full colour resolution.
+            assert np.abs(np.asarray(saved).astype(int) - pixels.astype(int)).mean() < 4
+
+
+def test_event_frames_that_actions_are_judged_on_stay_lossless(tmp_path):
+    pixels = np.arange(12 * 8 * 3, dtype=np.uint8).reshape(8, 12, 3)
+    monitor = Screenshots(lambda: pixels, tmp_path, interval_s=60).start()
+    try:
+        recorded = monitor.record_frame("play-observation", pixels, captured_at=time.time())
+        event = monitor.capture_event("target-before-click")
+    finally:
+        monitor.close()
+    for row in (recorded, event):
+        assert row["file"].endswith(".png")
         with Image.open(tmp_path / row["file"]) as saved:
             assert np.array_equal(np.asarray(saved), pixels)
 

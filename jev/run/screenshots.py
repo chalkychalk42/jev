@@ -24,6 +24,15 @@ class ScreenshotError(RuntimeError):
     """Requested visual monitoring could not be started or retained."""
 
 
+# Periodic frames are for watching a run; event frames are what an action was decided and
+# judged on, and replays read their exact pixels. Measured on a live 1611x906 frame
+# (23 September): lossless PNG 2.5 MB and 82 ms; JPEG quality 92 with full colour
+# resolution 0.68 MB and 5 ms, with the radio still decoding and exactly the same plate
+# candidates. Quality 85 with halved chroma invented plates, so it is not used.
+PERIODIC_FORMAT = ("jpg", {"format": "JPEG", "quality": 92, "subsampling": 0})
+EVENT_FORMAT = ("png", {"format": "PNG", "compress_level": 1})
+
+
 _EVENT_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}\Z")
 
 
@@ -182,7 +191,7 @@ class Screenshots:
 
     def _persist(self, pixels: object | None, row: dict, started: float, *,
                  capture_error: Exception | None = None) -> dict:
-        """One PNG/index/manifest path, always under the recorder's ownership lock."""
+        """One image/index/manifest path, always under the recorder's ownership lock."""
         if capture_error is not None or pixels is None:
             exc = capture_error or ScreenshotError("client frame unavailable")
             self.missing += 1
@@ -193,11 +202,12 @@ class Screenshots:
             self._last_capture_error = detail
         else:
             stamp = datetime.fromtimestamp(row["t"], UTC).strftime("%Y%m%dT%H%M%S.%fZ")
-            name = f"{row['index']:06d}-{stamp}.png"
+            suffix, options = PERIODIC_FORMAT if row["kind"] == "periodic" else EVENT_FORMAT
+            name = f"{row['index']:06d}-{stamp}.{suffix}"
             path = self.directory / name
-            pending = path.with_suffix(".png.tmp")
+            pending = path.with_name(name + ".tmp")
             try:
-                self._image.fromarray(pixels).save(pending, format="PNG", compress_level=1)
+                self._image.fromarray(pixels).save(pending, **options)
                 pending.replace(path)
             except Exception as exc:
                 pending.unlink(missing_ok=True)
