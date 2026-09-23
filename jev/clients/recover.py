@@ -170,13 +170,17 @@ class Recover:
         return Recovered.STILL_GHOST
 
     @traced("recovery.spirit_healer")
-    def run_spirit_healer(self, tries: int = 8) -> Recovered:
+    def run_spirit_healer(self, tries: int = 4, talks: int = 3) -> Recovered:
         """Get up at the graveyard instead of at the body.
 
         For a body lying where something that kills this character still stands: run
         20260923T181209-bc03ba resurrected beside a level 6 wolf three times, at half
         health each time, and died each time. The Spirit Healer answers a right-click with
         the same kind of popup as the body, so the same painted button accepts it.
+
+        The first right-click can open nothing: three seconds after releasing, run
+        20260923T183905-e273a3's click on the healer at its feet got no popup, and the same
+        click a minute later got one and got up. So it talks again when nothing opens.
         """
         self.detail = ""
         v = self.read()
@@ -195,19 +199,21 @@ class Recover:
         if far and self.walk_to is not None:
             event("graveyard.approach", data={"destination": self.graveyard})
             self.walk_to(self.graveyard)
-        opened = self.interact(SPIRIT_HEALER)
-        event("spirit_healer.interact", data={"result": str(opened)})
-        for _ in range(tries):
-            v = self.read()
-            self._observe(v)
-            if v is None:
-                return Recovered.BLIND
-            if v.get("vitals.dead") is False and v.get("vitals.ghost") is False:
-                return Recovered.ALIVE
-            if v.get("ui.modal") is True:
-                self._press(v)
-            time.sleep(1.0)
-        self.detail = f"talked to the Spirit Healer ({opened}) and did not get up"
+        opened = None
+        for _ in range(talks):
+            opened = self.interact(SPIRIT_HEALER)
+            event("spirit_healer.interact", data={"result": str(opened)})
+            for _ in range(tries):
+                v = self.read()
+                self._observe(v)
+                if v is None:
+                    return Recovered.BLIND
+                if v.get("vitals.dead") is False and v.get("vitals.ghost") is False:
+                    return Recovered.ALIVE
+                if v.get("ui.modal") is True:
+                    self._press(v)
+                time.sleep(1.0)
+        self.detail = f"talked to the Spirit Healer {talks} times ({opened}) and did not get up"
         return Recovered.STILL_GHOST
 
     def _press(self, values: dict) -> bool:

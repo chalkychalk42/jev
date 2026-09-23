@@ -514,3 +514,18 @@ def test_a_unit_out_of_reach_is_stepped_toward_and_clicked_again():
     b.client.hid.hold = lambda key, seconds, **_: steps.append(key) or True
     assert b._talk_to("Spirit Healer") == "hovered"
     assert clicks == [True, True] and steps == ["w"], "one step closer between two clicks"
+
+
+def test_the_spirit_healer_is_asked_again_when_the_first_click_opens_nothing(monkeypatch):
+    import jev.clients.recover
+    monkeypatch.setattr(jev.clients.recover.time, "sleep", lambda seconds: None)
+    ghost = {"vitals.ghost": True, "vitals.dead": False, "pos.mx": 0.39, "pos.my": 0.60}
+    popup = {**ghost, "ui.modal": True, "ui.advance_x": 0.5, "ui.advance_y": 0.2}
+    states = iter([ghost] + [ghost] * 4 + [popup, {"vitals.ghost": False, "vitals.dead": False}])
+    talked = []
+    recovery = Recover(hid=None, read=lambda: next(states),
+                       interact=lambda name: talked.append(name) or "hovered")
+    recovery.graveyard = (0.39, 0.60)
+    recovery._press = lambda values: True
+    assert recovery.run_spirit_healer() is Recovered.ALIVE
+    assert talked == ["Spirit Healer", "Spirit Healer"], "asked again after a silent click"
