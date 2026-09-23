@@ -3,12 +3,18 @@
 This is the current implementation contract. It supersedes the original assumption that
 the teacher only selects whole skills or writes suggestions after failure.
 
-The guide chooses the objective. Jev receives an owned screenshot, the radio decoded
-from those same pixels, configured controls and their meanings, the current guide goal,
-retrieved exact-server facts, and recent action outcomes. It proposes one bounded action.
-The executor checks fresh state and sends input; an independent observer checks the
-predicted effect. Completed useful episodes supply training evidence. Evaluated local
-capabilities gradually take over, with Jev retaining unfamiliar situations and audits.
+The guide chooses the objective. Jev receives an owned screenshot and a compact text
+account of the same capture: the goal and quest progress, character and target state,
+where nameplates are drawn, open windows and the last game error, bags, and the measured
+results of its recent actions. It picks **one action from a menu built from that state by
+the executor's own rules** - a key held or tapped, an action slot, a verified unit or UI
+click, a camera drag, a knowledge lookup, or a reusable routine such as COMBAT_PROFILE,
+LOOT, FACE_TARGET or the objective's own routine - and replies with flat JSON
+(`jev/play/tutor.py`, DECISIONS V43). The executor checks fresh state and sends input; an
+independent observer judges the effect, which is derived locally, never asked of the
+model. Each verified unit of objective progress closes a successful episode that supplies
+training evidence. Evaluated local capabilities gradually take over - including which
+routine to run - with Jev retaining unfamiliar situations and audits.
 
 ```mermaid
 flowchart LR
@@ -32,11 +38,11 @@ flowchart LR
 | Component | Behavior |
 |---|---|
 | `jev/play/actions.py`, `controls.py` | Typed movement, turning, strafe, target selection, action slots, pointer, grounded clicks, camera and existing skills. Account/character binding overrides retain source hashes and uncertainty. |
-| `teacher.py` | Actual embedded PNG through the selected Claude/GLM transport, typed output, state-dependent modal actions, observation identity, bounded knowledge lookups, per-attempt accounting and cancellation. Teacher prompts preserve all controls/state while omitting local student image features and deduplicating provenance. |
+| `tutor.py`, `teacher.py` | State-built action menu (the same rules as the executor), flat reply with strict parsing, identities bound from the observation, compact text prompt, one corrective re-ask, transient-overload retries with backoff inside the deadline, bounded knowledge lookups, per-attempt accounting and cancellation, through the selected Claude/GLM transport. |
 | `knowledge.py`, `world_knowledge.py` | Guide, objectives, starting abilities, vendors and bounded read-only entity retrieval from the existing world/DBC snapshot. Content fingerprints invalidate incompatible students. |
 | `executor.py` | One input owner, short bounded holds, fresh hover before unit clicks, painted UI control coordinates, focus/state checks and unconditional release. Right-click never establishes facing by assertion. |
 | `observation.py` | Same-capture pixels/radio, shared coordinate conversion, fresh paint evidence, independent observed effects. Movement alone is never credited as closing distance. |
-| `controller.py`, `runtime.py` | Teacher/student action loop inside the normal supervisor and guide. Existing routines remain callable under their current validation. Repeated ineffective decisions stop for inspection. |
+| `controller.py`, `runtime.py` | Teacher/student action loop inside the normal supervisor and guide. Existing routines remain callable under their current validation. Episodes close at each verified unit of objective progress. A tutor that cannot answer, or makes no verified progress in its bound, hands the objective to the guide's scripted routine instead of stopping the run. |
 | `learning.py` | Durable action/episode joins, learned visual-conditioned action parameters, independent evaluation, shadow, canary, active capability, teacher audits and failure rollback. |
 | `journal.py` | Flushed requests, accepted decisions, results, observations and completed episodes. Crash tails never acquire invented outcomes. |
 
@@ -68,8 +74,10 @@ C:\forever-win\Scripts\python.exe tools\start_teaching.py --run
 
 The stop file is `captures/teaching/STOP`. Its existence stops before attachment or at
 the supervisor's next checkpoint. It is never silently deleted. Ctrl-C and shutdown use
-the existing release/cleanup path. Teacher unavailability or a teaching stall stops the
-session; no automatic restart repeats a broken interaction.
+the existing release/cleanup path. Teacher unavailability or a teaching stall hands that
+objective to the guide's scripted routine (the zero-teacher floor) and the next objective
+asks Jev again; only a blocking dialog nobody can dismiss stops the session. No automatic
+restart repeats a broken interaction.
 
 Direct portable entrypoint:
 

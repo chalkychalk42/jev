@@ -9,6 +9,14 @@ The older scripted mode and its strategic learner remain available. The historic
 sections below describe that earlier mode; zero teacher dependency is a goal earned per
 capability, not an invariant imposed on an untrained motor controller.
 
+**Engagement and tutor contract, 23 September 2026 (DECISIONS V40-V44):** a unit is faced
+by turning until its own hover-proved nameplate is on the screen's centre line (a
+right-click never turns the character); melee auto-attack is pressed only when the radio
+observes it off; kills are proved by zero health or experience, and a corpse the client
+deselected is found by a dead hover of the killed unit's name. The tutor replies with one
+action name from a state-built menu; a tutor that cannot answer or stalls hands its
+objective to the scripted routine, which is the zero-teacher floor again.
+
 `docs/PLAN.md` is the vision. This file is the buildable form of it, and overrides the
 plan wherever the two disagree. Every deviation is recorded with its reason so nobody
 re-derives it. Decisions live in `DECISIONS.md`.
