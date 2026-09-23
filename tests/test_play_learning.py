@@ -574,3 +574,34 @@ def test_a_state_decision_transfers_across_scenery_but_a_turn_does_not(tmp_path)
     teach(turns)
     assert predict(turns, observation_value=elsewhere).action is None, \
         "a turn learned in one picture was proposed for a different one"
+
+
+def test_a_new_guide_does_not_start_the_corpus_again(tmp_path):
+    """Knowledge shaped which actions the tutor chose, but every label is graded by its
+    observed outcome and none of it is a model input. Tied to it, the corpus restarted at
+    every guide change - a regenerated guide or the next level band (V71)."""
+    learner = MotorLearner(tmp_path, config=config())
+    for number, run in enumerate(("fit-a", "fit-b", "fit-c")):
+        knowledge = "knowledge-v1" if number < 2 else "knowledge-v2"      # the guide moved on
+        for side in range(2):
+            for index in range(2):
+                learner.record(record(run, side * 2 + index, side=side, knowledge=knowledge))
+        finish(learner, run)
+    learner.update()
+    state = learner.status()["capabilities"].get("approach")
+    assert state and state["model"], "runs from before the guide changed were thrown away"
+    assert state["knowledge_fingerprint"] == "knowledge-v2", "the newest is kept, for audit"
+    moved_on = learner.predict(observation(side=1), "approach", decision_id="now",
+                               controls_fingerprint="controls-v1",
+                               knowledge_fingerprint="knowledge-v3")
+    assert moved_on.action == {"kind": "key", "control": "turn_right", "duration_s": 0.4}
+
+
+def test_new_key_bindings_still_start_a_new_generation(tmp_path):
+    learner = MotorLearner(tmp_path, config=config())
+    teach(learner)
+    assert predict(learner).action is not None
+    rebound = learner.predict(observation(side=0), "approach", decision_id="now",
+                              controls_fingerprint="controls-v2",
+                              knowledge_fingerprint="knowledge-v1")
+    assert rebound.action is None and "controls" in rebound.reason

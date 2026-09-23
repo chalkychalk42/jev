@@ -775,9 +775,12 @@ class MotorLearner:
         model_id = state.get("model")
         if state.get("mode") == "blocked":
             return MotorPrediction(model=model_id, reason=state["reason"])
-        if (state.get("controls_fingerprint") != controls_fingerprint
-                or state.get("knowledge_fingerprint") != knowledge_fingerprint):
-            return MotorPrediction(model=model_id, reason="controls or knowledge changed")
+        # The key bindings an action is pressed with are what a motor model depends on. The
+        # tutor's knowledge - guide, profiles, catalogue - shaped which actions it chose, but
+        # every label is graded by its observed outcome (V9), and none of it is a model
+        # input; tying models to it restarted the corpus at every guide change (V71).
+        if state.get("controls_fingerprint") != controls_fingerprint:
+            return MotorPrediction(model=model_id, reason="controls changed")
         if observation.get("synthetic") is True:
             return MotorPrediction(model=model_id, reason="synthetic observation cannot drive live policy")
         try:
@@ -811,9 +814,9 @@ class MotorLearner:
             groups: dict[tuple, list] = defaultdict(list)
             rows = self.records()
             for row in rows:
-                groups[(row["capability"], row["controls_fingerprint"],
-                        row["knowledge_fingerprint"])].append(row)
-            # The latest observation pins which control/knowledge generation is current.
+                groups[(row["capability"], row["controls_fingerprint"])].append(row)
+            # The latest observation pins which controls generation is current. Knowledge is
+            # not a generation (V71): records keep its fingerprint, for audit only.
             latest: dict[str, tuple] = {}
             for key, records in groups.items():
                 stamp = max(_stamp(r) for r in records)
@@ -822,11 +825,11 @@ class MotorLearner:
             for _, key in sorted(latest.values(), key=lambda item: str(item[1])):
                 if cancelled():
                     break
-                capability, controls, knowledge = key
+                capability, controls = key
                 records = groups[key]
+                knowledge = max(records, key=_stamp)["knowledge_fingerprint"]
                 state = registry["capabilities"].get(capability)
-                compatible = (state and state.get("controls_fingerprint") == controls
-                              and state.get("knowledge_fingerprint") == knowledge)
+                compatible = bool(state and state.get("controls_fingerprint") == controls)
                 if compatible and state.get("mode") != "blocked":
                     model = self._load(state["model"], registry)
                     self._evaluate(state, model, records, all_rows=rows)
