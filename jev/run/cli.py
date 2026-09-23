@@ -14,7 +14,7 @@ from pathlib import Path
 
 from jev.clients import win32
 from jev.clients.interact import GOSSIP_YARDS
-from jev.guide import playhead
+from jev.guide import playhead, spawns
 from jev.guide.coords import bounds_by_radio_id, navigation_frame
 from jev.guide.graph import Graph
 from jev.guide.path import MmapQuery
@@ -244,7 +244,8 @@ def _live(args, graph) -> int:
                     arrival_yards=GOSSIP_YARDS, say=print, zones=zones,
                     route_memory=RouteMemory(ROOT / "var/route-memory.json"))
         body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt,
-                        record_frame=screenshots.record_frame if screenshots is not None else None)
+                        record_frame=screenshots.record_frame if screenshots is not None else None,
+                        hunt_spawns=spawns.load(args.graph))
         if recorder is None:
             recorder = Recorder(root=args.runs_dir)
         if args.play_mode != "off":

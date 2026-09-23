@@ -69,6 +69,11 @@ class Spawn:
     # the mobs standing on the node have been killed.
     spread: float = 0.0
     kind: str = "creature"
+    # Where the group's members actually spawn, nearest the centre first. A hunt stands on
+    # these rather than on rings round the centre: Northshire's Young Wolves spawn 24 to
+    # 170 yards from their cluster's centre, and rings at 0, 13 and 31 yards looked 38
+    # times and found nothing (run 20260923T233909-8b1484).
+    points: tuple[tuple[float, float, float], ...] = ()
 
 
 # Spawn clustering, in yards. A cell wide enough that one camp lands in one or two
@@ -176,7 +181,18 @@ def _cluster(npc_id: int, name: str, map_id: int, rows) -> Spawn:
     z = sum(r["pz"] * weight(r) for r in near) / n
     reaches = sorted(math.hypot(r["px"] - x, r["py"] - y) for r in near)
     spread = reaches[len(reaches) // 2] if reaches else 0.0
-    return Spawn(npc_id, name, map_id, x, y, z, spread=spread)
+    members = sorted(near, key=lambda r: math.hypot(r["px"] - x, r["py"] - y))
+    points = tuple((round(float(r["px"]), 1), round(float(r["py"]), 1), round(float(r["pz"]), 1))
+                   for r in members[:HUNT_SPAWNS])
+    return Spawn(npc_id, name, map_id, x, y, z, spread=spread, points=points)
+
+
+# Spawn points kept per cluster for a hunt to stand on: the nearest this many to its centre.
+HUNT_SPAWNS = 16
+
+
+def hunt_spawns(spawn: Spawn | None) -> tuple[tuple[float, float, float], ...]:
+    return spawn.points if spawn is not None else ()
 
 
 def hunt_yards(spawn: Spawn | None) -> float:
@@ -580,7 +596,8 @@ class WorldDB:
             best = max(names, key=lambda n: names[n])
             chosen = next(r for r in near if r["Name"] == best)
             spawn = Spawn(chosen["Entry"], best or "mobs", m,
-                          spawn.x, spawn.y, spawn.z, spread=spawn.spread, kind=chosen["kind"])
+                          spawn.x, spawn.y, spawn.z, spread=spawn.spread, kind=chosen["kind"],
+                          points=spawn.points)
         return spawn
 
     # -- services ------------------------------------------------------------
@@ -713,20 +730,28 @@ def generate(
     level_min: int = 1,
     level_max: int = 12,
     max_quests: int | None = None,
+    spawns: dict[str, list] | None = None,
 ) -> Graph:
-    """Build a spine plus ribs and services for one faction over one level band."""
+    """Build a spine plus ribs and services for one faction over one level band.
+
+    `spawns`, when given, is filled with where each hunt's target actually spawns, keyed
+    `node_id` and `node_id#target_id` (`hunt_spawns`, `jev.run.hunt.spawn_stations`). It is
+    routine data kept out of the guide: the guide's bytes are the tutor's knowledge
+    fingerprint, and a changed fingerprint starts the motor learner's corpus again.
+    """
     db = WorldDB(db_path)
+    spawns = {} if spawns is None else spawns
     try:
         return _generate(db, graph_id=graph_id, faction=faction, zone_ids=zone_ids,
                          zone_names=zone_names, level_min=level_min,
-                         level_max=level_max, max_quests=max_quests)
+                         level_max=level_max, max_quests=max_quests, spawns=spawns)
     finally:
         db.close()
 
 
 def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, ...],
               zone_names: dict[int, str], level_min: int, level_max: int,
-              max_quests: int | None) -> Graph:
+              max_quests: int | None, spawns: dict[str, list]) -> Graph:
     nodes: list[Node] = []
     prefix = graph_id
     # NPCs whose spawn exists but falls outside every zone box in scope. Recorded so a
@@ -789,6 +814,8 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
                 taken.add(spawn.npc_id)
                 frac, world, map_id = place(spawn, zid)
                 rid = f"{prefix}_grind_{_slug(zone_names.get(zid, str(zid)), 12)}_{lo}_{hi}"
+                if spawn.points:
+                    spawns[rid] = [list(p) for p in spawn.points]
                 ribs.append(Node(
                     id=rid, kind=StepKind.GRIND, zone=zone_names.get(zid, str(zid)),
                     zone_id=zid, level=(lo, hi), pos=frac, world=world, map_id=map_id,
@@ -905,6 +932,13 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
         if requirements:
             mobs = requirements[0].spawn
             ofrac, oworld, omap = place(mobs or giver, zid)
+            if mobs is not None and mobs.points:
+                spawns[f"{base}_do"] = [list(p) for p in mobs.points]
+            for requirement in requirements:
+                if (requirement.kind in ("kill", "loot") and requirement.spawn is not None
+                        and requirement.spawn.points):
+                    spawns[f"{base}_do#{requirement.spawn.npc_id}"] = [
+                        list(p) for p in requirement.spawn.points]
             nodes.append(Node(
                 id=f"{base}_do", kind=StepKind.QUEST_OBJECTIVE, zone=zname, zone_id=zid,
                 level=band, pos=ofrac, world=oworld, map_id=omap, quest_id=q.quest_id,

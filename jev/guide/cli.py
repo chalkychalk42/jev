@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import pathlib
 
+from jev.guide import spawns
 from jev.guide.generate import generate
 from jev.guide.graph import stats
 
@@ -44,10 +45,12 @@ def main() -> int:
     faction, zones = SPINES[args.race]
     graph_id = f"{faction[:4]}_{args.race}_{args.min}_{args.max}"
 
+    table: dict[str, list] = {}
     g = generate(
         args.db, graph_id=graph_id, faction=faction,
         zone_ids=tuple(zones), zone_names=zones,
         level_min=args.min, level_max=args.max, max_quests=args.max_quests,
+        spawns=table,
     )
     s = stats(g)
 
@@ -71,6 +74,7 @@ def main() -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         g.save(path)
         print(f"\nwrote {path}")
+        print(f"wrote {spawns.save(path, table)} ({len(table)} hunts)")
     return 0
 
 

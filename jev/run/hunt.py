@@ -94,6 +94,33 @@ def stations(centre: tuple[float, float, float], radius_yards: float,
     return out
 
 
+# Spawn points closer than this to a station already on the tour add nothing to it: a plate
+# shows about twenty yards off, and two stances ten yards apart see the same mobs.
+SPAWN_MERGE_YARDS = 10.0
+# Times round the spawn points before the camp is called empty. Mobs respawn - Northshire's
+# Young Wolves in fifteen seconds - so a second lap finds what the first one killed.
+SPAWN_LAPS = 2
+
+
+def spawn_stations(spawns) -> list[tuple[float, float, float]]:
+    """Where the target actually spawns, as a walk: from the point nearest the cluster's
+    centre (the generator lists it first), always on to the nearest one left.
+
+    Rings round a centre stand where the mobs may not be. Northshire's Young Wolves spawn
+    24 to 170 yards from their cluster's centre, and rings at 0, 13 and 31 yards looked 38
+    times and found nothing (run 20260923T233909-8b1484).
+    """
+    left = [tuple(p) for p in spawns]
+    tour: list[tuple[float, float, float]] = []
+    while left:
+        here = tour[-1] if tour else None
+        point = left[0] if here is None else min(left, key=lambda p: math.dist(here[:2], p[:2]))
+        left.remove(point)
+        if all(math.dist(point[:2], t[:2]) > SPAWN_MERGE_YARDS for t in tour):
+            tour.append(point)
+    return tour * SPAWN_LAPS
+
+
 @dataclass
 class Hunt:
     fight: Fight
@@ -113,14 +140,17 @@ class Hunt:
 
     @traced("hunt")
     def run(self, centre: tuple[float, float, float], radius_yards: float,
-            name_id: int | None = None, *, timeout_s: float = 900.0) -> Hunted:
+            name_id: int | None = None, *, timeout_s: float = 900.0,
+            spawns=()) -> Hunted:
         self.kills = self.moves = 0
         self._outdoors = None
         self.detail = ""
         event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
-                                    "wanted_name_id": name_id, "timeout_s": timeout_s})
+                                    "wanted_name_id": name_id, "timeout_s": timeout_s,
+                                    "spawns": len(spawns)})
         deadline = time.monotonic() + timeout_s
-        posts = stations(centre, radius_yards)
+        # Where the target spawns when the guide knows it; rings round the centre when not.
+        posts = spawn_stations(spawns) or stations(centre, radius_yards)
         post = 0
         dry = 0
         stood = False

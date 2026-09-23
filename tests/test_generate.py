@@ -284,3 +284,27 @@ def test_the_rib_for_a_level_is_the_highest_window_it_has_reached():
     assert rib_for((mid, high), 1) is mid, "below every window: the lowest"
     assert rib_for(ribs, None, preferred=high) is high, "an unread level keeps the guide's"
     assert rib_for((), 3) is None
+
+
+def test_every_hunt_knows_where_its_target_spawns_without_touching_the_guide():
+    """Rings round a cluster's centre stood where Northshire's wolves were not: they spawn
+    24 to 170 yards from it, and the rings looked 38 times and found nothing (run
+    ...233909). The points go in a side table - the guide's bytes are the tutor's
+    knowledge fingerprint, and a changed one starts the motor learner's corpus again."""
+    import math
+
+    table = {}
+    g = generate(DB, graph_id="t", faction="alliance", zone_ids=tuple(HUMAN_ZONES),
+                 zone_names=HUMAN_ZONES, level_min=1, level_max=12, spawns=table)
+    hunts = [n for n in g.nodes if n.kind is StepKind.GRIND
+             or any(t.kind in ("kill", "loot") and t.target_kind == "creature"
+                    for t in n.objective_targets)]
+    assert hunts and all(n.id in table for n in hunts), "a hunt with nowhere to stand"
+    wolves = next(n for n in g.nodes if n.id == "t_33_wolves_across_the_border_do")
+    points = table[wolves.id]
+    assert 8 <= len(points) <= 16
+    distances = [math.dist(wolves.world[:2], p[:2]) for p in points]
+    assert distances == sorted(distances), "nearest the centre first"
+    plain = generate(DB, graph_id="t", faction="alliance", zone_ids=tuple(HUMAN_ZONES),
+                     zone_names=HUMAN_ZONES, level_min=1, level_max=12)
+    assert plain.model_dump() == g.model_dump(), "the guide itself changed"

@@ -29,6 +29,7 @@ from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph
 from jev.guide.objectives import progress, select_objective, target_progress
+from jev.guide.spawns import lookup as spawn_points
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import UI_ERROR_KEYS, list_lines, name_id
@@ -71,11 +72,14 @@ class LiveBody:
 
     def __init__(self, client: Client, graph: Graph, *, travel_timeout: float = 180,
                  hunt_timeout: float = 600, say: Callable[[str], None] = print,
-                 record_frame: Callable[..., dict] | None = None):
+                 record_frame: Callable[..., dict] | None = None,
+                 hunt_spawns: dict | None = None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
         self.client, self.graph = client, graph
         self.travel_timeout, self.hunt_timeout, self.say = travel_timeout, hunt_timeout, say
+        # Where each hunt's target spawns (`jev.guide.spawns`); empty walks rings.
+        self.hunt_spawns = hunt_spawns or {}
         self.travelling = False
         self.policy_context = Context()
         self.checkpoint: Callable[[], None] = lambda: None
@@ -352,7 +356,9 @@ class LiveBody:
                     is_complete=complete_reader, service_needed=self._service_needed)
         outcome = hunt.run(destination.world, destination.hunt_yards or DEFAULT_HUNT_YARDS,
                            name_id(destination.target_name),
-                           timeout_s=self.hunt_timeout)
+                           timeout_s=self.hunt_timeout,
+                           spawns=spawn_points(self.hunt_spawns, node.id,
+                                               getattr(destination, "target_id", None)))
         return self._result(outcome, hunt.detail)
 
     def _service_needed(self) -> str | None:

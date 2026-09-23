@@ -359,3 +359,29 @@ def test_observed_loot_results_allow_the_next_objective_check(outcome):
     hunt.loot = SimpleNamespace(run=lambda **_: outcome, detail="observed")
     assert hunt.run((0, 0, 0), 30) is Hunted.DONE
     assert hunt.fight.calls == 1
+
+
+def test_a_hunt_stands_where_its_target_spawns_when_the_guide_knows():
+    """Northshire's Young Wolves spawn 24 to 170 yards from their cluster's centre, and
+    rings at 0, 13 and 31 yards looked 38 times and found nothing (run ...233909)."""
+    from jev.run.hunt import SPAWN_LAPS
+
+    spawns = ((24.0, 0.0, 80.0), (0.0, 36.0, 80.0), (30.0, 5.0, 80.0), (60.0, 60.0, 80.0))
+    h, walked = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
+    assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=spawns) is Hunted.UNREACHABLE
+    assert h.moves == 3 * SPAWN_LAPS, "a spawn ten yards from a station is the same stance"
+
+
+def test_spawn_stations_are_a_walk_not_a_zigzag():
+    from jev.run.hunt import SPAWN_LAPS, spawn_stations
+
+    spawns = ((0.0, 0.0, 0.0), (100.0, 0.0, 0.0), (20.0, 0.0, 0.0), (80.0, 0.0, 0.0),
+              (40.0, 0.0, 0.0))
+    tour = spawn_stations(spawns)
+    assert [p[0] for p in tour[: len(tour) // SPAWN_LAPS]] == [0.0, 20.0, 40.0, 80.0, 100.0]
+
+
+def test_without_spawns_the_rings_remain():
+    h, _ = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
+    assert h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5, spawns=()) is Hunted.UNREACHABLE
+    assert h.moves == STATIONS
