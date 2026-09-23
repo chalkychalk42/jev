@@ -168,7 +168,7 @@ def test_engaging_never_clicks_the_body_it_turns_and_starts_the_swing():
     assert f.engage() is True
     assert hid.clicks == [], "aimed by clicking, which does not turn the character"
     assert hid.taps == ["1"], "faced the unit and never started swinging"
-    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.6}]
+    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.0}]
 
 
 def test_a_vanishing_target_at_full_health_is_not_a_kill():
@@ -722,7 +722,7 @@ def test_an_unfaced_unit_is_never_walked_at_or_clicked():
     f.targeting.face = FaceResult(FaceCode.UNSETTLED, "plate still off centre", 0.2)
     assert f.run(timeout_s=1) is Fought.NOT_VISIBLE
     assert hid.clicks == [] and hid.holds == []
-    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.6}]
+    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.0}]
 
 
 @pytest.mark.parametrize("last_hp", [None, 1.0, 0.03])
@@ -964,7 +964,85 @@ def test_a_unit_fighting_us_is_searched_for_all_the_way_round():
     f.engage({**ALIVE, "target.attacking_me": True})
     f.engage(ALIVE)
     assert [r["search_s"] for r in f.targeting.faces] == [FACE_SEARCH_MAX_S, FACE_SEARCH_MAX_S,
-                                                           0.6]
+                                                           0.0]
+
+
+NOT_VISIBLE = FaceResult(FaceCode.NOT_VISIBLE, "no plate proved to be the selected unit's", turns=0)
+
+
+class _Sighting(_Targeting):
+    """The plate shows only after `hidden` looks: a unit Tab picked beyond plate range."""
+
+    def __init__(self, read, hid, hidden):
+        super().__init__(read, hid)
+        self.hidden = hidden
+
+    def face_selected(self, **request):
+        self.faces.append(request)
+        return NOT_VISIBLE if len(self.faces) <= self.hidden else FACED
+
+
+def test_a_tab_pick_without_a_plate_is_walked_toward_until_its_plate_shows():
+    """Measured 23 September: Tab chose a Young Wolf in plain view twenty yards ahead with
+    no nameplate, and the turning search swung it out of view. Tab picks ahead, so the
+    character walks at it and looks after every stride, never turning away."""
+    from jev.clients.fight import SIGHT_STRIDE_S
+
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.targeting = _Sighting(f.read, hid, hidden=3)
+    assert f.select(1161) is None and f._ahead is True
+    assert f.engage(ALIVE) is True
+    assert hid.holds == [("w", SIGHT_STRIDE_S)] * 3
+    assert [r["search_s"] for r in f.targeting.faces] == [0.0] * 4, "turned away from a Tab pick"
+    assert f.closed == 3
+
+
+def test_walking_toward_an_unseen_tab_pick_is_bounded():
+    from jev.clients.fight import SIGHT_STRIDES
+
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.targeting = _Sighting(f.read, hid, hidden=10 ** 6)
+    assert f.select(1161) is None
+    assert f.engage(ALIVE) is False
+    assert len(hid.holds) == SIGHT_STRIDES
+    assert f._aim_failure() is Fought.NOT_VISIBLE
+
+
+def test_a_unit_that_starts_fighting_during_the_walk_is_searched_for_all_round():
+    from jev.clients.targeting import FACE_SEARCH_MAX_S
+
+    hid = _Hid()
+    fighting = {**ALIVE, "vitals.combat": True}
+    f = _fight([ALIVE, fighting], hid=hid)
+    f.targeting = _Sighting(f.read, hid, hidden=10 ** 6)
+    assert f.select(1161) is None
+    assert f.engage(ALIVE) is False
+    assert len(hid.holds) == 1, "kept walking blind while something was hitting us"
+    assert f.targeting.faces[-1]["search_s"] == FACE_SEARCH_MAX_S
+
+
+def test_a_kept_selection_is_not_walked_at_blind():
+    """A selection kept from an earlier fight is not known to be ahead: no stride."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.targeting = _Sighting(f.read, hid, hidden=10 ** 6)
+    assert f.engage(ALIVE) is False
+    assert hid.holds == [] and f.closed == 0
+
+
+def test_a_kept_selection_with_no_plate_on_screen_is_dropped_for_a_new_choice():
+    """Measured 23 September: one far wolf stayed selected for five minutes and absorbed
+    twenty-eight fights, because a kept selection skipped acquisition entirely."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.targeting = _Sighting(f.read, hid, hidden=1)
+    acquired = []
+    f.acquire = lambda name_id, **kw: acquired.append((name_id, kw)) or None
+    f.run(1161, timeout_s=0.3)
+    assert acquired == [(1161, {"defend": False})], "a stale selection skipped acquisition"
+    assert len(f.targeting.faces) >= 2
 
 
 def test_the_last_proved_plate_is_the_hint_for_the_next_look():

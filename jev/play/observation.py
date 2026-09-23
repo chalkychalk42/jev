@@ -16,6 +16,7 @@ from pathlib import Path
 
 from jev.guide.objectives import select_objective
 from jev.perceive import radio_frame
+from jev.perceive.fields import SEQ_MODULUS
 from jev.run.client import STALE_AFTER_S
 
 OBSERVATION_VERSION = 1
@@ -327,7 +328,7 @@ def judge(before: dict, after: dict | None, *, expected_effect: str, delivered: 
     progressed = (type(old_generation) is int and type(new_generation) is int
                   and new_generation > old_generation)
     sequence_progressed = (type(a.get("seq")) is int and type(b.get("seq")) is int
-                           and 0 < (b["seq"] - a["seq"]) % 256 < 128)
+                           and 0 < (b["seq"] - a["seq"]) % SEQ_MODULUS < 128)
     if (b.get("vitals.dead") is None or b.get("vitals.ghost") is None
             or not (progressed or sequence_progressed)):
         return {**base, "reason": detail or "outcome telemetry incomplete or unchanged"}

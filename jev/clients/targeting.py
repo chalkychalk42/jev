@@ -66,6 +66,7 @@ TRACK_DX, TRACK_DY = 0.06, 0.05      # fractions of the client width / height
 # A turn's outcome is uncertain by a share of its own size (the rate is still being
 # measured), so the horizontal window grows with the predicted shift.
 TRACK_SHIFT_SHARE = 0.6
+PLATE_FILL_SLACK_PX = 10
 
 
 class FaceCode(StrEnum):
@@ -204,9 +205,6 @@ class Targeting:
         if baseline is None:
             return PaintResult(PaintCode.BLIND, None, None, "no radio after action")
         baseline_seq = baseline.get("seq")
-        if baseline_seq is None:
-            return PaintResult(PaintCode.UNKNOWN, baseline, baseline,
-                               "no paint sequence after action")
         deadline = time.monotonic() + self.wait_s
         after = baseline
         while time.monotonic() < deadline:
@@ -217,8 +215,18 @@ class Targeting:
             if after is None:
                 return PaintResult(PaintCode.BLIND, baseline, None,
                                    "radio lost while waiting for fresh paint")
-            if after.get("seq") is not None and after["seq"] != baseline_seq:
+            seq = after.get("seq")
+            if baseline_seq is None:
+                # An addon older than the modulo-255 sequence paints "no sequence" once
+                # every 256 paints. That paint cannot be ordered; the next one is the
+                # baseline, and only a paint after it is fresh.
+                baseline, baseline_seq = after, seq
+                continue
+            if seq is not None and seq != baseline_seq:
                 return PaintResult(PaintCode.FRESH, baseline, after, "new paint after action")
+        if baseline_seq is None:
+            return PaintResult(PaintCode.UNKNOWN, baseline, after,
+                               "no paint sequence after action")
         return PaintResult(PaintCode.UNKNOWN, baseline, after,
                            "no new paint after action before timeout")
 
@@ -411,6 +419,14 @@ class Targeting:
         height, width = view.frame.shape[:2]
         candidates = units.plate_candidates(view.frame,
                                             units.plate_colours(view.values.get("target.reaction")))
+        # A health bar's fill is the unit's health times the plate width: measured 89 px at
+        # 60% and 29 px at 20% against 147 px full. Yellow flowers pass the bar shape but
+        # almost never at the one width the radio's health predicts.
+        hp = view.values.get("target.hp")
+        if isinstance(hp, (int, float)) and not isinstance(hp, bool) and 0 < hp <= 1:
+            expected = hp * units.PLATE_FULL_W_FRAC * width
+            candidates = [p for p in candidates
+                          if abs(p.w - expected) <= max(PLATE_FILL_SLACK_PX, 0.25 * expected)]
         if tracked is not None:
             near = [p for p in candidates if abs(p.cx - tracked[0]) <= TRACK_DX * width + slack
                     and abs(p.cy - tracked[1]) <= TRACK_DY * height]

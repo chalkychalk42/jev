@@ -9,7 +9,7 @@ from jev.clients.hid import Hid
 from jev.learn.episode import SkillOutcome, read
 from jev.run.cli import main
 from jev.run.supervisor import Cancelled, Result, Supervisor, interruption
-from jev.world.state_v1 import Bags, Quest, State, Ui, Vitals
+from jev.world.state_v1 import Bags, Flags, Quest, State, Ui, Vitals
 
 
 class Body:
@@ -345,6 +345,46 @@ def test_operator_stop_cancels_a_pending_focus_backoff(tmp_path):
     supervisor.close()
     assert worker.done.is_set() and not worker.thread.is_alive()
     assert body.calls == 0
+
+
+def test_the_bodys_own_jump_does_not_preempt_the_skill_that_jumped(tmp_path):
+    # Measured 23 September: every unstick jump read as falling for 0.5-1.06 s, and
+    # cancelling mid-air kept the character on the near side of a fence for 45 s.
+    airborne = seen(flags=Flags(falling=True))
+    rt = runtime(tmp_path, [seen(0), airborne.model_copy(update={"t": 0.5}),
+                            airborne.model_copy(update={"t": 1.0}), seen(1.5), seen(2.0)])
+    body = Body()
+    supervisor = Supervisor(rt, body, say=lambda line: None)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        for t in (0.5, 1.0, 1.5, 2.0):
+            supervisor.step(t)
+        assert supervisor.worker is worker and not worker.cancelled.is_set()
+    finally:
+        supervisor.close()
+
+
+def test_a_fall_longer_than_any_jump_still_preempts(tmp_path):
+    airborne = seen(flags=Flags(falling=True))
+    rt = runtime(tmp_path, [seen(0)] + [airborne.model_copy(update={"t": t / 2})
+                                        for t in range(1, 6)])
+    body = Body()
+    supervisor = Supervisor(rt, body, say=lambda line: None)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        for t in (0.5, 1.0, 1.5):
+            supervisor.step(t)
+        assert not worker.cancelled.is_set()
+        supervisor.step(2.0)                       # 1.5 s airborne: longer than any jump
+        assert worker.cancelled.is_set() and worker.reason == "falling"
+    finally:
+        supervisor.close()
+    assert interruption(worker.arm, airborne) == "falling", "untracked callers stay conservative"
+    assert interruption(worker.arm, airborne, falling_s=1.0) != "falling"
 
 
 def test_a_catalog_timeout_is_a_counted_failure_not_a_retrying_preemption(tmp_path):

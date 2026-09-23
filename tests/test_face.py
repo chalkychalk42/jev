@@ -240,3 +240,29 @@ def test_turns_are_bounded(monkeypatch):
     result = targeting_for(world, monkeypatch).face_selected(max_turns=0)
     assert result.code is FaceCode.UNSETTLED
     assert world.holds == []
+
+
+def test_a_bar_whose_width_disagrees_with_the_target_health_is_never_hovered(monkeypatch):
+    """Measured 23 September: yellow flowers pass the bar shape and ate the hover budget
+    on every look. A health bar's fill is the unit's health times the plate width, so a
+    flower-sized bar at full health is not the target's plate and is not worth a hover."""
+
+    class Flowers(World):
+        def frame(self):
+            frame = super().frame()
+            for cx in (500, 1100):                       # 30 px yellow bars, plate-shaped
+                frame[380:387, cx - 15:cx + 15] = YELLOW
+            return frame
+
+    world = Flowers(bearing=1.0)
+    targeting = targeting_for(world, monkeypatch)
+    result = targeting.face_selected(expected_name_id=2864)
+    assert result.faced
+    assert all(abs(x - WIDTH / 2) < 80 for x, _ in targeting.probes), targeting.probes
+
+    # At a fifth of its health the target's own fill is about 29 px: the full-width bar
+    # is the one that disagrees, so it is not hovered, and the flower-sized ones are.
+    hurt = Flowers(bearing=1.0, values=radio(**{"target.hp": 0.2}))
+    hurt_targeting = targeting_for(hurt, monkeypatch)
+    hurt_targeting.face_selected(expected_name_id=2864, search_s=0.0)
+    assert hurt_targeting.probes and all(abs(x - WIDTH / 2) > 80 for x, _ in hurt_targeting.probes)

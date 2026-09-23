@@ -2,6 +2,7 @@ from dataclasses import replace
 
 import pytest
 
+from jev.perceive.fields import SEQ_MODULUS
 from jev.play.controls import Limits, build_manifest
 from jev.play.executor import Executor, GuardState
 
@@ -116,7 +117,7 @@ class Harness:
     def read(self):
         self.reads += 1
         self.on_read()
-        self.seq = (self.seq + self.fresh) % 256
+        self.seq = (self.seq + self.fresh) % SEQ_MODULUS
         return GuardState({**self.values, "seq": self.seq}, self.clock.now - self.age,
                           self.origin, self.size, cursor=self.hid.position)
 

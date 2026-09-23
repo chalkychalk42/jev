@@ -20,6 +20,12 @@ from jev.run.evidence import bind, operation
 from jev.skills.catalog import get
 from jev.world.state_v1 import State
 
+# The body's own jump reads as falling for its whole airtime: measured 0.5-1.06 s per
+# jump over 17 unstick jumps on 23 September. Cancelling mid-air released the forward key,
+# the character dropped back on the near side of the fence and the leg replanned into the
+# same jump for 45 s. A fall that outlasts any jump is a real one.
+FALL_GRACE_S = 1.5
+
 
 class Cancelled(Exception):
     pass
@@ -148,7 +154,13 @@ class Worker:
 
 
 def interruption(arm: Armed, state: State, *, travelling: bool = False,
-                 completion_observed: bool = False, handles_modal: bool = False) -> str | None:
+                 completion_observed: bool = False, handles_modal: bool = False,
+                 falling_s: float = FALL_GRACE_S) -> str | None:
+    """Why the armed skill must stop now, or `None`.
+
+    `falling_s` is how long falling has been observed continuously; a caller that does
+    not track it gets the conservative answer, a fall that has already lasted long enough.
+    """
     skill = arm.decision.skill
     if not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5:
         return "perception unavailable"
@@ -157,7 +169,7 @@ def interruption(arm: Armed, state: State, *, travelling: bool = False,
         return "dead or ghost"
     if state.ui.modal is True and not recovery and not handles_modal:
         return "blocking modal"
-    if state.flags.falling is True and not recovery:
+    if state.flags.falling is True and falling_s >= FALL_GRACE_S and not recovery:
         return "falling"
     fighting = skill in {"COMBAT_PROFILE", "APPROACH_TARGET", "ACQUIRE_TARGET", "GRIND_UNTIL", "LOOT"}
     modal_cleanup = (handles_modal and skill == "ABORT_WAIT"
@@ -194,10 +206,17 @@ class Supervisor:
         self.failure: str | None = None
         self.max_failures = max_failures
         self.failures: dict[tuple[str | None, str | None], int] = {}
+        self._falling_since: float | None = None
 
     def step(self, now: float | None = None) -> State:
         now = time.monotonic() if now is None else now
         state = self.runtime.source.read()
+        if state.flags.falling is True:
+            if self._falling_since is None:
+                self._falling_since = now
+        else:
+            self._falling_since = None
+        falling_s = 0.0 if self._falling_since is None else now - self._falling_since
         exhausted = None
         if self.worker and self.worker.done.is_set():
             worker, self.worker = self.worker, None
@@ -291,7 +310,8 @@ class Supervisor:
                 self.worker.completion_observed = True
             reason = interruption(self.worker.arm, state, travelling=self.body.travelling,
                                   completion_observed=self.worker.completion_observed,
-                                  handles_modal=getattr(self.body, "handles_modal", False))
+                                  handles_modal=getattr(self.body, "handles_modal", False),
+                                  falling_s=falling_s)
             # Hunt yields between pulls, after looting. Interrupting it as combat drops
             # would leave the killed corpse behind. A standalone travel leg can yield now.
             if reason is None and self.worker.arm.decision.skill == "TRAVEL_TO":
@@ -315,7 +335,8 @@ class Supervisor:
               and (self.runtime.armed.decision.skill != "ABORT_WAIT"
                    or getattr(self.body, "executes_wait", False))):
             arm = self.runtime.armed
-            reason = interruption(arm, state, handles_modal=getattr(self.body, "handles_modal", False))
+            reason = interruption(arm, state, handles_modal=getattr(self.body, "handles_modal", False),
+                                  falling_s=falling_s)
             if not reason:
                 self.worker = Worker(self.body, arm, state, recorder=self.runtime.recorder)
                 self.worker.thread.start()

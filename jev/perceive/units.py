@@ -617,23 +617,26 @@ CORPSE_MERGE_PX = 12
 
 def corpse_probe_points(frame: np.ndarray, anchor: Plate | None = None, *,
                         limit: int = 16) -> list[Point]:
-    """Ordered points worth hovering to find a selected corpse; none is a body claim.
+    """Ordered points worth hovering to find a corpse; none is a body claim.
 
-    Ring proposals first (cheap when a ring is visible), then a grid under the last living
-    plate, then the same grid on the centre line. Interface zones and plate surfaces are
-    excluded; points closer than a few pixels to an earlier one are merged.
+    The grid under the last living plate first - measured 23 September, the corpse lay
+    about a hundred pixels under the plate the wolf had when it died - then the same grid
+    on the centre line, and ring proposals last: in grass they are mostly terrain, and
+    ordered first they spent a whole sixteen-probe search on it. Interface zones and plate
+    surfaces are excluded; points closer than a few pixels to an earlier one are merged.
     """
     if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
         raise ValueError("probe limit must be a positive integer")
     height, width = frame.shape[:2]
     _, _, plates = _observations(frame, PROPOSAL_COLOURS)
-    ordered = [c.point for c in corpse_candidates(frame)]
     anchors = [(anchor.cx, anchor.cy)] if anchor is not None else []
     anchors.append((width / 2, height * CORPSE_CENTRE_Y))
     grid = sorted(((dx, dy) for dy in CORPSE_DROPS for dx in CORPSE_COLUMNS),
                   key=lambda d: abs(d[0]) + 0.7 * abs(d[1] - CORPSE_DROPS[0]))
+    ordered = []
     for cx, cy in anchors:
         ordered.extend((round(cx + dx), round(cy + dy)) for dx, dy in grid)
+    ordered.extend(c.point for c in corpse_candidates(frame))
     out: list[Point] = []
     for point in ordered:
         if not _point_clear(point, frame, plates):

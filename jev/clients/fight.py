@@ -22,6 +22,15 @@ own range check says a swing reaches (`target.melee_range`, schema 9). `target.i
 `CheckInteractDistance` index 3, about eleven yards, and only chooses the stride length.
 Without the range check (an older addon) the target's **health** decides, as before.
 
+**Seeing it** comes first. `Tab` picks ahead of the character but reaches well beyond the
+distance at which the client draws nameplates: measured 23 September, a Young Wolf in
+plain view about twenty yards ahead with its selection ring and name but no plate. Turning
+to look for it swung it out of view. So a `Tab` pick with no plate is walked toward in
+strides, looking after each one, until its plate shows. A selection kept from before this
+fight is not assumed to be ahead: when its plate is not on screen it is dropped for a new
+acquisition. The same run kept one such wolf selected for five minutes and twenty-eight
+fights while the hunt walked between spots.
+
 **Swinging** is melee auto-attack, a toggle. It is pressed only when the radio says it is
 off (`bars.attacking`, the stock Attack-button flash state): pressing it while it is on
 switches it off, which is what the old rotation did straight after every right-click.
@@ -110,10 +119,10 @@ MAX_CLOSE_BURSTS = 12
 # inside this window would read the old state and switch it straight back.
 TOGGLE_SETTLE_S = 1.0
 
-# Turning to look for a freshly selected unit with no plate on screen. Two steps cover
-# about eighty degrees; a unit Tab chose ahead but beyond nameplate range is not found
-# by turning further, and a full turn costs three seconds per look.
-FRESH_SEARCH_S = 0.6
+# Walking toward a Tab pick that has no plate yet. Tab reaches past nameplate range;
+# eight half-second strides are about twenty-five yards at run speed, looking after each.
+SIGHT_STRIDES = 8
+SIGHT_STRIDE_S = 0.5
 
 # Re-face after this long without the target losing any health, or at once when the
 # client reports "facing the wrong way". Health coming off the target is the only evidence
@@ -208,6 +217,8 @@ class Fight:
     killed_name_id: int | None = field(default=None, init=False)
     _xp_start: tuple | None = field(default=None, init=False)
     _strides: int = field(default=0, init=False)
+    # The current selection came from Tab in this fight, so it lies ahead of the character.
+    _ahead: bool = field(default=False, init=False)
     _error_count: int | None = field(default=None, init=False)
     _damage_seen: bool = field(default=False, init=False)
     _input_refused: bool = field(default=False, init=False)
@@ -235,6 +246,7 @@ class Fight:
         self.killed_name_id = None
         self._xp_start = None
         self._strides = 0
+        self._ahead = False
         self._error_count = None
         self._damage_at = time.monotonic()
         self.last_hp = None
@@ -297,7 +309,18 @@ class Fight:
             self._damage_mark = v.get("target.hp")
             self.selected_plate = None
         if not self.engage(v):
-            return self._aim_failure()
+            if not (chosen and self._aim_code is FaceCode.NOT_VISIBLE):
+                return self._aim_failure()
+            # Kept from before this fight and not on screen: nothing says it is ahead or
+            # near, so choose again from what is. Measured: one stale far selection
+            # absorbed twenty-eight fights while the hunt walked between spots.
+            event("selection.dropped", data={"name_id": self._selected_name_id,
+                                             "reason": self.detail})
+            acquired = self.acquire(name_id, defend=in_combat)
+            if acquired is not None:
+                return acquired
+            if not self.engage(v):
+                return self._aim_failure()
         # Acquisition/verification time is not time spent trying to deal damage.
         self._damage_at = self._last_aim_at = time.monotonic()
         deadline = time.monotonic() + timeout_s
@@ -417,6 +440,7 @@ class Fight:
         to fight, and `Tab` does not care how far away or how occluded its pick is.
         """
         self.selected_plate = None
+        self._ahead = False
         frame = self.read_frame()
         if frame is not None:
             for plate in self._candidates(frame):
@@ -528,6 +552,7 @@ class Fight:
                 continue
             self._selected_name_id = v.get("target.name_id")
             self._damage_mark = v.get("target.hp")
+            self._ahead = True
             return None
         self.detail = "no nameplate and no Tab target worth fighting"
         return Fought.NO_TARGET
@@ -546,12 +571,14 @@ class Fight:
         """
         v = values or {}
         # A unit already fighting us can be anywhere, including behind: search a full turn.
-        # A fresh selection with no plate is usually beyond nameplate range ahead, where
-        # turning cannot help; a short look settles it and the hunt moves on.
+        # Otherwise turning is not how an unseen unit is found: a Tab pick lies ahead,
+        # beyond nameplate range, and is walked toward; a kept selection is re-chosen.
         fighting = v.get("vitals.combat") is True or v.get("target.attacking_me") is True
         result = self._targeting().face_selected(
             expected_name_id=self._selected_name_id, hint=self.last_plate,
-            search_s=FACE_SEARCH_MAX_S if fighting else FRESH_SEARCH_S)
+            search_s=FACE_SEARCH_MAX_S if fighting else 0.0)
+        if result.code is FaceCode.NOT_VISIBLE and self._ahead and not fighting:
+            result = self._close_to_sight(result)
         self._aim_code = result.code
         self.detail = result.detail
         event("engage.request", code=result.code.value,
@@ -563,6 +590,27 @@ class Fight:
             return False
         self._last_aim_at = time.monotonic()
         return self._ensure_attacking()
+
+    def _close_to_sight(self, result):
+        """Walk at a Tab pick until its plate shows. Bounded; looks after every stride."""
+        for stride in range(SIGHT_STRIDES):
+            event("approach.request", data={"key": "w", "duration_s": SIGHT_STRIDE_S,
+                                            "closed": self.closed, "sight": stride + 1})
+            if not self.hid.hold("w", SIGHT_STRIDE_S):
+                self._input_refused = True
+                self.detail = "approach input refused"
+                return result
+            self.closed += 1
+            v = self.read()
+            self._observe(v)
+            fighting = v is not None and (v.get("vitals.combat") is True
+                                          or v.get("target.attacking_me") is True)
+            result = self._targeting().face_selected(
+                expected_name_id=self._selected_name_id, hint=None,
+                search_s=FACE_SEARCH_MAX_S if fighting else 0.0)
+            if result.code is not FaceCode.NOT_VISIBLE or fighting:
+                return result
+        return result
 
     def _ensure_attacking(self) -> bool:
         """Press the melee toggle only when it is observed off (ARCHITECTURE section 6).

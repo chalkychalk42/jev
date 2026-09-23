@@ -175,3 +175,23 @@ def test_post_action_missing_sequence_is_unknown_without_guessing(clock):
     result = Targeting(None, lambda: sample).wait_for_paint()
     assert result.code is PaintCode.UNKNOWN
     assert "no paint sequence" in result.detail
+
+
+def test_an_unordered_paint_becomes_the_baseline_for_the_next_one(clock):
+    """An older addon paints sequence 255 as "not available" once every 256 paints. That
+    paint cannot be ordered, so the next known paint is the baseline and only a paint
+    after it counts as fresh - measured live as a false `blind` on 23 September."""
+    unordered = {**radio(1), "seq": None}
+    first, second = radio(0), radio(1, **{"target.name_id": 999})
+    readings = iter([unordered, first, first, second])
+    result = Targeting(None, lambda: next(readings)).wait_for_paint()
+    assert result.code is PaintCode.FRESH
+    assert result.baseline is first and result.after is second
+
+
+def test_the_sequence_never_paints_the_not_available_code():
+    from jev.perceive.fields import FIELDS, SEQ_MODULUS
+
+    seq = next(f for f in FIELDS if f.name == "seq")
+    assert SEQ_MODULUS == seq.na == seq.span, "every painted value must be a real code"
+    assert f"SEQ % {SEQ_MODULUS}" in seq.lua

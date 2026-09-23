@@ -132,11 +132,16 @@ def _tri(name: str, lua: str, note: str = "") -> Field:
 #
 # Order is the wire order. Appending is cheap; reordering is a schema break.
 
+# The paint counter wraps at 255, not 256: an all-ones UINT is the not-available code, so
+# 255 decoded as "no sequence" once every 256 paints and an action waiting for fresh paint
+# read that as blindness (measured 23 September, `blind: no paint sequence after action`).
+SEQ_MODULUS = 255
+
 FIELDS: tuple[Field, ...] = (
     # -- header ------------------------------------------------------------------
     Field("schema", 4, Kind.UINT, f"return {SCHEMA}",
           "must match the decoder's SCHEMA or the strip is from another build"),
-    Field("seq", 8, Kind.UINT, "return SEQ % 256",
+    Field("seq", 8, Kind.UINT, f"return SEQ % {SEQ_MODULUS}",
           "increments every paint; a frozen seq is a hung addon, not a misread"),
 
     # -- character ---------------------------------------------------------------

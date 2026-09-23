@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, is_dataclass
 
 from jev.clients.camera import GRAB_S
+from jev.perceive.fields import SEQ_MODULUS
 from jev.play.actions import (
     Action,
     ActionSlotAction,
@@ -47,7 +48,7 @@ class GuardState:
     @property
     def sequence(self) -> int | None:
         value = (self.values or {}).get("seq")
-        return value if type(value) is int and 0 <= value <= 255 else None
+        return value if type(value) is int and 0 <= value < SEQ_MODULUS else None
 
 
 @dataclass(frozen=True)
@@ -323,7 +324,7 @@ class Executor:
             current = self._view()
             self._compare(current, view)
             self._state(action, current)
-            if current.sequence is not None and 0 < (current.sequence - sequence) % 256 < 128:
+            if current.sequence is not None and 0 < (current.sequence - sequence) % SEQ_MODULUS < 128:
                 return current
         raise _Refusal("stale", "no newer hover paint arrived")
 

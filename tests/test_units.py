@@ -394,13 +394,18 @@ def test_legacy_manual_components_cannot_invent_measured_brackets():
     assert not Sighting(ring, plate, (800, 445)).admits((800, 445))
 
 
-def test_corpse_probes_start_on_the_ring_then_search_under_the_last_living_plate():
+def test_corpse_probes_search_under_the_last_living_plate_before_ring_proposals():
     frame = _scene()
     [sighting] = corpse_candidates(frame)
     assert sighting.point == (800, 544)
     assert sighting.ring.bounds == (770, 540, 830, 560)
-    points = corpse_probe_points(frame)
-    assert points[0] == sighting.point, "the measured prone pose is tried first"
+    # A ring off the centre-line grid is still proposed, but only after both grids:
+    # measured 23 September, grass rings ordered first spent the whole search.
+    aside = _scene(ring_left=1010, bar_left=968)
+    [ring] = corpse_candidates(aside)
+    points = corpse_probe_points(aside, limit=60)
+    assert ring.point in points
+    assert all(abs(x - 800) <= 85 for x, _ in points[:points.index(ring.point)])
     anchor = Plate(500.0, 300.0, 147, RingColour.YELLOW)
     anchored = corpse_probe_points(np.zeros((900, 1600, 3), dtype=np.uint8), anchor)
     assert anchored[0] == (500, 400), "the column under the last living plate comes first"
