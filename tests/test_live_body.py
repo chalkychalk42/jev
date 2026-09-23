@@ -487,7 +487,7 @@ def test_a_unit_with_no_nameplate_on_show_is_talked_to_where_a_hover_finds_it():
                            "fixture")
 
     b.targeting.probe = probe
-    b.targeting.wait_for_paint = lambda: SimpleNamespace(after={"ui.error_count": None})
+    b._read = lambda: {"ui.modal": True}
     clicks = []
     b.client.hid.click = lambda x, y, right=False: clicks.append((x, y, right)) or True
     assert b._talk_to("Spirit Healer") == "hovered"
@@ -506,8 +506,9 @@ def test_a_unit_out_of_reach_is_stepped_toward_and_clicked_again():
     b.targeting.probe = lambda point, require_target=True: HoverResult(
         HoverCode.OTHER, point, None, healer, "fixture")
     far = {"ui.error_last": UI_ERROR_KEYS.index("out_of_range"), "ui.error_count": 5}
-    answers = iter([far, {"ui.modal": True, "ui.error_count": 5}])
-    b.targeting.wait_for_paint = lambda: SimpleNamespace(after=next(answers))
+    # Silence first: the error arrives after the server's reply, not with the first paint.
+    answers = iter([{"ui.error_count": 4}, far, {"ui.modal": True, "ui.error_count": 5}])
+    b._read = lambda: next(answers)
     clicks, steps = [], []
     b.client.hid.click = lambda x, y, right=False: clicks.append(right) or True
     b.client.hid.hold = lambda key, seconds, **_: steps.append(key) or True

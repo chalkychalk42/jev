@@ -52,6 +52,9 @@ HOVER_POINTS = ((0.5, 0.35), (0.5, 0.45), (0.5, 0.25), (0.45, 0.35), (0.55, 0.35
 # which the hover found in front of the character, and click again.
 HOVER_STEPS = 5
 HOVER_STEP_S = 0.35
+# The answer to a click - a popup, or the error - arrives after the server's reply, which
+# is later than the first fresh paint (run 20260923T183537-ee5ef3 read silence and stopped).
+HOVER_ANSWER_S = 1.2
 
 
 class LiveBody:
@@ -509,9 +512,15 @@ class LiveBody:
                 return False
             if self.client.hid.click(*point, right=True) is False:
                 return False
-            answer = self.targeting.wait_for_paint().after or {}
-            if not (answer.get("ui.error_last") == too_far
-                    and answer.get("ui.error_count") != errors):
+            deadline, far = time.monotonic() + HOVER_ANSWER_S, False
+            while time.monotonic() < deadline:
+                answer = self._read() or {}
+                far = (answer.get("ui.error_last") == too_far
+                       and answer.get("ui.error_count") != errors)
+                if far or answer.get("ui.modal") is True:
+                    break
+                time.sleep(0.1)
+            if not far:
                 return True
             if not self.client.hid.hold("w", HOVER_STEP_S):
                 return False
