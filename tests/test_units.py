@@ -454,3 +454,32 @@ def test_measured_merchant_brackets_survive_proposal_and_revalidation(fixture):
 
 def test_name_only_target_cannot_borrow_unrelated_visible_bars():
     assert candidates(hostile_frame()) == ()
+
+
+def test_a_new_selection_is_located_by_the_colour_it_adds_between_two_frames():
+    """Measured 23 September: a Tab-picked Young Wolf in plain view, beyond nameplate
+    distance, with its ring broken by its body and grass and its name above it."""
+    from jev.perceive.units import Mark, selection_marks
+
+    rng = np.random.default_rng(7)
+    before = np.full((906, 1611, 3), (70, 90, 30), dtype=np.uint8)       # grass
+    for _ in range(40):                                                    # flowers
+        x, y = int(rng.integers(0, 1600)), int(rng.integers(200, 780))
+        before[y:y + 4, x:x + 5] = (215, 180, 10)
+    after = before.copy()
+    after[:, 1:] = before[:, :-1]                   # grass sways a pixel: not new colour
+    for x0, x1 in ((318, 331), (341, 349), (355, 363)):                   # a broken ring
+        after[211:219, x0:x1] = (250, 255, 30)
+    after[170:174, 327:352] = (245, 255, 5)                                 # its name
+    after[20:60, 300:420] = (230, 200, 10)                                  # target frame
+    [mark] = selection_marks(before, after)
+    assert isinstance(mark, Mark)
+    assert 320 <= mark.cx <= 360 and 170 <= mark.cy <= 219
+    assert selection_marks(before, before) == []
+
+
+def test_selection_marks_refuse_frames_of_different_sizes():
+    from jev.perceive.units import selection_marks
+
+    with pytest.raises(ValueError):
+        selection_marks(np.zeros((10, 10, 3), np.uint8), np.zeros((10, 11, 3), np.uint8))

@@ -266,3 +266,19 @@ def test_a_bar_whose_width_disagrees_with_the_target_health_is_never_hovered(mon
     hurt_targeting = targeting_for(hurt, monkeypatch)
     hurt_targeting.face_selected(expected_name_id=2864, search_s=0.0)
     assert hurt_targeting.probes and all(abs(x - WIDTH / 2) > 80 for x, _ in hurt_targeting.probes)
+
+
+def test_an_open_loop_turn_toward_a_mark_is_bounded_and_goes_the_right_way(monkeypatch):
+    from jev.clients.targeting import FACE_GAIN_S
+
+    world = World(bearing=0.0)
+    targeting = targeting_for(world, monkeypatch)
+    assert targeting.turn_toward(0.2) is True
+    assert world.holds == [("d", pytest.approx(0.2 * FACE_GAIN_S))]
+    assert targeting.turn_toward(-3.0) is True                 # clamped to half a screen
+    assert world.holds[-1] == ("a", pytest.approx(0.5 * FACE_GAIN_S))
+    assert targeting.turn_toward(0.01) is True and len(world.holds) == 2, "a hair is not a turn"
+    with pytest.raises(ValueError):
+        targeting.turn_toward(float("nan"))
+    world.refuse = True
+    assert targeting.turn_toward(0.3) is False

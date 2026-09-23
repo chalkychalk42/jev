@@ -450,6 +450,81 @@ def plate_colours(reaction: int | None) -> tuple[RingColour, ...]:
     return (RingColour.YELLOW, RingColour.RED)
 
 
+# Selecting a unit draws its ring at the feet and its name above it, in the reaction
+# colour, the moment the selection is made - at any distance, while nameplates stop at
+# about twenty yards (measured 23 September: a Tab-picked Young Wolf in plain view with
+# its ring and name and no plate). Between frames either side of the key the camera does
+# not move, so what took a selection colour is where the pick stands. Grass sways; a
+# colour pixel that was within `MARK_JITTER_PX` of the same colour before is not new.
+MARK_JITTER_PX = 2
+# A far ring measured about 33x12 px, broken by the body and grass into pieces of 8-32 px;
+# its name label about 25x4. Pieces this far apart sideways belong to one pick.
+MARK_MIN_AREA = 12
+MARK_GROUP_DX = 60
+MARK_GROUP_DY = 140
+
+
+@dataclass(frozen=True)
+class Mark:
+    """Where selection colour appeared. A direction to look in, not an identity."""
+
+    cx: float
+    cy: float
+    area: int
+    bounds: Bounds
+
+
+def _dilate(mask: np.ndarray, radius: int) -> np.ndarray:
+    out = mask.copy()
+    h, w = mask.shape
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            if dx or dy:
+                out[max(0, dy):h + min(0, dy), max(0, dx):w + min(0, dx)] |= \
+                    mask[max(0, -dy):h + min(0, -dy), max(0, -dx):w + min(0, -dx)]
+    return out
+
+
+def selection_marks(before: np.ndarray, after: np.ndarray,
+                    colours: tuple[RingColour, ...] = PROPOSAL_COLOURS) -> list[Mark]:
+    """Groups of selection-coloured pixels new in `after`, largest first.
+
+    Both frames must come from an unmoving camera either side of one selection change.
+    Interface zones are excluded: the target frame redraws on every selection.
+    """
+    if before.shape != after.shape:
+        raise ValueError("selection marks need two frames of one size")
+    shape = after.shape[:2]
+    appeared = np.zeros(shape, dtype=bool)
+    for colour in colours:
+        appeared |= _RULES[colour].mask(after) & ~_dilate(_RULES[colour].mask(before),
+                                                          MARK_JITTER_PX)
+    pieces = sorted((b for b in _blobs(appeared) if _outside_interface(b, shape)),
+                    key=lambda b: -b.area)
+    groups: list[list[_Blob]] = []
+    for piece in pieces:
+        for group in groups:
+            if (abs(piece.cx - group[0].cx) <= MARK_GROUP_DX
+                    and abs(piece.cy - group[0].cy) <= MARK_GROUP_DY):
+                group.append(piece)
+                break
+        else:
+            groups.append([piece])
+    marks = []
+    for group in groups:
+        area = sum(b.area for b in group)
+        if area < MARK_MIN_AREA:
+            continue
+        bounds = [b.bounds or (round(b.cx), round(b.cy), round(b.cx) + 1, round(b.cy) + 1)
+                  for b in group]
+        marks.append(Mark(sum(b.cx * b.area for b in group) / area,
+                          sum(b.cy * b.area for b in group) / area, area,
+                          (min(b[0] for b in bounds), min(b[1] for b in bounds),
+                           max(b[2] for b in bounds), max(b[3] for b in bounds))))
+    marks.sort(key=lambda m: -m.area)
+    return marks
+
+
 def selected_plates(frame: np.ndarray, reaction: int | None = None) -> list[Plate]:
     """Whole nameplates in the colours the selected unit's reaction can take.
 

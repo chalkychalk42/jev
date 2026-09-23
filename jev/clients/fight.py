@@ -27,8 +27,10 @@ camera shows about a hundred degrees of that circle, so before `Tab` the charact
 round in quarter turns for a plate of the unit it wants. `Tab` reaches well beyond
 nameplate distance: measured 23 September, a Young Wolf in plain view with its selection
 ring and name but no plate, and turning to look for it swung it out of view. So a `Tab`
-pick with no plate is walked toward in strides, looking after each one, until its plate
-shows. A selection kept from before this
+pick with no plate is located by the ring and name the client draws the moment it is
+selected (the selection colour that appears between frames either side of the key), turned
+toward, and walked toward in strides, looking after each one, until its plate shows. A
+pick with no such mark on screen is not walked at: four blind walks in one run found none. A selection kept from before this
 fight is not assumed to be ahead: when its plate is not on screen it is dropped for a new
 acquisition. The same run kept one such wolf selected for five minutes and twenty-eight
 fights while the hunt walked between spots.
@@ -55,10 +57,12 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
+import numpy as np
+
 from jev.clients.targeting import FACE_SEARCH_MAX_S, FaceCode, HoverCode, PaintCode, Targeting
 from jev.clients.travel import TURN_RATE_SEED
 from jev.perceive.radio_frame import UI_ERROR_KEYS
-from jev.perceive.units import Plate, find_plates
+from jev.perceive.units import Plate, find_plates, plate_colours, selection_marks
 from jev.run.evidence import event, operation, traced
 from jev.world.combat import (
     HEAL_IN_COMBAT,
@@ -229,6 +233,8 @@ class Fight:
     _strides: int = field(default=0, init=False)
     # The current selection came from Tab in this fight, so it lies ahead of the character.
     _ahead: bool = field(default=False, init=False)
+    # Where the Tab pick's selection mark appeared, as a fraction of the width off centre.
+    _mark_offset: float | None = field(default=None, init=False)
     _error_count: int | None = field(default=None, init=False)
     _damage_seen: bool = field(default=False, init=False)
     _input_refused: bool = field(default=False, init=False)
@@ -454,6 +460,7 @@ class Fight:
         """
         self.selected_plate = None
         self._ahead = False
+        self._mark_offset = None
         turn = getattr(self.hid, "TURN_RIGHT", "d")
         for look in range(1 if defend else SCAN_TURNS + 1):
             if look:
@@ -562,6 +569,7 @@ class Fight:
         for _ in range(MAX_SELECTS):
             event("selection.request", data={"method": "tab", "wanted_name_id": name_id,
                                              "defend": defend})
+            before = self.read_frame()
             if not self.hid.tap("tab"):
                 self.detail = "selection input refused"
                 return Fought.REFUSED
@@ -583,9 +591,26 @@ class Fight:
             self._selected_name_id = v.get("target.name_id")
             self._damage_mark = v.get("target.hp")
             self._ahead = True
+            self._mark_offset = self._mark(before, v)
             return None
         self.detail = "no nameplate and no Tab target worth fighting"
         return Fought.NO_TARGET
+
+    def _mark(self, before, values: dict) -> float | None:
+        """Where the pick's ring and name appeared, as an offset from centre, or `None`."""
+        after = self.read_frame()
+        if not isinstance(before, np.ndarray) or not isinstance(after, np.ndarray):
+            return None
+        try:
+            marks = selection_marks(before, after, plate_colours(values.get("target.reaction")))
+        except ValueError:
+            return None
+        event("selection.marks", data={"count": len(marks), "marks": [
+            {"cx": round(m.cx), "cy": round(m.cy), "area": m.area} for m in marks[:3]]})
+        if not marks:
+            return None
+        width = after.shape[1]
+        return (marks[0].cx - width / 2) / width
 
     def _targeting(self) -> Targeting:
         return self.targeting or Targeting(self.hid, self.read, read_frame=self.read_frame,
@@ -622,7 +647,19 @@ class Fight:
         return self._ensure_attacking()
 
     def _close_to_sight(self, result):
-        """Walk at a Tab pick until its plate shows. Bounded; looks after every stride."""
+        """Turn toward a Tab pick's mark, then walk at it until its plate shows.
+
+        Bounded, and looks after every stride. No mark, no walk: the pick is somewhere
+        the camera does not show, and walking the current heading is a guess.
+        """
+        if self._mark_offset is None:
+            return result
+        event("approach.mark", data={"offset": round(self._mark_offset, 4)})
+        if not self._targeting().turn_toward(self._mark_offset):
+            self._input_refused = True
+            self.detail = "turn input refused"
+            return result
+        self._mark_offset = None               # the turn used it; it is no longer where it was
         for stride in range(SIGHT_STRIDES):
             event("approach.request", data={"key": "w", "duration_s": SIGHT_STRIDE_S,
                                             "closed": self.closed, "sight": stride + 1})

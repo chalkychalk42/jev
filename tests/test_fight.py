@@ -84,6 +84,10 @@ class _Targeting:
         self.faces.append(request)
         return self.face
 
+    def turn_toward(self, offset):
+        self.turned_toward = [*getattr(self, "turned_toward", []), offset]
+        return self.hid.hold("d" if offset > 0 else "a", round(abs(offset) * 0.9, 3))
+
     def probe(self, point, require_target=True):
         """Every plate is the wanted unit's, unless a test says otherwise."""
         after = {"cursor.has": True, "cursor.dead": False,
@@ -982,20 +986,47 @@ class _Sighting(_Targeting):
         return NOT_VISIBLE if len(self.faces) <= self.hidden else FACED
 
 
-def test_a_tab_pick_without_a_plate_is_walked_toward_until_its_plate_shows():
-    """Measured 23 September: Tab chose a Young Wolf in plain view twenty yards ahead with
-    no nameplate, and the turning search swung it out of view. Tab picks ahead, so the
-    character walks at it and looks after every stride, never turning away."""
+def _tab_frames(mark_x=None):
+    """Grass before the key; after it, the pick's ring and name where it stands."""
+    import numpy as np
+
+    before = np.full((900, 1600, 3), (70, 90, 30), dtype=np.uint8)
+    after = before.copy()
+    if mark_x is not None:
+        after[500:508, mark_x - 16:mark_x + 16] = (250, 255, 30)
+        after[460:464, mark_x - 12:mark_x + 12] = (245, 255, 5)
+    frames = iter([before])
+    return lambda: next(frames, after)
+
+
+def test_a_tab_pick_without_a_plate_is_turned_toward_by_its_mark_then_walked_at():
+    """Measured 23 September: Tab chose a Young Wolf in plain view beyond nameplate
+    distance, and the turning search swung it out of view. The ring and name the client
+    draws at selection say where it is: turn toward them once, then walk and look."""
     from jev.clients.fight import SIGHT_STRIDE_S
 
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
+    f.read_frame = _tab_frames(mark_x=400)
     f.targeting = _Sighting(f.read, hid, hidden=3)
     assert f.select(1161) is None and f._ahead is True
+    assert f._mark_offset == pytest.approx((400 - 800) / 1600, abs=0.01)
     assert f.engage(ALIVE) is True
-    assert hid.holds == [("w", SIGHT_STRIDE_S)] * 3
-    assert [r["search_s"] for r in f.targeting.faces] == [0.0] * 4, "turned away from a Tab pick"
+    assert hid.holds[0][0] == "a", "turned away from the mark"
+    assert hid.holds[1:] == [("w", SIGHT_STRIDE_S)] * 3
+    assert [r["search_s"] for r in f.targeting.faces] == [0.0] * 4, "searched away from the pick"
     assert f.closed == 3
+
+
+def test_a_tab_pick_with_no_mark_on_screen_is_not_walked_at():
+    """Four blind walks at plateless Tab picks in one live run found none of them."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.read_frame = _tab_frames(mark_x=None)
+    f.targeting = _Sighting(f.read, hid, hidden=10 ** 6)
+    assert f.select(1161) is None and f._mark_offset is None
+    assert f.engage(ALIVE) is False
+    assert hid.holds == [] and f.closed == 0
 
 
 def test_walking_toward_an_unseen_tab_pick_is_bounded():
@@ -1003,10 +1034,11 @@ def test_walking_toward_an_unseen_tab_pick_is_bounded():
 
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
+    f.read_frame = _tab_frames(mark_x=1000)
     f.targeting = _Sighting(f.read, hid, hidden=10 ** 6)
     assert f.select(1161) is None
     assert f.engage(ALIVE) is False
-    assert len(hid.holds) == SIGHT_STRIDES
+    assert [key for key, _ in hid.holds] == ["d"] + ["w"] * SIGHT_STRIDES
     assert f._aim_failure() is Fought.NOT_VISIBLE
 
 
@@ -1016,10 +1048,11 @@ def test_a_unit_that_starts_fighting_during_the_walk_is_searched_for_all_round()
     hid = _Hid()
     fighting = {**ALIVE, "vitals.combat": True}
     f = _fight([ALIVE, fighting], hid=hid)
+    f.read_frame = _tab_frames(mark_x=1000)
     f.targeting = _Sighting(f.read, hid, hidden=10 ** 6)
     assert f.select(1161) is None
     assert f.engage(ALIVE) is False
-    assert len(hid.holds) == 1, "kept walking blind while something was hitting us"
+    assert [key for key, _ in hid.holds] == ["d", "w"], "kept walking while something was hitting us"
     assert f.targeting.faces[-1]["search_s"] == FACE_SEARCH_MAX_S
 
 

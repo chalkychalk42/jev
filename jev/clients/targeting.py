@@ -321,6 +321,23 @@ class Targeting:
                                                   captured_at=view.captured_at)
         event("target.frame", code="observed", data=metadata)
 
+    def turn_toward(self, offset: float) -> bool:
+        """One open-loop turn by a screen offset (fraction of the width, + is right).
+
+        For a direction that is not a plate, such as a selection mark, where there is
+        nothing to servo on. Bounded to half a screen, at the facing gain.
+        """
+        if not math.isfinite(offset):
+            raise ValueError("turn offset must be finite")
+        offset = max(-0.5, min(0.5, offset))
+        seconds = abs(offset) * FACE_GAIN_S
+        if seconds < FACE_MIN_PULSE_S:
+            return True
+        key = getattr(self.hid, "TURN_RIGHT", "d") if offset > 0 else getattr(self.hid, "TURN_LEFT", "a")
+        event("face.turn", data={"key": key, "seconds": round(seconds, 3),
+                                 "offset": round(offset, 4), "open_loop": True})
+        return bool(self.hid.hold(key, seconds))
+
     def face_selected(self, *, expected_name_id: int | None = None,
                       tolerance: float = FACE_TOLERANCE, max_turns: int = FACE_MAX_TURNS,
                       search_s: float = FACE_SEARCH_MAX_S,
