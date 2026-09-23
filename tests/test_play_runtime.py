@@ -429,6 +429,33 @@ def test_the_scripted_routine_gets_its_budget_from_the_moment_it_takes_over(tmp_
     assert env.playing.routine_clock is None, "the clock outlived the objective"
 
 
+@pytest.mark.parametrize(("rule", "skill"), [
+    ("fight.rotation", "COMBAT_PROFILE"), ("preempt.critical", "COMBAT_PROFILE"),
+    ("preempt.dead", "RELEASE_SPIRIT"), ("preempt.ghost", "CORPSE_RUN"),
+])
+def test_a_fight_or_a_death_runs_its_routine_without_asking_the_tutor(tmp_path, rule, skill):
+    """Run 20260923T172056-54f4d5: thirty seconds of an unanswered tutor call in a fight,
+    from full health to dead without a swing; then Esc five times at the release popup."""
+    env = composition(tmp_path)
+    env.playing.controller.run = Mock(side_effect=AssertionError("the tutor was asked"))
+    scripted = []
+    env.spine.execute = lambda arm, state, checkpoint: scripted.append(
+        (arm, env.playing.routine_clock)) or Result(SkillOutcome.SUCCEEDED, "routine ran", "ok")
+    reflex = replace(env.arm, rule=rule,
+                     decision=env.arm.decision.model_copy(update={"skill": skill}))
+    try:
+        result = env.playing.execute(reflex, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert result.code == "ok" and [arm for arm, _ in scripted] == [reflex]
+    assert scripted[0][1] is not None and scripted[0][1] != float("inf"), \
+        "the routine's own budget applies from the start"
+    rows = [json.loads(line) for line in
+            (env.recorder.dir / "play-actions.jsonl").read_text().splitlines()]
+    assert [row["rule"] for row in rows if row.get("event") == "reflex"] == [rule]
+
+
 def test_a_dialog_nobody_can_dismiss_is_not_handed_to_a_routine(tmp_path):
     env = composition(tmp_path)
     env.playing.controller.teacher = UnavailableTeacher()

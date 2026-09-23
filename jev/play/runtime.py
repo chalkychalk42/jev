@@ -32,6 +32,14 @@ from jev.world.state_v1 import State
 # the scripted fallback when the tutor cannot answer or stalls.
 OBJECTIVE_LOOPS = frozenset({"GRIND_UNTIL"})
 
+# Objectives the tutor is never asked about, named by the coach rule that armed them: a
+# fight the character is already in, and death. A tutor answer takes seconds, its deadline
+# is thirty, and neither waits. In run 20260923T172056-54f4d5 one unanswered tutor call in
+# a fight took the character from full health to dead without a swing, and the dead
+# character's one routine then sat behind a menu offering only Esc, which opened the game
+# menu five times. DECISIONS V35: safety, recovery and combat keep the scripted floor.
+REFLEX_RULES = ("fight.", "preempt.dead", "preempt.ghost", "preempt.critical")
+
 
 def delegable_skills(current: str, available) -> tuple[str, ...]:
     """The routines Jev may run inside a guide objective armed with `current`.
@@ -200,6 +208,14 @@ class PlayingBody:
         if error:
             return Result(SkillOutcome.ABORTED, error, "unsupported")
         focused_checkpoint()
+        if arm.rule.startswith(REFLEX_RULES):
+            self.journal.append("actions", {"event": "reflex", "t": time.time(),
+                                            "arm_id": arm.arm_id, "skill": arm.decision.skill,
+                                            "rule": arm.rule})
+            if state is None:
+                state = State.model_validate(self.observer.observe(arm).data["state"])
+            self.routine_clock = time.monotonic()
+            return self.spine.execute(arm, state, focused_checkpoint)
         result = self.controller.run(arm, focused_checkpoint)
         if (result.code not in {"teacher_unavailable", "teaching_stalled"}
                 or arm.decision.skill in {"ABORT_WAIT", "IDLE"}):
