@@ -411,3 +411,19 @@ def test_a_dialog_nobody_can_dismiss_is_not_handed_to_a_routine(tmp_path):
         env.screenshots.close()
         env.playing.close()
     assert result.code == "teacher_unavailable"
+
+
+def test_a_stalled_tutor_also_hands_the_objective_to_the_scripted_routine(tmp_path):
+    env = composition(tmp_path)
+    env.playing.controller.run = lambda arm, checkpoint: Result(
+        SkillOutcome.ABORTED, "bounded teaching episode made no verified useful progress",
+        "teaching_stalled")
+    scripted = []
+    env.spine.execute = lambda arm, state, checkpoint: scripted.append(arm) or Result(
+        SkillOutcome.SUCCEEDED, "scripted travel arrived", "arrived")
+    try:
+        result = env.playing.execute(env.arm, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert result.code == "arrived" and scripted == [env.arm]

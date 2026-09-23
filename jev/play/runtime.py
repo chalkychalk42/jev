@@ -181,13 +181,16 @@ class PlayingBody:
             return Result(SkillOutcome.ABORTED, error, "unsupported")
         focused_checkpoint()
         result = self.controller.run(arm, focused_checkpoint)
-        if result.code != "teacher_unavailable" or arm.decision.skill in {"ABORT_WAIT", "IDLE"}:
+        if (result.code not in {"teacher_unavailable", "teaching_stalled"}
+                or arm.decision.skill in {"ABORT_WAIT", "IDLE"}):
             return result
         # The system makes progress with zero teacher calls (ARCHITECTURE.md section 0).
         # A tutor that cannot answer - provider down, overloaded past the deadline, or an
-        # invalid reply after its re-ask - hands this objective to the guide's own routine
-        # rather than stopping the run. The next objective asks Jev again. Waits are not
-        # routines: a dialog nobody can dismiss stays a stop for a human.
+        # invalid reply after its re-ask - or that made no verified progress within its
+        # bounded episode hands this objective to the guide's own routine rather than
+        # stopping the run; the failed episode stays recorded and earns no labels. The
+        # next objective asks Jev again. Waits are not routines: a dialog nobody can
+        # dismiss stays a stop for a human.
         self.spine.say(f"tutor unavailable ({result.detail}); "
                        f"the scripted {arm.decision.skill} routine plays this objective")
         self.journal.append("actions", {"event": "scripted_fallback", "t": time.time(),
