@@ -483,3 +483,17 @@ def test_selection_marks_refuse_frames_of_different_sizes():
 
     with pytest.raises(ValueError):
         selection_marks(np.zeros((10, 10, 3), np.uint8), np.zeros((10, 11, 3), np.uint8))
+
+
+def test_a_hostile_units_plate_is_a_facing_candidate():
+    """Every hostile bar measured 5 px under the red rule, and a 6 px floor made facing
+    turn in circles past a Defias Cutpurse's plate in plain view (lossless live frame)."""
+    from jev.perceive.units import plate_candidates, plate_colours
+
+    frame = np.load(LIVE.parent / "live-hostile-plate.npz")["frame"]
+    hostile = plate_candidates(frame, plate_colours(2))
+    assert [(round(p.cx), round(p.cy), p.colour) for p in hostile] == [(663, 335, RingColour.RED)]
+    # The floor stays for yellow, where flower blobs are 4-5 px.
+    yellow = np.zeros_like(frame)
+    yellow[400:405, 700:845] = (230, 200, 10)
+    assert plate_candidates(yellow, (RingColour.YELLOW,)) == []

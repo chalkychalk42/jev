@@ -34,7 +34,7 @@ def captured(recorder):
 
 def test_hunt_records_selection_click_observation_and_loot_under_one_arm(tmp_path, monkeypatch):
     monkeypatch.setattr("jev.clients.fight.time.sleep", lambda _: None)
-    monkeypatch.setattr("jev.clients.fight.find_plates", lambda _: [PLATE])
+    monkeypatch.setattr("jev.clients.fight.find_plates", lambda _, **__: [PLATE])
     nothing = {**ALIVE, "target.has": False, "target.name_id": None, "target.hp": None}
     values = iter([nothing, ALIVE, {**ALIVE, "target.hp": 0.5}, {**ALIVE, "target.hp": 0}])
     reads = []

@@ -181,6 +181,12 @@ PLATE_FULL_W_FRAC = 0.0912
 # Partial bars: measured nameplate fills are 7-8 px tall here; most yellow flower blobs
 # are 4-5. A fill below 12 px is under 8% health. Candidates still need proof of identity.
 PARTIAL_BAR_MIN_H = 6
+# Except red. The red rule keeps only the bar's saturated core, and every hostile bar
+# measured 5 px under it - a Defias Cutpurse's lossless, a Mangy Wolf's and two Forest
+# Spiders' - so a 6 px floor hid every hostile plate from facing. A fight with a hostile
+# unit then turned in circles "searching" with its plate in plain view, and the
+# character died without a swing (runs 20260923T172056-54f4d5, ...175710-b5044f).
+PARTIAL_BAR_MIN_H_BY_COLOUR = {RingColour.RED: 5}
 PARTIAL_BAR_MAX_H = 12       # taller solid colour is not a health bar
 PARTIAL_BAR_MIN_W = 12
 
@@ -405,7 +411,8 @@ def find_plates(frame: np.ndarray,
 def _partial_plate(blob: _Blob, colour: RingColour, shape: tuple[int, int]) -> Plate | None:
     """A health bar at any fill: bar-shaped, solid, no wider than a full plate."""
     full = PLATE_FULL_W_FRAC * shape[1]
-    if (blob.h < PARTIAL_BAR_MIN_H or blob.h > PARTIAL_BAR_MAX_H or blob.w < PARTIAL_BAR_MIN_W
+    min_h = PARTIAL_BAR_MIN_H_BY_COLOUR.get(colour, PARTIAL_BAR_MIN_H)
+    if (blob.h < min_h or blob.h > PARTIAL_BAR_MAX_H or blob.w < PARTIAL_BAR_MIN_W
             or blob.w > 1.25 * full or not _outside_interface(blob, shape)):
         return None
     if blob.area / max(1.0, blob.w * blob.h) < BAR_FILL_MIN or blob.w < blob.h:

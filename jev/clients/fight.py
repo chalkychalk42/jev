@@ -65,7 +65,13 @@ from jev.clients.hid import held, humaniser, pace
 from jev.clients.targeting import FACE_SEARCH_MAX_S, FaceCode, HoverCode, PaintCode, Targeting
 from jev.clients.travel import TURN_RATE_SEED
 from jev.perceive.radio_frame import UI_ERROR_KEYS
-from jev.perceive.units import Plate, find_plates, plate_colours, selection_marks
+from jev.perceive.units import (
+    PROPOSAL_COLOURS,
+    Plate,
+    find_plates,
+    plate_colours,
+    selection_marks,
+)
 from jev.run.evidence import event, operation, traced
 from jev.world.combat import (
     HEAL_IN_COMBAT,
@@ -486,11 +492,29 @@ class Fight:
         if h is not None and h.rng.random() < 0.5:
             turn = getattr(self.hid, "TURN_LEFT", "a")
         swept, look = 0.0, 0
+        turned_round = False
         while True:
             picked = self._pick_plate(name_id, defend)
             if picked is not False:
                 return picked
-            if defend or swept >= SCAN_SWEEP_DEG:
+            if defend:
+                # Tab picks in front of the character, and an attacker behind it is out of
+                # reach: run 20260923T175710-b5044f pressed Tab three times, found nothing,
+                # and was hit from behind. Turn round once and look again.
+                chosen = self.select(name_id, defend=True)
+                if chosen is not Fought.NO_TARGET or turned_round:
+                    return chosen
+                turned_round = True
+                seconds = math.pi / TURN_RATE_SEED
+                event("acquire.turn_round", data={"key": turn, "seconds": round(seconds, 3)})
+                if not self.hid.hold(turn, seconds, exact=True):
+                    self.detail = "scan input refused"
+                    return Fought.REFUSED
+                if self._targeting().wait_for_paint().code is PaintCode.BLIND:
+                    self.detail = "radio lost while turning round"
+                    return Fought.BLIND
+                continue
+            if swept >= SCAN_SWEEP_DEG:
                 return self.select(name_id, defend=defend)
             look += 1
             seconds = (SCAN_TURN_S if h is None
@@ -549,7 +573,9 @@ class Fight:
         character twice, and a plate with no neighbour is the best available evidence that
         a mob has none either.
         """
-        plates = find_plates(frame)
+        # Red too: aggressive units - the Mangy Wolves and Defias round Goldshire - have
+        # red plates, and a search without it could only find them by Tab.
+        plates = find_plates(frame, colours=PROPOSAL_COLOURS)
         centre = self.window_centre_x
         # A snapshot, because `list.sort` empties the list while it computes keys — so a
         # key function that reads `plates` sees nothing, every plate looks isolated, and

@@ -410,7 +410,7 @@ def test_an_isolated_nameplate_is_preferred_over_a_central_one():
               read_frame=lambda: None, window_centre_x=800)
     import jev.clients.fight as mod
 
-    real, mod.find_plates = mod.find_plates, lambda _f: [crowd_a, crowd_b, alone]
+    real, mod.find_plates = mod.find_plates, lambda _f, **_: [crowd_a, crowd_b, alone]
     try:
         assert f._candidates(object())[0] is alone, "picked the one with company"
     finally:
@@ -1318,6 +1318,18 @@ def test_self_defence_does_not_look_round():
     f.read_frame = lambda: _plate_frame(None)
     assert f.acquire(1161, defend=True) is None
     assert hid.holds == [] and hid.taps == ["tab"]
+
+
+def test_self_defence_turns_round_once_when_tab_finds_nothing_in_front():
+    """Tab picks in front of the character; run 20260923T175710-b5044f pressed it three
+    times with the attacker behind and found nothing."""
+    hid = _Hid()
+    nothing = {**ALIVE, "target.has": False}
+    f = _fight([nothing], hid=hid)
+    f.read_frame = lambda: _plate_frame(None)
+    assert f.acquire(1161, defend=True) is Fought.NO_TARGET
+    assert hid.holds == [("d", math.pi / TURN_RATE_SEED)], "turned round once, and only once"
+    assert hid.taps == ["tab"] * (2 * MAX_SELECTS), "a Tab burst either side of the turn"
 
 
 def test_a_refused_turn_stops_the_look_round():
