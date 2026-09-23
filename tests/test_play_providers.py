@@ -82,8 +82,13 @@ def test_claude_selection_never_reads_glm_credentials(tmp_path, monkeypatch):
     result = providers.make_vision_client(provider="claude", binary="fixture-claude",
                                           env_file=tmp_path / "never-read.env")
     assert result is construct.return_value
-    construct.assert_called_once_with(binary="fixture-claude", model="sonnet")
+    construct.assert_called_once_with(binary="fixture-claude", model="sonnet", effort=None)
     read.assert_not_called()
+
+
+def test_reasoning_effort_is_a_claude_setting_only():
+    with pytest.raises(ValueError, match="effort"):
+        providers.make_vision_client(provider="glm", effort="medium", key_env="UNSET_TEST_KEY")
 
 
 def test_claude_rejects_api_endpoint_without_constructing_transport(monkeypatch):
