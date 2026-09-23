@@ -141,7 +141,19 @@ class LiveBody:
                 and not self.client.focused(FOCUS_QUICK_S, checkpoint=checkpoint)):
             return Result(SkillOutcome.ABORTED, "client refused focus after backoff", "refused")
         self.checkpoint()
+        self.ready_camera(state)
         return getattr(self, handler)(state)
+
+    def ready_camera(self, state: State | None) -> None:
+        """Level the camera while nothing is hitting the character.
+
+        Every look needs it, and it is five seconds of mouse-look. Left to the first look,
+        it landed in run 20260923T173347-590b06's first fight - a panic fight at 12% health,
+        which was over before the drag was. A skill whose look finds it done skips it; one
+        that runs in combat with it undone still levels first, as before.
+        """
+        if state is not None and state.vitals.combat is False and not self.camera.calibrated:
+            self.camera.ensure_level()
 
     def _parameters(self) -> str | None:
         """Execute only requests this composition can honour, without silently retargeting."""

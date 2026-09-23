@@ -40,6 +40,8 @@ def body(kind=StepKind.QUEST_ACCEPT, *, log=()):
                              reading=lambda: None, read=lambda: {"vitals.hp": 1.0},
                              frame=lambda: None, approach=Mock(return_value=True))
     b = LiveBody(client, graph, say=lambda line: None)
+    # These tests are about skill composition; levelling before a skill has its own.
+    b.ready_camera = lambda state: None
     skill = "ACCEPT_QUEST" if kind is StepKind.QUEST_ACCEPT else "TURNIN_QUEST"
     d = Decision(goal="g", intent=Intent.ADVANCE, skill=skill, abort_if=["dead"],
                  confidence=1, why="fixture")
@@ -295,6 +297,25 @@ def calibration_devices(b, monkeypatch):
     b.client.hid.move_by = Mock(return_value=True)
     b.client.hid.button = Mock(return_value=True)
     return b.client.hid
+
+
+@pytest.mark.parametrize(("combat", "levels"), [(False, True), (True, False), (None, False)])
+def test_the_camera_is_levelled_before_a_skill_only_while_nothing_is_fighting(
+        monkeypatch, combat, levels):
+    """Levelled lazily, the first look of run 20260923T173347-590b06 was a panic fight at
+    12% health, and the five-second drag outlasted the character."""
+    from jev.world.state_v1 import Vitals
+
+    b = body()
+    del b.ready_camera                        # the body's own, not the fixture's
+    hid = calibration_devices(b, monkeypatch)
+    b._quest = lambda state: Result(SkillOutcome.SUCCEEDED, "ok", "ok")
+    state = seen(vitals=Vitals(hp=1, combat=combat, dead=False, ghost=False))
+    b.execute(b.arm, state, lambda: None)
+    assert b.camera.calibrated is levels
+    assert hid.move_by.call_count == (2 if levels else 0)
+    b.execute(b.arm, state, lambda: None)
+    assert hid.move_by.call_count == (2 if levels else 0), "levelled twice in one session"
 
 
 def test_interact_fight_and_loot_reuse_one_camera_across_ordinary_skill_releases(monkeypatch):

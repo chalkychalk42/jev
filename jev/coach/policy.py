@@ -39,6 +39,16 @@ from jev.world.state_v1 import PowerType, State, StepKind
 # would be spending a rate-limited resource on something already known.
 CONFIDENT = 0.6
 
+# Reflexes: the rules for a fight the character is already in, and for death. Their
+# routine runs at once and is never put to a tutor (a thirty-second deadline is a death in
+# a fight - run 20260923T172056-54f4d5), and losing one is a death, which the tracker
+# counts against its step, not a failed attempt at that step.
+REFLEX_RULES = ("fight.", "preempt.dead", "preempt.ghost", "preempt.critical")
+
+
+def reflex(rule: str) -> bool:
+    return rule.startswith(REFLEX_RULES)
+
 
 @dataclass(frozen=True)
 class Plan:

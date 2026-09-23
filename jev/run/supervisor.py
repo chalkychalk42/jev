@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from jev.coach.policy import Context, service
+from jev.coach.policy import Context, reflex, service
 from jev.learn.episode import Recorder, SkillOutcome
 from jev.orch.runtime import Armed, ClientRuntime
 from jev.run.evidence import bind, operation
@@ -266,7 +266,8 @@ class Supervisor:
                 key = worker.arm.step_id, worker.arm.decision.skill
                 if result.outcome is SkillOutcome.SUCCEEDED:
                     self.failures.pop(key, None)
-                elif result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT) and result.code != "too_poor":
+                elif (result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
+                      and result.code != "too_poor" and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if self.failures[key] >= self.max_failures:
                         exhausted = key, result.detail

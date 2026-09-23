@@ -485,3 +485,27 @@ def test_focus_is_rechecked_inside_a_mouse_move(monkeypatch):
     hid.ready = lambda: next(ready, False)
     assert not hid.move_by(0, 30, step_px=10)
     assert len(sent) == 1
+
+
+@pytest.mark.parametrize(("combat", "stops"), [(True, False), (False, True)])
+def test_a_lost_defensive_fight_is_a_death_not_a_failed_attempt_at_the_step(
+        tmp_path, combat, stops):
+    """Run 20260923T173347-590b06 stopped with `('..._turnin', 'COMBAT_PROFILE'): 1 failed
+    attempts` because the fight it was defending in ended with the character dead. The
+    tracker counts deaths against the step; the step's own skill failing still stops."""
+    fighting = Vitals(hp=1, power=1, combat=combat, dead=False, ghost=False)
+    rt = runtime(tmp_path, [seen(0, vitals=fighting), seen(1, vitals=fighting),
+                            seen(2, vitals=fighting)])
+    body = Body()
+    body.available = body.available | {"COMBAT_PROFILE"}
+    body.execute = lambda arm, state, checkpoint: Result(SkillOutcome.ABORTED, "lost", "too_hurt")
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert supervisor.worker.done.wait(1)
+        rule = supervisor.worker.arm.rule
+        supervisor.step(1)
+        assert rule.startswith("fight.") is combat
+        assert supervisor.stopped.is_set() is stops
+    finally:
+        supervisor.close()

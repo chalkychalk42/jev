@@ -75,6 +75,10 @@ class Camera:
         self._generation += 1
         self._calibrated_geometry = None
 
+    @property
+    def calibrated(self) -> bool:
+        return self._calibrated_geometry == (self.window_origin, self.window_size, self._generation)
+
     def ensure_level(self) -> bool:
         """Reuse this session's completed calibration until explicitly invalidated.
 
@@ -82,7 +86,7 @@ class Camera:
         The runtime invalidates on observed focus loss and before reconnecting; callers
         that deliberately change the camera must invalidate it too.
         """
-        if self._calibrated_geometry == (self.window_origin, self.window_size, self._generation):
+        if self.calibrated:
             event("camera.ready", code="retained")
             return True
         return self.level()

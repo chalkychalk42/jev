@@ -8,6 +8,7 @@ import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from jev.coach.policy import reflex
 from jev.coach.schema import Intent
 from jev.learn.episode import SkillOutcome
 from jev.persist import atomic_json
@@ -31,14 +32,6 @@ from jev.world.state_v1 import State
 # the decision-making Jev is there to do and the student is there to learn. It remains
 # the scripted fallback when the tutor cannot answer or stalls.
 OBJECTIVE_LOOPS = frozenset({"GRIND_UNTIL"})
-
-# Objectives the tutor is never asked about, named by the coach rule that armed them: a
-# fight the character is already in, and death. A tutor answer takes seconds, its deadline
-# is thirty, and neither waits. In run 20260923T172056-54f4d5 one unanswered tutor call in
-# a fight took the character from full health to dead without a swing, and the dead
-# character's one routine then sat behind a menu offering only Esc, which opened the game
-# menu five times. DECISIONS V35: safety, recovery and combat keep the scripted floor.
-REFLEX_RULES = ("fight.", "preempt.dead", "preempt.ghost", "preempt.critical")
 
 
 def delegable_skills(current: str, available) -> tuple[str, ...]:
@@ -208,7 +201,13 @@ class PlayingBody:
         if error:
             return Result(SkillOutcome.ABORTED, error, "unsupported")
         focused_checkpoint()
-        if arm.rule.startswith(REFLEX_RULES):
+        self.spine.ready_camera(state)
+        # A fight the character is already in, and death, are never put to the tutor
+        # (`policy.reflex`). In run 20260923T172056-54f4d5 one unanswered tutor call in a
+        # fight took the character from full health to dead without a swing, and the dead
+        # character's one routine then sat behind a menu offering only Esc, which opened
+        # the game menu five times. DECISIONS V35: combat and recovery keep the floor.
+        if reflex(arm.rule):
             self.journal.append("actions", {"event": "reflex", "t": time.time(),
                                             "arm_id": arm.arm_id, "skill": arm.decision.skill,
                                             "rule": arm.rule})
