@@ -64,6 +64,23 @@ def test_exact_observed_zero_after_health_drop_is_death():
     assert outcome(before, after, "target_dead")["success"]
 
 
+def test_a_fight_that_selected_its_own_kill_is_a_death():
+    """Measured 23 September: a delegated COMBAT_PROFILE killed a Kobold Worker (XP 60,
+    slain 1/10) with nothing selected before it, and was judged a failure."""
+    nothing = {"target.has": False, "target.hp": None, "target.name_id": None}
+    before = view(values={**nothing, "char.xp_pct": 0.20}, quests=[quest(0)])
+    corpse = view(11, values={"target.hp": 0, "char.xp_pct": 0.25}, quests=[quest(0)])
+    assert outcome(before, corpse, "target_dead")["success"]
+    counted = view(12, values={**nothing, "char.xp_pct": 0.25}, quests=[quest(1)])
+    assert outcome(before, counted, "target_dead")["success"]
+    # Experience alone (exploration, a hand-in) with nothing selected is not a kill.
+    explored = view(13, values={**nothing, "char.xp_pct": 0.25}, quests=[quest(0)])
+    assert "target_dead" not in outcome(before, explored, "target_dead")["effects"]
+    # A corpse that was already there, with no experience, is not a new kill either.
+    stale = view(14, values={"target.hp": 0, "char.xp_pct": 0.20}, quests=[quest(0)])
+    assert "target_dead" not in outcome(before, stale, "target_dead")["effects"]
+
+
 @pytest.mark.parametrize("previous,current", [(0.4, 0.4), (None, 0.4), (0.4, 0.6)])
 def test_initial_injury_unread_health_or_healing_is_not_new_damage(previous, current):
     result = outcome(view(values={"target.hp": previous}), view(11, values={"target.hp": current}))

@@ -289,6 +289,14 @@ def measured_effects(before: dict, after: dict) -> tuple[list[str], float]:
             if gain or completed:
                 effects.append("quest_progress")
                 progress += gain or 1
+    # A delegated fight selects its own kill, so the target the rules above compare was
+    # not selected before the action. Measured 23 September: COMBAT_PROFILE killed a
+    # Kobold Worker (XP 60, "Kobold Worker slain: 1/10") and was judged a failure. Only a
+    # kill grants experience together with a corpse left selected, or with a counter.
+    gained = _increase(a, b, "char.xp_pct") or _increase(a, b, "char.level")
+    corpse = b.get("target.has") is True and b.get("target.hp") == 0
+    if gained and "target_dead" not in effects and (corpse or "quest_progress" in effects):
+        effects.append("target_dead")
     for supply in ("food", "drink"):
         identity, count = f"bags.{supply}_id", f"bags.{supply}_count"
         same_item = (type(a.get(identity)) is int and a[identity] > 0
