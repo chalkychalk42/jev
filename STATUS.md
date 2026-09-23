@@ -1873,4 +1873,17 @@ Simulated with the real code: post, post walled on one side, post within melee r
 four walls on one route all reached. `walk_sim` time now passes for sleeps below a
 substep; the first step-mode simulation spun on a float residue.
 
-NEXT: session 16 at Echo Ridge.
+Session 16 (`runs/20260923T190938-3b2dd7`): the fight's sidesteps fired live (right
+0.5 s, left 1 s, right 2 s, left 2 s) and moved the character under a yard. It stood in a
+dead-end pocket: the rock face on one side, the log along the mine platform's edge on the
+other, the prop ahead. The mesh crosses onto the platform at that log, which the client
+does not let a character over. The tutor then spent its episode there and handed over to
+the scripted hunt, whose walk got into the mine. Inside, the character stood among
+Kobold Laborers and read nothing: the teal cave passes the cyan marker test and ran into
+the strip's right marker (V65, fixed and verified against the frame).
+
+OPEN: routes into Echo Ridge Mine can still cross the log (the mesh does not know it);
+the teaching watchdog (300 s without progress) always stops a stuck objective before its
+own 600 s timeout fails it into a rib.
+
+NEXT: session 17 inside the mine.

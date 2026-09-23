@@ -1028,6 +1028,24 @@ def test_the_strip_reads_against_a_saturated_blue_banner():
     assert grid.cols == GRID_COLS and grid.rows == GRID_ROWS
 
 
+MINE = pathlib.Path(__file__).parent / "fixtures" / "live-echo-ridge-mine.npz"
+
+
+def test_the_strip_reads_where_the_scene_runs_into_a_marker():
+    """Inside Echo Ridge Mine the teal cave, `(41, 101, 121)`, passes the cyan test - it is
+    dark, but its low channel is dark relative to the high ones and those match - and
+    it lies right against the strip. The right marker's run went on fifty pixels past
+    the strip, every bracket built from outer edges was wrong, and the character stood
+    among Kobold Laborers blind (run 20260923T190938-3b2dd7). The top 160 rows of that
+    frame."""
+    frame = np.load(MINE)["frame"]
+    reading = radio_frame.read(frame)
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    assert reading.values["schema"] == 12
+    assert reading.values["pos.indoors"] is True
+    assert reading.values["pos.mx"] == pytest.approx(0.4909, abs=1e-3)
+
+
 def test_a_marker_needs_its_two_high_channels_to_match():
     def mask(rgb):
         return radio_frame._marker_masks(np.full((4, 4, 3), rgb, dtype=np.uint8))[1]

@@ -482,6 +482,23 @@ def _strip_candidates(left: np.ndarray, right: np.ndarray,
                             _Blob(area=int(cell * cell), cx=lcx, cy=cy, w=cell, h=cell),
                             _Blob(area=int(cell * cell), cx=rcx, cy=cy, w=cell, h=cell),
                         ))
+                # A run can also merge with the *scene* on its outer side, and then only
+                # its inner edge means anything. Inside Echo Ridge Mine the teal cave,
+                # (41, 101, 121), passes the cyan test, and the right marker's run went
+                # on fifty pixels past the strip: every bracket above was wrong and the
+                # strip read as absent (run 20260923T190938-3b2dd7). In the calibration
+                # row the inner edges are exact - ten swatches lie between them, none a
+                # marker colour.
+                inner = (_rx0 - _lx1 - 1) / (GRID_COLS - 2)
+                if MIN_CELL_PX <= inner <= MAX_CELL_PX and (lx0, rx1, -int(inner)) not in seen:
+                    seen.add((lx0, rx1, -int(inner)))
+                    icy = y + inner / 2.0 - 0.5
+                    out.append((
+                        _Blob(area=int(inner * inner), cx=_lx1 - inner / 2.0 + 0.5, cy=icy,
+                              w=inner, h=inner),
+                        _Blob(area=int(inner * inner), cx=_rx0 + inner / 2.0 - 0.5, cy=icy,
+                              w=inner, h=inner),
+                    ))
                 if len(out) >= limit:
                     return out
     return out
