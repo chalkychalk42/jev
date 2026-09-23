@@ -15,12 +15,18 @@ which is the one worth knowing about.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import StrEnum
 
 from jev.guide.graph import FailEdge, FailWhen, Graph, Node
 from jev.guide.objectives import select_objective
 from jev.world.state_v1 import State, StepKind
+
+# Getting closer to a step's position by this much (map fractions, about three and a half
+# yards in Elwynn) within this long is progress, and stops the step's clock.
+PROGRESS_STEP = 0.001
+PROGRESS_WINDOW_S = 2.0
 
 
 class Event(StrEnum):
@@ -60,6 +66,12 @@ class StepMemory:
     route_pos: tuple[float, float] | None = None
     level_at_entry: int | None = None
     xp_at_entry: float | None = None
+    # The step's own clock: seconds it had to act and made no progress (`Tracker._clock`).
+    working_s: float = 0.0
+    clocked_at: float | None = None
+    closest: float | None = None
+    closest_at: float | None = None
+    closest_to: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -96,6 +108,7 @@ class Tracker:
             quest_was_in_log=_quest_in_log(state, self._node(step_id)),
             level_at_entry=state.char.level,
             xp_at_entry=state.char.xp_pct,
+            clocked_at=state.t,
         )
 
     @classmethod
@@ -173,6 +186,7 @@ class Tracker:
         node = self._node()
         if node is None:
             return Verdict(Event.BLOCKED, reason=f"step {self.step_id!r} is not in the graph")
+        self._clock(state, node)
 
         # Death first, unconditionally. Every other answer is wrong while dead: the
         # predicate may even be satisfiable, and advancing would discard the step that
@@ -181,7 +195,7 @@ class Tracker:
             return Verdict(Event.DEATH, reason="dead or ghost")
 
         self._backfill(state)
-        age = state.t - self.memory.entered_at
+        age = self.memory.working_s
         off_route_s = self._update_off_route(state, node)
 
         if _predicate(state, node, self.memory):
@@ -211,6 +225,38 @@ class Tracker:
         return Verdict(Event.NONE, off_route_s=off_route_s)
 
     # -- internals -----------------------------------------------------------
+
+    def _clock(self, state: State, node: Node) -> None:
+        """Advance the step's own clock: time it could act and made no progress.
+
+        A step's timeout is how long it may stall, not how long it may take. Counted from
+        entry, a hand-in failed four minutes after the step began while the character was
+        still walking to Marshal McBride, with the minutes before spent dead, then in a
+        fight, then eating (run 20260923T174132-d01302) - and a failed hand-in is passed
+        over for good. So the clock stops while the character is dead or a ghost, while it
+        is in combat, and while it is getting closer to where the step is; it runs at the
+        step's position and whenever a walk stalls, so a character stuck on the way still
+        fails over to its rib.
+        """
+        mem = self.memory
+        destination = route_destination(state, node)
+        if destination != mem.closest_to:
+            mem.closest_to, mem.closest, mem.closest_at = destination, None, None
+        there = mem.arrived
+        if destination is not None and state.pos.mx is not None and state.pos.my is not None:
+            distance = math.dist((state.pos.mx, state.pos.my), destination)
+            there = distance <= node.r
+            if mem.closest is None:
+                mem.closest = distance           # where the walk starts: not progress yet
+            elif distance < mem.closest - PROGRESS_STEP:
+                mem.closest, mem.closest_at = distance, state.t
+        approaching = (not there and mem.closest_at is not None
+                       and state.t - mem.closest_at <= PROGRESS_WINDOW_S)
+        v = state.vitals
+        stopped = v.dead is True or v.ghost is True or v.combat is True or approaching
+        if mem.clocked_at is not None and not stopped:
+            mem.working_s += max(0.0, state.t - mem.clocked_at)
+        mem.clocked_at = state.t
 
     def _backfill(self, state: State) -> None:
         """Fill in entry facts that were unreadable when the step was entered.
@@ -280,7 +326,8 @@ class Tracker:
         node = self._node()
         if node is None:
             return True
-        age = state.t - self.memory.entered_at
+        self._clock(state, node)
+        age = self.memory.working_s
         return age > node.timeout_s and self._match_fail(state, node, age) is None
 
 

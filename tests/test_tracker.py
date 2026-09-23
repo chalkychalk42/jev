@@ -320,3 +320,36 @@ def test_a_rib_resumes_with_its_way_back_or_not_at_all():
     # which finds the hand-in of the quest the log says is complete.
     lost = Tracker.resume(g, _with_quest(have=10), start="rib")
     assert lost.step_id == "turnin"
+
+
+def _walking(t, x, **kw):
+    from jev.world.state_v1 import Pos
+
+    return _s(t, pos=Pos(zone="Elwynn", zone_id=12, mx=x, my=0.5), **kw)
+
+
+def test_a_steps_clock_stops_while_the_walk_to_it_is_getting_closer():
+    """A hand-in failed four minutes in while the character was still walking to it, the
+    minutes before spent dead, fighting and eating (run 20260923T174132-d01302)."""
+    tr = Tracker(_graph(), "accept")               # at (0.5, 0.5), times out after 60 s
+    tr.enter("accept", _walking(0, 0.1))
+    for t in range(1, 180):                        # three minutes of steady walking
+        assert tr.tick(_walking(t, 0.1 + 0.002 * t)).event is not Event.FAIL
+    stalled = [tr.tick(_walking(t, 0.1 + 0.002 * 179)).event for t in range(180, 250)]
+    assert Event.FAIL in stalled, "a walk that stops getting closer still times out"
+    assert 60 <= stalled.index(Event.FAIL) <= 64
+
+
+def test_a_steps_clock_stops_while_dead_or_fighting_and_runs_at_the_step():
+    from jev.world.state_v1 import Vitals
+
+    tr = Tracker(_graph(), "accept")
+    tr.enter("accept", _s(0))
+    for t in range(1, 101):
+        assert tr.tick(_s(t, vitals=Vitals(hp=0.0, dead=True, ghost=False))).event is Event.DEATH
+    for t in range(101, 201):
+        fighting = Vitals(hp=0.5, dead=False, ghost=False, combat=True)
+        assert tr.tick(_s(t, vitals=fighting)).event is not Event.FAIL
+    assert tr.memory.working_s == 0.0
+    events = [tr.tick(_s(t)).event for t in range(201, 270)]
+    assert events.index(Event.FAIL) in (59, 60), "standing at the step counts"
