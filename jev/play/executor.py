@@ -28,6 +28,10 @@ from jev.play.actions import (
 )
 from jev.play.controls import ControlManifest, Limits, build_manifest
 
+# Where to look for a world unit a requested point just missed, as fractions of the window:
+# below first, where a body hangs under its plate, then either side, then just above.
+NEAR_PROBES = ((0.0, 0.03), (0.0, 0.06), (-0.025, 0.045), (0.025, 0.045), (0.0, -0.025))
+
 
 @dataclass(frozen=True)
 class GuardState:
@@ -356,6 +360,12 @@ class Executor:
             raise _Refusal("blind", "painted UI control coordinates are unavailable")
         return x, y
 
+    @staticmethod
+    def _world_match(action: ClickAction, values: dict) -> bool:
+        return (values.get("cursor.has") is True and values.get("cursor.world") is True
+                and values.get("cursor.name_id") == action.expected_target_id
+                and values.get("cursor.dead") is action.expected_dead)
+
     def _click(self, action: ClickAction, view: GuardState) -> tuple[int, int]:
         if action.intent == "ui":
             coordinates = self._ui_point(action, view)
@@ -372,9 +382,22 @@ class Executor:
             if values.get("cursor.world") is not False:
                 raise _Refusal("blind", "UI mouse focus is not observed")
         else:
-            if (values.get("cursor.has") is not True or values.get("cursor.world") is not True
-                    or values.get("cursor.name_id") != action.expected_target_id
-                    or values.get("cursor.dead") is not action.expected_dead):
+            # A point that misses the unit by a little - the tutor names its plate, or the edge
+            # of its body - is probed nearby before it is refused, below first, where the body
+            # hangs under its plate. Each miss had cost a whole new decision: four in a row in
+            # run 20260924T004320-923c3b. The hover still has to prove the unit asked for.
+            if not self._world_match(action, values) and coordinates is not None:
+                for dx, dy in NEAR_PROBES:
+                    near = (min(1.0, max(0.0, coordinates[0] + dx)),
+                            min(1.0, max(0.0, coordinates[1] + dy)))
+                    if not self.hid.move_to(*self._point(view, *near)):
+                        raise _Refusal("refused", "pointer movement was refused")
+                    point = self._cursor(view)
+                    hover = self._fresh_hover(action, view, point)
+                    values = hover.values
+                    if self._world_match(action, values):
+                        break
+            if not self._world_match(action, values):
                 raise _Refusal("wrong_target", "fresh hover does not match requested world unit")
             if action.intent == "interact" and (
                 values.get("target.has") is not True

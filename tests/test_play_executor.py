@@ -477,3 +477,26 @@ def test_delegated_result_preserves_structured_game_outcome():
     result = h.run(kind="skill", name="TRAVEL_TO")
     assert result.metadata["skill_result"] == {
         "outcome": SkillOutcome.ABORTED, "detail": "unreachable", "code": "unreachable"}
+
+
+def test_a_select_point_just_off_the_unit_is_probed_nearby_before_it_is_refused():
+    """The tutor names a plate or the edge of a body; four such misses in a row each cost a
+    new decision (run 20260924T004320-923c3b). Just below, where the body hangs under its
+    plate, the hover proves the unit, and the click lands there."""
+    h = Harness()
+    h.on_read = lambda: h.values.update({"cursor.name_id": 42 if h.hid.position[1] > 60 else 43})
+    action = {**interact(), "button": "left", "intent": "select"}
+    result = h.run(**action)
+    assert result.delivered, result.detail
+    moves = [c for c in h.hid.calls if c[0] == "move"]
+    assert moves[0] == ("move", 60, 60) and moves[1][2] > 60, "not probed below first"
+    assert h.hid.calls[-1] == ("click", False) and result.point == moves[-1][1:]
+
+
+def test_a_unit_nowhere_near_the_point_is_still_refused():
+    h = Harness()
+    h.values["cursor.name_id"] = 43
+    action = {**interact(), "button": "left", "intent": "select"}
+    result = h.run(**action)
+    assert result.code == "wrong_target"
+    assert not any(call[0] == "click" for call in h.hid.calls)
