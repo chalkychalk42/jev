@@ -1,4 +1,4 @@
--- A stub of the 2.4.3 client API, just deep enough to run JevRadio for real.
+-- A stub of the 2.4.3 client API, just deep enough to run the addon for real.
 --
 -- The point is to execute *the addon itself* rather than a transcription of it. A
 -- transcription proves the format; only running the real file catches a nil index, a
@@ -79,13 +79,18 @@ local function newFrame()
     return f
 end
 
--- WoW registers a named frame as a global of that name, and addons rely on it. A stub
--- that dropped the name left `JevRadioFrame` nil, so the harness could not reach the
--- frame's OnUpdate and the strip was never painted at all — every payload cell came out
--- black and read as a schema mismatch rather than as "nothing ran".
+-- WoW registers a named frame as a global of that name, and the stock panels the addon
+-- inspects are found that way. A stub that dropped the name once left the painter
+-- unreachable, so the strip was never painted at all — every payload cell came out black
+-- and read as a schema mismatch rather than as "nothing ran".
+--
+-- Every frame is also listed in creation order. The addon names none of its own (a frame
+-- name is a global, and it owns none), so the harness finds its frames here.
+CREATED_FRAMES = {}
 function CreateFrame(_, name, _)
     local f = newFrame()
     if name then _G[name] = f end
+    CREATED_FRAMES[#CREATED_FRAMES + 1] = f
     return f
 end
 UIParent = newFrame()

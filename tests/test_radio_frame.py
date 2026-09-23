@@ -37,12 +37,14 @@ from jev.perceive.fields import (
     layout,
 )
 from jev.world.state_v1 import Classification, PowerType, Reaction, SenseFault
+from tools import gen_addon_fields as addon_build
 
 ROOT = Path(__file__).resolve().parent.parent
 ADDON = ROOT / "addons" / "JevRadio"
 HELPERS_LUA = (ADDON / "Helpers.lua").read_text(encoding="utf-8")
 PAINTER_LUA = (ADDON / "JevRadio.lua").read_text(encoding="utf-8")
-FIELDS_LUA = (ADDON / "Fields.lua").read_text(encoding="utf-8")
+# Generated in memory, so a checkout that has not run the generator still tests it.
+FIELDS_LUA = addon_build.render()
 
 
 # --------------------------------------------------------------------------- painting
@@ -704,7 +706,7 @@ def test_every_helper_the_generated_getters_call_exists():
     reads as a hung addon and sends the postmortem to entirely the wrong place."""
     exported = set(
         re.findall(r"^\s{4}(\w+) = ", 
-                   re.search(r"^JevRadioHelpers = \{(.*?)^\}", HELPERS_LUA,
+                   re.search(r"^return \{(.*?)^\}", HELPERS_LUA,
                              re.MULTILINE | re.DOTALL).group(1),
                    re.MULTILINE)
     )
@@ -726,14 +728,21 @@ def test_every_helper_the_generated_getters_call_exists():
     assert not unknown, f"Fields.lua calls names nothing provides: {sorted(unknown)}"
 
 
-def test_the_toc_loads_helpers_before_the_painter():
+def test_the_build_hands_the_painter_what_the_earlier_parts_returned():
     """The painter builds each getter's environment out of the helper table at load time,
-    so a TOC that loads it first hands out an empty environment and every field goes
-    unknown on a strip that otherwise looks healthy."""
-    toc = (ADDON / "JevRadio.toc").read_text(encoding="utf-8").splitlines()
-    files = [line.strip() for line in toc if line.strip().endswith(".lua")]
-    assert files == ["Supplies.lua", "Helpers.lua", "Fields.lua", "JevRadio.lua"]
-    assert "## Interface: 20400" in "\n".join(toc)
+    so a build that ran it first would hand out an empty environment and every field would
+    go unknown on a strip that otherwise looks healthy. Load order is the order of the
+    parts in the one built file, and each part receives the tables it needs as arguments."""
+    built = addon_build.bundle(FIELDS_LUA)
+    heads = [line for line in built.splitlines() if line.startswith("local ")
+             and "(function(" in line]
+    assert heads == ["local Supplies = (function()", "local Helpers = (function(Supplies)",
+                     "local Fields = (function()", "local _ = (function(Helpers, Fields)"]
+    assert built.rstrip().endswith("end)(Helpers, Fields)")
+    toc = addon_build.toc().splitlines()
+    assert "## Interface: 20400" in toc
+    assert [line for line in toc if not line.startswith("##")] == \
+        [f"{addon_build.ADDON_NAME}.lua"]
 
 
 def test_the_addon_sets_the_map_only_on_demand():

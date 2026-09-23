@@ -1,4 +1,5 @@
--- JevRadio -- Helpers.lua
+-- Helpers.lua - a module body: the build wraps it in a function taking `Supplies` and
+-- keeps what it returns. It defines no globals (see tools/gen_addon_fields.py).
 --
 -- Everything the generated Fields.lua getters call. Fields.lua is generated from
 -- jev/perceive/fields.py and is a build error to hand-edit; this file is the half that
@@ -504,7 +505,7 @@ local function snapshotInventory()
     inventorySnapshot = row
     local class = CLASS_ID[select(2, UnitClass("player"))]
     local race = RACE_ID[select(2, UnitRace("player"))]
-    local profile = JevRadioSupplies and JevRadioSupplies[tostring(race) .. ":" .. tostring(class)]
+    local profile = Supplies and Supplies[tostring(race) .. ":" .. tostring(class)]
     if profile and complete then
         for role, id in pairs(profile) do
             supplySnapshot[role .. "_id"] = id
@@ -845,7 +846,8 @@ end
 
 -- --------------------------------------------------------------------- events
 
-local watcher = CreateFrame("Frame", "JevRadioWatcher")
+-- Unnamed: a frame name is a global, and this addon owns none.
+local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
 watcher:RegisterEvent("PLAYER_LOGIN")
 watcher:RegisterEvent("ZONE_CHANGED")
@@ -937,13 +939,13 @@ end
 
 -- --------------------------------------------------------------------- export
 --
--- Exported as one table rather than as globals. The generated getters call bare names
+-- Returned as one table rather than set as globals. The generated getters call bare names
 -- like `frac` and `tri`, which are far too generic to own in WoW's single shared global
--- namespace; JevRadio.lua gives each getter a function environment holding these, falling
+-- namespace; the painter gives each getter a function environment holding these, falling
 -- through to _G for the client API. A second addon defining its own `frac` then cannot
--- change what this strip paints.
+-- change what this strip paints, and nothing here is visible to anyone else.
 
-JevRadioHelpers = {
+return {
     frac = frac,
     angle = angle,
     tri = tri,

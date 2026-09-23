@@ -33,7 +33,7 @@ The existing scripted mode remains available. See the current
 ```bash
 uv venv --python 3.12 && uv pip install -e ".[dev]"
 .venv/bin/python -m pytest          # no game required
-.venv/bin/python tools/gen_addon_fields.py
+.venv/bin/python tools/gen_addon_fields.py            # add --install to put it in the client
 ```
 
 The wire format, the state contract, the situation key, the verifier and the reward
@@ -79,7 +79,8 @@ jev/clients/    window binding, capture, HID
 jev/orch/       shared coach/tracker runtime and decision recording
 jev/run/        live client composition, body worker, supervisor, CLI
 jev/eval/       dashboard counters
-addons/JevRadio state painted into pixels; Fields.lua is generated, never edited
+addons/JevRadio state painted into pixels; Fields.lua is generated, never edited; the
+                client gets one built file under a neutral name (build/addon/)
 tools/          codegen and one-off scripts
 data/           knowledge packs (gitignored, see data/README.md)
 ```

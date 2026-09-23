@@ -5,6 +5,10 @@ checked against a Python model of it, which proves the *format* and cannot prove
 *addon* — a nil index, a wrong arity or a helper renamed on one side would pass every
 other test in this suite and fail on a client that has to be restarted to try again.
 
+What runs is the built addon, the one file a client installs, not the sources: a part
+that only works when loaded on its own, or a global the sources lean on, would otherwise
+pass here and fail in the client.
+
 Needs `lua5.1` on PATH and skips without it, because a developer machine without Lua
 should still be able to run the suite.
 """
@@ -25,19 +29,34 @@ from jev.perceive.fields import (
     MARKER_R,
     layout,
 )
+from tools import gen_addon_fields as addon_build
 
 PAYLOAD_CELLS = layout()["payload_cells"]
 
 LUA = shutil.which("lua5.1") or shutil.which("lua")
 pytestmark = pytest.mark.skipif(LUA is None, reason="needs lua5.1 to run the real addon")
 
+BUILT: dict[str, pathlib.Path] = {}
 
-def paint(state: dict | None = None) -> list[tuple[int, int, int]]:
+
+@pytest.fixture(scope="module", autouse=True)
+def installed_addon(tmp_path_factory) -> pathlib.Path:
+    """The addon folder a client would install, built from `fields.py` for this run."""
+    folder = addon_build.build(tmp_path_factory.mktemp("AddOns"),
+                               fields_lua=addon_build.render())
+    BUILT["lua"] = folder / f"{addon_build.ADDON_NAME}.lua"
+    return folder
+
+
+def paint(state: dict | None = None, bundle: pathlib.Path | None = None
+          ) -> list[tuple[int, int, int]]:
     """Run the addon under the stubbed client and return every painted cell."""
     literal = "return {" + ", ".join(f"{k}={_lua(v)}" for k, v in (state or {}).items()) + "}"
     proc = subprocess.run(
         [LUA, "tests/lua/paint_once.lua"],
-        capture_output=True, text=True, env={"JEV_STATE": literal, "PATH": "/usr/bin:/bin"},
+        capture_output=True, text=True,
+        env={"JEV_STATE": literal, "PATH": "/usr/bin:/bin",
+             "ADDON_BUNDLE": str(bundle or BUILT["lua"])},
     )
     assert proc.returncode == 0, f"the addon raised:\n{proc.stderr}"
     lines = proc.stdout.strip().splitlines()
@@ -159,19 +178,30 @@ def test_an_unobservable_field_is_painted_as_unknown_not_as_false():
 
 
 def test_the_addon_only_touches_a_small_api_surface():
-    """Paint only (PLAN §2.2). Nothing here may actuate."""
-    # Comments are stripped first. Both files explain at length that they do not call
-    # these functions, and a naive substring search finds the explanation.
-    import re
-
-    src = ""
-    for name in ("Helpers.lua", "JevRadio.lua"):
-        text = pathlib.Path(f"addons/JevRadio/{name}").read_text(encoding="utf-8")
-        text = re.sub(r"--\[\[.*?\]\]", "", text, flags=re.S)
-        src += "\n".join(line.split("--")[0] for line in text.splitlines())
+    """Paint only (PLAN §2.2). Nothing here may actuate. Checked on what ships: the build
+    strips the comments that explain, at length, which calls the sources never make."""
+    src = BUILT["lua"].read_text(encoding="utf-8")
     for forbidden in ("UseAction", "CastSpellByName", "MoveForwardStart", "SetCVar",
                       "TurnLeftStart", "JumpOrAscendStart", "RunBinding", "SendChatMessage"):
         assert forbidden not in src, f"the addon calls {forbidden}, which actuates"
+
+
+def test_the_addon_sets_no_global_through_load_events_and_paints():
+    """The harness fails any run in which the addon assigns a global or names a frame.
+    This drives every path that could - load, each watched event, repeated paints - and
+    then proves the check can fail at all, with a build that does both."""
+    events = [["PLAYER_LOGIN"], ["PLAYER_ENTERING_WORLD"], ["ZONE_CHANGED_NEW_AREA"],
+              ["QUEST_LOG_UPDATE"], ["BAG_UPDATE"], ["UI_ERROR_MESSAGE", "Out of range."],
+              ["UNIT_SPELLCAST_START", "player"], ["UNIT_SPELLCAST_STOP", "player"],
+              ["PLAYER_ENTER_COMBAT"], ["PLAYER_LEAVE_COMBAT"],
+              ["COMBAT_LOG_EVENT_UNFILTERED", 1.0, "SWING_DAMAGE", "0x0000000000000042"]]
+    assert paint({"events": events, "inventoryFixture": True, "attackSlot": 1})
+
+    leaky = BUILT["lua"].with_name("Leaky.lua")
+    leaky.write_text(BUILT["lua"].read_text(encoding="utf-8")
+                     + 'LeakedName = 1\nCreateFrame("Frame", "NamedFrame")\n', encoding="utf-8")
+    with pytest.raises(AssertionError, match="the addon set globals: LeakedName, NamedFrame"):
+        paint(bundle=leaky)
 
 
 @pytest.mark.parametrize(("flag", "complete"), [(1, True), (0, False), (-1, False)])

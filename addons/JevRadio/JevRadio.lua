@@ -1,4 +1,5 @@
--- JevRadio -- JevRadio.lua
+-- JevRadio.lua - the painter, a module body: the build wraps it in a function taking the
+-- `Helpers` and `Fields` tables the other parts return. It defines no globals.
 --
 -- PAINT ONLY. This addon reads stock 2.4.3 Lua and renders the answers to textures. It
 -- calls no UseAction, no movement function, no SetCVar, and nothing else that plays the
@@ -10,10 +11,10 @@
 -- order, four bits per channel, twelve bits per cell. jev/perceive/fields.py defines the
 -- format; Fields.lua is generated from it and this file only obeys it.
 
-local L         = JevRadioLayout
-local FIELDS    = JevRadioFields
-local MARKERS   = JevRadioMarkers
-local SWATCHES  = JevRadioSwatches
+local L         = Fields.layout
+local FIELDS    = Fields.fields
+local MARKERS   = Fields.markers
+local SWATCHES  = Fields.swatches
 
 local COLS      = L.cols
 local ROWS      = L.rows
@@ -49,7 +50,7 @@ for i = 0, 31 do POW[i] = 2 ^ i end
 -- client API still resolves.
 
 local ENV = {}
-for k, v in pairs(JevRadioHelpers) do ENV[k] = v end
+for k, v in pairs(Helpers) do ENV[k] = v end
 setmetatable(ENV, { __index = _G })
 
 for i = 1, #FIELDS do
@@ -130,7 +131,7 @@ end
 
 -- --------------------------------------------------------------------- the grid
 
-local frame = CreateFrame("Frame", "JevRadioFrame", UIParent)
+local frame = CreateFrame("Frame", nil, UIParent)    -- unnamed: a frame name is a global
 frame:SetFrameStrata("TOOLTIP")   -- above DIALOG on purpose: a StaticPopup must not cover
 frame:SetToplevel(true)           -- the strip, because that is exactly when ui.modal matters
 
@@ -203,13 +204,13 @@ end
 local TOTAL_BITS = CELLS * CELL_BITS
 
 local function paint()
-    JevRadioHelpers.syncMap()
+    Helpers.syncMap()
     -- Once per frame, before any getter runs: every quest field in this paint has
     -- to describe the same log entry, or the decoder assembles a chimera.
-    JevRadioHelpers.advanceQuestSlot()
+    Helpers.advanceQuestSlot()
     -- One inventory/merchant snapshot per paint keeps every field on the same row.
     -- Unsupported stock APIs yield unknown telemetry without freezing the radio.
-    pcall(JevRadioHelpers.snapshotInventory)
+    pcall(Helpers.snapshotInventory)
 
     ENV.SEQ = (ENV.SEQ + 1) % 256
 

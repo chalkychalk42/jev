@@ -240,6 +240,12 @@ Use the smallest shared design supported by evidence, without speculative framew
 - **One source of truth.** `jev/perceive/fields.py` defines the field table;
   `tools/gen_addon_fields.py` generates `addons/JevRadio/Fields.lua` from it. Hand-editing
   the Lua is a build error.
+- **Installed as one anonymous file** (V54). The sources are module bodies that return
+  tables. The generator joins them into `build/addon/StatusStrip/StatusStrip.lua`, each part
+  in its own function scope with comments stripped, under a neutral table of contents. The
+  installed addon owns no global names and names no frame. `--install` copies it into the
+  client and moves earlier installs aside. `JevRadio` is the repository's name for it, never
+  the client's.
 - **4 bits per channel, 12 bits per cell.** Not 8. Sixteen levels tolerate ±8 levels of
   channel error, absorbing gamma, capture colour transforms and compression. Throughput is
   not the constraint; a bad decode is.

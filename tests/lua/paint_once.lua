@@ -51,16 +51,44 @@ if STATE.vendorGossip then
     function b:GetCenter() return 200, 300 end
 end
 
-dofile("addons/JevRadio/Supplies.lua")
-dofile("addons/JevRadio/Helpers.lua")
-dofile("addons/JevRadio/Fields.lua")
-dofile("addons/JevRadio/JevRadio.lua")
+-- The addon exactly as a client installs it: the one file `tools/gen_addon_fields.py`
+-- builds. It owns no global names, so any global it assigns fails the run, attributed by
+-- the chunk doing the assigning - the event arguments this harness sets (arg2, ...) are
+-- not the addon's. Recorded rather than raised, because a getter runs inside a pcall and
+-- an error there would only paint unknown.
+local bundle = assert(os.getenv("ADDON_BUNDLE"), "ADDON_BUNDLE must name the built addon")
+local leaked = {}
+local function byAddon(level)
+    local info = debug.getinfo(level + 1, "S")
+    return info ~= nil and info.source == "@" .. bundle
+end
+setmetatable(_G, {__newindex = function(t, k, v)
+    if byAddon(2) then leaked[#leaked + 1] = tostring(k) end
+    rawset(t, k, v)
+end})
+-- A frame name is a global too, one the client creates rather than the addon's own code.
+local createFrame = CreateFrame
+CreateFrame = function(kind, name, ...)
+    if name ~= nil and byAddon(2) then leaked[#leaked + 1] = tostring(name) end
+    return createFrame(kind, name, ...)
+end
+local first = #CREATED_FRAMES + 1
+dofile(bundle)
+
+-- Its frames are unnamed, so they are found by what they do: the watcher handles events
+-- and nothing else, and the painter is the one with an OnUpdate.
+local function addonFrame(has, lacks)
+    for i = first, #CREATED_FRAMES do
+        local f = CREATED_FRAMES[i]
+        if f.scripts[has] and not (lacks and f.scripts[lacks]) then return f end
+    end
+end
 
 -- Client events, delivered through the addon's own watcher before the paint, in the
 -- 2.4.3 style: the handler receives the event name and its first argument.
 if STATE.events then
-    local w = _G["JevRadioWatcher"]
-    assert(w and w.scripts and w.scripts.OnEvent, "the addon registered no event watcher")
+    local w = addonFrame("OnEvent", "OnUpdate")
+    assert(w, "the addon registered no event watcher")
     for _, e in ipairs(STATE.events) do
         -- Later arguments arrive only as globals on 2.4.3 (arg2, arg3, ...).
         for i = 3, #e do _G["arg" .. (i - 1)] = e[i] end
@@ -72,12 +100,16 @@ if STATE.paintTime then STATE.time = STATE.paintTime end
 
 -- Drive the addon's own OnUpdate rather than calling an exported test hook. There is no
 -- hook, deliberately: a paint path that only tests can reach is not the paint path.
-local f = _G["JevRadioFrame"]
-assert(f, "JevRadioFrame was never created")
-assert(f.scripts and f.scripts.OnUpdate, "the addon registered no OnUpdate")
+local f = addonFrame("OnUpdate")
+assert(f, "the addon registered no OnUpdate")
 local ticks = tonumber(os.getenv("JEV_TICKS") or "1")
 for _ = 1, ticks do
     f.scripts.OnUpdate(f, 10.0)
+end
+
+if #leaked > 0 then
+    io.stderr:write("the addon set globals: " .. table.concat(leaked, ", ") .. "\n")
+    os.exit(1)
 end
 
 local painted = GetTexturesPainted()
