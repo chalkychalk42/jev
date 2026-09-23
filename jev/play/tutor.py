@@ -454,9 +454,13 @@ def render(observation: dict, *, choices: list[Choice], knowledge: dict | None =
             delivery = row.get("delivery") or {}
             effects = [e for e in outcome.get("effects") or () if e != "observed"]
             verdict = "worked" if outcome.get("success") else "did not work"
+            # A routine reports why it stopped; that is what a different next step needs.
+            routine = (delivery.get("metadata") or {}).get("skill_result") or {}
+            said = (f"; the routine said: {routine.get('code')} {routine.get('detail') or ''}".rstrip()
+                    if isinstance(routine, dict) and routine.get("code") else "")
             lines.append(f"- {describe(row.get('action') or {})} -> {verdict}"
                          f" ({delivery.get('code', 'unknown')}); effects: {', '.join(effects) or 'none'}"
-                         f"{'; ' + outcome['reason'] if outcome.get('reason') else ''}")
+                         f"{'; ' + outcome['reason'] if outcome.get('reason') else ''}{said}")
     if lookups:
         lines += ["", "LOOKUP RESULTS"]
         for result in lookups:

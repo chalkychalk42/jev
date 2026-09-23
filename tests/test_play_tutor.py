@@ -155,3 +155,16 @@ def test_the_rendered_prompt_names_the_state_that_decides_the_next_action():
     assert "Quest log progress: 2/8" in text and "auto-attack on: no" in text
     assert "- loot_corpse x 0-1 y 0-1:" in text
     assert '{"observation_id": "o-1", "action": "<one name' in text
+
+
+def test_a_failed_routine_tells_jev_why_it_stopped():
+    observation = {"id": "o-2", "values": ALIVE, "context": {}, "size": [1600, 900]}
+    recent = [{"action": {"kind": "skill", "name": "COMBAT_PROFILE", "params": {}},
+               "outcome": {"success": False, "effects": ["observed"],
+                           "reason": "did not observe target_dead"},
+               "delivery": {"code": "delegated", "metadata": {"skill_result": {
+                   "outcome": "aborted", "code": "not_visible",
+                   "detail": "no plate proved to be the selected unit's after the search turn"}}}}]
+    text = tutor.render(observation, choices=tutor.menu(observation, CONTROLS), recent=recent)
+    assert ("skill:COMBAT_PROFILE -> did not work (delegated); effects: none; did not observe "
+            "target_dead; the routine said: not_visible no plate proved") in text

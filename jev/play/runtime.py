@@ -24,20 +24,27 @@ from jev.run.supervisor import FocusLost, Result
 from jev.teacher.bridge import BudgetClient
 from jev.world.state_v1 import State
 
+# Routines that are a whole objective loop rather than a step within one. Delegating the
+# hunt from inside the hunt objective handed every decision - which unit, when to loot,
+# when to eat, when to move on - back to the scripted loop for up to ten minutes, which is
+# the decision-making Jev is there to do and the student is there to learn. It remains
+# the scripted fallback when the tutor cannot answer or stalls.
+OBJECTIVE_LOOPS = frozenset({"GRIND_UNTIL"})
+
 
 def delegable_skills(current: str, available) -> tuple[str, ...]:
     """The routines Jev may run inside a guide objective armed with `current`.
 
-    Recovery arms delegate only themselves. Waits are not routines. Everything offered
-    must exist in the body's executor catalog. The tutor's menu and the delegation check
-    both use this one rule.
+    Recovery arms delegate only themselves. Waits are not routines, and an objective loop
+    is not a step of itself. Everything offered must exist in the body's executor
+    catalog. The tutor's menu and the delegation check both use this one rule.
     """
     allowed = {current, "EAT_DRINK", "LOOT", "COMBAT_PROFILE", "FACE_TARGET"}
     if current in {"GRIND_UNTIL", "ACCEPT_QUEST", "TURNIN_QUEST", "TRAVEL_TO"}:
         allowed.add("TRAVEL_TO")
     if current in {"RELEASE_SPIRIT", "CORPSE_RUN"}:
         allowed = {current}
-    allowed -= {"ABORT_WAIT", "IDLE"}
+    allowed -= {"ABORT_WAIT", "IDLE"} | OBJECTIVE_LOOPS
     return tuple(sorted(allowed & set(available)))
 
 

@@ -427,3 +427,16 @@ def test_a_stalled_tutor_also_hands_the_objective_to_the_scripted_routine(tmp_pa
         env.screenshots.close()
         env.playing.close()
     assert result.code == "arrived" and scripted == [env.arm]
+
+
+def test_the_hunt_loop_is_not_a_step_of_itself_but_its_steps_are_offered():
+    """Delegating GRIND_UNTIL from inside the hunt handed every decision back to the
+    scripted loop; Jev composes the hunt from its steps instead."""
+    from jev.play.runtime import delegable_skills
+
+    grind = delegable_skills("GRIND_UNTIL", LiveBody.available)
+    assert "GRIND_UNTIL" not in grind
+    assert {"COMBAT_PROFILE", "LOOT", "FACE_TARGET", "TRAVEL_TO", "EAT_DRINK"} <= set(grind)
+    assert "TURNIN_QUEST" in delegable_skills("TURNIN_QUEST", LiveBody.available), \
+        "an interaction routine is still the objective's own step"
+    assert delegable_skills("CORPSE_RUN", LiveBody.available) == ("CORPSE_RUN",)
