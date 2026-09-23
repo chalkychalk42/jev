@@ -7,10 +7,12 @@ speeds, through trunks, walls and fences with sliding collision, on a virtual cl
 from __future__ import annotations
 
 import math
+import random
 
 import pytest
 
 import jev.clients.travel as travel_module
+from jev.clients.hid import Humaniser
 from jev.clients.travel import Outcome, Travel
 from jev.clients.walk_sim import Circle, Segment, SimHid, SimTime, WalkWorld
 from jev.guide.coords import ZoneBounds
@@ -29,7 +31,7 @@ def _shifted(ob):
     return Segment(X0 + ob.ax, Y0 + ob.ay, X0 + ob.bx, Y0 + ob.by, ob.thickness, ob.height)
 
 
-def walk(points, obstacles, heading, *, memory=None, monkeypatch):
+def walk(points, obstacles, heading, *, memory=None, humaniser=None, monkeypatch):
     world = WalkWorld(x=X0 + points[0][0], y=Y0 + points[0][1], heading=heading,
                       obstacles=tuple(_shifted(o) for o in obstacles),
                       width_yards=W, height_yards=H)
@@ -42,7 +44,7 @@ def walk(points, obstacles, heading, *, memory=None, monkeypatch):
     def replan(here):                       # the mesh does not know the obstacle
         return route([(here[0] * W - X0, here[1] * H - Y0), *points[1:]])
 
-    travel = Travel(hid=SimHid(world), bounds=ELWYNN, read_pos=world.map_position)
+    travel = Travel(hid=SimHid(world, humaniser), bounds=ELWYNN, read_pos=world.map_position)
     result = travel.follow(route(points), timeout_s=120.0, replan=replan, memory=memory)
     return result, world
 
@@ -86,6 +88,37 @@ def test_a_blocked_leg_is_rounded_without_walking_into_it_twice(monkeypatch):
     result, _ = walk([(0, 0), (0, -40)], [Segment(-6, -20, 6, -20)], -math.pi / 2,
                      monkeypatch=monkeypatch)
     assert result.outcome is Outcome.ARRIVED and result.stuck_events == 1
+
+
+def test_a_fence_met_nearly_square_is_unstuck_not_pressed_into(monkeypatch):
+    """Two degrees off square, a character slides along a fence at a quarter of a yard a
+    second: not frozen, and far too slow to take a heading from. Before the stuck test
+    asked for a heading's worth of travel, this walk pressed into the fence for its whole
+    two minutes without a single stuck event."""
+    result, _ = walk([(0, 0), (0, -40)], FENCE, -math.pi / 2 + math.radians(2),
+                     monkeypatch=monkeypatch)
+    assert result.outcome is Outcome.ARRIVED and result.stuck_events >= 1
+    assert result.elapsed_s < 60.0
+
+
+@pytest.mark.parametrize("seed", range(4))
+@pytest.mark.parametrize(("points", "obstacles", "heading"), [
+    ([(0, 0), (0, -40)], FENCE, -math.pi / 2),
+    ([(-10, 1.0), (12, 1.0), (14, 8.0)], WEDGE, 0.0),
+], ids=["long fence", "tree beside a wall"])
+def test_with_drawn_holds_and_waits_every_spot_is_still_learned_and_rounded(
+        points, obstacles, heading, seed, monkeypatch):
+    """In play every hold and loop wait is drawn (`Humaniser`), so a walk never repeats
+    one exact trajectory. Simulated over forty draws each, every first trip arrived and
+    learned, and every second trip arrived faster with no stuck event."""
+    memory, humaniser = RouteMemory(), Humaniser(rng=random.Random(seed))
+    first, _ = walk(points, obstacles, heading, memory=memory, humaniser=humaniser,
+                    monkeypatch=monkeypatch)
+    assert first.outcome is Outcome.ARRIVED and memory.passages
+    second, _ = walk(points, obstacles, heading, memory=memory, humaniser=humaniser,
+                     monkeypatch=monkeypatch)
+    assert second.outcome is Outcome.ARRIVED and second.stuck_events == 0
+    assert second.elapsed_s < first.elapsed_s
 
 
 def test_open_ground_is_walked_without_any_recovery(monkeypatch):

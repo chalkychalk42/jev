@@ -54,6 +54,9 @@ MIN_TRAVEL_FOR_HEADING = 1.5      # yards; below this the angle is noise
 MIN_PULSE_S = 0.05
 MAX_PULSE_S = 0.45                # one correction, not a whole swing
 
+# A detour whose own walk covered less than this found a dead end on its side.
+DETOUR_BLOCKED_YARDS = 3.0
+
 
 class Outcome(StrEnum):
     ARRIVED = "arrived"
@@ -97,11 +100,17 @@ class Travel:
     # character" 3.7 seconds in without having tried anything. The loop must distinguish
     # "could not read this frame" from "cannot read at all".
     read_retries: int = 4
-    # Frozen for this long with forward held is stuck. Measured on a clean run: the
-    # longest frozen stretch was 0.06s and the median step 0.19 yards, so a second and a
-    # half is far outside normal and still quick to recover from.
+    # Forward held this long without a heading's worth of travel is stuck. Measured on a
+    # clean run: the longest frozen stretch was 0.06s and the median step 0.19 yards, so
+    # a second and a half is far outside normal and still quick to recover from.
+    #
+    # The distance is the travel a heading needs, not "frozen". A character pressed into a
+    # fence two degrees off square slides along it at a quarter of a yard a second: past a
+    # 0.3-yard "frozen" test, and far too slow to take a heading from, so nothing steered
+    # it and nothing unstuck it. Simulated, that walk pressed into the fence for its whole
+    # two minutes without a single stuck event; drawn timing made the angle common.
     stuck_after_s: float = 1.5
-    stuck_step_yards: float = 0.3
+    stuck_step_yards: float = MIN_TRAVEL_FOR_HEADING
     # How many headings to try the recovery from, and how far to turn between them. Eight
     # would be a full circle; four covers a corner, and each one costs five attempts.
     unstick_headings: int = 4
@@ -124,6 +133,9 @@ class Travel:
     detours: int = field(default=0, init=False)
     closest_yards: float | None = field(default=None, init=False)
     _detour_side: int = field(default=1, init=False)
+    # The search for the way round one obstacle: this side's allowance and what is left.
+    _sweep: int = field(default=1, init=False)
+    _sweep_left: int = field(default=1, init=False)
     _pulse_ended_at: float = field(default=0.0, init=False)
     stuck_events: int = field(default=0, init=False)
     last_unstick: str = field(default="", init=False)
@@ -322,7 +334,7 @@ class Travel:
                             "this node needs a recorded route")
                     if self._trace is not None:
                         self._trace = []        # only the attempt that works is learned
-                    self._detour(here, target)
+                    self._detour(here)
                     self._track.clear()
                     self.hid.key_down("w")
                     time.sleep(pace(self.hid, self.sample_s))
@@ -429,7 +441,9 @@ class Travel:
                 # Comparing answers rather than positions, because a leg that walks eighty
                 # yards and *then* wedges has moved, and that one spins just as happily.
                 if self._same_answer(fresh, position, leg):
-                    self.detours = 0       # a fresh obstacle, not the last one continued
+                    # A fresh obstacle, not the last one continued.
+                    self.detours = 0
+                    self._sweep = self._sweep_left = 1
                     # Round it now. Walking the same leg first only found the same
                     # obstacle again: measured in simulation, a whole second stuck cycle
                     # per fence before the first detour.
@@ -437,7 +451,7 @@ class Travel:
                     self._trace = []
                     try:
                         if position is not None:
-                            self._detour(position, leg)
+                            self._detour(position)
                         last = self.to(leg, abort=abort, allow_detour=True,
                                        timeout_s=timeout_s - (time.perf_counter() - t0))
                         if last.outcome is Outcome.ARRIVED:
@@ -532,15 +546,22 @@ class Travel:
             return True                    # nowhere left to go, so nothing new to try
         return self.distance(ahead[0], leg) <= self.waypoint_arrival_yards
 
-    def _detour(self, here, target) -> None:
+    def _detour(self, here) -> None:
         """Turn off the direct line and walk along the obstacle for a while.
 
-        The side is kept until it stops helping. The first version alternated on every
-        detour, which is not "try the other way", it is "oscillate": eight detours took
-        the character from ten yards out to twenty-nine, each one undoing the last. A
-        detour that makes the distance worse flips the side; one that helps is repeated.
+        Which way round an obstacle nobody has mapped is a search, done by doubling: one
+        detour one way, then two the other - one to come back, one of new ground - then
+        four, and so on, which bounds the walk for an end at any distance on either side.
+        Two earlier rules both oscillated. Alternating on every detour took the character
+        from ten yards out to twenty-nine, each detour undoing the last. Flipping whenever
+        a detour ended farther from the target is the same thing round anything long,
+        because going round a wall moves away from the target before it moves toward it:
+        simulated on a 60-yard fence, it walked back and forth along the fence until the
+        walk timed out.
+
+        A detour whose own walk is blocked has found a dead end on its side, and the rest
+        of the search goes the other way.
         """
-        before = self.distance(here, target)
         self.detours += 1
         key = self.hid.TURN_RIGHT if self._detour_side > 0 else self.hid.TURN_LEFT
         # About a right angle at the current estimated rate: enough to clear a wall face
@@ -555,8 +576,14 @@ class Travel:
         self.last_detour_end = after_pos
         if self._trace is not None:
             self._trace.append(after_pos)
-        if self.distance(after_pos, target) > before:
+        self._sweep_left -= 1
+        if self.distance(here, after_pos) < DETOUR_BLOCKED_YARDS:
             self._detour_side *= -1
+            self._sweep = self._sweep_left = self.max_detours
+        elif self._sweep_left <= 0:
+            self._detour_side *= -1
+            self._sweep *= 2
+            self._sweep_left = self._sweep
 
     def _unstick(self) -> bool:
         """Try the things that actually free a character, cheapest first.

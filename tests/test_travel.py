@@ -74,15 +74,30 @@ def test_a_position_that_never_reads_is_reported_as_lost():
     assert t.position() is None
 
 
-def test_a_detour_that_makes_things_worse_switches_side():
-    """Alternating on every detour is not 'try the other way', it is oscillate: eight
-    detours took a live character from ten yards out to twenty-nine."""
-    t = _travel([(0.5, 0.5)])
-    t.hid.require_focus = True                # nothing will actually press
-    side = t._detour_side
-    t.read_pos = lambda: (0.9, 0.9)           # far worse than where we started
-    t._detour((0.5, 0.5), (0.51, 0.51))
-    assert t._detour_side == -side
+def _detour_sides(t: Travel, walks_clear: list[bool]) -> list[int]:
+    """The side each detour went, where each detour's own walk got clear or was blocked.
+    Nothing is pressed: the device here is refused, and the walk's result is scripted."""
+    sides, here = [], (0.5, 0.5)
+    for clear in walks_clear:
+        sides.append(t._detour_side)
+        after = (here[0] + 0.01, here[1]) if clear else here     # about 35 yards, or none
+        t.read_pos = lambda after=after: after
+        t._detour(here)
+        here = after
+    return sides
+
+
+def test_the_way_round_an_obstacle_is_searched_by_doubling():
+    """One detour one way, two the other - one back, one of new ground - then four. Both
+    earlier rules oscillated: alternating every detour took a live character from ten
+    yards out to twenty-nine, and flipping whenever a detour ended farther away walked a
+    simulated character back and forth along a 60-yard fence until the walk timed out."""
+    assert _detour_sides(_travel([(0.5, 0.5)]), [True] * 7) == [1, -1, -1, 1, 1, 1, 1]
+
+
+def test_a_detour_blocked_on_its_own_walk_sends_the_rest_of_the_search_the_other_way():
+    assert _detour_sides(_travel([(0.5, 0.5)]), [False, True, True, True, True]) == \
+        [1, -1, -1, -1, -1]
 
 
 def test_arrival_is_measured_in_yards():
