@@ -496,3 +496,36 @@ def test_the_hunt_loop_is_not_a_step_of_itself_but_its_steps_are_offered():
     assert "TURNIN_QUEST" in delegable_skills("TURNIN_QUEST", LiveBody.available), \
         "an interaction routine is still the objective's own step"
     assert delegable_skills("CORPSE_RUN", LiveBody.available) == ("CORPSE_RUN",)
+
+
+def test_background_rereads_a_run_only_when_its_play_files_change(tmp_path):
+    """Re-reading every run each cycle took the store's lock once per recorded row, forty
+    runs over, and a cycle failed on Windows' ten-second lock (run 20260923T232300)."""
+    runs, store = tmp_path / "runs", tmp_path / "learning"
+    store.mkdir()
+    (runs / "quiet").mkdir(parents=True)
+    (runs / "quiet" / "play-actions.jsonl").write_text("")
+    (runs / "live").mkdir()
+    actions = runs / "live" / "play-actions.jsonl"
+    actions.write_text("")
+    cycles = threading.Semaphore(0)
+    ingested = []
+
+    class OfflineLearner:
+        directory = store
+        def ingest_run(self, directory):
+            ingested.append(directory.name)
+            return {"errors": []}
+        def update(self, *, cancelled):
+            cycles.release()
+            return {"candidates": 0}
+
+    service = MotorLearningService(OfflineLearner(), runs, interval_s=0.05).start()
+    try:
+        assert cycles.acquire(timeout=3) and cycles.acquire(timeout=3)
+        assert sorted(ingested) == ["live", "quiet"], "an unchanged run was read again"
+        actions.write_text('{"event": "request"}\n')
+        assert cycles.acquire(timeout=3) and cycles.acquire(timeout=3)
+    finally:
+        service.close()
+    assert sorted(ingested) == ["live", "live", "quiet"]

@@ -64,6 +64,12 @@ class MotorLearningService:
         return self
 
     def _run(self):
+        # A run is re-read only when its play files changed. Re-reading all of them every
+        # cycle took and released the store's lock once per recorded row, forty runs over,
+        # and a blocking lock on Windows gives up after ten seconds: a cycle failed with
+        # `PermissionError: [Errno 13]` (run 20260923T232300-e3b21c), and the teaching
+        # controller writes through the same lock.
+        seen: dict[Path, tuple] = {}
         while not self.stop.is_set():
             try:
                 recovered = []
@@ -71,9 +77,16 @@ class MotorLearningService:
                     if self.stop.is_set():
                         break
                     if directory.is_dir() and (directory / "play-actions.jsonl").exists():
+                        stamp = tuple((p.stat().st_size, p.stat().st_mtime_ns) if p.exists() else None
+                                      for p in (directory / "play-actions.jsonl",
+                                                directory / "play-episodes.jsonl"))
+                        if seen.get(directory) == stamp:
+                            continue
                         report = self.learner.ingest_run(directory)
                         if report.get("errors"):
                             recovered.append({"run": directory.name, "errors": report["errors"]})
+                        else:
+                            seen[directory] = stamp
                 report = self.learner.update(cancelled=self.stop.is_set)
                 atomic_json(self.learner.directory / "latest-cycle.json",
                             {"t": time.time(), "cycle": report, "ingest_errors": recovered})
