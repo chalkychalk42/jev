@@ -31,7 +31,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from jev.clients.hid import Hid
+from jev.clients.hid import Hid, pace
 from jev.guide.coords import (
     ZoneBounds,
     distance_yards,
@@ -325,7 +325,7 @@ class Travel:
                     self._detour(here, target)
                     self._track.clear()
                     self.hid.key_down("w")
-                    time.sleep(self.sample_s)
+                    time.sleep(pace(self.hid, self.sample_s))
                     continue
 
                 # Steer, but only while actually moving: a heading taken from a character
@@ -346,7 +346,7 @@ class Travel:
                                     self.hid.key_down(pulse_key)
                                     self.turns += 1
 
-                time.sleep(self.sample_s)
+                time.sleep(pace(self.hid, self.sample_s))
         finally:
             self.hid.release_all()
 
@@ -590,7 +590,7 @@ class Travel:
         self.last_unstick = ""
 
         attempts = (
-            ("jump-forward", lambda: (self.hid.tap("space"), time.sleep(0.15),
+            ("jump-forward", lambda: (self.hid.tap("space"), time.sleep(pace(self.hid, 0.15)),
                                       self.hid.hold("w", 0.8, tick_s=self.sample_s))),
             ("back", lambda: self.hid.hold("s", 0.5, tick_s=self.sample_s)),
             ("strafe-right", lambda: self.hid.hold(self.hid.STRAFE_RIGHT, 0.6,
@@ -617,7 +617,7 @@ class Travel:
                     continue
                 tried += 1
                 attempt()
-                time.sleep(0.25)
+                time.sleep(pace(self.hid, 0.25))
                 after = self.position()
                 if after is None:
                     unreadable += 1

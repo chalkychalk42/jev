@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from jev.clients import win32
-from jev.clients.hid import EXTENDED, VK, Hid, Humaniser, bezier
+from jev.clients.hid import EXTENDED, VK, Hid, Humaniser, bezier, held, pace
 
 
 def test_win32_imports_anywhere_and_admits_where_it_is():
@@ -99,6 +99,73 @@ def test_a_client_reproduces_its_own_timing():
     a = Humaniser.for_client("c03", seed=11)
     b = Humaniser.for_client("c03", seed=11)
     assert [a.gap() for _ in range(5)] == [b.gap() for _ in range(5)]
+
+
+class _Clock:
+    """Stands in for `time` inside `hid`: sleeping advances it, nothing waits."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def perf_counter(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += max(0.0, seconds)
+
+
+@pytest.fixture
+def timed_hid(monkeypatch):
+    hid = Hid(humaniser=Humaniser(rng=random.Random(7)))
+    monkeypatch.setattr("jev.clients.hid.time", _Clock())
+    monkeypatch.setattr(hid, "_guard", lambda: True)
+    monkeypatch.setattr(hid, "_send", lambda event: True)
+    monkeypatch.setattr(hid, "_key_event", lambda key, up: (key, up))
+    return hid
+
+
+def test_a_hold_lasts_a_drawn_time_near_what_was_asked(timed_hid):
+    """A turn that always lasts the 0.672 s its angle implies is a constant, however
+    plausible the constant."""
+    lasted = []
+    for _ in range(300):
+        assert timed_hid.hold("d", 0.5)
+        lasted.append(timed_hid.last_hold_s)
+    assert all(0.5 * 0.85 - 1e-9 <= s <= 0.5 * 1.15 + 1e-9 for s in lasted)
+    assert len({round(s, 6) for s in lasted}) > 250, "the hold is nearly constant"
+    assert sum(lasted) / len(lasted) == pytest.approx(0.5, abs=0.02)
+
+
+def test_an_exact_hold_is_what_was_asked_and_a_ceiling_is_never_passed(timed_hid):
+    assert timed_hid.hold("d", 0.5, exact=True)
+    assert timed_hid.last_hold_s == pytest.approx(0.5, abs=1e-9)
+    capped = []
+    for _ in range(300):
+        timed_hid.hold("w", 2.0, at_most=2.0)
+        capped.append(timed_hid.last_hold_s)
+    assert max(capped) <= 2.0 + 1e-9 and min(capped) >= 1.7 - 1e-9
+    # Lowered, not clamped: no pile of holds at exactly the limit.
+    assert sum(1 for s in capped if s > 2.0 - 1e-6) <= 1
+
+
+def test_what_a_hold_actually_lasted_is_what_a_caller_learns_from(timed_hid):
+    timed_hid.hold("d", 0.3)
+    assert held(timed_hid, 0.3) == timed_hid.last_hold_s != 0.3
+    assert held(SimpleNamespace(), 0.3) == 0.3, "a device that cannot say reports the ask"
+    timed_hid.hold = Hid.hold.__get__(timed_hid)
+    timed_hid.key_down = lambda key: False
+    assert not timed_hid.hold("d", 0.3)
+    assert held(timed_hid, 0.3) == 0.0, "a refused hold held nothing"
+
+
+def test_loop_waits_are_drawn_only_behind_a_humaniser():
+    """Test fakes and the simulator's device have none, so scripted tests see exactly the
+    waits they scripted."""
+    assert pace(SimpleNamespace(), 0.2) == 0.2
+    hid = Hid(humaniser=Humaniser(rng=random.Random(3)))
+    waits = [pace(hid, 0.2) for _ in range(200)]
+    assert all(0.15 - 1e-9 <= w <= 0.25 + 1e-9 for w in waits)
+    assert len({round(w, 6) for w in waits}) > 180
 
 
 # --- guards -----------------------------------------------------------------

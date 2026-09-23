@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 
+from jev.clients.hid import held
 from jev.perceive import radio_frame, units
 from jev.run.evidence import event, operation
 
@@ -408,8 +409,9 @@ class Targeting:
                                            "searched_s": round(searched, 3)})
                 if not self.hid.hold(search_key, FACE_SEARCH_STEP_S):
                     return done(FaceCode.REFUSED, "turn input refused")
-                searched += FACE_SEARCH_STEP_S
-                turned += FACE_SEARCH_STEP_S
+                step = held(self.hid, FACE_SEARCH_STEP_S)
+                searched += step
+                turned += step
                 before = pulse = None
                 self.wait_for_paint()
                 continue
@@ -436,6 +438,9 @@ class Targeting:
                                      "offset": round(offset, 4), "rate": round(rate, 3)})
             if not self.hid.hold(key, pulse):
                 return done(FaceCode.REFUSED, "turn input refused", offset, plate)
+            # A hold lasts a drawn time near the one asked for, and the rate is learned
+            # from the turn that actually happened.
+            pulse = held(self.hid, pulse)
             turns += 1
             turned += pulse
             before = offset

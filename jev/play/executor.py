@@ -265,7 +265,9 @@ class Executor:
             if not self.hid.key_down(modifier):
                 return False
         if duration_s:
-            return self.hid.hold(keys[-1], duration_s, on_tick=self.checkpoint)
+            # The hold is drawn near the asked duration; the exposure limit stays exact.
+            return self.hid.hold(keys[-1], duration_s, on_tick=self.checkpoint,
+                                 at_most=self.limits.max_hold_s)
         return self.hid.tap(keys[-1])
 
     @staticmethod

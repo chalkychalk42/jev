@@ -83,7 +83,7 @@ def walk(hid: Hid, cap: WindowCapture, key: str, seconds: float) -> tuple:
 
     start = settle(cap)
     t0 = time.perf_counter()
-    hid.hold(key, seconds, on_tick=tick)
+    hid.hold(key, seconds, on_tick=tick, exact=True)      # a measurement, not play
     time.sleep(0.35)                                    # let the client stop
     end = settle(cap)
     return start, end, samples, time.perf_counter() - t0
@@ -151,7 +151,7 @@ def main() -> int:
         for key in ("d", "a"):
             s1, e1, _, _ = walk(hid, cap, "w", args.walk_s)
             h1 = heading(s1, e1)
-            hid.hold(key, args.turn_s)
+            hid.hold(key, args.turn_s, exact=True)   # the rate divides by this duration
             time.sleep(0.25)
             s2, e2, _, _ = walk(hid, cap, "w", args.walk_s)
             h2 = heading(s2, e2)

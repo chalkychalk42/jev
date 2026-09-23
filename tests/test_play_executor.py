@@ -43,10 +43,11 @@ class Hid:
         self.calls.append(("tap", key))
         return ok
 
-    def hold(self, key, seconds, on_tick=None):
+    def hold(self, key, seconds, on_tick=None, at_most=None):
         if not self.key_down(key):
             return False
         self.calls.append(("hold", key, seconds))
+        self.ceilings = [*getattr(self, "ceilings", []), at_most]
         self.on_hold()
         if on_tick:
             on_tick()
@@ -139,6 +140,8 @@ def test_move_and_turn_are_independent_of_click_and_always_release():
     assert h.hid.releases == 1 and not h.hid.held
     result = h.run(kind="key", control="turn_right", duration_s=0.31)
     assert result.delivered and ("hold", "d", 0.31) in h.hid.calls
+    # The device draws each hold near the asked duration; the exposure limit is its ceiling.
+    assert h.hid.ceilings == [2.0, 2.0]
 
 
 def test_observe_can_wait_unfocused_without_sending_a_play_action():

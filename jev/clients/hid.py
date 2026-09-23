@@ -12,7 +12,9 @@ So the jitter, the hold durations and the mouse curve all live in this file, whe
 press goes through them, rather than being sprinkled over callers who will forget.
 
 Every delay is drawn per event. A fixed "human-looking" 50 ms is a signature exactly as
-clean as 0 ms — it is simply a different constant.
+clean as 0 ms — it is simply a different constant. The same goes for the durations callers
+ask for: a turn is "about 0.67 s", held for a different time each time, and the waits in a
+control loop are drawn too (`pace`), so no action lands on a fixed cadence.
 """
 
 from __future__ import annotations
@@ -80,6 +82,11 @@ class Humaniser:
     # Per-client offset so ten bots are not a chorus. A farm pressing the same key on the
     # same millisecond is a pattern no amount of per-event jitter hides.
     stagger_ms: float = 0.0
+    # How far a held duration and a control loop's wait stray from what was asked, as a
+    # fraction either way. Holds stay close because a turn's length is its angle, and the
+    # loops that ask for them correct from what they observe.
+    hold_spread: float = 0.15
+    pace_spread: float = 0.25
 
     def gap(self) -> float:
         return self.rng.uniform(*self.gap_ms) / 1000.0
@@ -90,6 +97,18 @@ class Humaniser:
     def settle(self) -> float:
         """A longer pause, for after something that changes the UI."""
         return self.rng.uniform(120.0, 260.0) / 1000.0
+
+    def vary(self, seconds: float, spread: float, at_most: float | None = None) -> float:
+        """`seconds`, drawn uniformly within `spread` of itself either way.
+
+        A ceiling lowers the top of the range rather than clamping the draw: clamped, every
+        hold asked for at a limit would last exactly the limit, a constant again.
+        """
+        lo, hi = seconds * (1.0 - spread), seconds * (1.0 + spread)
+        if at_most is not None:
+            hi = min(hi, at_most)
+            lo = min(lo, hi)
+        return self.rng.uniform(lo, hi)
 
     @staticmethod
     def for_client(client_id: str, seed: int | None = None) -> Humaniser:
@@ -119,6 +138,9 @@ class Hid:
         self.held: set[str] = set()
         self.held_buttons: set[bool] = set()
         self.checkpoint: Callable[[], None] | None = None
+        # How long the last `hold` actually kept its key down. Holds are drawn, so a caller
+        # that learns from a hold's effect divides by this, not by what it asked for.
+        self.last_hold_s: float | None = None
 
     # -- guards --------------------------------------------------------------
 
@@ -219,8 +241,9 @@ class Hid:
 
     def hold(self, key: str, seconds: float,
              on_tick: Callable[[], None] | None = None,
-             tick_s: float = 0.05) -> bool:
-        """Hold a key down for a measured duration.
+             tick_s: float = 0.05, *, exact: bool = False,
+             at_most: float | None = None) -> bool:
+        """Hold a key down for about `seconds`.
 
         Movement is a held key, not a tap, and the duration is the control signal — a
         turn is "press D for 0.31 s", so the accuracy of that hold is the accuracy of the
@@ -228,13 +251,25 @@ class Hid:
         the only way to measure a speed without stopping first and measuring a different
         thing.
 
+        **The duration is drawn** within the humaniser's `hold_spread` of `seconds`, and
+        never beyond `at_most`: every caller of a hold steers or retries from what it then
+        observes, and `last_hold_s` says what was actually held. `exact` is for a probe
+        that computes a rate from the duration it asked for, and for a caller that has
+        already drawn its own.
+
         The key is released in a `finally`. A held movement key that survives an exception
         is a character running into the sea for as long as it takes someone to notice.
         """
+        if not exact:
+            seconds = self.h.vary(seconds, self.h.hold_spread, at_most)
+        elif at_most is not None:
+            seconds = min(seconds, at_most)
+        self.last_hold_s = 0.0
         if not self.key_down(key):
             return False
+        start = time.perf_counter()
         try:
-            deadline = time.perf_counter() + seconds
+            deadline = start + seconds
             while time.perf_counter() < deadline:
                 if not self._guard():
                     return False
@@ -243,6 +278,7 @@ class Hid:
                 time.sleep(min(tick_s, max(0.0, deadline - time.perf_counter())))
         finally:
             released = self.key_up(key)
+            self.last_hold_s = time.perf_counter() - start
         self._sleep(self.h.gap())
         return released
 
@@ -463,6 +499,32 @@ class Hid:
             ok = self.button(False, right=right)
         self._sleep(self.h.gap())
         return ok
+
+
+def humaniser(hid) -> Humaniser | None:
+    """The humaniser behind an input device, or `None` for a device without one.
+
+    Test fakes and the walk simulator have none unless given one, and every drawn quantity
+    then stays at its nominal value, so a scripted test sees exactly the waits and turns
+    it scripted.
+    """
+    h = getattr(hid, "h", None)
+    return h if isinstance(h, Humaniser) else None
+
+
+def pace(hid, seconds: float) -> float:
+    """A control loop's wait, drawn within the humaniser's `pace_spread` of `seconds`.
+
+    A loop that reads, decides and presses on a fixed period presses on that period too.
+    """
+    h = humaniser(hid)
+    return seconds if h is None else h.vary(seconds, h.pace_spread)
+
+
+def held(hid, asked: float) -> float:
+    """How long `hid`'s last hold kept its key down, or `asked` if it cannot say."""
+    value = getattr(hid, "last_hold_s", None)
+    return value if isinstance(value, float) else asked
 
 
 def bezier(start: tuple[int, int], end: tuple[int, int], steps: int,

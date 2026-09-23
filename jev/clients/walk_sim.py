@@ -23,6 +23,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from jev.clients.hid import Humaniser
 from jev.guide.coords import ZoneBounds, map_to_world
 
 RUN_YD_S = 7.0
@@ -164,14 +165,20 @@ class SimTime:
 
 
 class SimHid:
-    """The HID surface `Travel` uses, acting on a `WalkWorld`."""
+    """The HID surface `Travel` uses, acting on a `WalkWorld`.
+
+    Holds last exactly what was asked unless a `Humaniser` is given, which then draws them
+    as `Hid` does and draws the loops' waits too (`hid.pace`).
+    """
 
     TURN_LEFT, TURN_RIGHT = "a", "d"
     STRAFE_LEFT, STRAFE_RIGHT = "q", "e"
 
-    def __init__(self, world: WalkWorld):
+    def __init__(self, world: WalkWorld, humaniser: Humaniser | None = None):
         self.world = world
         self.refused = 0
+        self.h = humaniser
+        self.last_hold_s: float | None = None
 
     def key_down(self, key: str) -> bool:
         self.world.keys.add(key)
@@ -193,10 +200,13 @@ class SimHid:
         return True
 
     def hold(self, key: str, seconds: float, *, tick_s: float | None = None, on_tick=None,
-             **_) -> bool:
+             exact: bool = False, at_most: float | None = None, **_) -> bool:
+        if self.h is not None and not exact:
+            seconds = self.h.vary(seconds, self.h.hold_spread, at_most)
         self.key_down(key)
         self.world.advance(seconds)
         self.key_up(key)
+        self.last_hold_s = seconds
         return True
 
     def release_all(self) -> None:

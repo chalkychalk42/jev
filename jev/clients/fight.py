@@ -61,6 +61,7 @@ from enum import StrEnum
 
 import numpy as np
 
+from jev.clients.hid import pace
 from jev.clients.targeting import FACE_SEARCH_MAX_S, FaceCode, HoverCode, PaintCode, Targeting
 from jev.clients.travel import TURN_RATE_SEED
 from jev.perceive.radio_frame import UI_ERROR_KEYS
@@ -453,7 +454,7 @@ class Fight:
             self._rotate(v)
             if self._input_refused:
                 return Fought.REFUSED
-            time.sleep(0.2)
+            time.sleep(pace(self.hid, 0.2))
 
         self.detail = f"{timeout_s:.0f}s and it is still standing"
         return Fought.TIMEOUT
@@ -712,7 +713,8 @@ class Fight:
             if deadline is not None:
                 wait_until = min(wait_until, deadline)
             while time.monotonic() < wait_until:
-                time.sleep(min(CLOSE_LOOK_S, max(0.0, wait_until - time.monotonic())))
+                time.sleep(min(pace(self.hid, CLOSE_LOOK_S),
+                               max(0.0, wait_until - time.monotonic())))
                 v = self.read()
                 if v is None or not self._same_fight(v):
                     return False
@@ -731,11 +733,12 @@ class Fight:
         self._strides += 1
         started = time.monotonic()
         stop_at = started + CLOSE_MAX_S if deadline is None else min(started + CLOSE_MAX_S, deadline)
-        steer_at = started + CLOSE_STEER_S
+        steer_at = started + pace(self.hid, CLOSE_STEER_S)
         near_at = None
         try:
             while time.monotonic() < stop_at:
-                time.sleep(min(CLOSE_LOOK_S, max(0.0, stop_at - time.monotonic())))
+                time.sleep(min(pace(self.hid, CLOSE_LOOK_S),
+                               max(0.0, stop_at - time.monotonic())))
                 v = self.read()
                 if v is None or not self._same_fight(v):
                     return False
@@ -750,7 +753,7 @@ class Fight:
                     if time.monotonic() - near_at >= NEAR_OVERRUN_S:
                         return False
                 if time.monotonic() >= steer_at:
-                    steer_at = time.monotonic() + CLOSE_STEER_S
+                    steer_at = time.monotonic() + pace(self.hid, CLOSE_STEER_S)
                     seen = targeting.track_selected(plate, window_dy=CLOSE_TRACK_DY)
                     if seen is not None:
                         plate, offset = seen
@@ -970,7 +973,7 @@ class Fight:
         """Did health actually rise? The same confirmation as in combat, waited on."""
         deadline = time.monotonic() + settle_s
         while time.monotonic() < deadline:
-            time.sleep(0.4)
+            time.sleep(pace(self.hid, 0.4))
             v = self.read()
             self._observe(v)
             if v is None:
@@ -1057,7 +1060,7 @@ class Fight:
             self.killed_name_id = self._selected_name_id
             return Fought.KILLED
         for _ in range(SETTLE_LOOKS):
-            time.sleep(SETTLE_LOOK_S)
+            time.sleep(pace(self.hid, SETTLE_LOOK_S))
             later = self.read()
             self._observe(later)
             if self._gained(later):
