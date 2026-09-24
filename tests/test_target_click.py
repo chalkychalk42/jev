@@ -516,3 +516,32 @@ def test_a_retarget_mid_hover_still_needs_the_dead_unit_of_the_name(harness, hov
         expected_name_id=2864)
     assert result.code is not ClickCode.CLICKED
     assert harness.hid.buttons == []
+
+
+LIVE_PACKMATE = {"target.has": True, "target.name_id": 2864, "target.hp": 1.0}
+
+
+def _moved_on_harness(harness, **hovered):
+    harness.observations = [radio(1, **LIVE_PACKMATE)]
+    under = {**LIVE_PACKMATE, "cursor.has": True, "cursor.is_target": False,
+             "cursor.world": True, "cursor.dead": True, "cursor.name_id": 2864, **hovered}
+    harness.samples = [radio(1, **LIVE_PACKMATE), radio(2, **under), radio(3, **under)]
+    return harness
+
+
+def test_a_corpse_is_found_past_a_living_packmate_the_client_selected(harness):
+    """Run 20260924T140621-fc3531: the kill moved the selection to the next Kobold
+    Tunneler; the corpse is the dead one of that name, not the selection."""
+    result = _moved_on_harness(harness).targeting.click_corpse(expected_name_id=2864,
+                                                               past_selection=True)
+    assert result.code is ClickCode.CLICKED
+    assert harness.hid.buttons == [((), {"right": True})]
+
+
+def test_past_a_living_selection_the_hover_must_still_be_dead(harness):
+    result = _moved_on_harness(harness, **{"cursor.dead": False}).targeting.click_corpse(
+        expected_name_id=2864, past_selection=True)
+    assert result.code is not ClickCode.CLICKED
+    assert harness.hid.buttons == []
+    result = _moved_on_harness(harness).targeting.click_corpse(expected_name_id=2864)
+    assert result.code is not ClickCode.CLICKED, "without past_selection the live unit is refused"

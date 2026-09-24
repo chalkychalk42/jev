@@ -76,7 +76,8 @@ def test_loot_delegates_the_selected_corpse_pose_to_shared_targeting():
     hid = _Hid()
     skill = _loot([HAVE, {**HAVE, "bags.free": 7}], hid=hid)
     assert skill.run(settle_s=1.0) is Looted.TOOK
-    assert skill.targeting.requests == [{"expected_name_id": 1161, "anchor": None}]
+    assert skill.targeting.requests == [{"expected_name_id": 1161, "anchor": None,
+                                        "past_selection": False, "max_probes": 24}]
     assert hid.clicks == [(710, 533, True)]
     assert skill.clicked == (710, 533)
 
@@ -289,7 +290,8 @@ def test_the_corpse_search_starts_under_the_last_living_plate():
     plate = Plate(640.0, 430.0, 147, RingColour.YELLOW)
     skill = _loot([HAVE, {**HAVE, "bags.free": 7}])
     assert skill.run(settle_s=1.0, anchor=plate) is Looted.TOOK
-    assert skill.targeting.requests == [{"expected_name_id": 1161, "anchor": plate}]
+    assert skill.targeting.requests == [{"expected_name_id": 1161, "anchor": plate,
+                                        "past_selection": False, "max_probes": 24}]
 
 
 def test_an_item_onto_a_stack_is_a_take():
@@ -321,3 +323,26 @@ def test_nothing_selected_is_not_escaped_into_the_game_menu():
     skill = _loot([HAVE, {**gone, "bags.free": 7}], hid=hid)
     assert skill.run(settle_s=1.0) is Looted.TOOK
     assert hid.taps == []
+
+
+def test_a_selection_moved_on_to_a_living_packmate_does_not_hide_the_corpse(monkeypatch):
+    """Run 20260924T140621-fc3531: at a kobold's kill the client selected the next Kobold
+    Tunneler, and the search refused it as not dead - three corpses in one session."""
+    monkeypatch.setattr("jev.clients.loot.time.sleep", lambda _: None)
+    moved_on = {**HAVE, "target.hp": 1.0, "target.name_id": 32830}
+    skill = _loot([moved_on, {**moved_on, "bags.money_silver": 4}])
+    assert skill.run(settle_s=1.0, name_id=32830) is Looted.TOOK
+    assert skill.targeting.requests == [{"expected_name_id": 32830, "anchor": None,
+                                         "past_selection": True, "max_probes": 24}]
+
+
+def test_in_combat_the_corpse_search_is_short_and_waits_below_half_health(monkeypatch):
+    monkeypatch.setattr("jev.clients.loot.time.sleep", lambda _: None)
+    fighting = {**HAVE, "target.hp": 1.0, "vitals.combat": True, "vitals.hp": 0.8}
+    skill = _loot([fighting, {**fighting, "bags.money_silver": 4}])
+    assert skill.run(settle_s=1.0, name_id=1161) is Looted.TOOK
+    assert skill.targeting.requests[0]["max_probes"] == 6
+    hurt = {**fighting, "vitals.hp": 0.3}
+    skill = _loot([hurt])
+    assert skill.run(settle_s=1.0, name_id=1161) is Looted.NO_CORPSE
+    assert skill.targeting.requests == [] and "not now" in skill.detail

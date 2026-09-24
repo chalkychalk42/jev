@@ -762,17 +762,27 @@ CORPSE_COLUMNS = (0, -45, 45, -85, 85)
 # camera draws on the centre line just above the character's head.
 CORPSE_CENTRE_Y = 0.46
 CORPSE_MERGE_PX = 12
+# The nearest points of each grid come before the rest of either: every corpse found in
+# the runs of 24 September was within seven probes of its anchor, and 14 searches that
+# had a plate spent all sixteen probes round it, the centre line never tried.
+CORPSE_FIRST = 8
+# Beside the character's own model, at its hips and knees: in Fargodeep Mine, the camera
+# pulled in close by the walls, a kobold lay against the character's right hip where
+# neither grid reaches (run 20260924T140621-fc3531).
+CORPSE_BESIDE = tuple((sx * 230, fy) for fy in (0.70, 0.62, 0.78) for sx in (1, -1))
 
 
 def corpse_probe_points(frame: np.ndarray, anchor: Plate | None = None, *,
-                        limit: int = 16) -> list[Point]:
+                        limit: int = 24) -> list[Point]:
     """Ordered points worth hovering to find a corpse; none is a body claim.
 
     The grid under the last living plate first - measured 23 September, the corpse lay
     about a hundred pixels under the plate the wolf had when it died - then the same grid
-    on the centre line, and ring proposals last: in grass they are mostly terrain, and
-    ordered first they spent a whole sixteen-probe search on it. Interface zones and plate
-    surfaces are excluded; points closer than a few pixels to an earlier one are merged.
+    on the centre line, each nearest-first and `CORPSE_FIRST` deep, then the band beside
+    the character's own model, then the rest of both grids, and ring proposals last: in
+    grass they are mostly terrain, and ordered first they spent a whole sixteen-probe
+    search on it. Interface zones and plate surfaces are excluded; points closer than a
+    few pixels to an earlier one are merged.
     """
     if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
         raise ValueError("probe limit must be a positive integer")
@@ -782,9 +792,10 @@ def corpse_probe_points(frame: np.ndarray, anchor: Plate | None = None, *,
     anchors.append((width / 2, height * CORPSE_CENTRE_Y))
     grid = sorted(((dx, dy) for dy in CORPSE_DROPS for dx in CORPSE_COLUMNS),
                   key=lambda d: abs(d[0]) + 0.7 * abs(d[1] - CORPSE_DROPS[0]))
-    ordered = []
-    for cx, cy in anchors:
-        ordered.extend((round(cx + dx), round(cy + dy)) for dx, dy in grid)
+    grids = [[(round(cx + dx), round(cy + dy)) for dx, dy in grid] for cx, cy in anchors]
+    ordered = [point for points in grids for point in points[:CORPSE_FIRST]]
+    ordered.extend((round(width / 2 + dx), round(height * fy)) for dx, fy in CORPSE_BESIDE)
+    ordered.extend(point for points in grids for point in points[CORPSE_FIRST:])
     ordered.extend(c.point for c in corpse_candidates(frame))
     out: list[Point] = []
     for point in ordered:

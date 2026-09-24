@@ -405,12 +405,15 @@ def test_corpse_probes_search_under_the_last_living_plate_before_ring_proposals(
     [ring] = corpse_candidates(aside)
     points = corpse_probe_points(aside, limit=60)
     assert ring.point in points
-    assert all(abs(x - 800) <= 85 for x, _ in points[:points.index(ring.point)])
+    assert all(abs(x - 800) <= 85 or abs(abs(x - 800) - 230) <= 1
+               for x, _ in points[:points.index(ring.point)])
     anchor = Plate(500.0, 300.0, 147, RingColour.YELLOW)
     anchored = corpse_probe_points(np.zeros((900, 1600, 3), dtype=np.uint8), anchor)
     assert anchored[0] == (500, 400), "the column under the last living plate comes first"
-    assert all(abs(x - 500) <= 85 for x, _ in anchored[:25])
-    assert len(anchored) == 16, "the search is bounded"
+    assert all(abs(x - 500) <= 85 for x, _ in anchored[:8])
+    assert all(abs(x - 800) <= 85 for x, _ in anchored[8:16]), "then the centre line"
+    assert (1030, 630) in anchored[16:22], "then beside the character's own model"
+    assert len(anchored) == 24, "the search is bounded"
     no_anchor = corpse_probe_points(np.zeros((900, 1600, 3), dtype=np.uint8))
     assert no_anchor[0] == (800, round(900 * 0.46) + 100), "centre line without a plate"
 

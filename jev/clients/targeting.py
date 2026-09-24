@@ -516,8 +516,8 @@ class Targeting:
         return None
 
     def click_corpse(self, *, expected_name_id: int | None = None,
-                     anchor: units.Plate | None = None, max_probes: int = 16,
-                     timeout_s: float = 8.0) -> ClickResult:
+                     anchor: units.Plate | None = None, max_probes: int = 24,
+                     timeout_s: float = 10.0, past_selection: bool = False) -> ClickResult:
         """Right-click the corpse where a fresh hover reports it dead.
 
         A dead unit has no nameplate, so a fresh hover that reports a dead unit can only
@@ -529,7 +529,10 @@ class Targeting:
         With the corpse selected, the hover must be exactly the selection. The client
         can also clear the selection at the kill (measured on 23 September: the target
         vanished the moment XP arrived); then a dead unit of the killed unit's name is
-        the corpse to take, and `expected_name_id` is required.
+        the corpse to take, and `expected_name_id` is required. `past_selection` searches
+        that way with a living unit selected: the client can move the selection on at the
+        kill to the next unit, of the same name in a pack. A right-click on a corpse loots
+        it whatever is selected.
         """
         if type(max_probes) is not int or max_probes <= 0:
             raise ValueError("max_probes must be a positive integer")
@@ -538,18 +541,21 @@ class Targeting:
         with operation("target.corpse", data={"wanted_name_id": expected_name_id,
                        "anchor": None if anchor is None else [round(anchor.cx), round(anchor.cy)],
                        "max_probes": max_probes}) as span:
-            result = self._click_corpse(expected_name_id, anchor, max_probes, timeout_s)
+            result = self._click_corpse(expected_name_id, anchor, max_probes, timeout_s,
+                                        past_selection)
             span.finish(code=result.code.value, detail=result.detail,
                         data={"point": result.point, "attempts": result.attempts})
             return result
 
-    def _click_corpse(self, wanted, anchor, max_probes, timeout_s) -> ClickResult:
+    def _click_corpse(self, wanted, anchor, max_probes, timeout_s,
+                      past_selection=False) -> ClickResult:
         deadline = time.monotonic() + timeout_s
         view = self._view()
         if self.cancel_pending_spell(view.values):
             view = self._view()              # a click now would cast it on the corpse
         values = view.values
-        selected = values is not None and values.get("target.has") is True
+        selected = (values is not None and values.get("target.has") is True
+                    and not past_selection)
         if selected or values is None:
             error = self._eligible(values, wanted, "corpse")
         elif (values.get("ui.modal") is True or values.get("vitals.dead") is True

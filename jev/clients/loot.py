@@ -54,6 +54,12 @@ from jev.run.evidence import event, traced
 
 # How long to wait for the bags or the loot frame to admit something happened.
 SETTLE_S = 2.0
+# Hover probes for a corpse (`corpse_probe_points`). In combat the next attacker is hitting
+# the character while it searches, and every corpse found on 24 September was within seven
+# probes; below half health with an attacker still on it, the search waits for another time.
+LOOT_PROBES = 24
+LOOT_IN_COMBAT_PROBES = 6
+LOOT_IN_COMBAT_HP = 0.5
 
 class Looted(StrEnum):
     TOOK = "took"              # objective, money or bag capacity changed
@@ -115,8 +121,20 @@ class Loot:
 
         targeting = self.targeting or Targeting(self.hid, self.read, read_frame=self.read_frame,
                                                 window_origin=self.window_origin)
-        wanted = v.get("target.name_id") if v.get("target.has") is True else name_id
-        action = targeting.click_corpse(expected_name_id=wanted, anchor=anchor)
+        selected = v.get("target.has") is True
+        # The client moved the selection on at the kill: in a pack, to the next unit of the
+        # same name, which the corpse search then refused as not dead - 20 corpses in the
+        # runs of 24 September, none looted. The corpse is found by its name instead.
+        moved_on = selected and v.get("target.hp") != 0 and name_id is not None
+        wanted = name_id if moved_on or not selected else v.get("target.name_id")
+        fighting = v.get("vitals.combat") is True
+        hp = v.get("vitals.hp")
+        if fighting and moved_on and isinstance(hp, (int, float)) and hp < LOOT_IN_COMBAT_HP:
+            self.detail = f"at {hp:.0%} health with something still attacking; not now"
+            return Looted.NO_CORPSE
+        action = targeting.click_corpse(
+            expected_name_id=wanted, anchor=anchor, past_selection=moved_on,
+            max_probes=LOOT_IN_COMBAT_PROBES if fighting else LOOT_PROBES)
         self.clicked, self.detail = action.point, action.detail
         event("loot.request", code=action.code.value,
               data={"point": self.clicked, "method": "verified_corpse"})
