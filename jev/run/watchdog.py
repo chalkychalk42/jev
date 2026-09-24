@@ -33,8 +33,14 @@ class Watchdog:
     _quests: tuple | None = None
     _level: int | None = None
     _xp: float | None = None
+    # Walking toward the step is progress too, by new closest approaches only (the
+    # tracker's own, in map fractions): circling or standing wedged never makes one. A walk
+    # to a grind 1,200 yards off was failed over half way by a window that counted only
+    # quests and experience (run 20260924T015701-2417ae).
+    walk_step: float = 0.003
+    _walk: tuple = (None, None)
 
-    def observe(self, state, now):
+    def observe(self, state, now, closest: float | None = None):
         if not state.sense.addon_ok:
             if self.blind_since is None:
                 self.blind_since = now
@@ -56,8 +62,16 @@ class Watchdog:
             self._xp = state.char.xp_pct
         # A fail/rib/rejoin cycle moves the playhead without earning anything. Its
         # changing step IDs must not keep a wedged route alive indefinitely.
+        step = state.guide.step_id if state.guide is not None else None
+        walked = False
+        if closest is not None:
+            walk_step, best = self._walk
+            if step != walk_step or best is None:
+                self._walk = (step, closest)       # a new step's start is not progress
+            elif closest <= best - self.walk_step:
+                self._walk, walked = (step, closest), True
         facts = (self._level, self._xp, self._quests)
-        if facts != self._facts or self.progress_at is None:
+        if facts != self._facts or self.progress_at is None or walked:
             self._facts, self.progress_at = facts, now
             self.escalated = False
         elif now - self.progress_at >= self.no_progress_s:

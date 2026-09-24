@@ -286,6 +286,25 @@ def test_the_rib_for_a_level_is_the_highest_window_it_has_reached():
     assert rib_for((), 3) is None
 
 
+def test_a_character_fails_into_the_nearest_rib_that_still_suits_it():
+    """A level 5 character failed out of Echo Ridge Mine into the level 5-7 wolves 1,200
+    yards away, the level 3-5 kobolds beside the mine passed by (run ...015701-2417ae)."""
+    from jev.guide.graph import Node, rib_for
+
+    def rib(lo, hi, pos):
+        return Node(id=f"r{lo}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi),
+                    pos=pos)
+
+    wolves, kobolds, boars = rib(1, 3, (0.48, 0.30)), rib(3, 5, (0.49, 0.33)), rib(5, 7, (0.42, 0.80))
+    ribs = (wolves, kobolds, boars)
+    at_the_mine = (0.48, 0.32)
+    assert rib_for(ribs, 5) is boars
+    assert rib_for(ribs, 5, near=at_the_mine) is kobolds
+    assert rib_for(ribs, 5, near=(0.42, 0.79)) is boars
+    assert rib_for(ribs, 6, near=at_the_mine) is boars, "never more than two levels below"
+    assert rib_for(ribs, 2, near=(0.42, 0.79)) is wolves, "never a window above the level"
+
+
 def test_every_hunt_knows_where_its_target_spawns_without_touching_the_guide():
     """Rings round a cluster's centre stood where Northshire's wolves were not: they spawn
     24 to 170 yards from it, and the rings looked 38 times and found nothing (run

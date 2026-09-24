@@ -290,7 +290,11 @@ class ClientRuntime:
                         # The rib whose mobs suit the character as it is, not as the guide
                         # expected: a level 3 character failed into level 5-6 boars and
                         # died there three times (run 20260923T174132-d01302).
-                        goto = self.graph.rib_for(state.char.level, preferred=target).id
+                        here = ((state.pos.mx, state.pos.my)
+                                if state.pos.mx is not None and state.pos.my is not None
+                                else None)
+                        goto = self.graph.rib_for(state.char.level, preferred=target,
+                                                  near=here).id
                         if failed not in self._retried:
                             self._retried.add(failed)
                             rejoin = failed

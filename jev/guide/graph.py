@@ -18,6 +18,8 @@ to do and no error to explain it.
 
 from __future__ import annotations
 
+import math
+
 import json
 import pathlib
 from enum import StrEnum
@@ -201,9 +203,10 @@ class Graph(BaseModel):
         """Grind loops hanging off the spine — what `on_fail` falls back to."""
         return tuple(n for n in self.nodes if n.kind is StepKind.GRIND)
 
-    def rib_for(self, level: int | None, preferred: Node | None = None) -> Node | None:
+    def rib_for(self, level: int | None, preferred: Node | None = None,
+                near: tuple[float, float] | None = None) -> Node | None:
         """The rib whose mobs suit a character of `level`. See `rib_for`."""
-        return rib_for(self.ribs(), level, preferred)
+        return rib_for(self.ribs(), level, preferred, near)
 
     def unreachable(self) -> tuple[str, ...]:
         """Nodes no edge leads to. Not an error — a rib is reached only on failure — but
@@ -237,15 +240,31 @@ class GraphStats(BaseModel):
     quests: int
 
 
-def rib_for(ribs, level: int | None, preferred: Node | None = None) -> Node | None:
+# How far below the character a rib's window may start and still be worth a detour.
+RIB_LEVELS_BELOW = 2
+
+
+def rib_for(ribs, level: int | None, preferred: Node | None = None,
+            near: tuple[float, float] | None = None) -> Node | None:
     """The rib whose mobs suit a character of `level`: of the ribs whose level window
     starts at or below it, the highest; below every window, the lowest. `preferred` wins
-    a tie, and is the answer when the level is unknown."""
+    a tie, and is the answer when the level is unknown.
+
+    Given where the character is (`near`, the guide's map fractions), the nearest rib whose
+    window starts within `RIB_LEVELS_BELOW` of its level wins instead: a level 5 character
+    failed out of Echo Ridge Mine into the level 5-7 wolves 1,200 yards away and was failed
+    over again on the way, the level 3-5 kobolds beside the mine passed by (run
+    20260924T015701-2417ae)."""
     ribs = tuple(ribs)
     if not ribs:
         return None
     if level is None:
         return preferred or ribs[0]
+    if near is not None:
+        close = [r for r in ribs if r.pos is not None
+                 and level - RIB_LEVELS_BELOW <= r.level[0] <= level]
+        if close:
+            return min(close, key=lambda r: (math.dist(r.pos, near), -r.level[0]))
     fitting = [r for r in ribs if r.level[0] <= level]
     if not fitting:
         return min(ribs, key=lambda r: r.level[0])

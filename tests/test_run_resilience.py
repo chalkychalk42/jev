@@ -47,6 +47,30 @@ def test_progress_after_a_fail_over_earns_a_fresh_one():
     assert watch.escalate and watch.failure is None
 
 
+def test_walking_closer_to_the_step_is_progress_and_circling_is_not():
+    """A walk to a grind 1,200 yards off was failed over half way (run
+    20260924T015701-2417ae): only new closest approaches count, so circling never does."""
+    watch = Watchdog(no_progress_s=10)
+    state = seen(char=Char(level=5, xp_pct=0.2), guide=GuidePos(step_id="rib"))
+    watch.observe(state, 0, closest=0.30)
+    for now in range(1, 40):
+        watch.observe(state, now, closest=0.30 - 0.005 * now)
+    assert not watch.escalate, "every few seconds brought it closer"
+    for now in range(40, 52):
+        watch.observe(state, now, closest=0.30 - 0.005 * 39)    # circling: never closer
+    assert watch.escalate
+
+
+def test_a_new_steps_first_distance_is_not_progress():
+    watch = Watchdog(no_progress_s=10)
+    state = seen(char=Char(level=5, xp_pct=0.2), guide=GuidePos(step_id="objective"))
+    watch.observe(state, 0, closest=0.10)
+    for now, step, closest in ((4, "rib", 0.05), (8, "turnin", 0.02), (10, "objective", 0.01)):
+        watch.observe(state.model_copy(update={"guide": GuidePos(step_id=step)}), now,
+                      closest=closest)
+    assert watch.escalate, "each step's start is a baseline, not an approach"
+
+
 def test_last_reconnect_is_allowed_to_finish_before_budget_exhaustion(tmp_path):
     blind = seen(sense=Sense(addon_ok=False))
     rt = runtime(tmp_path, [blind, blind, blind, blind])

@@ -292,7 +292,8 @@ class Supervisor:
             if self.worker:
                 self.worker.cancel(self.failure)
         if self.watchdog:
-            self.watchdog.observe(state, now)
+            memory = getattr(getattr(self.runtime, "tracker", None), "memory", None)
+            self.watchdog.observe(state, now, closest=getattr(memory, "closest", None))
             if self.watchdog.escalate:
                 self.watchdog.escalate = False
                 step = self.runtime.tracker.step_id
