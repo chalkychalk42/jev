@@ -2237,3 +2237,14 @@ Operator action, 06:10: quest 18's objective failed on its three-deaths edge int
 at 06:06. The loop was stopped, the playhead put back on `18_brotherhood_of_thieves_do` with
 its deaths cleared (the previous file is at `/tmp/playhead-before-0610.json`), and the loop
 restarted at session 37.
+
+## 2026-09-24 06:50 — debrief 8: quests flowing again
+
+Since the summary: quest 18 (twelve bandanas) and 3903 handed in, 3904 (Milly's Harvest)
+at 2/8 crates. Two more general fixes from live evidence:
+- an object click nothing answers is out of reach, as the Spirit Healer's was: the gather
+  turns toward the crate, steps in and clicks again (V106). The tutor, told the same,
+  took crates itself;
+- a selected bystander in combat is not the fight: a Defias Thug at full health, neither
+  biting nor near, stayed selected for 40 s while another killed the character. Defending
+  now picks what is attacking first (V107).
