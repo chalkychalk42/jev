@@ -100,6 +100,8 @@ MERCHANT_UNREACHABLE = frozenset({"not_visible", "no_target", "no_window", "appr
 # After buying spells, the spellbook census is rebuilt under its new revision (about 2.5 s
 # at ten paints a second) before anything is put on the bar from it.
 CENSUS_S = 8.0
+# How long to read every paint for a whole bar and spellbook census when one is missing.
+CENSUS_LOOK_S = 4.0
 # Skills that start with no time for putting spells on the bar: a fight, a death, a wait.
 UNHURRIED_EXCEPT = frozenset({"COMBAT_PROFILE", "LOOT", "FACE_TARGET", "RELEASE_SPIRIT",
                               "CORPSE_RUN", "ABORT_WAIT", "IDLE", "TRAIN_CLASS"})
@@ -620,16 +622,35 @@ class LiveBody:
         if after and after.get("inventory.revision") is not None:
             self._gear_checked = after.get("inventory.revision")
 
+    def _census(self, *, seconds: float = CENSUS_LOOK_S):
+        """The bar and the spellbook, whole: read every paint until both censuses are.
+
+        Read as they come, a census can stay partial for minutes: the strip paints one
+        entry per paint, and a reader at a steady fraction of the paint rate sees the same
+        few bar slots over and over (session 56 put nothing on the bar for that). At twenty
+        reads a second every paint is seen: the bar in 1.2 s, a spellbook of 17 in 1.7 s.
+        The last whole ones are kept, so this reads only when one is missing.
+        """
+        census = getattr(self.client, "spells", None)
+        if census is None:
+            return None, None
+        deadline = time.monotonic() + seconds
+        while True:
+            with self.client._capturing:
+                bar, known = census.bar, census.known
+            if (bar is not None and known is not None) or time.monotonic() >= deadline:
+                return bar, known
+            self._read()
+            time.sleep(0.05)
+
     def _bar_profile(self) -> None:
         """Fight with what the bar holds: its census's spells by role, over the class's
         starting profile. Without a whole census the starting profile stands."""
         values = self._read()
-        census = getattr(self.client, "spells", None)
-        if values is None or census is None:
+        if values is None or getattr(self.client, "spells", None) is None:
             return
         base = for_class(values.get("char.class_id"), values.get("char.race_id"))
-        with self.client._capturing:
-            bar = census.bar
+        bar, _ = self._census()
         self.fight.profile = profile_from_bar(bar, base) if bar else None
 
     def _trainer(self, state: State | None = None):
@@ -737,9 +758,8 @@ class LiveBody:
         if (values is None or values.get("vitals.combat") is not False
                 or values.get("vitals.dead") is not False or values.get("vitals.ghost") is not False):
             return "no spells placed"
-        with self.client._capturing:
-            bar, known = census.bar, census.known
-            mark = (values.get("bars.revision"), values.get("spells.revision"))
+        bar, known = self._census()
+        mark = (values.get("bars.revision"), values.get("spells.revision"))
         if bar is None or known is None or (not force and mark == self._placing_checked):
             return "no spells placed"
         self._placing_checked = mark

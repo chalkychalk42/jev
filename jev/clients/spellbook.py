@@ -34,9 +34,13 @@ DROP_POINT = (0.66, 0.32)
 # Clicks on tabs and page buttons to bring one entry into view: tabs, then pages.
 NAVIGATE_CLICKS = 8
 OPEN_S = 3.0
-ENTRY_S = 4.0            # a whole spellbook census is about 2.5 s at 10 paints a second
-SLOT_S = 3.0             # a whole bar census is 1.2 s
-PLACED_S = 4.0
+# One entry of each census is painted per paint, ten a second, and a look (a capture and a
+# decode) takes a paint or three: a reader can go several seconds without landing on one
+# entry. Session 56 waited 4 s for Divine Protection's, of 17, and gave up with two of four
+# spells placed. Waits end as soon as the entry is seen, or every entry has been.
+ENTRY_S = 12.0
+SLOT_S = 8.0
+PLACED_S = 8.0
 
 
 class Placed(StrEnum):
@@ -148,8 +152,19 @@ class Spellbook:
     def _entry(self, spell_id: int) -> dict:
         """A paint describing `spell_id`'s spellbook entry, its button in view."""
         for _ in range(NAVIGATE_CLICKS + 1):
-            values = self._await(lambda v: v.get("spells.id") == spell_id, ENTRY_S,
-                                 f"spellbook entry for spell {spell_id}")
+            seen: set[int] = set()
+
+            def found(v, seen=seen):
+                if v.get("spells.id") == spell_id:
+                    return True
+                if v.get("spells.index") is not None:
+                    seen.add(v["spells.index"])
+                total = v.get("spells.total")
+                if total and len(seen) >= total:
+                    raise _Stop(Placed.NO_BUTTON, f"spell {spell_id} is not in the spellbook")
+                return False
+
+            values = self._await(found, ENTRY_S, f"spellbook entry for spell {spell_id}")
             if self._point(values, "spells.") is not None:
                 return values
             go = self._point(values, "spells.go_")

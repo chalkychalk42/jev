@@ -228,3 +228,11 @@ def test_a_drag_that_cannot_find_its_slot_lets_go_on_open_world():
     assert placer.place([Placement(465, 4)]) is Placed.TIMEOUT
     drag = [e for e in book.events if e[0] == "drag"]
     assert drag and drag[-1][2] == (1056, 288), "let go somewhere a spell could land"
+
+
+def test_a_spell_the_spellbook_does_not_hold_is_given_up_once_every_entry_is_seen():
+    book = Book()
+    placer = book.book()
+    assert placer.place([Placement(853, 5)]) is Placed.NO_BUTTON
+    assert "not in the spellbook" in placer.detail
+    assert book.now < 2.0, "waited out the whole deadline for an entry that is not there"
