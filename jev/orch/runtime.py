@@ -52,9 +52,14 @@ from jev.world.state_v1 import ArmedBy, State, StepKind
 # Skills that serve the character rather than its step: while one runs, the step's clock
 # stands still (`Tracker.serving`).
 # A dialog nobody closes is a stall, so ABORT_WAIT is not among them.
+#
+# A fight that finds the character on its way is one too, from its approach to its loot:
+# the clock already stood still in combat, but not for the walk to an attacker or the
+# corpse after it, and a dozen kobolds on the way back from Fargodeep Mine ran quest 60's
+# hand-in out of its four minutes with the quest complete (run 20260924T132256-fc8503).
 SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
                               "BUY_AMMO_REAGENT_FOOD", "LOOT", "RELEASE_SPIRIT", "CORPSE_RUN",
-                              "TRAIN_CLASS"})
+                              "TRAIN_CLASS", "COMBAT_PROFILE"})
 
 
 @dataclass

@@ -436,3 +436,12 @@ def test_a_step_of_an_abandoned_quest_is_skipped_before_it_is_walked_to(tmp_path
     assert beyond is not None and guide.get(beyond).quest_id != 16
     assert rt._abandoned_now(seen(0, quests=None)) is None, "an unread log skips nothing"
     assert rt._abandoned_now(seen(0, quests=(Quest(quest_id=16),))) is None
+
+
+def test_a_fight_on_the_way_stops_the_step_s_clock_like_a_meal():
+    """A dozen kobolds on the way back from Fargodeep Mine ran quest 60's hand-in out of
+    its four minutes, the quest complete: the walk to each and its corpse were counted."""
+    from jev.orch.runtime import SERVICING_SKILLS
+
+    assert {"COMBAT_PROFILE", "EAT_DRINK", "LOOT"} <= SERVICING_SKILLS
+    assert "ABORT_WAIT" not in SERVICING_SKILLS
