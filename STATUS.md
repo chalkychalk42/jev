@@ -2084,3 +2084,34 @@ The real limit under all of it: a level 6 paladin with Seal of Righteousness and
 alone. The trainer and a way to use trained spells are the operator's call (below).
 
 NEXT: Goldshire (54), then 18; the first live gather at 3904.
+
+## 2026-09-24 05:35 — overnight debrief 6: a pack, a heal, and the Spirit Healer explained
+
+Sessions 28-31. Testvvi: level 6 at 80%, walking to Goldshire for quest 54's hand-in. Nine
+deaths in sessions 29-30, all from one chain, each link now fixed and general:
+- the hunt's tour began at the spawn nearest the camp's centre - in the level 5-7 wolf camp
+  a spawn with three others inside twenty yards. The walk there pulled four Mangy Wolves at
+  once. Lone spawns are now walked before packs, and round a pack where possible (V95);
+- getting up at the body among the same wolves killed it again, four times: the 32-yard
+  short reclaim ran only after a quick second death, which a new session never remembers.
+  Every body is now reclaimed short of it (V94; seen working at session 31's start);
+- the Spirit Healer's silence is explained. The server drops a right-click from beyond five
+  yards without a word (`INTERACTION_DISTANCE`), and when the healer does answer it opens a
+  gossip ("Return me to life.", menu 83), not the popup the recovery waited for. The
+  interaction now steps in on silence and chooses that line (V94; not yet seen live);
+- between two wolves it healed at 44% with its target at 18%, two swings from dead, and
+  never swung again: a heal now waits while the target will die well before the character
+  would, by the rates the fight has shown (V96).
+
+The failed hand-in's three deaths dropped it to the level 3-5 kobold rib at Northshire, 1000
+yards off through wolf country; the rib's own two deaths sent it back to 54.
+
+Learner (read from the live store, nothing written): acquire 55 qualified in 11 runs (26
+train / 29 held out; needs 40 train), approach 39, rest 26, interact 25. No model yet. The 44
+acquire rows in interrupted episodes are unproductive tutor wandering (Escape, turning,
+clicking emptied corpses), so the episode gate is right to leave them out.
+
+The real limit stays: an untrained paladin. No Divine Protection, Judgement or auras, so two
+level 6 wolves at once are a loss. See the trainer sketch below.
+
+NEXT: 54's hand-in, then quest 18 back in Northshire; a live Spirit Healer rise; heals held.
