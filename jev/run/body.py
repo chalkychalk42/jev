@@ -19,7 +19,7 @@ from jev.clients.gather import Gather
 from jev.clients.hearth import Hearth
 from jev.clients.interact import Interact
 from jev.clients.interact import Result as Interacted
-from jev.clients.loot import Loot
+from jev.clients.loot import Loot, Looted
 from jev.clients.recover import Recover, Recovered
 from jev.clients.repair import Repair
 from jev.clients.rest import Rest
@@ -482,7 +482,9 @@ class LiveBody:
         if outcome.ok:
             looted = self.loot.run(progress=self._progress, anchor=self.fight.last_plate,
                                    name_id=self.fight.killed_name_id)
-            if not looted.ok:
+            # A corpse not found costs its loot, not the kill: the selection can move on at
+            # the kill and leave nothing to hover (run 20260924T033806-a3254d, three times).
+            if not looted.ok and looted is not Looted.NO_CORPSE:
                 return self._result(looted, f"post-kill loot: {self.loot.detail}")
             # Said, so whoever delegated the fight knows the corpse is done with: the tutor
             # went on clicking corpses this had already emptied.

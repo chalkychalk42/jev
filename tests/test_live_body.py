@@ -244,7 +244,7 @@ def test_all_unit_actions_share_one_targeting_owner_and_event_frame_writer():
 @pytest.mark.parametrize("outcome, status", [
     (Looted.REFUSED, SkillOutcome.ABORTED), (Looted.BLIND, SkillOutcome.PREEMPTED),
     (Looted.INTERRUPTED, SkillOutcome.PREEMPTED), (Looted.BAGS_FULL, SkillOutcome.PREEMPTED),
-    (Looted.WINDOW_OPEN, SkillOutcome.ABORTED), (Looted.NO_CORPSE, SkillOutcome.ABORTED),
+    (Looted.WINDOW_OPEN, SkillOutcome.ABORTED),
 ])
 def test_direct_combat_does_not_hide_post_kill_loot_failure(outcome, status):
     b = body()
@@ -258,7 +258,7 @@ def test_direct_combat_does_not_hide_post_kill_loot_failure(outcome, status):
     b.loot.run.assert_called_once_with(progress=b._progress, anchor=plate, name_id=2864)
 
 
-@pytest.mark.parametrize("outcome", [Looted.TOOK, Looted.NOTHING])
+@pytest.mark.parametrize("outcome", [Looted.TOOK, Looted.NOTHING, Looted.NO_CORPSE])
 def test_direct_combat_keeps_success_after_observed_loot_outcome(outcome):
     b = body()
     b.fight = SimpleNamespace(run=lambda _: Fought.KILLED, detail="observed death",
@@ -564,3 +564,14 @@ def test_a_fight_says_the_corpse_is_looted_so_no_one_loots_it_again():
     result = b._fight(seen())
     assert result.outcome is SkillOutcome.SUCCEEDED
     assert "corpse looted: took - 3 copper" in result.detail
+
+
+def test_a_kill_whose_corpse_is_not_found_is_still_a_kill():
+    b = body(StepKind.QUEST_OBJECTIVE)
+    b.fight = SimpleNamespace(run=lambda name: Fought.KILLED, last_plate=None, killed_name_id=7,
+                              detail="selected plate on the centre line")
+    b.loot = SimpleNamespace(run=lambda **kw: Looted.NO_CORPSE, detail="target observation: none")
+    result = b._fight(seen())
+    assert result.outcome is SkillOutcome.SUCCEEDED and "no_corpse" in result.detail
+    b.loot = SimpleNamespace(run=lambda **kw: Looted.BAGS_FULL, detail="bags are full")
+    assert b._fight(seen()).outcome is SkillOutcome.PREEMPTED, "full bags still call a vendor"
