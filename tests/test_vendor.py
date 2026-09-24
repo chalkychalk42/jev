@@ -399,3 +399,11 @@ def test_nothing_is_put_on_while_a_shop_is_open():
     body = Vendor(shop, shop.read, shop.visit, clock=lambda: shop.now, sleep=shop.sleep)
     assert body.equip_items({5580}) == []
     assert shop.clicks == []
+
+
+def test_a_spawn_only_a_game_event_places_is_no_merchant():
+    """With full bags the character walked to the Darkmoon Faire's empty grounds for Stamp
+    Thunderhorn, Sylannia and Professor Thaddeus Paleo (session 63)."""
+    names = {v["name"] for v in catalog()["vendors"]}
+    assert not names & {"Stamp Thunderhorn", "Sylannia", "Professor Thaddeus Paleo"}
+    assert "Godric Rothgar" in names                  # Northshire's, always there

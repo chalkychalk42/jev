@@ -42,10 +42,16 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
         "select entry from world_item_template where Quality=0 and SellPrice>0 "
         "and class in (2,4) and startquest=0 order by entry") if row[0] not in protected]
     vendors = []
+    # A spawn a game event adds (a positive event in game_event_creature) stands there only
+    # while the event runs: with full bags the character walked to the Darkmoon Faire's
+    # empty grounds by Goldshire for Stamp Thunderhorn, Sylannia and Professor Thaddeus
+    # Paleo, found none of them, and the session stopped (session 63).
     for row in db.execute(
         "select distinct t.Entry,t.Name,c.map,c.position_x,c.position_y,c.position_z "
         "from world_creature_template t join world_creature c on c.id=t.Entry "
-        "where (t.NpcFlags & 128)!=0 order by t.Entry,c.map,c.position_x,c.position_y"):
+        "where (t.NpcFlags & 128)!=0 and c.guid not in "
+        "(select guid from world_game_event_creature where event > 0) "
+        "order by t.Entry,c.map,c.position_x,c.position_y"):
         entry, name, map_id, x, y, z = row
         if not name or name.startswith("["):
             # "[DND] TAR Pedestal - Trainer, Druid" and 779 others: developer placeholders the

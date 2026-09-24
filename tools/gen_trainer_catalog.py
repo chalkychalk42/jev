@@ -200,8 +200,11 @@ def generate(db: sqlite3.Connection) -> dict:
             "order by Entry"):
         if not name or name.startswith("["):
             continue
+        # Not a spawn only a game event puts there (see tools/gen_vendor_catalog.py).
         spawns = db.execute("select map, position_x, position_y, position_z from "
-                            "world_creature where id=? order by guid", (entry,)).fetchall()
+                            "world_creature where id=? and guid not in (select guid from "
+                            "world_game_event_creature where event > 0) order by guid",
+                            (entry,)).fetchall()
         sides = _sides(db, faction)
         if not spawns or not sides:
             continue
