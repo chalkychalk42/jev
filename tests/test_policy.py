@@ -195,6 +195,16 @@ def test_a_trainer_with_something_to_teach_is_a_service_and_a_failed_visit_waits
     assert service(fighting, context=context) is None
 
 
+def test_training_waits_for_a_meal():
+    from jev.coach.policy import Context, service
+    from jev.world.state_v1 import Char
+
+    context = Context()
+    context.trainable = lambda state: True
+    hurt = _s(char=Char(level=8), vitals=Vitals(hp=0.4, power=1.0, combat=False))
+    assert service(hurt, context=context) is None
+
+
 def test_repairs_and_bags_come_before_training():
     from jev.coach.policy import Context, service
     from jev.world.state_v1 import Char

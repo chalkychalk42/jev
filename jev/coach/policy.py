@@ -207,8 +207,9 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
                        0.8, ("dead", "combat"), service="supplies"), True, "service.supplies")
 
     # Last: spells a trainer would teach now. A paladin that never trained fought to level
-    # 8 on Seal of Righteousness and Holy Light rank 1, losing to two wolves at once.
-    if context is not None and context.can_train(state):
+    # 8 on Seal of Righteousness and Holy Light rank 1, losing to two wolves at once. It can
+    # wait for a meal: the walk to Goldshire's trainer is 640 yards of Elwynn.
+    if context is not None and _recover(state) is None and context.can_train(state):
         return Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
                        0.6, ("dead", "combat"), service="train"), True, "service.train")
 
