@@ -1767,9 +1767,15 @@ def test_divine_protection_goes_up_before_the_heal_it_protects():
     f._rotate(hurt)
     assert hid.taps == ["7"]
     f._rotate({**hurt, "bars.ready": ALL_READY & ~(1 << 6)})     # on its cooldown now
-    assert hid.taps == ["7", "8"], "the stun is the next guard when the save is spent"
-    f._rotate({**hurt, "bars.ready": ALL_READY & ~(1 << 6) & ~(1 << 7)})
-    assert hid.taps[-1] == "3" and f._pending_heal is not None
+    assert hid.taps == ["7", "3"], "the heal under the save, not a stun"
+    assert f._pending_heal is not None
+    # With the save spent before this fight, the stun clears the way instead.
+    hid2 = _Hid()
+    f2, _ = _trained(hid2)
+    f2._rotate({**hurt, "bars.ready": ALL_READY & ~(1 << 6)})
+    assert hid2.taps == ["8"], "the stun is the guard when the save is spent"
+    f2._rotate({**hurt, "bars.ready": ALL_READY & ~(1 << 6) & ~(1 << 7)})
+    assert hid2.taps[-1] == "3" and f2._pending_heal is not None
 
 
 def test_the_last_resort_is_for_a_fight_about_to_be_lost():
@@ -1848,3 +1854,24 @@ def test_a_spell_the_catalog_does_not_know_keeps_its_slot_s_starting_row():
     bar = {**TRAINED_BAR, 2: 999999}
     rows = {a.slot: (a.name, a.role) for a in from_bar(bar, for_class(2, 1)).abilities}
     assert rows[2] == ("Seal of Righteousness", Role.BUFF)
+
+
+def test_the_heal_comes_straight_after_the_save_whatever_the_line(combat_clock):
+    """Divine Protection at 40%, then a stun, and health sat at exactly 40% - not below
+    the heal's line - until the immunity ran out; the heal came after it and was pushed
+    back to nothing (run 20260924T122236-108178)."""
+    from jev.world.combat import from_bar
+
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.profile = from_bar(TRAINED_BAR, for_class(2, 1))
+    hurt = {**ALIVE, "bars.ready": ALL_READY, "bars.usable": ALL_READY, "vitals.hp": 0.39,
+            "vitals.combat": True, "vitals.power": 0.9, "vitals.power_max": 300,
+            "target.attacking_me": True}
+    f._rotate(hurt)
+    assert hid.taps == ["7"], "the save first"
+    combat_clock[0] += 1.6                                     # its global cooldown
+    immune = {**hurt, "vitals.hp": 0.40, "bars.ready": ALL_READY & ~(1 << 6)}
+    f._rotate(immune)
+    assert hid.taps == ["7", "3"], "the heal next, not the stun, at exactly 40%"
+    assert hid.chords[-1] == ("alt", "3")

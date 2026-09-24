@@ -239,6 +239,14 @@ HEAL_GIVE_UP = 2
 # Protection on the kill, and died to the next wolf with nothing left (run
 # 20260924T114311-570633). A save and a cast need a few seconds of health: below a
 # quarter, the heal - behind its save - comes now.
+# A save (Divine Protection: six seconds immune) is worth only the heal it clears the way
+# for: the heal comes next, whatever the usual line, while the save still has time for a
+# cast to finish inside it. At 40% the save went up, then a stun, and health sat at exactly
+# 40% - not below the heal's line - until the immunity ran out; the heal came after it and
+# was pushed back to nothing (run 20260924T122236-108178).
+SAVE_HEAL_WINDOW_S = 3.5
+SAVE_HEAL_BELOW = 0.8
+
 FINISH_MARGIN = 0.8
 FINISH_EVIDENCE_S = 3.0
 FINISH_WINDOW_S = 6.0
@@ -352,6 +360,8 @@ class Fight:
     # fights, unlike `_last_use`: a ten-minute blessing pressed every fight is a global
     # cooldown thrown away each time. A death takes them all (`buffs_lost`).
     _lasting: dict[str, float] = field(default_factory=dict, init=False)
+    # When this fight's save went up: the heal comes next (`SAVE_HEAL_WINDOW_S`).
+    _saved_at: float | None = field(default=None, init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
     _race: list[tuple] = field(default_factory=list, init=False)
     # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
@@ -394,6 +404,7 @@ class Fight:
         self.last_hp = None
         self.detail = ""
         self._last_use = {}
+        self._saved_at = None
         event("fight.request", data={"wanted_name_id": name_id, "timeout_s": timeout_s})
 
         v = self.read()
@@ -1266,24 +1277,29 @@ class Fight:
         #    a character ends up running back from the graveyard.
         heal = profile.first(Role.HEAL)
         giving_up = self.heals_ignored >= HEAL_GIVE_UP and self.heals_landed == 0
+        saved = (self._saved_at is not None
+                 and time.monotonic() - self._saved_at < SAVE_HEAL_WINDOW_S)
         if (heal is not None and pressable(heal) and not giving_up
                 # One at a time. `_watch_heal` is what decides whether the last one
                 # landed, and pressing again before it answers is how a live fight got
                 # `pressed [2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]` - fifteen
                 # Holy Lights, none of which healed anything, on a 2.5 second cast.
                 and self._pending_heal is None
-                and in_combat
-                and hp is not None and hp < HEAL_IN_COMBAT
+                and in_combat and hp is not None
+                and (hp < HEAL_IN_COMBAT or (saved and hp < SAVE_HEAL_BELOW))
                 and self._has_mana_for(heal, values)
-                and not self._finishes_first(values)):
+                and (saved or not self._finishes_first(values))):
             # Clear the way for it first, where the bar can: immune (Divine Protection),
             # or the attacker stunned (Hammer of Justice). Pushback is what left a level 6
-            # paladin's Holy Lights unfinished for 22 s against one wolf.
-            for guard in (*profile.by_role(Role.SAVE), *profile.by_role(Role.STUN)):
+            # paladin's Holy Lights unfinished for 22 s against one wolf. Under a save the
+            # way is clear already.
+            for guard in () if saved else (*profile.by_role(Role.SAVE),
+                                           *profile.by_role(Role.STUN)):
                 if (pressable(guard) and self._has_mana_for(guard, values)
                         and (guard.role is Role.SAVE
                              or values.get("target.attacking_me") is True)):
-                    self._press(guard)
+                    if self._press(guard) and guard.role is Role.SAVE:
+                        self._saved_at = time.monotonic()
                     return
             if self._press(heal):
                 self._pending_heal = (hp, time.monotonic())
