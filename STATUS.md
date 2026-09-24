@@ -2319,3 +2319,7 @@ to have both: run the fight inside the teaching episode as a delegated routine (
 episode continues and the kill is its progress), or finalise a combat-preempted grind
 episode after the reflex fight, crediting it only if that fight's kill came within
 seconds. Either changes what the learner is taught from, so it is your call.
+
+09:00: V114 (corpses released after a "nothing" loot) is in. The wolf rib ended on its
+two-deaths rule - two more multi-wolf deaths at level 8, the untrained paladin's limit - and
+the route is on quest 6 (Garrick Padfoot) at last.
