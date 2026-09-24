@@ -1821,3 +1821,22 @@ def test_a_starting_spell_keeps_its_starting_role_at_any_rank_and_page():
     rows = {a.slot: (a.name, a.role) for a in from_bar(bar, for_class(1, 1)).abilities}
     assert rows == {1: ("Attack", Role.ATTACK), 2: ("Heroic Strike", Role.ATTACK),
                     12: ("Tough Jerky", Role.FOOD)}
+
+
+def test_below_a_quarter_the_heal_comes_behind_its_save_however_close_the_kill(combat_clock):
+    """Held nine times from 40% against a wolf "a second from dead" that took five more:
+    won at 14%, Divine Protection spent on the kill, dead to the next wolf (run
+    20260924T114311-570633)."""
+    from jev.world.combat import from_bar
+
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.profile = from_bar(TRAINED_BAR, for_class(2, 1))
+    looks = [(0.70 - 0.03 * i, 0.60 - 0.03 * i) for i in range(17)]
+    _race(f, combat_clock, looks)
+    hurt = {**ALIVE, "bars.ready": ALL_READY, "bars.usable": ALL_READY, "vitals.hp": 0.23,
+            "target.hp": 0.07, "vitals.combat": True, "vitals.power": 0.9,
+            "vitals.power_max": 300, "target.guid": 7, "target.attacking_me": True}
+    assert f._finishes_first(hurt) is False
+    f._rotate(hurt)
+    assert hid.taps == ["7"], "Divine Protection first, then the heal"

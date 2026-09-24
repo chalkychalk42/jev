@@ -233,10 +233,16 @@ HEAL_GIVE_UP = 2
 # died with both wolves alive (run 20260924T050644-f9f9fa). Killing one first halves what
 # the heal has to outpace. Rates only once each has this much evidence behind it, and
 # never below the floor, where there is no margin left to be wrong with.
+#
+# The floor is a quarter. At 15% a trained paladin held its heal nine times against a
+# wolf "a second or three from dead" that took five more; it won at 14%, spent Divine
+# Protection on the kill, and died to the next wolf with nothing left (run
+# 20260924T114311-570633). A save and a cast need a few seconds of health: below a
+# quarter, the heal - behind its save - comes now.
 FINISH_MARGIN = 0.8
 FINISH_EVIDENCE_S = 3.0
 FINISH_WINDOW_S = 6.0
-FINISH_FLOOR = 0.15
+FINISH_FLOOR = 0.25
 
 # Which key an action slot is. The default bindings run 1-9, then 0, then the two keys
 # left of Backspace — which is where a fresh character's food and water sit, so getting
