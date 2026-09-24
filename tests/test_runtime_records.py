@@ -157,6 +157,25 @@ def test_full_bags_with_nothing_to_sell_wait_for_a_slot_to_free():
         "a slot freed and filled again is worth another visit"
 
 
+def test_nearly_full_bags_visit_the_merchant_before_the_loot_stops():
+    """Session 81 left four kills unlooted with full bags on its way to a merchant."""
+    context = Context()
+    tight = seen(bags=Bags(free=2, durability_min=1.0))
+    assert decide(tight, context=context).rule == "service.bags_full"
+    context.bags_failed(2)
+    assert decide(tight, context=context).rule != "service.bags_full"
+    assert decide(seen(bags=Bags(free=1, durability_min=1.0)),
+                  context=context).rule != "service.bags_full", "fuller, but nothing new sold"
+    decide(seen(bags=Bags(free=3, durability_min=1.0)), context=context)
+    assert decide(tight, context=context).rule == "service.bags_full", "room, then tight again"
+    context.bags_failed(2)
+    for free in (1, 0, 1):                          # fuller, full, a meal eaten
+        assert decide(seen(bags=Bags(free=free, durability_min=1.0)),
+                      context=context).rule != "service.bags_full"
+    assert decide(seen(bags=Bags(free=0, durability_min=1.0)),
+                  context=context).rule == "service.bags_full", "freed and filled again"
+
+
 def test_service_waits_for_observed_out_of_combat_state():
     from jev.coach.policy import service
 

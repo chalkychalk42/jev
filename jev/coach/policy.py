@@ -93,15 +93,24 @@ class Context:
             money is not None and self.supplies_money is not None and money > self.supplies_money)
 
     bags_blocked: bool = False
+    # The fewest free slots since a merchant visit found nothing to sell, and whether one
+    # has freed since: a slot freed and filled again may hold something a merchant buys.
+    bags_blocked_at: int = 0
+    bags_freed: bool = False
 
-    def bags_failed(self) -> None:
-        self.bags_blocked = True
+    def bags_failed(self, free: int | None = None) -> None:
+        self.bags_blocked, self.bags_blocked_at, self.bags_freed = True, free or 0, False
 
     def can_make_space(self, free: int | None) -> bool:
-        # Full bags with nothing a merchant may buy: another visit changes nothing until a
-        # slot frees (food eaten, an item used), and a run asking again stops on it.
-        if free is not None and free > 0:
-            self.bags_blocked = False
+        # Bags with nothing a merchant may buy: another visit changes nothing until something
+        # new is in them, and a run asking again stops on it.
+        if self.bags_blocked and free is not None:
+            if free > BAGS_LOW or (self.bags_freed and free <= self.bags_blocked_at):
+                self.bags_blocked = False
+            elif free > self.bags_blocked_at:
+                self.bags_freed = True
+            elif not self.bags_freed:
+                self.bags_blocked_at = free
         return not self.bags_blocked
 
     # Whether a class trainer has something to teach that the purse can pay for, from
@@ -175,6 +184,10 @@ def preempt(state: State) -> Plan | None:
     return None
 
 
+# Free bag slots at which the merchant is visited. Not none: every fight on the way there
+# drops loot, and with full bags session 81 left four kills unlooted on its way to one.
+BAGS_LOW = 2
+
 # --------------------------------------------------------------------------- soft tier
 
 
@@ -192,8 +205,8 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "equipment is broken", 0.85,
                        ("dead", "combat"), service="repair"), True, "service.broken")
 
-    if can_sell and b.free is not None and b.free == 0:
-        return Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are full; nothing can drop",
+    if can_sell and b.free is not None and b.free <= BAGS_LOW:
+        return Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are nearly full",
                        0.75, ("dead", "combat"), service="bags"), True, "service.bags_full")
 
     if can_repair and b.durability_min is not None and b.durability_min < 0.35:

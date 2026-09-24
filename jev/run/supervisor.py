@@ -261,7 +261,8 @@ class Supervisor:
                 self.runtime.finish(result.outcome, result.detail, state=state)
                 self.say(f"{worker.arm.decision.skill}: {result.code or result.outcome.value} {result.detail}")
                 if result.code == "no_junk":
-                    self.runtime.policy_context.bags_failed()
+                    self.runtime.policy_context.bags_failed(
+                        state.bags.free if state is not None else None)
                 if (worker.arm.decision.skill == "TRAIN_CLASS"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
                     # A trainer out of reach is not walked to again this level; a visit a
