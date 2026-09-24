@@ -148,6 +148,13 @@ ALIVE = {"target.has": True, "target.hp": 1.0, "target.name_id": 1161,
          "bars.casting": False, "char.class_id": 2, "vitals.dead": False}
 
 
+def _rotate_answered(f, values):
+    """One look, then the client's answer to anything it pressed: the global cooldown."""
+    f._rotate(values)
+    if f._pending_press is not None:
+        f._rotate({**values, "bars.gcd": 0.5})
+
+
 def test_selection_is_tab_and_never_chat():
     """A bot that can talk is a bot that can say the wrong thing — see `interact`. Tab is
     a keybind, the client picks the nearest attackable unit, and the radio says what
@@ -233,8 +240,8 @@ def test_a_seal_is_not_re_pressed_every_tick():
     interval is the spell's own duration less a margin, read from the world database."""
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
-    f._rotate(ALIVE)
-    f._rotate(ALIVE)
+    _rotate_answered(f, ALIVE)
+    _rotate_answered(f, ALIVE)
     assert hid.taps == ["2", "1"], "the seal was re-pressed while still up"
     seal = for_class(2, 1).first(Role.BUFF)
     assert seal is not None and seal.every_s == 25.0   # 30s duration, 5s margin
@@ -247,7 +254,7 @@ def test_melee_auto_attack_is_a_toggle_and_is_pressed_once():
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)
     for _ in range(4):
-        f._rotate(ALIVE)
+        _rotate_answered(f, ALIVE)
     assert hid.taps.count("1") == 1, "auto-attack was toggled more than once"
     attack = for_class(2, 1).first(Role.ATTACK)
     assert attack is not None and attack.toggle
@@ -514,7 +521,7 @@ def test_a_heal_is_not_pressed_again_until_the_last_one_answers():
             "vitals.power": 0.9, "vitals.power_max": 100}
     f = _fight([hurt], hid=hid)
     for _ in range(5):
-        f._rotate(hurt)
+        _rotate_answered(f, hurt)
     assert hid.taps.count("3") == 1, "spammed the heal without waiting for an answer"
 
     # Once it answers, the next one is allowed.
@@ -549,7 +556,7 @@ def test_a_heal_that_never_lands_is_dropped_for_the_rest_of_the_fight():
             "vitals.power": 0.9, "vitals.power_max": 100}
     f = _fight([hurt], hid=hid)
     for _ in range(HEAL_GIVE_UP):
-        f._rotate(hurt)
+        _rotate_answered(f, hurt)
         f._pending_heal = (0.2, time.monotonic() - 5.0)
         f._watch_heal(hurt, hurt["bars.ready"])
     assert f.heals_ignored == HEAL_GIVE_UP and f.heals_landed == 0
@@ -565,7 +572,7 @@ def test_a_heal_that_does_land_is_not_dropped():
     hurt = {**ALIVE, "vitals.hp": 0.2, "vitals.combat": True,
             "vitals.power": 0.9, "vitals.power_max": 100}
     f = _fight([hurt], hid=hid)
-    f._rotate(hurt)
+    _rotate_answered(f, hurt)
     f._watch_heal({**hurt, "vitals.hp": 0.6}, hurt["bars.ready"])
     f.heals_ignored = HEAL_GIVE_UP          # some missed, but one landed
     f._rotate(hurt)
@@ -1793,12 +1800,12 @@ def test_an_aura_and_a_blessing_are_kept_between_fights_and_lost_to_a_death(comb
     hid = _Hid()
     f, calm = _trained(hid, **{"bars.attacking": True})
     for _ in range(4):
-        f._rotate(calm)
+        _rotate_answered(f, calm)
     assert hid.taps == ["4", "2", "5", "6"], "aura, seal, blessing, then Judgement"
     assert ("alt", "5") in hid.chords                           # the blessing, on the caster
     f._last_use = {}                                            # a new fight
     hid.taps.clear()
-    f._rotate(calm)
+    _rotate_answered(f, calm)
     assert hid.taps == ["2"], "the aura and the blessing were pressed again next fight"
     f.buffs_lost()
     hid.taps.clear()
@@ -1811,8 +1818,8 @@ def test_judgement_spends_the_seal_and_the_seal_goes_straight_back_on(combat_clo
     hid = _Hid()
     f, calm = _trained(hid, **{"bars.attacking": True})
     f._lasting = {"Devotion Aura": 0.0, "Blessing of Might": 0.0}
-    f._rotate(calm)
-    f._rotate(calm)
+    _rotate_answered(f, calm)
+    _rotate_answered(f, calm)
     assert hid.taps == ["2", "6"]
     f._rotate({**calm, "bars.ready": ALL_READY & ~(1 << 5)})   # Judgement on its cooldown
     assert hid.taps == ["2", "6", "2"], "the seal Judgement released was not put back"
@@ -1929,3 +1936,60 @@ def test_a_grey_target_whose_selection_moves_on_is_a_kill(combat_clock):
     f.engage = lambda *_: True
     assert f.run(1161) is Fought.KILLED
     assert f.killed_name_id == 1161
+
+
+def test_a_press_the_client_drops_is_pressed_again(combat_clock):
+    """Run 20260924T140621-fc3531: Snap Kick's stun swallowed the seal, the rotation
+    stamped it as up, and Judgement stayed unusable for 25 s while the character swung
+    unsealed against a Defias Bandit that killed it."""
+    hid = _Hid()
+    f, calm = _trained(hid, **{"bars.attacking": True})
+    f._lasting = {"Devotion Aura": 0.0, "Blessing of Might": 0.0}
+    f._rotate(calm)
+    assert hid.taps == ["2"]
+    f._rotate(calm)
+    assert hid.taps == ["2"], "pressed again before the client could answer"
+    combat_clock[0] += 0.9                     # a look later: no cast, no cooldown
+    f._rotate(calm)
+    assert hid.taps == ["2", "2"], "the dropped seal was counted as up"
+
+
+def test_an_answered_press_is_kept(combat_clock):
+    hid = _Hid()
+    f, calm = _trained(hid, **{"bars.attacking": True})
+    f._lasting = {"Devotion Aura": 0.0, "Blessing of Might": 0.0}
+    f._rotate(calm)
+    combat_clock[0] += 0.3
+    f._rotate({**calm, "bars.gcd": 0.8})
+    combat_clock[0] += 1.5
+    f._rotate(calm)
+    assert hid.taps == ["2", "6"], "the seal went up, and Judgement came next"
+
+
+def test_a_first_look_after_the_global_cooldown_cannot_tell(combat_clock):
+    """A face or an approach step between looks: an answer would be over by then."""
+    hid = _Hid()
+    f, calm = _trained(hid, **{"bars.attacking": True})
+    f._lasting = {"Devotion Aura": 0.0, "Blessing of Might": 0.0}
+    f._rotate(calm)
+    combat_clock[0] += 2.0
+    f._rotate(calm)
+    assert hid.taps == ["2", "6"]
+
+
+def test_a_heal_pressed_under_a_stun_is_pressed_again_not_the_seal(combat_clock):
+    """The same run: a Holy Light pressed under a stun held the heal row off for its whole
+    watch, and the rotation sealed and judged at 12% health until the character died."""
+    hid = _Hid()
+    f, calm = _trained(hid, **{"bars.attacking": True})
+    f._lasting = {"Devotion Aura": 0.0, "Blessing of Might": 0.0}
+    f._last_use = {2: 0.0}
+    f._saved_at = -100.0
+    hurt = {**calm, "vitals.hp": 0.12, "vitals.combat": True,
+            "bars.ready": ALL_READY & ~(1 << 6) & ~(1 << 7) & ~(1 << 8)}   # save, stun, last resort spent
+    f._rotate(hurt)
+    assert [k for m, k in hid.chords] == ["3"]
+    combat_clock[0] += 0.9
+    f._rotate(hurt)
+    assert [k for m, k in hid.chords] == ["3", "3"], "the unanswered heal was not retried"
+    assert "2" not in hid.taps, "sealed at 12% health instead of healing"

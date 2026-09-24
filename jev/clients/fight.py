@@ -116,6 +116,12 @@ CROWD_PX = 260
 MIN_START_HP = 0.55
 FLEE_HP = 0.30
 
+# A press the client acts on shows within a look or two: a cast, the global cooldown or its
+# own. Nothing by `PRESS_ANSWER_S` and it was dropped (`_press_answered`); a first look
+# after `PRESS_TELL_S` comes too late to tell, the 1.5 s global cooldown being over.
+PRESS_ANSWER_S = 0.8
+PRESS_TELL_S = 1.4
+
 # After a target vanishes, how long to watch for the experience that proves a kill.
 SETTLE_LOOKS = 3
 SETTLE_LOOK_S = 0.25
@@ -386,6 +392,9 @@ class Fight:
     _lasting: dict[str, float] = field(default_factory=dict, init=False)
     # When this fight's save went up: the heal comes next (`SAVE_HEAL_WINDOW_S`).
     _saved_at: float | None = field(default=None, init=False)
+    # The last press not yet answered by the client (`_press_answered`): the ability, when,
+    # and the clocks as they were before it, to put back if it came to nothing.
+    _pending_press: tuple | None = field(default=None, init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
     _race: list[tuple] = field(default_factory=list, init=False)
     # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
@@ -404,6 +413,7 @@ class Fight:
             return Fought.REFUSED
         self._toggled = False
         self._pending_heal = None
+        self._pending_press = None
         self._race = []
         self._look_at = None
         self._damage_mark = None
@@ -1318,6 +1328,8 @@ class Fight:
         `survival_only` stops after the heal and its guards: no buff, no swing.
         """
         self._sample_race(values)
+        if not self._press_answered(values):
+            return
         if values.get("bars.casting") is True:
             return
         gcd = values.get("bars.gcd")
@@ -1517,6 +1529,7 @@ class Fight:
     def buffs_lost(self) -> None:
         """A death took every buff: auras and blessings are pressed again at the next fight."""
         self._lasting.clear()
+        self._pending_press = None
 
     def pressed_keys(self) -> list[str]:
         """The slots pressed this fight, as the keys they were sent as."""
@@ -1536,8 +1549,46 @@ class Fight:
             self._input_refused = True
             self.detail = f"ability slot {ability.slot} input refused"
             return False
-        self._last_use[ability.slot] = time.monotonic()
+        now = time.monotonic()
+        if not ability.toggle:
+            self._pending_press = (ability, now, dict(self._last_use), dict(self._lasting),
+                                   self._saved_at)
+        self._last_use[ability.slot] = now
         self.pressed.append(ability.slot)
+        return True
+
+    def _press_answered(self, values: dict) -> bool:
+        """Settle the last press. False while the client may still answer it.
+
+        A press the client acts on starts a cast, the global cooldown or the slot's own
+        cooldown within a look or two. One it drops - pressed under a stun, say - leaves
+        none of them, and counting it anyway cost a level 9 paladin its seal for 25 s
+        against a Defias Bandit: Snap Kick's stun swallowed the press, the seal was stamped
+        as up, and Judgement stayed unusable until the stamp ran out; the heal it pressed
+        under the next stun held off the heal row for its whole 2.5 s watch while the
+        character sealed at 12% and died (run 20260924T140621-fc3531). So an unanswered
+        press undoes all it stamped - its clocks, a save's window, a heal's watch - and
+        the rotation chooses again.
+        """
+        if self._pending_press is None:
+            return True
+        ability, when, last_use, lasting, saved_at = self._pending_press
+        ready = values.get("bars.ready")
+        gcd = values.get("bars.gcd")
+        if (values.get("bars.casting") is True or (gcd is not None and gcd > 0.0)
+                or (ready is not None and not ready & (1 << (ability.slot - 1)))):
+            self._pending_press = None
+            return True
+        age = time.monotonic() - when
+        if age < PRESS_ANSWER_S:
+            return False
+        self._pending_press = None
+        if age > PRESS_TELL_S:
+            return True                        # its global cooldown would be over by now
+        self._last_use, self._lasting, self._saved_at = last_use, lasting, saved_at
+        if ability.role is Role.HEAL:
+            self._pending_heal = None
+        event("ability.unanswered", data={"slot": ability.slot, "role": ability.role.value})
         return True
 
     def _has_mana_for(self, ability: Ability, values: dict) -> bool:
