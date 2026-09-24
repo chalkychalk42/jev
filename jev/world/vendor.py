@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -70,3 +71,39 @@ def merchants(map_id: int, *, items: frozenset[int] = frozenset()) -> tuple[Merc
                  for v in catalog()["vendors"]
                  if v["map_id"] == map_id and items <= set(v["items"])
                  and not str(v["name"]).startswith("["))       # "[DND]" placeholders
+
+
+# -- which merchants answered ----------------------------------------------------------
+#
+# Goldshire has ten merchants within seventy yards; the three nearest are a fruit seller who
+# walks her round, a trade supplier behind a wall and an armourer at the forge, and all
+# three failed a full-bag sale (session 65). Whether a merchant can be reached and clicked
+# is a fact about the world, not the character, so it is remembered for every character:
+# failures count against a merchant until one sale with it succeeds.
+
+
+def load_merchant_failures(path: pathlib.Path | None) -> dict[int, int]:
+    if path is None:
+        return {}
+    try:
+        raw = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {int(k): int(v) for k, v in (raw.get("failures") or {}).items()
+            if isinstance(v, int) and v > 0}
+
+
+def note_merchant(path: pathlib.Path | None, entry: int, *, failed: bool) -> None:
+    """Count a failure against a merchant, or clear its count on a sale."""
+    if path is None:
+        return
+    from jev.persist import atomic_json
+
+    failures = load_merchant_failures(path)
+    if failed:
+        failures[entry] = failures.get(entry, 0) + 1
+    else:
+        failures.pop(entry, None)
+    with suppress(OSError):
+        atomic_json(pathlib.Path(path), {"format": 1,
+                                         "failures": {str(k): v for k, v in sorted(failures.items())}})

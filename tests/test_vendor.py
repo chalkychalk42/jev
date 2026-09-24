@@ -407,3 +407,17 @@ def test_a_spawn_only_a_game_event_places_is_no_merchant():
     names = {v["name"] for v in catalog()["vendors"]}
     assert not names & {"Stamp Thunderhorn", "Sylannia", "Professor Thaddeus Paleo"}
     assert "Godric Rothgar" in names                  # Northshire's, always there
+
+
+def test_a_merchant_that_failed_is_remembered_until_a_sale_with_it(tmp_path):
+    from jev.world.vendor import load_merchant_failures, note_merchant
+
+    memory = tmp_path / "merchant-memory.json"
+    assert load_merchant_failures(memory) == {}
+    note_merchant(memory, 3937, failed=True)
+    note_merchant(memory, 3937, failed=True)
+    note_merchant(memory, 66, failed=True)
+    assert load_merchant_failures(memory) == {3937: 2, 66: 1}
+    note_merchant(memory, 66, failed=False)
+    assert load_merchant_failures(memory) == {3937: 2}
+    assert load_merchant_failures(None) == {}

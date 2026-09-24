@@ -47,7 +47,13 @@ from jev.world.gear import upgrades as gear_upgrades
 from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.training import placements as spell_placements
 from jev.world.training import trainer_due
-from jev.world.vendor import bag_slots, merchants, supplies_for
+from jev.world.vendor import (
+    bag_slots,
+    load_merchant_failures,
+    merchants,
+    note_merchant,
+    supplies_for,
+)
 
 # Dying again this soon after getting up at the body means the body lies where something
 # this character cannot beat still stands: the next recovery gets up at the graveyard's
@@ -82,7 +88,7 @@ EXPLORE_POLL_S = 0.25
 # sells what is wanted: Dermot Johns stands behind his wagon, every point between his ring
 # and his plate was wagon, and Godric Rothgar stood in plain view beside it (run
 # 20260924T011327-6e5f4b stopped on its first full bags).
-MERCHANT_TRIES = 3
+MERCHANT_TRIES = 5
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
 # Walks in a row that ended with the character wedged before it goes home by hearthstone.
@@ -137,7 +143,7 @@ class LiveBody:
     def __init__(self, client: Client, graph: Graph, *, travel_timeout: float = 180,
                  hunt_timeout: float = 600, say: Callable[[str], None] = print,
                  record_frame: Callable[..., dict] | None = None,
-                 hunt_spawns: dict | None = None, gear_memory=None):
+                 hunt_spawns: dict | None = None, gear_memory=None, merchant_memory=None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
         self.client, self.graph = client, graph
@@ -146,6 +152,8 @@ class LiveBody:
         self.hunt_spawns = hunt_spawns or {}
         # What this character has been given to wear, slot by slot (`jev.world.gear`).
         self.gear_memory = gear_memory
+        # Which merchants could not be reached or clicked (`jev.world.vendor`).
+        self.merchant_memory = merchant_memory
         self._gear_checked: object = object()     # the bags' revision last looked through
         self._placing_checked: object = object()  # the bar and spellbook last planned from
         self.travelling = False
@@ -841,7 +849,10 @@ class LiveBody:
         if not candidates:
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
         world = map_to_world(*here, self.client.bounds)
-        ranked = sorted(candidates, key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_TRIES]
+        failed = load_merchant_failures(self.merchant_memory)
+        # The ones that answered before first, then the nearest.
+        ranked = sorted(candidates, key=lambda m: (failed.get(m.entry, 0),
+                                                   math.dist(m.world[:2], world)))[:MERCHANT_TRIES]
         for merchant in ranked:
             def visit(merchant=merchant):
                 return self._open_merchant(merchant.name, merchant.world,
@@ -853,10 +864,14 @@ class LiveBody:
                                      min_free=1 if supplies else 6,
                                      timeout_s=self.travel_timeout + 120)
             except BodyFailure as failure:
+                if failure.result.code in MERCHANT_UNREACHABLE:
+                    note_merchant(self.merchant_memory, merchant.entry, failed=True)
                 if merchant is ranked[-1] or failure.result.code not in MERCHANT_UNREACHABLE:
                     raise
                 self.say(f"  {failure.result.detail}; trying the next merchant")
                 continue
+            if outcome.ok:
+                note_merchant(self.merchant_memory, merchant.entry, failed=False)
             return self._result(outcome, vendor.detail or
                                 f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
         raise AssertionError("unreachable: the last merchant returns or raises")
