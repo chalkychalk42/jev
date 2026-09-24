@@ -165,7 +165,7 @@ def test_a_loot_window_that_stays_open_is_closed():
     took = {**open_frame, "bags.free": 7}
     skill = _loot([HAVE, took, took, {**took, "ui.loot": False}], hid=hid)
     assert skill.run(settle_s=1.0) is Looted.TOOK
-    assert hid.taps == ["esc"]
+    assert hid.taps == ["esc", "esc"], "the window shut, then the looted corpse released"
 
 
 def test_an_empty_corpse_still_gets_its_window_shut():
@@ -174,7 +174,7 @@ def test_an_empty_corpse_still_gets_its_window_shut():
     open_frame = {**HAVE, "ui.loot": True}
     skill = _loot([HAVE, open_frame, open_frame, HAVE], hid=hid)
     assert skill.run(settle_s=0) is Looted.NOTHING
-    assert hid.taps == ["esc"]
+    assert hid.taps == ["esc", "esc"], "the window shut, then the emptied corpse released"
 
 
 @pytest.mark.parametrize("code, expected", [
@@ -304,3 +304,20 @@ def test_a_meal_moving_the_revision_is_not_a_take():
     before = {**HAVE, "inventory.revision": 40, "bags.food_count": 5}
     skill = _loot([before, {**before, "inventory.revision": 41, "bags.food_count": 4}])
     assert skill.run(settle_s=0.5) is Looted.NOTHING
+
+
+def test_a_looted_corpse_is_released_from_the_selection():
+    """Left selected, it put the tutor in its loot situation after every kill: 43 tutor
+    loot attempts on emptied corpses, none taking anything (sessions 30-50)."""
+    hid = _Hid()
+    skill = _loot([HAVE, {**HAVE, "bags.free": 7}], hid=hid)
+    assert skill.run(settle_s=1.0) is Looted.TOOK
+    assert hid.taps == ["esc"]
+
+
+def test_nothing_selected_is_not_escaped_into_the_game_menu():
+    hid = _Hid()
+    gone = {**HAVE, "target.has": False, "target.hp": None, "target.name_id": None}
+    skill = _loot([HAVE, {**gone, "bags.free": 7}], hid=hid)
+    assert skill.run(settle_s=1.0) is Looted.TOOK
+    assert hid.taps == []

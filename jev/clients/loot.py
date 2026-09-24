@@ -47,7 +47,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from jev.clients.targeting import ClickCode, Targeting
+from jev.clients.targeting import ClickCode, PaintCode, Targeting
 from jev.clients.windows import CloseCode, close_observed
 from jev.perceive.units import Plate
 from jev.run.evidence import event, traced
@@ -152,7 +152,34 @@ class Loot:
             self.detail = why
         else:
             self.detail = "no observed objective, money or bag-slot change after the click"
-        return self._close_if_open(after) or (Looted.TOOK if why else Looted.NOTHING)
+        closed = self._close_if_open(after)
+        if closed is not None:
+            return closed
+        self._release_corpse()
+        return Looted.TOOK if why else Looted.NOTHING
+
+    def _release_corpse(self) -> None:
+        """Clear a looted corpse from the selection.
+
+        Left selected, it put the tutor in its loot situation after every kill: 43 tutor
+        loot attempts on emptied corpses in sessions 30-50, not one of them taking anything.
+        Escape clears a selection when no window is open, and opens the game menu when there
+        is no selection either, so only on a dead unit observed selected, and the menu is
+        shut again if it opened anyway.
+        """
+        v = self.read()
+        if (not v or v.get("target.has") is not True or v.get("target.hp") != 0
+                or any(v.get(k) is True for k in ("ui.loot", "ui.modal", "ui.gossip",
+                                                  "ui.vendor", "ui.quest_frame"))):
+            return
+        event("loot.release", data={"name_id": v.get("target.name_id")})
+        if not self.hid.tap("esc"):
+            return
+        targeting = self.targeting or Targeting(self.hid, self.read)
+        paint = targeting.wait_for_paint()
+        after = paint.after if paint.code is PaintCode.FRESH else self.read()
+        if after and after.get("ui.modal") is True:
+            self.hid.tap("esc")
 
     def _counter(self) -> tuple[int | None, int | None] | None:
         if self._progress is None:
