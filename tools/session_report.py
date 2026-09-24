@@ -132,7 +132,9 @@ def measure(number: int, table: dict[int, int], exit_code: int | None = None) ->
     if len(ticks) >= 2:
         played = 0.0
         by_skill: Counter = Counter()
-        dead_before = False
+        # A session that starts dead or a ghost inherits the death of the one before.
+        first_vitals = ticks[0]["state"]["vitals"]
+        dead_before = first_vitals.get("dead") is True or first_vitals.get("ghost") is True
         for a, b in zip(ticks, ticks[1:]):
             gap = b["t"] - a["t"]
             if gap <= 0:
@@ -262,10 +264,10 @@ def main(argv=None) -> int:
         for row in compare(sessions):
             print(json.dumps(row))
         return 0
-    print(f"{'#':>4} {'arm':6} {'min':>5} {'lvl':>5} {'xp':>6} {'xp/h':>6} {'kill':>4} {'die':>3} "
+    print(f"{'#':>4} {'arm':12} {'min':>5} {'lvl':>5} {'xp':>6} {'xp/h':>6} {'kill':>4} {'die':>3} "
           f"{'loot':>7} {'stuck':>5} {'tutor':>5} {'t_med':>5} {'money':>6} {'exit':>4}")
     for s in sessions:
-        print(f"{s.number:>4} {s.arm[:6]:6} {s.minutes:5.1f} {s.level_start or 0:>2}-{s.level_end or 0:<2} "
+        print(f"{s.number:>4} {s.arm[:12]:12} {s.minutes:5.1f} {s.level_start or 0:>2}-{s.level_end or 0:<2} "
               f"{s.xp:6.0f} {s.xp_per_hour:6.0f} {s.kills:>4} {s.deaths:>3} "
               f"{s.looted:>3}/{s.looted + s.unlooted:<3} {s.stuck:>5} {s.tutor_calls:>5} "
               f"{s.tutor_median_s if s.tutor_median_s is not None else '-':>5} "
