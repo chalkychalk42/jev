@@ -171,10 +171,8 @@ class LiveObserver:
         """Persist the chosen owned frame, without a second capture or every poll on disk."""
         if observation.png:
             return observation
-        from PIL import Image
-
         output = io.BytesIO()
-        Image.fromarray(observation.pixels).save(output, format="PNG", compress_level=1)
+        scaled(observation.pixels).save(output, format="PNG", compress_level=1)
         png = output.getvalue()
         screen = {**observation.data["screen"], "sha256": hashlib.sha256(png).hexdigest()}
         if self.screenshots is not None:
@@ -185,6 +183,36 @@ class LiveObserver:
             screen["record"] = retained
             screen["path"] = str(Path(self.screenshots.directory) / retained["file"])
         return Observation({**observation.data, "screen": screen}, png)
+
+
+# The tutor's copy of a frame carries a scale along its edges: a tick and a label at every
+# tenth of the width and height, within this many pixels of the border. It gave "the Kobold
+# Worker nameplate at (0.65, 0.36)" as x 0.98, twice (run 20260924T032302-458737): a model
+# reading pixels off an unmarked picture divides by the wrong width.
+SCALE_BORDER_PX = 18
+
+
+def scaled(pixels):
+    """The frame for the tutor: unchanged except for the scale drawn along its edges."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.fromarray(pixels).copy()
+    draw = ImageDraw.Draw(image)
+    width, height = image.size
+    font = ImageFont.load_default(size=14)
+    ink, shade = (255, 230, 0), (0, 0, 0)
+    tick = SCALE_BORDER_PX - 6
+    for tenth in range(1, 10):
+        x, y = round(width * tenth / 10), round(height * tenth / 10)
+        label = f".{tenth}"
+        for start, end in (((x, 0), (x, tick)), ((x, height - 1 - tick), (x, height - 1)),
+                           ((0, y), (tick, y)), ((width - 1 - tick, y), (width - 1, y))):
+            draw.line([start, end], fill=ink, width=2)
+        for corner in ((x + 3, 0), (x + 3, height - SCALE_BORDER_PX), (0, y + 2),
+                       (width - 22, y + 2)):
+            draw.rectangle([corner, (corner[0] + 20, corner[1] + 16)], fill=shade)
+            draw.text((corner[0] + 2, corner[1]), label, fill=ink, font=font)
+    return image
 
 
 def _number(value):

@@ -26,6 +26,7 @@ from jev.orch.runtime import Armed, ClientRuntime
 from jev.play.actions import KeyAction, SkillAction
 from jev.play.controller import PlayConfig
 from jev.play.learning import MotorPrediction
+from jev.play.observation import SCALE_BORDER_PX
 from jev.play.runtime import MotorLearningService, PlayingBody
 from jev.play.teacher import PlayTeacherResult
 from jev.run.body import LiveBody
@@ -165,7 +166,10 @@ def test_teacher_pixels_radio_and_retained_screenshot_are_one_owned_capture(tmp_
         assert hashlib.sha256(png).hexdigest() == observation["screen"]["sha256"]
         teacher_pixels = np.array(Image.open(io.BytesIO(png)))
         expected = f.cap.frames[observation["values"]["seq"]]
-        assert np.array_equal(teacher_pixels, expected)
+        # The same frame, but for the scale drawn along the tutor's copy's edges.
+        border = SCALE_BORDER_PX + 12
+        assert np.array_equal(teacher_pixels[border:-border, border:-border],
+                              expected[border:-border, border:-border])
         retained_pixels = np.array(Image.open(observation["screen"]["path"]))
         assert np.array_equal(retained_pixels, expected)
         assert observation["origin"] == [10, 20]

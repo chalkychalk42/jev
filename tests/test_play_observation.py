@@ -14,7 +14,13 @@ from jev.perceive import radio, radio_frame
 from jev.perceive.fields import SCHEMA
 from jev.perceive.radio_frame import name_id
 from jev.play.controller import finished
-from jev.play.observation import LiveObserver, capability, judge, measured_effects
+from jev.play.observation import (
+    SCALE_BORDER_PX,
+    LiveObserver,
+    capability,
+    judge,
+    measured_effects,
+)
 from jev.world.state_v1 import Objective, Quest, StepKind
 
 WOLF = name_id("Young Wolf")
@@ -363,7 +369,13 @@ def test_owned_observation_uses_one_real_frame_for_pixels_and_radio():
     assert observed.data["values"]["seq"] == sequences[0]
     assert observed.data["values"]["target.name_id"] == WOLF
     assert observed.data["screen"]["sha256"] == hashlib.sha256(observed.png).hexdigest()
-    assert np.array_equal(np.asarray(Image.open(io.BytesIO(observed.png))), pixels)
+    # The tutor's copy is the frame itself but for the scale along its edges.
+    border = SCALE_BORDER_PX + 12
+    tutor_copy = np.asarray(Image.open(io.BytesIO(observed.png)))
+    assert tutor_copy.shape == pixels.shape
+    assert np.array_equal(tutor_copy[border:-border, border:-border],
+                          pixels[border:-border, border:-border])
+    assert not np.array_equal(tutor_copy, pixels), "the scale is drawn"
     assert retained[0][1] is pixels
     assert retained[0][2] == observed.data["captured_at"]
 
