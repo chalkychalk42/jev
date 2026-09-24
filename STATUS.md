@@ -1977,3 +1977,40 @@ Operational: the client came back from its restart on the first-time realm wizar
 for it yet.
 
 NEXT: keep the loop running; watch quest 21's rejoin and the walk to Goldshire (quest 54).
+
+## 2026-09-24 02:40 — overnight debrief 3: getting around, and quest objects
+
+Sessions 15-19. Testvvi: level 5, quest 21 at 9/12, on the kobold rib beside Echo Ridge
+Mine with quest 21 as its way back. Learner: acquire 38/60 (8 runs), approach 25/60,
+interact 21/60.
+
+Fixed, all general:
+- a selection whose health jumps up is another unit even under the same name: the next
+  Kobold Worker after a kill was chased as the same one and the kill never looted (V82);
+- the tutor's selections may be proved over a nameplate: 27 of its 40 refused selections
+  were aimed at one (f392c3d);
+- plans start at the ground the last walk ended on, then heights either side of the
+  destination's, to 60 yards: the merchant wagons and Echo Ridge Mine's wooden platform
+  had each snapped the start onto the wrong floor (V83; verified live, a 1,197-yard plan
+  from the platform);
+- Escape is never offered to clear a selection: in a fight it raised 2.4.3's
+  "Blizzard_TimeManager has been blocked" popup instead (V84);
+- walking closer to the step is progress to the watchdog, and a failed step goes to the
+  nearest rib within two levels: a level 5 fail-over went to wolves 1,200 yards away and
+  was failed over again on the way (V85);
+- a walk's time limit grows with its route (a flat 180 s was the clean time for the
+  1,038 yards to Gerard Tiller);
+- quest objects are gathered (V86): schema 14 paints the stock tooltip's name for a world
+  object under the pointer, and the grind walks the object's spawn points and right-clicks
+  only where a fresh hover names it. Milly's Harvest, Grape Manifest and A Bundle of
+  Trouble rejoin the route. Installed; first live use will be quest 3904;
+- login reads the realm wizard, the realm list and a loading character list (whose red
+  sunset sky had passed for the login form). A client restart at 02:28 still needed a
+  second restart: the world session never sent the character list, and a fresh client
+  logged straight in.
+
+Noted, not changed: 80 motor rows had their own effect verified but sat in episodes that
+failed; acquire would pass its gate with them, but 28 are the tutor's futile shop
+open/close cycles. The episode gate is a quality filter; worth the operator's view.
+
+NEXT: the loop; quest 21's rejoin, then Goldshire; the first live gather at 3904.
