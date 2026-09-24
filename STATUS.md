@@ -2292,3 +2292,8 @@ covered **0 of 20** held-out examples, every held-out state farther than its rad
 anything it had trained on, so it stays in shadow and the tutor continues. The pipeline is
 proven end to end; whether the learner generalises is the question now - its features or
 its radius, more varied runs, or a different learner. Rest is next (35 of 40 training).
+Why 0 of 20 (read-only check): categorical context matched exactly for all twenty; 16 had
+their nearest training state beyond the calibrated radius (0.15; nearest 0.17-0.72), and 4
+were near enough but lacked support from enough independent runs. Sparse data, not a broken
+learner: forty examples across a whole night's varied fights. Coverage should come with
+volume, or with a looser radius if you prefer it sooner.
