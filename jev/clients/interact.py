@@ -48,6 +48,7 @@ class Result(StrEnum):
     QUEST = "quest"
     VENDOR = "vendor"
     LOOT = "loot"
+    TRAINER = "trainer"
     NO_TARGET = "no_target"        # clicked every candidate; none of them was the one
     NOT_VISIBLE = "not_visible"    # no nameplate on screen at all
     NO_WINDOW = "no_window"        # clicked the unit and nothing opened
@@ -59,7 +60,7 @@ class Result(StrEnum):
 
     @property
     def opened(self) -> bool:
-        return self in (Result.GOSSIP, Result.QUEST, Result.VENDOR, Result.LOOT)
+        return self in (Result.GOSSIP, Result.QUEST, Result.VENDOR, Result.LOOT, Result.TRAINER)
 
 
 @dataclass
@@ -222,11 +223,12 @@ class Interact:
         v = self.read()
         event("interact.window", code="blind" if v is None else "readable",
               data={} if v is None else {key: v.get(key) for key in (
-                  "ui.quest_frame", "ui.gossip", "ui.vendor", "ui.loot")})
+                  "ui.quest_frame", "ui.gossip", "ui.vendor", "ui.loot", "ui.trainer")})
         if v is None:
             return Result.BLIND
         for key, result in (("ui.quest_frame", Result.QUEST), ("ui.gossip", Result.GOSSIP),
-                            ("ui.vendor", Result.VENDOR), ("ui.loot", Result.LOOT)):
+                            ("ui.vendor", Result.VENDOR), ("ui.loot", Result.LOOT),
+                            ("ui.trainer", Result.TRAINER)):
             if v.get(key) is True:
                 return result
         return None

@@ -8,7 +8,7 @@ import time
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from jev.coach.policy import reflex
+from jev.coach.policy import reflex, routine_only
 from jev.coach.schema import Intent
 from jev.learn.episode import SkillOutcome
 from jev.persist import atomic_json
@@ -236,10 +236,10 @@ class PlayingBody:
         # fight took the character from full health to dead without a swing, and the dead
         # character's one routine then sat behind a menu offering only Esc, which opened
         # the game menu five times. DECISIONS V35: combat and recovery keep the floor.
-        if reflex(arm.rule):
-            self.journal.append("actions", {"event": "reflex", "t": time.time(),
-                                            "arm_id": arm.arm_id, "skill": arm.decision.skill,
-                                            "rule": arm.rule})
+        if reflex(arm.rule) or routine_only(arm.rule):
+            self.journal.append("actions", {"event": "reflex" if reflex(arm.rule) else "routine",
+                                            "t": time.time(), "arm_id": arm.arm_id,
+                                            "skill": arm.decision.skill, "rule": arm.rule})
             if state is None:
                 state = State.model_validate(self.observer.observe(arm).data["state"])
             self.routine_clock = time.monotonic()

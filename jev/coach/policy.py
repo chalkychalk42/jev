@@ -27,6 +27,7 @@ always usable on its own.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from jev.coach.schema import Decision, Intent
@@ -48,6 +49,15 @@ REFLEX_RULES = ("fight.", "preempt.dead", "preempt.ghost", "preempt.critical")
 
 def reflex(rule: str) -> bool:
     return rule.startswith(REFLEX_RULES)
+
+
+# Services only a routine can do, never put to the tutor: training ends in drags from the
+# spellbook onto the bar, which the tutor has no control for.
+ROUTINE_RULES = ("service.train",)
+
+
+def routine_only(rule: str) -> bool:
+    return rule.startswith(ROUTINE_RULES)
 
 
 @dataclass(frozen=True)
@@ -93,6 +103,23 @@ class Context:
         if free is not None and free > 0:
             self.bags_blocked = False
         return not self.bags_blocked
+
+    # Whether a class trainer has something to teach that the purse can pay for, from
+    # the spellbook census and the trainer catalog (`LiveBody.trainable`). Absent, no
+    # training is ever asked for.
+    trainable: Callable[[State], bool] | None = None
+    train_blocked_level: int | None = None
+
+    def train_failed(self, level: int | None) -> None:
+        # One visit a level: the next level brings new spells, and a trainer that could not
+        # be reached, or would not teach what it lists, may from there.
+        self.train_blocked_level = level
+
+    def can_train(self, state: State) -> bool:
+        level = state.char.level
+        if self.trainable is None or level is None or level == self.train_blocked_level:
+            return False
+        return self.trainable(state)
 
 
 def _d(intent: Intent, skill: str | None, why: str, confidence: float,
@@ -178,6 +205,12 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
                  or (b.drink_id is not None and b.drink_count == 0))):
         return Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD", "confirmed food or drink is empty",
                        0.8, ("dead", "combat"), service="supplies"), True, "service.supplies")
+
+    # Last: spells a trainer would teach now. A paladin that never trained fought to level
+    # 8 on Seal of Righteousness and Holy Light rank 1, losing to two wolves at once.
+    if context is not None and context.can_train(state):
+        return Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
+                       0.6, ("dead", "combat"), service="train"), True, "service.train")
 
     return None
 

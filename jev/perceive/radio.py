@@ -19,8 +19,10 @@ from jev.perceive.fields import (
     BITS_PER_CHANNEL,
     CALIBRATION_SWATCHES,
     CHECKSUM_BITS,
+    EXTENDED,
     FIELDS,
     GRID_COLS,
+    LAST_HEADER_SCHEMA,
     LEVELS,
     MARKER_L,
     MARKER_R,
@@ -89,7 +91,12 @@ def decode_field(f: Field, code: int) -> Any:
 
 
 def pack_bits(values: dict[str, Any]) -> str:
-    """Field values -> payload bitstring, MSB-first, with the checksum appended."""
+    """Field values -> payload bitstring, MSB-first, with the checksum appended.
+
+    `schema` is the schema number, as `unpack_bits` returns it; the header's code for it
+    (EXTENDED, with the number in `schema_rev`) is this function's business.
+    """
+    values = {**values, "schema": EXTENDED, "schema_rev": values.get("schema", SCHEMA)}
     out: list[str] = []
     for f in FIELDS:
         code = encode_field(f, values.get(f.name))
@@ -102,10 +109,17 @@ def unpack_bits(bits: str) -> dict[str, Any]:
     """Payload bitstring -> field values. Verifies the checksum before believing any of it."""
     if len(bits) < FIELDS[0].bits:
         raise DecodeError("short", "missing schema header")
-    version = int(bits[:FIELDS[0].bits], 2)
+    width = FIELDS[0].bits
+    header = int(bits[:width], 2)
+    extended = header == EXTENDED
+    version = int(bits[width:width + FIELDS[1].bits] or "0", 2) if extended else header
+    # The header names schemas up to 14 itself and the revision byte names the rest; a
+    # number arriving the other way (a header of 15 is its not-available code) is no
+    # layout at all.
+    known = version in SCHEMA_FIELDS and extended == (version > LAST_HEADER_SCHEMA)
     # An unknown header may itself be corrupt. Check the current layout's integrity
     # before classifying it as a build mismatch, preserving the checksum/schema split.
-    fields = SCHEMA_FIELDS.get(version, FIELDS)
+    fields = SCHEMA_FIELDS[version] if known else FIELDS
     need = sum(f.bits for f in fields) + CHECKSUM_BITS
     if len(bits) < need:
         raise DecodeError("short", f"{len(bits)} bits, need {need}")
@@ -114,7 +128,7 @@ def unpack_bits(bits: str) -> dict[str, Any]:
     want, got = checksum(payload), int(tail, 2)
     if want != got:
         raise DecodeError("checksum", f"computed {want:#06x}, read {got:#06x}")
-    if version not in SCHEMA_FIELDS:
+    if not known:
         raise DecodeError("schema", f"strip says {version}, decoder is {SCHEMA}")
 
     values: dict[str, Any] = {f.name: None for f in FIELDS}
@@ -122,6 +136,8 @@ def unpack_bits(bits: str) -> dict[str, Any]:
     for f in fields:
         values[f.name] = decode_field(f, int(payload[i : i + f.bits], 2))
         i += f.bits
+    # The schema number, whichever way the header carried it.
+    values["schema"] = version
 
     return values
 

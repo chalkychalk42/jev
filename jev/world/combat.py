@@ -33,6 +33,11 @@ class Role(StrEnum):
     HEAL = "heal"
     FOOD = "food"
     DRINK = "drink"
+    # Trained spells (`jev.world.training`), on the bar once the character has trained.
+    AURA = "aura"                  # kept up for good: pressed once, again after a death
+    SAVE = "save"                  # immune for a few seconds: pressed before a heal
+    STUN = "stun"                  # the attacker held still: pressed before a heal
+    LAST_RESORT = "last_resort"    # a full heal on a long cooldown, at the very end
 
 
 # -- policy -------------------------------------------------------------------------
@@ -63,6 +68,10 @@ MIN_MANA_TO_HEAL = 0.08
 """Do not start a heal that leaves nothing behind. Out of mana means fall through to
 food, or to a vendor, or break the fight off — never a drink loop inside a fight."""
 
+LAST_RESORT_BELOW = 0.15
+"""A last resort heals to full and then waits an hour: for a fight about to be lost, when
+a heal would not finish in time."""
+
 
 # Casting on oneself. With a hostile or dead unit selected, a helpful spell does not fall
 # back to the caster unless the client's auto-self-cast option is on; it waits for a target
@@ -84,11 +93,18 @@ class Ability:
     every_s: float = 0.0
     # Melee auto-attack is a toggle: pressing it while already swinging stops the swing.
     toggle: bool = False
+    # Aimed at a friend, so at the caster: a blessing, as a heal is.
+    friendly: bool = False
+    # A buff that outlasts a fight (a blessing, an aura): its clock is kept between fights.
+    lasting: bool = False
+    # Usable only in a state a buff sets, and spends it: Judgement releases the seal.
+    spends: bool = False
+    spell_id: int | None = None
 
     @property
     def self_cast(self) -> bool:
         """Cast on the caster whatever is selected. A solo character heals only itself."""
-        return self.role is Role.HEAL
+        return self.role in (Role.HEAL, Role.LAST_RESORT) or self.friendly
 
 
 @dataclass(frozen=True)
@@ -138,6 +154,46 @@ def _load() -> dict[str, CombatProfile]:
 
 
 PROFILES: dict[str, CombatProfile] = _load()
+
+
+# A trained spell's role (`jev.world.training`) as a bar row's.
+TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL,
+                 "short_buff": Role.BUFF, "long_buff": Role.BUFF, "aura": Role.AURA,
+                 "save": Role.SAVE, "stun": Role.STUN, "last_resort": Role.LAST_RESORT}
+
+
+def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatProfile:
+    """The profile for what the bar holds now: each slot's spell by its role.
+
+    `bar` is the strip's bar census (`jev.perceive.spellbook`): a spell id per slot, 0 for
+    an empty slot, `None` for an item or a spell unnamed. Such a slot keeps the base
+    profile's row (the food and the water), an empty slot has none, and a spell with no
+    role worth pressing (a dispel, a passive) has none either. Without a census the base
+    profile stands.
+    """
+    if not bar:
+        return base
+    from jev.world.training import spell
+
+    by_slot = {a.slot: a for a in base.abilities}
+    rows: list[Ability] = []
+    for slot in sorted(set(by_slot) | set(bar)):
+        held = bar.get(slot)
+        if held is None:
+            # An item, or a spell the addon could not name: what the base profile says.
+            if slot in by_slot:
+                rows.append(by_slot[slot])
+            continue
+        facts = spell(held)
+        role = TRAINED_ROLES.get(facts.role) if facts else None
+        if role is None:
+            continue
+        rows.append(Ability(slot=slot, role=role, name=facts.name, mana=facts.mana,
+                            every_s=(float("inf") if role is Role.AURA else facts.every_s),
+                            toggle=facts.role == "attack", friendly=facts.self_cast,
+                            lasting=facts.role in ("long_buff", "aura"),
+                            spends=facts.spends, spell_id=facts.spell_id))
+    return CombatProfile(name=base.name, abilities=tuple(rows))
 
 
 def for_class(class_id: int | None, race_id: int | None = None) -> CombatProfile:

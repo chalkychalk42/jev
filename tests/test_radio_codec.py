@@ -47,7 +47,7 @@ def test_layout_fits_the_grid():
 
 @pytest.mark.parametrize(("version", "field_count", "payload_bits"),
                          [(6, 75, 582), (7, 112, 1035), (8, 117, 1059), (9, 121, 1073),
-                          (10, 125, 1100), (11, 126, 1102)])
+                          (10, 125, 1100), (11, 126, 1102), (14, 130, 1169)])
 def test_historical_schema_prefixes_keep_their_checksum_boundary(version, field_count, payload_bits):
     fields = SCHEMA_FIELDS[version]
     assert len(fields) == field_count
@@ -61,17 +61,19 @@ def test_historical_schema_prefixes_keep_their_checksum_boundary(version, field_
     for field in fields:
         if field.kind not in (Kind.FRAC, Kind.ANGLE):
             assert decoded[field.name] == values[field.name]
-    assert all(decoded[f.name] is None for f in FIELDS[field_count:])
+    assert all(decoded[f.name] is None for f in FIELDS if f not in fields)
 
 
 def test_appended_fields_fit_the_existing_grid():
     """Schemas 10-12 appended 27, 2 and 4 bits without growing the strip. Schema 13's
     31-bit character key did not fit the 6 spare bits and added one row, deliberately;
-    schema 14's 16-bit world object and 16-bit unit identity fit the row that left."""
+    schema 14's 16-bit world object and 16-bit unit identity fit the row that left.
+    Schema 15's revision byte, bar census and spellbook census add one row more."""
     lay = layout()
-    assert (lay["cols"], lay["rows"]) == (12, 10)
-    assert lay["payload_bits"] == 1169
-    assert lay["field_count"] == 130
+    assert (lay["cols"], lay["rows"]) == (12, 11)
+    assert lay["payload_bits"] == 1317
+    assert lay["field_count"] == 147
+    assert sum(f.bits for f in SCHEMA_FIELDS[14]) == 1169, "schema 14 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[13]) == 1137, "schema 13 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073, "schema 9 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[10]) == 1100, "schema 10 is a preserved prefix"
@@ -98,6 +100,36 @@ def test_every_field_round_trips_at_its_boundaries(field):
             assert got == value
 
 
+def test_schema_15_names_itself_in_the_revision_byte():
+    """The 4-bit header ran out at 14: from 15 it says EXTENDED and the number follows."""
+    bits = radio.pack_bits({"schema": 15, "seq": 7})
+    assert int(bits[:4], 2) == 0
+    assert int(bits[4:12], 2) == 15
+    decoded = radio.unpack_bits(bits)
+    assert decoded["schema"] == 15 and decoded["schema_rev"] == 15 and decoded["seq"] == 7
+
+
+def test_a_revision_this_decoder_does_not_know_is_a_schema_error():
+    fields = SCHEMA_FIELDS[15]
+    values = {"schema": 0, "schema_rev": 16, "seq": 1}
+    bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
+                   for f in fields)
+    with pytest.raises(radio.DecodeError) as err:
+        radio.unpack_bits(bits + format(checksum(bits), "016b"))
+    assert err.value.reason == "schema"
+
+
+def test_a_schema_14_strip_still_decodes_without_a_revision_byte():
+    fields = SCHEMA_FIELDS[14]
+    values = {"schema": 14, "seq": 9, "target.guid": 1234, "char.level": 8}
+    bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
+                   for f in fields)
+    decoded = radio.unpack_bits(bits + format(checksum(bits), "016b"))
+    assert (decoded["schema"], decoded["seq"], decoded["char.level"]) == (14, 9, 8)
+    assert decoded["target.guid"] == 1234
+    assert decoded["schema_rev"] is None and decoded["bars.slot"] is None
+
+
 def test_unknown_never_decodes_as_a_negative_fact():
     """A tri-state that nobody observed must come back None, not False."""
     tris = [f for f in FIELDS if f.kind is Kind.TRI]
@@ -110,7 +142,7 @@ def test_unknown_never_decodes_as_a_negative_fact():
 
 def test_full_frame_round_trips_through_cells():
     values = {f.name: _boundaries(f)[-1] for f in FIELDS}
-    values["schema"] = layout()["schema"]
+    values["schema"] = values["schema_rev"] = layout()["schema"]
     got = radio.unpack(radio.pack(values))
     for f in FIELDS:
         if f.kind in (Kind.FRAC, Kind.ANGLE):
@@ -124,7 +156,7 @@ def test_all_not_available_round_trips():
     values["schema"] = layout()["schema"]
     got = radio.unpack(radio.pack(values))
     assert got["schema"] == layout()["schema"]
-    assert all(got[f.name] is None for f in FIELDS if f.name != "schema")
+    assert all(got[f.name] is None for f in FIELDS if f.name not in ("schema", "schema_rev"))
 
 
 def test_checksum_rejects_a_transposed_cell():
@@ -155,7 +187,7 @@ def test_checksum_rejects_a_single_flipped_nibble():
 def test_a_wrong_schema_is_refused_not_misread():
     payload = radio.pack_bits({f.name: None for f in FIELDS})
     assert checksum(payload[: -16]) == int(payload[-16:], 2)
-    bumped = format(layout()["schema"] + 1, "04b") + payload[4:]
+    bumped = payload[:4] + format(layout()["schema"] + 1, "08b") + payload[12:]
     bumped = bumped[: -16] + format(checksum(bumped[: -16]), "016b")
     with pytest.raises(radio.DecodeError, match="schema"):
         radio.unpack_bits(bumped)

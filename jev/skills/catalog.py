@@ -114,10 +114,10 @@ _SKILLS: tuple[Skill, ...] = (
                              and s.bags.durability_min > 0.7),
           pre=_alive, on_fail="STUCK_RECOVER"),
 
-    Skill("TRAIN_CLASS", "learn available ranks", 120.0,
-          # The client cannot reliably confirm a rank was learned, so this ends on its
-          # timeout and the graph's skip edge. Saying so beats a success predicate that
-          # returns True and means nothing.
+    Skill("TRAIN_CLASS", "learn available spells and put them on the bar", 600.0,
+          # The walk is most of it: Goldshire's paladin trainer is 640 yards from
+          # Northshire Abbey. A purchase is the money falling and a placement is the bar's
+          # census holding the spell (`LiveBody._train`), so the body judges it.
           success=JUDGED_ELSEWHERE, pre=_alive),
 
     Skill("RELEASE_SPIRIT", "release to the graveyard", 30.0,

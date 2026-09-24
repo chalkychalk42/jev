@@ -2338,3 +2338,30 @@ without them.
 Also since debrief 10: looted corpses are released from the selection, so the tutor stops
 trying to loot them (V114; 43 attempts, none taking anything). Quest 6 accepted; Garrick
 Padfoot's camp next.
+
+## 2026-09-24 10:30 — the class trainer (V116-V119), ready for its first live run
+
+Since the operator returned (09:28), in answer to "level 8 still in Northshire" and "two
+quests completed and still killing Defias":
+- a rib ends as soon as the step it would rejoin is already done (V116): quest 6 was
+  complete in the log while the grind rib ran on;
+- a rib entered for anything but deaths lasts five minutes (V117);
+- a teaching episode cut short by a fight is credited with that fight's kill (V118).
+
+And the trainer, as the operator set it: a new rank replaces the old one on the bar, and a
+new spell goes on any free slot (V119). Offline-tested end to end, including the real
+addon run under the client stub; not yet live, because the client needs the new addon
+(schema 15) and a restart, which takes the desktop. What the first run should show:
+- `TRAIN_CLASS: done ... N spells bought at Brother Wilhelm` (Goldshire; he teaches
+  Hammer of Justice as well as all that Northshire's Brother Sammuel does at level 8);
+  about 6 of the 9 at 6 silver, in the trainer window's own order;
+- `spells on the bar: done` with Holy Light rank 2 over rank 1 in slot 3, and Devotion
+  Aura, Blessing of Might, Judgement, Divine Protection and Hammer of Justice on 4-8 as
+  bought;
+- in fights: the aura once, the blessing every ten minutes (Alt, on the caster), Judgement
+  on its cooldown with the seal straight back on, Divine Protection or Hammer of Justice
+  before a Holy Light under 40%.
+
+Open risks, for the live run to settle: the drag from spellbook to bar (the mouse held and
+moved off the spell button; a release anywhere but a bar button places nothing and casts
+nothing), and the click on open world that drops the rank-1 Holy Light a swap hands back.

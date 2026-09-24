@@ -211,6 +211,9 @@ local function paint()
     -- One inventory/merchant snapshot per paint keeps every field on the same row.
     -- Unsupported stock APIs yield unknown telemetry without freezing the radio.
     pcall(Helpers.snapshotInventory)
+    -- Likewise one bar slot and one spellbook entry per paint.
+    pcall(Helpers.snapshotBar)
+    pcall(Helpers.snapshotSpells)
 
     ENV.SEQ = (ENV.SEQ + 1) % 256
 

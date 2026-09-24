@@ -369,6 +369,11 @@ local ADVANCE_BUTTONS = {
     -- forward and the button only exists while one is open. Ahead of the popup for the
     -- same reason the quest frames are — a real frame beats a dialog.
     "MerchantRepairAllButton",
+    -- Train, the same intent at a class trainer: buy the selected service. The stock
+    -- frame selects the first learnable one on opening and again after every purchase,
+    -- and disables the button when that one is unaffordable or not yet learnable, so it
+    -- is painted only while enabled (below) and a reader stops when it goes.
+    "ClassTrainerTrainButton",
     -- Last, so a quest frame always wins. A StaticPopup's first button is the same
     -- intent as Accept — *move this forward* — and Release Spirit and Resurrect are
     -- both one. It is painted, not pressed: whether pressing is right is the caller's
@@ -472,10 +477,22 @@ local function QUEST_CHOICE(what)
     return 1 - (y * ratio) / UIParent:GetHeight()
 end
 
+-- Buttons that are the way forward only while enabled. The quest buttons keep their old
+-- rule (painted whenever showing), which the hand-in skills were measured against.
+local ONLY_ENABLED = { ClassTrainerTrainButton = true }
+
+-- 2.4.3 answers IsEnabled with 1 or nil; later clients with 1 or 0. Either way, off is off.
+local function enabled(btn)
+    if not btn.IsEnabled then return true end
+    local e = btn:IsEnabled()
+    return e ~= nil and e ~= 0 and e ~= false
+end
+
 local function ADVANCE_BUTTON(axis)
     for i = 1, #ADVANCE_BUTTONS do
         local btn = getglobal(ADVANCE_BUTTONS[i])
-        if btn and btn.IsVisible and btn:IsVisible() then
+        if btn and btn.IsVisible and btn:IsVisible()
+                and (not ONLY_ENABLED[ADVANCE_BUTTONS[i]] or enabled(btn)) then
             local x, y = btn:GetCenter()
             if x and y then
                 -- A ratio inside one coordinate system, so no screen height and no scale
@@ -819,6 +836,110 @@ local function CASTING()
     return castingByEvent
 end
 
+-- --------------------------------------------------------------------- bar and spellbook
+--
+-- Two censuses, one entry each per paint (fields.py, schema 15): which spell each main-bar
+-- button holds and where the button is, and each spellbook entry with its button, or the
+-- tab or page button that brings it into view. Only stock reads: GetActionInfo,
+-- GetSpellLink, the stock frames' own page state. Picking a spell up and putting it on a
+-- button is a drag the body makes, with the mouse, like any other click.
+
+local barRevision, spellRevision = 0, 0
+local barCursor, spellCursor = 0, 0
+local barSnapshot, spellSnapshot = {}, {}
+local SPELLS_PER_PAGE = 12
+local BOOK = BOOKTYPE_SPELL or "spell"
+
+local function spellLinkID(link)
+    if type(link) ~= "string" then return nil end
+    return tonumber(string.match(link, "spell:(%d+)"))
+end
+
+-- The spell on an action, by id. GetActionInfo's second value is a spellbook index on
+-- 2.4.3 and a spell id on later clients; whichever reading's icon is the button's own is
+-- the one believed, and neither matching is unknown rather than a guess.
+local function actionSpell(action)
+    local kind, id, book = GetActionInfo(action)
+    if kind ~= "spell" or id == nil then return nil end
+    local icon = GetActionTexture(action)
+    if icon == nil then return nil end
+    if GetSpellTexture(id, book or BOOK) == icon then
+        local sid = spellLinkID(GetSpellLink(id, book or BOOK))
+        if sid then return sid end
+    end
+    if GetSpellInfo then
+        local _, _, texture = GetSpellInfo(id)
+        if texture == icon then return id end
+    end
+    return nil
+end
+
+local function snapshotBar()
+    barCursor = barCursor % BAR_SLOTS + 1
+    local slot = barCursor
+    local row = { slot = slot, revision = barRevision }
+    local btn = _G["ActionButton" .. slot]
+    -- The action the button's key sends: the button's paged action, as the stock bar
+    -- keeps it, else the slot itself on page one.
+    local action = (btn and btn.action) or slot
+    if not HasAction(action) then
+        row.spell = 0
+    elseif GetActionInfo then
+        row.spell = actionSpell(action)
+    end
+    row.x, row.y = point(btn, "x"), point(btn, "y")
+    barSnapshot = row
+end
+
+local function SPELLBOOK_OPEN()
+    return SpellBookFrame ~= nil and SpellBookFrame:IsVisible() and SpellBookFrame.bookType == BOOK
+end
+
+local function snapshotSpells()
+    spellSnapshot = { revision = spellRevision }
+    if not GetNumSpellTabs or not GetSpellTabInfo or not GetSpellLink then return end
+    local tabs, total = {}, 0
+    for t = 1, GetNumSpellTabs() do
+        local _, _, offset, count = GetSpellTabInfo(t)
+        tabs[t] = { offset = offset or 0, count = count or 0 }
+        if (offset or 0) + (count or 0) > total then total = (offset or 0) + (count or 0) end
+    end
+    spellSnapshot.total = total
+    if total == 0 then return end
+    spellCursor = spellCursor % total + 1
+    local i = spellCursor
+    spellSnapshot.index = i
+    spellSnapshot.id = spellLinkID(GetSpellLink(i, BOOK))
+    spellSnapshot.passive = tri(IsPassiveSpell(i, BOOK))
+    if not SPELLBOOK_OPEN() then return end
+    local tab
+    for t = 1, #tabs do
+        if i > tabs[t].offset and i <= tabs[t].offset + tabs[t].count then tab = t; break end
+    end
+    if tab == nil then return end
+    local within = i - tabs[tab].offset
+    local page = math.floor((within - 1) / SPELLS_PER_PAGE) + 1
+    local shownTab = SpellBookFrame.selectedSkillLine
+    local shownPage = (SPELLBOOK_PAGENUMBERS and shownTab and SPELLBOOK_PAGENUMBERS[shownTab]) or 1
+    local btn
+    if tab ~= shownTab then
+        btn = _G["SpellBookSkillLineTab" .. tab]
+        spellSnapshot.go_x, spellSnapshot.go_y = point(btn, "x"), point(btn, "y")
+    elseif page ~= shownPage then
+        btn = page > shownPage and _G["SpellBookNextPageButton"] or _G["SpellBookPrevPageButton"]
+        spellSnapshot.go_x, spellSnapshot.go_y = point(btn, "x"), point(btn, "y")
+    else
+        local k = (within - 1) % SPELLS_PER_PAGE + 1
+        btn = _G["SpellButton" .. k]
+        if btn and btn.GetID and btn:GetID() == k then
+            spellSnapshot.x, spellSnapshot.y = point(btn, "x"), point(btn, "y")
+        end
+    end
+end
+
+local function BAR_CENSUS(key) return barSnapshot[key] end
+local function SPELL_CENSUS(key) return spellSnapshot[key] end
+
 -- --------------------------------------------------------------------- melee
 --
 -- Stock 2.4.3 ActionButton_UpdateFlash flashes the Attack button when
@@ -931,6 +1052,11 @@ watcher:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
 watcher:RegisterEvent("PLAYER_ENTER_COMBAT")
 watcher:RegisterEvent("PLAYER_LEAVE_COMBAT")
 watcher:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+watcher:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+watcher:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
+watcher:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+watcher:RegisterEvent("SPELLS_CHANGED")
+watcher:RegisterEvent("LEARNED_SPELL_IN_TAB")
 
 watcher:SetScript("OnEvent", function(self, event, a1)
     -- 2.4.3 delivers event arguments in the globals arg1..argN; named handler parameters
@@ -956,6 +1082,11 @@ watcher:SetScript("OnEvent", function(self, event, a1)
                 and UnitGUID and source == UnitGUID("player") then
             swingCount = (swingCount + 1) % 15
         end
+    elseif ev == "ACTIONBAR_SLOT_CHANGED" or ev == "ACTIONBAR_PAGE_CHANGED"
+        or ev == "UPDATE_BONUS_ACTIONBAR" then
+        barRevision = (barRevision + 1) % 255
+    elseif ev == "SPELLS_CHANGED" or ev == "LEARNED_SPELL_IN_TAB" then
+        spellRevision = (spellRevision + 1) % 255
     elseif ev == "BAG_UPDATE" then
         inventoryRevision = (inventoryRevision + 1) % 65535
     elseif ev == "QUEST_LOG_UPDATE" then
@@ -1035,6 +1166,11 @@ return {
     advanceQuestSlot = advanceQuestSlot,
     OBJ = OBJ,
     BAR_BITS = BAR_BITS,
+    BAR_CENSUS = BAR_CENSUS,
+    SPELL_CENSUS = SPELL_CENSUS,
+    SPELLBOOK_OPEN = SPELLBOOK_OPEN,
+    snapshotBar = snapshotBar,
+    snapshotSpells = snapshotSpells,
     GCD_FRAC = GCD_FRAC,
     CASTING = CASTING,
     ATTACKING = ATTACKING,

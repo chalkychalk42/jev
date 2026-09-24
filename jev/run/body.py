@@ -23,7 +23,9 @@ from jev.clients.loot import Loot, Looted
 from jev.clients.recover import Recover, Recovered
 from jev.clients.repair import Repair
 from jev.clients.rest import Rest
+from jev.clients.spellbook import Spellbook
 from jev.clients.targeting import FaceCode, Targeting
+from jev.clients.trainer import TrainerDesk
 from jev.clients.vendor import Vendor
 from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
@@ -34,14 +36,17 @@ from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
-from jev.perceive.radio_frame import UI_ERROR_KEYS, list_lines, name_id
+from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FOCUS_QUICK_S, Client
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
-from jev.world.combat import HEAL_OUT_OF_COMBAT, Role
+from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, for_class
+from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import load_worn, save_worn
 from jev.world.gear import upgrades as gear_upgrades
 from jev.world.state_v1 import PowerType, State, StepKind
+from jev.world.training import placements as spell_placements
+from jev.world.training import trainer_due
 from jev.world.vendor import bag_slots, merchants, supplies_for
 
 # Dying again this soon after getting up at the body means the body lies where something
@@ -92,6 +97,11 @@ REST_BEARINGS = 16
 # A step back, about two yards, before a second look at a spawn point that showed nothing.
 GATHER_STEP_BACK_S = 0.6
 MERCHANT_UNREACHABLE = frozenset({"not_visible", "no_target", "no_window", "approach_failed"})
+# After buying spells, the spellbook census is rebuilt under its new revision (about 2.5 s
+# at ten paints a second) before anything is put on the bar from it.
+CENSUS_S = 8.0
+CLASS_IDS = {name: class_id for class_id, name in CLASS_BY_ID.items()}
+RACE_IDS = {name: race_id for race_id, name in RACE_BY_ID.items()}
 
 
 def _tour(points, start) -> list[tuple[float, float, float]]:
@@ -115,6 +125,7 @@ class LiveBody:
         "BAG_MAKE_SPACE": "_vendor", "BUY_AMMO_REAGENT_FOOD": "_vendor",
         "RELEASE_SPIRIT": "_release", "CORPSE_RUN": "_recover",
         "IDLE": "_wait", "ABORT_WAIT": "_wait", "FACE_TARGET": "_face",
+        "TRAIN_CLASS": "_train",
     }
     available = frozenset(HANDLERS)
 
@@ -131,6 +142,7 @@ class LiveBody:
         # What this character has been given to wear, slot by slot (`jev.world.gear`).
         self.gear_memory = gear_memory
         self._gear_checked: object = object()     # the bags' revision last looked through
+        self._placing_checked: object = object()  # the bar and spellbook last planned from
         self.travelling = False
         self.policy_context = Context()
         self.checkpoint: Callable[[], None] = lambda: None
@@ -224,6 +236,9 @@ class LiveBody:
             return Result(SkillOutcome.ABORTED, "client refused focus after backoff", "refused")
         self.checkpoint()
         self.ready_camera(state)
+        # Every fight a skill starts - a hunt's, a tutor's delegated one - uses what the bar
+        # holds now.
+        self._bar_profile()
         return getattr(self, handler)(state)
 
     def ready_camera(self, state: State | None) -> None:
@@ -263,6 +278,8 @@ class LiveBody:
             expected["service"] = "bags"
         if decision.skill == "BUY_AMMO_REAGENT_FOOD":
             expected["service"] = "supplies"
+        if decision.skill == "TRAIN_CLASS":
+            expected["service"] = "train"
         for key, value in decision.params.items():
             if key == "profile" and decision.skill == "COMBAT_PROFILE" and value in ("default", "panic"):
                 continue  # Fight's measured health branch owns panic within the rotation.
@@ -558,6 +575,8 @@ class LiveBody:
     def _rest(self, state) -> Result:
         self._clear_of_spawns()
         self._wear_upgrades()
+        self._place_spells()
+        self._bar_profile()
         if state.vitals.power_type is PowerType.MANA and state.vitals.power is not None and state.vitals.power < 0.35:
             return self._result(self.rest.until(0.75, role=Role.DRINK), self.rest.detail)
         if self.fight.top_up():
@@ -595,6 +614,138 @@ class LiveBody:
         after = self._read()
         if after and after.get("inventory.revision") is not None:
             self._gear_checked = after.get("inventory.revision")
+
+    def _bar_profile(self) -> None:
+        """Fight with what the bar holds: its census's spells by role, over the class's
+        starting profile. Without a whole census the starting profile stands."""
+        values = self._read()
+        census = getattr(self.client, "spells", None)
+        if values is None or census is None:
+            return
+        base = for_class(values.get("char.class_id"), values.get("char.race_id"))
+        with self.client._capturing:
+            bar = census.bar
+        self.fight.profile = profile_from_bar(bar, base) if bar else None
+
+    def _trainer(self, state: State | None = None):
+        """The class trainer worth a visit now (`jev.world.training.trainer_due`), or None.
+
+        From `state` when given: the policy asks from the supervisor's thread, where the
+        body's own readers (and the running skill's checkpoint) are not to be touched.
+        Without it, from a look of the body's own, in the skill's thread."""
+        census = getattr(self.client, "spells", None)
+        if census is None or self.client.bounds is None:
+            return None
+        if state is None:
+            values, here = self._read(), self._position()
+            if values is None or here is None:
+                return None
+            level, class_id, race_id, money = (values.get(k) for k in (
+                "char.level", "char.class_id", "char.race_id", "bags.money_copper"))
+        else:
+            if state.pos.mx is None or state.pos.my is None:
+                return None
+            here = (state.pos.mx, state.pos.my)
+            level, money = state.char.level, state.bags.money_copper
+            class_id = CLASS_IDS.get(state.char.cls)
+            race_id = RACE_IDS.get(state.char.race)
+        with self.client._capturing:
+            known = census.known
+        return trainer_due(class_id, race_id, level, known, money, self.client.bounds.map_id,
+                           map_to_world(*here, self.client.bounds)[:2])
+
+    def trainable(self, state: State) -> bool:
+        """Whether a class trainer has something to teach that the purse can pay for."""
+        try:
+            return self._trainer(state) is not None
+        except Exception:
+            return False
+
+    @property
+    def policy_context(self) -> Context:
+        return self._policy_context
+
+    @policy_context.setter
+    def policy_context(self, context: Context) -> None:
+        # The supervisor hands the body the runtime's context; training is asked of it.
+        self._policy_context = context
+        context.trainable = self.trainable
+
+    def _train(self, state) -> Result:
+        trainer = self._trainer()
+        if trainer is None:
+            return Result(SkillOutcome.ABORTED, "no trainer has anything to teach", "nothing")
+
+        def visit():
+            return self._open_trainer(trainer)
+
+        census = self.client.spells
+        with self.client._capturing:
+            before = census.book_revision
+        desk = TrainerDesk(self.client.hid, self._read, visit, self.client.origin,
+                           self.client.size)
+        outcome = desk.run(timeout_s=self.travel_timeout + 180)
+        # One visit a level, however it went: a spell a trainer lists and will not teach
+        # (a talent's rank) would otherwise bring the character back at every look. A
+        # visit cut short by a fight never gets here, and is asked for again after it.
+        self.policy_context.train_failed(state.char.level if state is not None else None)
+        self.say(f"  {trainer.name}: {outcome.value}, {desk.bought} bought for "
+                 f"{desk.spent} copper" + (f" ({desk.detail})" if desk.detail else ""))
+        if desk.bought:
+            self._await_census(before)
+        placed = self._place_spells(force=True)
+        detail = f"{desk.bought} spells bought at {trainer.name}; {placed}"
+        return self._result(outcome, detail)
+
+    def _open_trainer(self, trainer) -> bool:
+        point = world_to_map(*trainer.world[:2], self.client.bounds)
+        opened = self.interact.open_on(trainer.name, node_world=trainer.world, node_map=point)
+        if not opened.opened:
+            raise BodyFailure(self._result(opened, f"{trainer.name}: "
+                                                   f"{self.interact.detail or opened.value}"))
+        # Most trainers open on a gossip first, with their training line among others
+        # ("I wish to unlearn my talents."): chosen by its text, never its position.
+        return opened is not Interacted.GOSSIP or bool(
+            trainer.gossip and self.chooser.run(trainer.gossip).ok)
+
+    def _await_census(self, before: int | None) -> None:
+        """Wait for a whole spellbook census under a newer revision than `before`: the
+        purchases' spells are in it."""
+        census = self.client.spells
+        deadline = time.monotonic() + CENSUS_S
+        while time.monotonic() < deadline:
+            self._read()
+            with self.client._capturing:
+                if census.book_revision != before and census.bar is not None:
+                    return
+            time.sleep(0.05)
+
+    def _place_spells(self, *, force: bool = False) -> str:
+        """Put what the spellbook has and the bar lacks on the bar
+        (`jev.world.training.placements`): a new rank over the old, a new spell on a free
+        slot. Out of combat, and only when the bar or the spellbook changed since the last
+        plan, unless `force`."""
+        census = getattr(self.client, "spells", None)
+        values = self._read()
+        if census is None or values is None or values.get("vitals.combat") is not False:
+            return "no spells placed"
+        with self.client._capturing:
+            bar, known = census.bar, census.known
+            mark = (values.get("bars.revision"), values.get("spells.revision"))
+        if bar is None or known is None or (not force and mark == self._placing_checked):
+            return "no spells placed"
+        self._placing_checked = mark
+        plan = spell_placements(bar, known)
+        if not plan:
+            return "nothing to place"
+        book = Spellbook(self.client.hid, self._read, self.client.origin, self.client.size)
+        outcome = book.place(plan)
+        with self.client._capturing:
+            census.forget_bar()
+        done = ", ".join(f"{p.spell_id}->{p.slot}" for p in book.placed)
+        self.say(f"  spells on the bar: {outcome.value} {len(book.placed)}/{len(plan)}"
+                 + (f" [{done}]" if done else "") + (f" ({book.detail})" if book.detail else ""))
+        return f"placed {len(book.placed)} of {len(plan)} spells ({outcome.value})"
 
     def _clear_of_spawns(self) -> None:
         """Walk out of reach of the step's own spawn points before a meal, where a way out
@@ -784,6 +935,7 @@ class LiveBody:
         return False
 
     def _recover(self, state) -> Result:
+        self.fight.buffs_lost()
         # A body where the character keeps dying is not worth getting up at: run
         # 20260923T181209-bc03ba got up beside a level 6 wolf at half health and died,
         # four times. Up at the Spirit Healer instead, and home by hearthstone.

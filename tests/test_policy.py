@@ -169,3 +169,37 @@ def test_wanting_the_teacher_is_advisory_not_blocking():
     plan = decide(State(t=0.0, client_id="c"))
     assert wants_teacher(plan)
     assert plan.decision.skill in NAMES
+
+
+def test_a_trainer_with_something_to_teach_is_a_service_and_a_failed_visit_waits_a_level():
+    from jev.coach.policy import Context, service
+    from jev.coach.verifier import verify
+    from jev.world.state_v1 import Char
+
+    asked = []
+    context = Context()
+    context.trainable = lambda state: asked.append(state.char.level) or True
+    state = _s(char=Char(level=8))
+    plan = service(state, context=context)
+    assert plan.decision.skill == "TRAIN_CLASS" and plan.decision.params == {"service": "train"}
+    assert verify(plan.decision, state, NAMES).ok
+    context.train_failed(8)
+    assert service(state, context=context) is None
+    assert service(_s(char=Char(level=9)), context=context).decision.skill == "TRAIN_CLASS"
+    # Nothing to teach, no trainer function, or in a fight: no training.
+    context.trainable = lambda state: False
+    assert service(_s(char=Char(level=9)), context=context) is None
+    assert service(_s(char=Char(level=9)), context=Context()) is None
+    context.trainable = lambda state: True
+    fighting = _s(char=Char(level=9), vitals=Vitals(hp=1.0, power=1.0, combat=True))
+    assert service(fighting, context=context) is None
+
+
+def test_repairs_and_bags_come_before_training():
+    from jev.coach.policy import Context, service
+    from jev.world.state_v1 import Char
+
+    context = Context()
+    context.trainable = lambda state: True
+    broken = _s(char=Char(level=8), bags=Bags(free=10, durability_min=0.0))
+    assert service(broken, context=context).decision.skill == "VENDOR_REPAIR"

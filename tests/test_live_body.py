@@ -819,3 +819,81 @@ def test_upgrades_in_the_bags_are_put_on_before_a_meal_and_remembered(tmp_path, 
     assert set(load_worn(b.gear_memory)) == {"main_hand", "off_hand"}
     b._wear_upgrades()
     assert len(worn) == 1, "the same bags are not looked through twice"
+
+
+def _census(bar, known):
+    from jev.perceive.spellbook import SpellCensus
+
+    census = SpellCensus()
+    for slot in range(1, 13):
+        census.observe({"bars.revision": 1, "bars.slot": slot, "bars.slot_spell": bar.get(slot)})
+    for index, spell in enumerate(sorted(known), start=1):
+        census.observe({"spells.revision": 1, "spells.total": len(known), "spells.index": index,
+                        "spells.id": spell})
+    return census
+
+
+def test_training_visits_the_trainer_once_a_level_and_puts_the_spells_on_the_bar(monkeypatch):
+    import jev.run.body as body_module
+    from jev.clients.spellbook import Placed
+    from jev.clients.trainer import Trained
+    from jev.world.state_v1 import Bags, Char, Pos
+
+    b = body()
+    # Northshire, beside the Abbey: Brother Sammuel and Brother Wilhelm are both on map 0.
+    b.client.bounds = ZoneBounds(12, 0, 1535.4166, -1935.4166, -7939.583, -10254.166)
+    bar = {1: 6603, 2: 20154, 3: 635, **{s: 0 for s in range(4, 11)}, 11: None, 12: None}
+    b.client.spells = _census(bar, {6603, 20154, 635})
+    values = {"char.level": 8, "char.class_id": 2, "char.race_id": 1, "bags.money_copper": 626,
+              "vitals.combat": False, "bars.revision": 1, "spells.revision": 1}
+    b.client.read = lambda: dict(values)
+    here = (0.4789, 0.4115)
+    b.client.position = lambda: here
+    visits, plans = [], []
+
+    class Desk:
+        def __init__(self, hid, read, visit, *args):
+            self.visit, self.bought, self.spent, self.detail = visit, 0, 0, ""
+
+        def run(self, *, timeout_s):
+            self.visit()
+            b.client.spells = _census(bar, {6603, 20154, 635, 639, 465, 20271, 19740, 498, 853})
+            self.bought, self.spent = 6, 510
+            return Trained.DONE
+
+    class Book:
+        def __init__(self, *args):
+            self.placed, self.detail = [], ""
+
+        def place(self, plan):
+            plans.append(plan)
+            self.placed = list(plan)
+            return Placed.DONE
+
+    monkeypatch.setattr(body_module, "TrainerDesk", Desk)
+    monkeypatch.setattr(body_module, "Spellbook", Book)
+    monkeypatch.setattr(body_module, "CENSUS_S", 0.0)
+    b._open_trainer = lambda trainer: visits.append(trainer.name) or True
+    state = seen(char=Char(level=8, cls="paladin", race="human"), bags=Bags(money_copper=626),
+                 pos=Pos(zone="Elwynn Forest", zone_id=12, mx=here[0], my=here[1]))
+    assert b.trainable(state)
+    result = b._train(state)
+    assert result.outcome is SkillOutcome.SUCCEEDED, result.detail
+    assert visits == ["Brother Wilhelm"]
+    assert [(p.spell_id, p.slot) for p in plans[0]] == [
+        (639, 3), (465, 4), (19740, 5), (20271, 6), (498, 7), (853, 8)]
+    assert not b.policy_context.can_train(state), "a second visit at the same level"
+
+
+def test_the_trainer_s_gossip_line_is_chosen_by_its_text():
+    from jev.world.training import trainers
+
+    b = body()
+    chosen = []
+    b.interact = SimpleNamespace(open_on=lambda *a, **kw: Interacted.GOSSIP, detail="")
+    b.chooser = SimpleNamespace(run=lambda title: chosen.append(title) or Chose.CHOSE)
+    sammuel = next(t for t in trainers(2, 1, 0) if t.name == "Brother Sammuel")
+    assert b._open_trainer(sammuel) is True
+    assert chosen == ["I would like to train further in the ways of the Light."]
+    b.interact = SimpleNamespace(open_on=lambda *a, **kw: Interacted.TRAINER, detail="")
+    assert b._open_trainer(sammuel) is True

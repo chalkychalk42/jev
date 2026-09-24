@@ -53,7 +53,8 @@ from jev.world.state_v1 import ArmedBy, State, StepKind
 # stands still (`Tracker.serving`).
 # A dialog nobody closes is a stall, so ABORT_WAIT is not among them.
 SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
-                              "BUY_AMMO_REAGENT_FOOD", "LOOT", "RELEASE_SPIRIT", "CORPSE_RUN"})
+                              "BUY_AMMO_REAGENT_FOOD", "LOOT", "RELEASE_SPIRIT", "CORPSE_RUN",
+                              "TRAIN_CLASS"})
 
 
 @dataclass

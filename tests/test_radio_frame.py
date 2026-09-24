@@ -97,6 +97,10 @@ def _lua_pack(values: dict) -> list[tuple[int, int, int]]:
         for i in range(width - 1, -1, -1):
             bits.append((v // 2**i) % 2)
 
+    # The header's two getters are constants in the generated file; the addon paints what
+    # they return, whatever schema a test's values name.
+    header = {f.name: int(re.fullmatch(r"return (\d+)", f.lua).group(1)) for f in FIELDS[:2]}
+    values = {**values, **header}
     for field in FIELDS:
         push(_lua_encode(field, values.get(field.name)), field.bits)
 
@@ -674,7 +678,7 @@ CLIENT_API = frozenset({
     "IsMounted", "IsSwimming", "IsFalling", "IsResting", "IsStealthed", "IsIndoors",
     "GetPlayerFacing", "GetPlayerMapPosition", "GetCorpseMapPosition", "GetMoney", "CheckInteractDistance",
     "LootFrame", "GossipFrame", "MerchantFrame", "QuestFrame", "ClassTrainerFrame",
-    "MailFrame", "GetMouseFocus", "WorldFrame", "SpellIsTargeting",
+    "MailFrame", "GetMouseFocus", "WorldFrame", "SpellIsTargeting", "GetCursorInfo",
 })
 
 FORBIDDEN = (
@@ -682,6 +686,7 @@ FORBIDDEN = (
     "MoveBackwardStart", "TurnLeftStart", "TurnRightStart", "StrafeLeftStart",
     "StrafeRightStart", "JumpOrAscendStart", "InteractUnit", "TargetUnit",
     "RunMacro", "RunMacroText", "PickupAction", "UseContainerItem", "UseInventoryItem",
+    "PickupSpell", "PlaceAction", "ClearCursor", "BuyTrainerService", "CastSpellByID",
 )
 
 

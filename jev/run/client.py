@@ -39,6 +39,7 @@ from jev.guide.path import PathQuery, PathStatus
 from jev.guide.route_memory import AvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
+from jev.perceive.spellbook import SpellCensus
 from jev.world.state_v1 import Pos, SenseFault
 
 # Taking the window back: short waits first, doubling, capped.
@@ -95,6 +96,8 @@ class Client:
     size: tuple[int, int]
     client_id: str = "run"
     log: QuestLog = field(default_factory=QuestLog)
+    # The main bar and the spellbook, assembled from their one-entry-per-paint censuses.
+    spells: SpellCensus = field(default_factory=SpellCensus)
     _seq: int | None = field(default=None, init=False)
     _seq_at: float = field(default=0.0, init=False)
     _paint_generation: int = field(default=0, init=False)
@@ -120,7 +123,8 @@ class Client:
     # -- readers -------------------------------------------------------------
 
     def reading(self, tries: int = 6) -> radio_frame.RadioReading | None:
-        """A whole decoded reading, or `None`. Feeds the quest log on the way past.
+        """A whole decoded reading, or `None`. Feeds the quest log and the bar and
+        spellbook censuses on the way past.
 
         `None` also means **frozen**, not only unreadable, and that is deliberate: every
         caller already treats `None` as "cannot see", which is the honest answer for a
@@ -135,6 +139,7 @@ class Client:
                     if self.frozen_for() > STALE_AFTER_S:
                         return None
                     self.log.observe(r.values)
+                    self.spells.observe(r.values)
                     return r
             time.sleep(0.05)
         return None

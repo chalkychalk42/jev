@@ -262,6 +262,11 @@ class Supervisor:
                 self.say(f"{worker.arm.decision.skill}: {result.code or result.outcome.value} {result.detail}")
                 if result.code == "no_junk":
                     self.runtime.policy_context.bags_failed()
+                if (worker.arm.decision.skill == "TRAIN_CLASS"
+                        and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
+                    # A trainer out of reach is not walked to again this level; a visit a
+                    # fight cut short (preempted) is.
+                    self.runtime.policy_context.train_failed(state.char.level)
                 if result.code == "too_poor":
                     if worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
                         self.runtime.policy_context.supplies_failed(state.bags.money_copper)

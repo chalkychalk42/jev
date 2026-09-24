@@ -48,14 +48,14 @@ def installed_addon(tmp_path_factory) -> pathlib.Path:
     return folder
 
 
-def paint(state: dict | None = None, bundle: pathlib.Path | None = None
+def paint(state: dict | None = None, bundle: pathlib.Path | None = None, *, ticks: int = 1
           ) -> list[tuple[int, int, int]]:
-    """Run the addon under the stubbed client and return every painted cell."""
+    """Run the addon under the stubbed client and return every cell of its last paint."""
     literal = "return {" + ", ".join(f"{k}={_lua(v)}" for k, v in (state or {}).items()) + "}"
     proc = subprocess.run(
         [LUA, "tests/lua/paint_once.lua"],
         capture_output=True, text=True,
-        env={"JEV_STATE": literal, "PATH": "/usr/bin:/bin",
+        env={"JEV_STATE": literal, "PATH": "/usr/bin:/bin", "JEV_TICKS": str(ticks),
              "ADDON_BUNDLE": str(bundle or BUILT["lua"])},
     )
     assert proc.returncode == 0, f"the addon raised:\n{proc.stderr}"
@@ -482,3 +482,46 @@ def test_a_name_the_client_has_not_loaded_is_no_character():
     every character's."""
     values = radio.unpack(payload(paint({"playerName": "Unknown"}))[:PAYLOAD_CELLS])
     assert values["char.key"] is None
+
+
+# --- schema 15: the bar and the spellbook ------------------------------------
+
+def _painted(ticks: int, **state) -> dict:
+    return radio.unpack(payload(paint({"spellFixture": True, **state}, ticks=ticks))[:PAYLOAD_CELLS])
+
+
+def test_the_bar_census_names_each_slot_s_spell_and_where_its_button_is():
+    third = _painted(3)
+    assert third["schema"] == 15 and third["bars.slot"] == 3
+    assert third["bars.slot_spell"] == 635                   # Holy Light, by its spell link
+    assert abs(third["bars.slot_x"] - 220 / 1600) < 0.002
+    assert _painted(4)["bars.slot_spell"] == 0               # empty
+    assert _painted(11)["bars.slot_spell"] is None           # water: an item, not a spell
+    assert _painted(3, wrongIcon=True)["bars.slot_spell"] is None   # no match, no guess
+
+
+def test_the_spellbook_census_names_each_entry_and_shows_the_way_to_its_button():
+    closed = _painted(4)
+    assert (closed["spells.total"], closed["spells.index"], closed["spells.id"]) == (15, 4, 639)
+    assert closed["ui.spellbook"] is False and closed["spells.x"] is None
+    shown = _painted(4, bookOpen=1)                          # Holy, page 1: its button
+    assert shown["ui.spellbook"] is True and shown["spells.x"] is not None
+    assert shown["spells.go_x"] is None
+    other_tab = _painted(4, bookOpen=1, shownTab=1)          # General showing: Holy's tab
+    assert other_tab["spells.x"] is None
+    assert abs(other_tab["spells.go_y"] - (1 - 600 / 900)) < 0.002
+    next_page = _painted(15, bookOpen=1)                     # page 2 of Holy: next page
+    assert next_page["spells.id"] == 10290
+    assert abs(next_page["spells.go_x"] - 300 / 1600) < 0.002
+    assert _painted(12)["spells.passive"] is True            # Parry
+
+
+def test_train_is_the_advance_button_only_while_it_is_enabled():
+    enabled = _painted(1, trainer=True, trainEnabled=1)
+    assert abs(enabled["ui.advance_x"] - 224 / 1600) < 0.002
+    assert _painted(1, trainer=True, trainEnabled=False)["ui.advance_x"] is None
+
+
+def test_the_cursor_holding_something_is_painted():
+    assert _painted(1, cursorType="spell")["cursor.holding"] is True
+    assert _painted(1)["cursor.holding"] is False

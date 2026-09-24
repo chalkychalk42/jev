@@ -51,6 +51,61 @@ if STATE.vendorGossip then
     function b:GetCenter() return 200, 300 end
 end
 
+-- A spellbook of two tabs (General: Attack; Holy: fourteen spells over two pages), a main
+-- bar holding three of them and two items, and the stock buttons that show both.
+if STATE.spellFixture then
+    BOOKTYPE_SPELL = "spell"
+    local book = {6603, 20154, 635, 639, 465, 19740, 20271, 498, 853, 1152, 21082, 3127,
+                  633, 1022, 10290}
+    local tabs = {{0, 1}, {1, 14}}
+    function GetNumSpellTabs() return #tabs end
+    function GetSpellTabInfo(t) return "tab" .. t, "icon", tabs[t][1], tabs[t][2] end
+    function GetSpellLink(i, kind)
+        if book[i] == nil then return nil end
+        return "|cff71d5ff|Hspell:" .. book[i] .. "|h[spell]|h|r"
+    end
+    function GetSpellTexture(i, kind) return book[i] and ("tex" .. book[i]) end
+    function GetSpellInfo(id) return "spell", "Rank 1", "tex" .. id end
+    function IsPassiveSpell(i, kind) return book[i] == 3127 end
+    local bar = {[1] = 1, [2] = 2, [3] = 3}
+    local items = {[11] = true, [12] = true}
+    function HasAction(slot) return bar[slot] ~= nil or items[slot] == true end
+    function GetActionInfo(slot)
+        if bar[slot] then return "spell", bar[slot], "spell" end
+        if items[slot] then return "item", 159 end
+    end
+    function GetActionTexture(slot)
+        if bar[slot] then return STATE.wrongIcon and "other" or ("tex" .. book[bar[slot]]) end
+        if items[slot] then return "itemtex" end
+    end
+    local function button(name, id, x, y, enabled)
+        local b = CreateFrame("Button", name)
+        function b:GetID() return id end
+        function b:IsVisible() return true end
+        function b:IsEnabled() if enabled == false then return nil end return 1 end
+        function b:GetCenter() return x, y end
+        return b
+    end
+    for slot = 1, 12 do
+        button("ActionButton" .. slot, slot, 100 + 40 * slot, 40).action = slot
+    end
+    local frame = button("SpellBookFrame", 0, 200, 500)
+    function frame:IsVisible() return STATE.bookOpen == 1 end
+    frame.bookType = "spell"
+    frame.selectedSkillLine = STATE.shownTab or 2
+    SPELLBOOK_PAGENUMBERS = {1, STATE.shownPage or 1}
+    for k = 1, 12 do
+        button("SpellButton" .. k, k, 60 + (k % 2) * 140, 700 - math.floor((k - 1) / 2) * 50)
+    end
+    button("SpellBookSkillLineTab1", 1, 330, 650)
+    button("SpellBookSkillLineTab2", 2, 330, 600)
+    button("SpellBookPrevPageButton", 0, 40, 100)
+    button("SpellBookNextPageButton", 0, 300, 100)
+    if STATE.trainer then
+        button("ClassTrainerTrainButton", 0, 224, 420, STATE.trainEnabled == 1)
+    end
+end
+
 -- The addon exactly as a client installs it: the one file `tools/gen_addon_fields.py`
 -- builds. It owns no global names, so any global it assigns fails the run, attributed by
 -- the chunk doing the assigning - the event arguments this harness sets (arg2, ...) are

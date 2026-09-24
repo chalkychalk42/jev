@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 14                                   # bump when the field table changes shape
+SCHEMA = 15                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -68,7 +68,17 @@ with it only for human paladins.
 enough for a 2 Hz reader to see it, so a toggle is never pressed without its state.
 13: which character is painting (`char.key`, name and realm hashed), so every character
 keeps its own saved place in the guide.
+15: the header's revision byte, then the main action bar and the spellbook, one entry per
+paint each, and the Train button: a trained spell goes on the bar only by a drag the
+strip can show the ends of.
 Old schema 6, 7 and 8 reads remain supported, with appended observations unknown."""
+LAST_HEADER_SCHEMA = 14
+EXTENDED = 0
+"""The 4-bit header's code for "the schema number follows in `schema_rev`" (schema 15 on).
+
+Fourteen was the last number the header could name: 15 is its not-available code. Zero
+was never painted, and an all-black strip, the one thing that could paint it by accident,
+is refused before a header is read: it has no calibration row."""
 
 # Quantisation step: nibble n renders as n * STEP, so 15 -> 255 exactly.
 STEP = 255 // (LEVELS - 1)                    # 17
@@ -141,7 +151,9 @@ SEQ_MODULUS = 255
 
 FIELDS: tuple[Field, ...] = (
     # -- header ------------------------------------------------------------------
-    Field("schema", 4, Kind.UINT, f"return {SCHEMA}",
+    Field("schema", 4, Kind.UINT, f"return {EXTENDED}",
+          "0: the schema number is in schema_rev; 6-14 name a schema of their own"),
+    Field("schema_rev", 8, Kind.UINT, f"return {SCHEMA}",
           "must match the decoder's SCHEMA or the strip is from another build"),
     Field("seq", 8, Kind.UINT, f"return SEQ % {SEQ_MODULUS}",
           "increments every paint; a frozen seq is a hung addon, not a misread"),
@@ -505,6 +517,46 @@ FIELDS: tuple[Field, ...] = (
     Field("target.guid", 16, Kind.UINT, "return TARGET_GUID()",
           "UnitGUID('target') hashed as names are; unknown with nothing selected"),
 
+    # -- schema 15: the action bar and the spellbook ----------------------------------
+    #
+    # A trained spell is no use until it is on the bar, and a new rank of Holy Light does
+    # not replace the old one there by itself (the server swaps ranks on the bar only for
+    # spells whose skill line names a successor, like auras and seals). Putting one there
+    # is a drag from the spellbook onto a bar button, so the strip shows both ends: which
+    # spell each main-bar button holds, and where each spellbook entry's button is, or
+    # the tab or page button that brings it into view. Both censuses paint one entry per
+    # paint, like the bags, and count a revision so a reader knows when to start again.
+    Field("bars.revision", 8, Kind.UINT, "return BAR_CENSUS('revision')",
+          "changes when any action slot changes; a census across a change is thrown away"),
+    Field("bars.slot", 4, Kind.UINT, "return BAR_CENSUS('slot')",
+          "main-bar slot 1-12 the next fields describe; advances once per paint"),
+    Field("bars.slot_spell", 16, Kind.UINT, "return BAR_CENSUS('spell')",
+          "spell id on that slot's button; 0 empty; unknown for items, macros or unread"),
+    Field("bars.slot_x", 11, Kind.FRAC, "return BAR_CENSUS('x')",
+          "fraction across the interface of that slot's button"),
+    Field("bars.slot_y", 11, Kind.FRAC, "return BAR_CENSUS('y')"),
+    Field("spells.revision", 8, Kind.UINT, "return SPELL_CENSUS('revision')",
+          "changes when the spellbook changes (a spell learned)"),
+    Field("spells.total", 8, Kind.UINT, "return SPELL_CENSUS('total')",
+          "entries in the player's spellbook, every tab"),
+    Field("spells.index", 8, Kind.UINT, "return SPELL_CENSUS('index')",
+          "the spellbook entry the next fields describe; advances once per paint"),
+    Field("spells.id", 16, Kind.UINT, "return SPELL_CENSUS('id')",
+          "its spell id, from the stock spell link"),
+    _tri("spells.passive", "return SPELL_CENSUS('passive')",
+         "a passive entry: nothing to put on a bar"),
+    Field("spells.x", 11, Kind.FRAC, "return SPELL_CENSUS('x')",
+          "its spellbook button while the open page shows it"),
+    Field("spells.y", 11, Kind.FRAC, "return SPELL_CENSUS('y')"),
+    Field("spells.go_x", 11, Kind.FRAC, "return SPELL_CENSUS('go_x')",
+          "with the spellbook open and the entry not showing: its tab, else the page button toward it"),
+    Field("spells.go_y", 11, Kind.FRAC, "return SPELL_CENSUS('go_y')"),
+    _tri("ui.spellbook", "return tri(SPELLBOOK_OPEN())",
+         "the player's spellbook is open (not the pet's)"),
+    _tri("cursor.holding",
+         "if type(GetCursorInfo) ~= 'function' then return nil end\n"
+         "return tri(GetCursorInfo() ~= nil)",
+         "something is on the cursor: a picked-up spell, action or item"),
 )
 
 # --------------------------------------------------------------------------- layout
@@ -512,13 +564,16 @@ FIELDS: tuple[Field, ...] = (
 # Schemas 7 and 8 only appended fields. Explicit historical shapes keep existing screen
 # captures and installed addons readable without inventing merchant or cursor telemetry.
 # Preserve this prefix when adding future schemas; migrations are declared, not guessed.
-SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS[:121],
-                 10: FIELDS[:125], 11: FIELDS[:126], 12: FIELDS[:127], 13: FIELDS[:128],
-                 14: FIELDS}
-# Schema 14 is the last the 4-bit header can name (15 is its not-available code). It was
-# redefined once, within the hour it was installed on one client, to add `target.guid`.
-# The next layout needs a revision number in the header first, or one of 0-5: no strip
-# with those values is decoded by this table, though old captures may carry them.
+# Schemas 6-14 carry no revision byte: their header is the schema number itself.
+_LEGACY = FIELDS[:1] + FIELDS[2:131]
+SCHEMA_FIELDS = {6: _LEGACY[:75], 7: _LEGACY[:112], 8: _LEGACY[:117], 9: _LEGACY[:121],
+                 10: _LEGACY[:125], 11: _LEGACY[:126], 12: _LEGACY[:127], 13: _LEGACY[:128],
+                 14: _LEGACY, 15: FIELDS}
+# Schema 14 was the last the 4-bit header could name (15 is its not-available code), and
+# was redefined once, within the hour it was installed on one client, to add `target.guid`.
+# From 15 the header says EXTENDED and the number is in `schema_rev`; a new layout appends
+# and takes the next number there.
+assert _LEGACY[-1].name == "target.guid" and FIELDS[1].name == "schema_rev"
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 assert sum(f.bits for f in SCHEMA_FIELDS[8]) == 1059
@@ -527,6 +582,7 @@ assert sum(f.bits for f in SCHEMA_FIELDS[10]) == 1100
 assert sum(f.bits for f in SCHEMA_FIELDS[11]) == 1102
 assert sum(f.bits for f in SCHEMA_FIELDS[12]) == 1106
 assert sum(f.bits for f in SCHEMA_FIELDS[13]) == 1137
+assert sum(f.bits for f in SCHEMA_FIELDS[14]) == 1169
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

@@ -78,6 +78,7 @@ from jev.run.evidence import event, operation, traced
 from jev.world.combat import (
     HEAL_IN_COMBAT,
     HEAL_OUT_OF_COMBAT,
+    LAST_RESORT_BELOW,
     MIN_MANA_TO_HEAL,
     SELF_CAST_MODIFIER,
     Ability,
@@ -342,6 +343,10 @@ class Fight:
     _input_refused: bool = field(default=False, init=False)
     detail: str = field(default="", init=False)
     _last_use: dict[int, float] = field(default_factory=dict, init=False)
+    # When each lasting buff (an aura, a blessing) was last pressed, by name. Kept between
+    # fights, unlike `_last_use`: a ten-minute blessing pressed every fight is a global
+    # cooldown thrown away each time. A death takes them all (`buffs_lost`).
+    _lasting: dict[str, float] = field(default_factory=dict, init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
     _race: list[tuple] = field(default_factory=list, init=False)
     # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
@@ -1241,11 +1246,20 @@ class Fight:
             bit = 1 << (a.slot - 1)
             return bool(ready & bit) and bool(usable & bit)
 
+        hp = values.get("vitals.hp")
+        in_combat = values.get("vitals.combat") is True
+
+        # 0. A last resort (Lay on Hands: full health, all the mana, an hour's cooldown),
+        #    for a fight about to be lost, where a heal would not finish in time.
+        for last in profile.by_role(Role.LAST_RESORT):
+            if in_combat and hp is not None and hp < LAST_RESORT_BELOW and pressable(last):
+                self._press(last)
+                return
+
         # 1. Stay alive. A heal is a global cooldown not spent swinging, so the line is
         #    low — but standing there at 20% because healing is "not the rotation" is how
         #    a character ends up running back from the graveyard.
         heal = profile.first(Role.HEAL)
-        hp = values.get("vitals.hp")
         giving_up = self.heals_ignored >= HEAL_GIVE_UP and self.heals_landed == 0
         if (heal is not None and pressable(heal) and not giving_up
                 # One at a time. `_watch_heal` is what decides whether the last one
@@ -1253,22 +1267,33 @@ class Fight:
                 # `pressed [2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]` - fifteen
                 # Holy Lights, none of which healed anything, on a 2.5 second cast.
                 and self._pending_heal is None
-                and values.get("vitals.combat") is True
+                and in_combat
                 and hp is not None and hp < HEAL_IN_COMBAT
                 and self._has_mana_for(heal, values)
                 and not self._finishes_first(values)):
+            # Clear the way for it first, where the bar can: immune (Divine Protection),
+            # or the attacker stunned (Hammer of Justice). Pushback is what left a level 6
+            # paladin's Holy Lights unfinished for 22 s against one wolf.
+            for guard in (*profile.by_role(Role.SAVE), *profile.by_role(Role.STUN)):
+                if (pressable(guard) and self._has_mana_for(guard, values)
+                        and (guard.role is Role.SAVE
+                             or values.get("target.attacking_me") is True)):
+                    self._press(guard)
+                    return
             if self._press(heal):
                 self._pending_heal = (hp, time.monotonic())
             return
 
-        # 2. Keep the buff up, and only when it is actually lapsing: `bars.ready` says a
+        # 2. Keep the buffs up, and only when one is actually lapsing: `bars.ready` says a
         #    seal is pressable on every single tick, so without the interval the
-        #    character stands there re-sealing and never swings.
+        #    character stands there re-sealing and never swings. An aura, once pressed,
+        #    lasts until a death; a blessing, its ten minutes, across fights.
         now = time.monotonic()
-        for buff in profile.by_role(Role.BUFF):
-            last = self._last_use.get(buff.slot)
+        for buff in (*profile.by_role(Role.AURA), *profile.by_role(Role.BUFF)):
+            last = self._lasting.get(buff.name) if buff.lasting else self._last_use.get(buff.slot)
             if pressable(buff) and (last is None or now - last >= buff.every_s):
-                self._press(buff)
+                if self._press(buff) and buff.lasting:
+                    self._lasting[buff.name] = now
                 return
 
         # 3. Swing. A toggle is pressed at most once and only before anything has landed,
@@ -1278,8 +1303,14 @@ class Fight:
                 continue
             if attack.toggle and not self._toggle_needed(attack, values):
                 continue
-            if self._press(attack) and attack.toggle:
-                self._toggled = True
+            if self._press(attack):
+                if attack.toggle:
+                    self._toggled = True
+                if attack.spends:
+                    # Judgement released the seal: seal again on the next look.
+                    for buff in profile.by_role(Role.BUFF):
+                        if not buff.lasting:
+                            self._last_use.pop(buff.slot, None)
             return
 
     def _sample_race(self, values: dict) -> None:
@@ -1386,6 +1417,10 @@ class Fight:
             if hp is not None and hp > before + 0.02:
                 return True
         return False
+
+    def buffs_lost(self) -> None:
+        """A death took every buff: auras and blessings are pressed again at the next fight."""
+        self._lasting.clear()
 
     def pressed_keys(self) -> list[str]:
         """The slots pressed this fight, as the keys they were sent as."""

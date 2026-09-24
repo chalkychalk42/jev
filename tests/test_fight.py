@@ -1727,3 +1727,86 @@ def test_defending_clicks_through_a_bystanders_plate_to_the_attackers():
     assert f._pick_plate(1161, defend=True) is None
     assert f._selected_name_id == 1161 and read() is attacker
     assert len(hid.clicks) == 2, "the bystander's plate, then the attacker's"
+
+
+# -- trained spells (`jev.world.training`, `jev.world.combat.from_bar`) --------------
+
+TRAINED_BAR = {1: 6603, 2: 20154, 3: 639, 4: 465, 5: 19740, 6: 20271, 7: 498, 8: 853,
+               9: 633, 10: 0, 11: None, 12: None}
+ALL_READY = 0b111111111111
+
+
+def _trained(hid, **values):
+    from jev.world.combat import from_bar
+
+    f = _fight([ALIVE], hid=hid)
+    f.profile = from_bar(TRAINED_BAR, for_class(2, 1))
+    return f, {**ALIVE, "bars.ready": ALL_READY, "bars.usable": ALL_READY,
+               "vitals.power": 0.9, "vitals.power_max": 300, **values}
+
+
+def test_the_bar_s_census_is_the_profile_its_items_kept():
+    from jev.world.combat import from_bar
+
+    profile = from_bar(TRAINED_BAR, for_class(2, 1))
+    roles = {a.slot: a.role for a in profile.abilities}
+    assert roles == {1: Role.ATTACK, 2: Role.BUFF, 3: Role.HEAL, 4: Role.AURA, 5: Role.BUFF,
+                     6: Role.ATTACK, 7: Role.SAVE, 8: Role.STUN, 9: Role.LAST_RESORT,
+                     11: Role.DRINK, 12: Role.FOOD}
+    blessing = next(a for a in profile.abilities if a.slot == 5)
+    assert blessing.self_cast and blessing.lasting and blessing.every_s == 595.0
+    assert from_bar(None, for_class(2, 1)) == for_class(2, 1)
+
+
+def test_divine_protection_goes_up_before_the_heal_it_protects():
+    """Pushback left a level 6 paladin's Holy Lights unfinished for 22 s against one wolf:
+    immune first, then the heal."""
+    hid = _Hid()
+    f, hurt = _trained(hid, **{"vitals.hp": 0.3, "vitals.combat": True,
+                               "target.attacking_me": True})
+    f._rotate(hurt)
+    assert hid.taps == ["7"]
+    f._rotate({**hurt, "bars.ready": ALL_READY & ~(1 << 6)})     # on its cooldown now
+    assert hid.taps == ["7", "8"], "the stun is the next guard when the save is spent"
+    f._rotate({**hurt, "bars.ready": ALL_READY & ~(1 << 6) & ~(1 << 7)})
+    assert hid.taps[-1] == "3" and f._pending_heal is not None
+
+
+def test_the_last_resort_is_for_a_fight_about_to_be_lost():
+    hid = _Hid()
+    f, dying = _trained(hid, **{"vitals.hp": 0.1, "vitals.combat": True})
+    f._rotate(dying)
+    assert hid.taps == ["9"] and hid.chords == [("alt", "9")]   # on the caster
+    hid2 = _Hid()
+    f2, hurt = _trained(hid2, **{"vitals.hp": 0.3, "vitals.combat": True})
+    f2._rotate(hurt)
+    assert "9" not in hid2.taps
+
+
+def test_an_aura_and_a_blessing_are_kept_between_fights_and_lost_to_a_death(combat_clock):
+    hid = _Hid()
+    f, calm = _trained(hid, **{"bars.attacking": True})
+    for _ in range(4):
+        f._rotate(calm)
+    assert hid.taps == ["4", "2", "5", "6"], "aura, seal, blessing, then Judgement"
+    assert ("alt", "5") in hid.chords                           # the blessing, on the caster
+    f._last_use = {}                                            # a new fight
+    hid.taps.clear()
+    f._rotate(calm)
+    assert hid.taps == ["2"], "the aura and the blessing were pressed again next fight"
+    f.buffs_lost()
+    hid.taps.clear()
+    f._last_use = {}
+    f._rotate(calm)
+    assert hid.taps == ["4"], "the aura was not pressed again after a death"
+
+
+def test_judgement_spends_the_seal_and_the_seal_goes_straight_back_on(combat_clock):
+    hid = _Hid()
+    f, calm = _trained(hid, **{"bars.attacking": True})
+    f._lasting = {"Devotion Aura": 0.0, "Blessing of Might": 0.0}
+    f._rotate(calm)
+    f._rotate(calm)
+    assert hid.taps == ["2", "6"]
+    f._rotate({**calm, "bars.ready": ALL_READY & ~(1 << 5)})   # Judgement on its cooldown
+    assert hid.taps == ["2", "6", "2"], "the seal Judgement released was not put back"
