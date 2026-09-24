@@ -1404,9 +1404,14 @@ class Fight:
         #    character stands there re-sealing and never swings. An aura, once pressed,
         #    lasts until a death; a blessing, its ten minutes, across fights.
         now = time.monotonic()
+        reserve = self._mana_reserve(profile) if in_combat else 0
+
+        def affordable(a: Ability) -> bool:
+            return self._mana_left_after(a, values) >= reserve
+
         for buff in (*profile.by_role(Role.AURA), *profile.by_role(Role.BUFF)):
             last = self._lasting.get(buff.name) if buff.lasting else self._last_use.get(buff.slot)
-            if pressable(buff) and (last is None or now - last >= buff.every_s):
+            if pressable(buff) and affordable(buff) and (last is None or now - last >= buff.every_s):
                 if self._press(buff) and buff.lasting:
                     self._lasting[buff.name] = now
                 return
@@ -1414,7 +1419,7 @@ class Fight:
         # 3. Swing. A toggle is pressed at most once and only before anything has landed,
         #    because pressing melee auto-attack while already swinging **stops** it.
         for attack in profile.by_role(Role.ATTACK):
-            if not pressable(attack):
+            if not pressable(attack) or not affordable(attack):
                 continue
             if attack.toggle and not self._toggle_needed(attack, values):
                 continue
@@ -1605,6 +1610,30 @@ class Fight:
         if ability.role is Role.HEAL:
             self._pending_heal = None
         return True
+
+    @staticmethod
+    def _mana_reserve(profile) -> int:
+        """Mana kept back in a fight for one heal and the save before it.
+
+        A level 10 paladin re-sealed after every Judgement (40 mana a seal), came out of
+        its fight at 18% - 54 of 300 mana, short of Holy Light's 60 - and died under its
+        own Divine Protection with no heal to cast (session 88, run 20260924T225929-5a1ebe).
+        A seal or a strike that would leave less than this waits; damage is lost, not the
+        character. No heal, no reserve: a warrior spends its rage as before.
+        """
+        heal = profile.first(Role.HEAL)
+        if heal is None or not heal.mana:
+            return 0
+        save = profile.first(Role.SAVE)
+        return heal.mana + (save.mana if save is not None else 0)
+
+    @staticmethod
+    def _mana_left_after(ability: Ability, values: dict) -> float:
+        """Mana after pressing `ability`; plenty when the pool or its cost is unknown."""
+        frac, pool = values.get("vitals.power"), values.get("vitals.power_max")
+        if not ability.mana or frac is None or not pool:
+            return math.inf
+        return frac * pool - ability.mana
 
     def _has_mana_for(self, ability: Ability, values: dict) -> bool:
         """Enough mana for this, and enough left afterwards to matter.

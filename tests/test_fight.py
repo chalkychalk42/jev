@@ -2007,3 +2007,28 @@ def test_a_press_the_client_never_answers_is_counted_after_three(combat_clock):
         combat_clock[0] += 0.9
     assert hid.taps[:3] == ["4", "4", "4"]
     assert hid.taps[3] != "4", "the aura was pressed a fourth time in a row"
+
+
+def test_a_fight_keeps_mana_back_for_a_heal_and_its_save(combat_clock):
+    """Session 88: re-sealing after every Judgement left 54 of 300 mana, short of Holy
+    Light's 60, and the character died under Divine Protection with nothing to cast."""
+    pool = 300
+
+    def fight_at(mana: float, *, combat: bool):
+        hid = _Hid()
+        f, calm = _trained(hid, **{"bars.attacking": True, "vitals.combat": combat,
+                                   "vitals.power_max": pool})
+        f._lasting = {"Devotion Aura": 0.0, "Blessing of Might": 0.0}
+        f._rotate({**calm, "vitals.power": mana / pool})
+        return f, hid
+
+    probe, _ = fight_at(pool, combat=True)
+    heal, save = probe.profile.first(Role.HEAL), probe.profile.first(Role.SAVE)
+    seal = next(a for a in probe.profile.by_role(Role.BUFF) if not a.lasting)
+    reserve = heal.mana + save.mana
+    _, hid = fight_at(reserve + seal.mana - 5, combat=True)
+    assert str(seal.slot) not in hid.taps, "the seal spent the heal's mana"
+    _, hid = fight_at(reserve + seal.mana + 30, combat=True)
+    assert hid.taps[:1] == [str(seal.slot)], "with mana to spare the seal goes on"
+    _, hid = fight_at(reserve + seal.mana - 5, combat=False)
+    assert hid.taps[:1] == [str(seal.slot)], "out of a fight nothing is held back"
