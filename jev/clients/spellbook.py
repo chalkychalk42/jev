@@ -167,16 +167,15 @@ class Spellbook:
                            SLOT_S, f"bar slot {slot}")
 
     def _place(self, placement: Placement) -> None:
-        entry = self._entry(placement.spell_id)
-        target = self._slot(placement.slot)
-        if target.get("bars.slot_spell") == placement.spell_id:
+        here = self._await(lambda v: v.get("bars.slot") == placement.slot, SLOT_S,
+                           f"bar slot {placement.slot}")
+        if here.get("bars.slot_spell") == placement.spell_id:
             return                                     # already there
-        start, end = self._point(entry, "spells."), self._point(target, "bars.slot_")
+        entry = self._entry(placement.spell_id)
+        start = self._point(entry, "spells.")
         event("spellbook.drag", data={"spell": placement.spell_id, "slot": placement.slot,
-                                      "replaces": placement.replaces,
-                                      "from": list(start), "to": list(end)})
-        if not self._drag(start, end):
-            raise _Stop(Placed.REFUSED, "drag input refused")
+                                      "replaces": placement.replaces, "from": list(start)})
+        self._drag(start, placement.slot)
         try:
             self._await(lambda v: v.get("bars.slot") == placement.slot
                         and v.get("bars.slot_spell") == placement.spell_id,
@@ -189,29 +188,42 @@ class Spellbook:
         if values.get("cursor.holding") is True:
             self._drop_held()
 
-    def _drag(self, start: tuple[int, int], end: tuple[int, int]) -> bool:
-        if not self.hid.move_to(*start):
-            return False
-        if not self.hid.button(True):
-            return False
+    def _drag(self, start: tuple[int, int], slot: int) -> None:
+        """Pick the spell up, then find the slot's button, then let go over it.
+
+        In that order because the stock bar hides an empty button until something is being
+        dragged (ACTIONBAR_SHOWGRID): the first live placement waited three seconds for an
+        empty slot 4 the strip could not paint. Anything failing mid-drag lets go over open
+        world instead, where the spell drops, lands nowhere and casts nothing.
+        """
+        if not self.hid.move_to(*start) or not self.hid.button(True):
+            raise _Stop(Placed.REFUSED, "drag input refused")
         try:
             # Off the button first, a short way, so the drag starts on the spell and not
             # on whatever the long move passes over.
             if not self.hid.move_to(start[0] + 24, start[1] + 12):
-                return False
+                raise _Stop(Placed.REFUSED, "drag input refused")
+            target = self._slot(slot)
+            end = self._point(target, "bars.slot_")
+            event("spellbook.drop", data={"slot": slot, "to": list(end)})
             if not self.hid.move_to(*end):
-                return False
+                raise _Stop(Placed.REFUSED, "drag input refused")
             self.sleep(0.1)
+        except BaseException:
+            self.hid.move_to(*self._drop_point())
+            raise
         finally:
-            released = self.hid.button(False)
-        self.sleep(0.2)
-        return bool(released)
+            self.hid.button(False)
+            self.sleep(0.2)
+
+    def _drop_point(self) -> tuple[int, int]:
+        ox, oy = self.window_origin
+        w, h = self.window_size
+        return ox + round(DROP_POINT[0] * w), oy + round(DROP_POINT[1] * h)
 
     def _drop_held(self) -> None:
         """Drop what the cursor holds on open world, and check it went."""
-        ox, oy = self.window_origin
-        w, h = self.window_size
-        point = (ox + round(DROP_POINT[0] * w), oy + round(DROP_POINT[1] * h))
+        point = self._drop_point()
         event("spellbook.drop_held", data={"point": list(point)})
         if self.hid.click(*point) is False:
             raise _Stop(Placed.REFUSED, "drop click refused")

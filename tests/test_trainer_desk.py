@@ -99,6 +99,7 @@ class Book:
         self.events, self.keys = [], []
         self.pos = (0, 0)
         self.down = None
+        self.drops = True
 
     def read(self):
         self.i = self.i % len(self.entries) + 1
@@ -107,8 +108,11 @@ class Book:
         v = {"vitals.combat": False, "vitals.dead": False, "vitals.ghost": False,
              "ui.spellbook": self.open, "cursor.holding": self.holding is not None,
              "spells.index": self.i, "spells.id": spell, "spells.total": len(self.entries),
-             "bars.slot": self.slot, "bars.slot_spell": self.bar[self.slot],
-             "bars.slot_x": 0.3 + self.slot / 100, "bars.slot_y": 0.95}
+             "bars.slot": self.slot, "bars.slot_spell": self.bar[self.slot]}
+        # The stock bar hides an empty button until something is being dragged.
+        dragging = self.down is not None and self.pos != self.down
+        if self.bar[self.slot] != 0 or dragging:
+            v["bars.slot_x"], v["bars.slot_y"] = 0.3 + self.slot / 100, 0.95
         if self.open and tab == self.tab:
             v["spells.x"], v["spells.y"] = 0.1, 0.1 + self.i / 20
         elif self.open:
@@ -141,7 +145,10 @@ class Book:
             self.down = self.pos
             return True
         start, end = self.down, self.pos
+        self.down = None
         self.events.append(("drag", start, end))
+        if end == (1056, 288) or not self.drops:        # let go on open world: dropped
+            return True
         index = round(((start[1] / 900) - 0.1) * 20)
         slot = round((end[0] / 1600 - 0.3) * 100)
         spell = self.entries[index - 1][0]
@@ -175,7 +182,7 @@ def test_nothing_to_place_opens_nothing():
 
 def test_a_drop_that_does_not_land_stops_the_placing():
     book = Book()
-    book.button = lambda down, right=False: True       # the drag never delivers
+    book.drops = False                                 # picked up, and the drop never lands
     placer = book.book()
     assert placer.place([Placement(465, 4)]) is Placed.NOT_PLACED
     assert book.bar[4] == 0 and placer.placed == []
@@ -195,3 +202,29 @@ def test_something_already_on_the_cursor_is_never_dropped():
     placer = book.book()
     assert placer.place([Placement(465, 4)]) is Placed.HOLDING
     assert book.events == [] and book.holding == 2070 and book.keys == []
+
+
+def test_an_empty_slot_is_found_while_the_spell_is_being_dragged():
+    """The stock bar shows an empty button only during a drag: the first live placement
+    waited for slot 4's button before picking anything up, and timed out."""
+    book = Book()
+    placer = book.book()
+    assert placer.place([Placement(465, 4)]) is Placed.DONE, placer.detail
+    assert book.bar[4] == 465
+
+
+def test_a_drag_that_cannot_find_its_slot_lets_go_on_open_world():
+    book = Book()
+    book.bar[4] = None                                 # an item there: never painted
+    real = book.read
+
+    def read():
+        v = real()
+        v.pop("bars.slot_x", None)
+        v.pop("bars.slot_y", None)
+        return v
+
+    placer = Spellbook(book, read, clock=lambda: book.now, sleep=book.sleep)
+    assert placer.place([Placement(465, 4)]) is Placed.TIMEOUT
+    drag = [e for e in book.events if e[0] == "drag"]
+    assert drag and drag[-1][2] == (1056, 288), "let go somewhere a spell could land"
