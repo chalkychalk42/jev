@@ -474,3 +474,21 @@ def test_a_fight_on_the_way_stops_the_step_s_clock_like_a_meal():
 
     assert {"COMBAT_PROFILE", "EAT_DRINK", "LOOT"} <= SERVICING_SKILLS
     assert "ABORT_WAIT" not in SERVICING_SKILLS
+
+
+def test_a_fight_on_the_way_is_not_an_attempt_at_the_step(tmp_path):
+    """A fight whose target vanished made a quest accept's first timeout its second
+    attempt, and "not offered" sent the character to a grind 1,558 yards away and back for
+    a quest that was there all along (session 90)."""
+    from dataclasses import replace
+
+    rt = runtime(tmp_path, [seen(t / 2) for t in range(4)])
+    rt.tick(choose=True)
+    step_work = rt.armed
+    assert step_work.rule.startswith("guide.") and step_work.step_id == "accept"
+    rt.armed = replace(step_work, rule="fight.rotation")
+    rt.finish(SkillOutcome.ABORTED, "target disappeared without observed death")
+    assert rt.tracker.memory.attempts == 0, "a fight on the way is not the step failing"
+    rt.armed = step_work
+    rt.finish(SkillOutcome.TIMED_OUT, "skill timeout")
+    assert rt.tracker.memory.attempts == 1

@@ -282,8 +282,13 @@ class ClientRuntime:
         """The body reports its measured outcome once, against the original arm."""
         if self.armed is not None and self.last_state is not None:
             self._skill_result(state or self.last_state, outcome, detail)
+            # Only the step's own work is an attempt at it. A fight that lost its target on
+            # the way made a quest accept's first timeout its second attempt, and "not
+            # offered" sent a level 11 on a 1,558-yard walk to a grind and back for a
+            # quest that was there all along (session 90).
             if (outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
-                    and self.armed.step_id == self.tracker.step_id):
+                    and self.armed.step_id == self.tracker.step_id
+                    and self.armed.rule.startswith("guide.")):
                 self.tracker.memory.attempts += 1
         self.armed = None
 
