@@ -227,11 +227,12 @@ successful wolf turn-in.
    equivalent to reaching level 12; install a real continuation instead of exiting or
    replaying already completed quests.
 
-   Current exclusions are concrete: gameobject quests 3904/5545/176/37/45/71; exploration
-   62/76; descendants 3905/239/39/59; quest 147's missing earlier prerequisite 123; and
-   out-of-region quest 109. Seven service nodes also lack executors: four training,
-   two hearth and one flight. Keep these explicit. Build measured gameobject and
-   exploration completion when they improve the chosen route; add quest-item use,
+   Current exclusions are concrete (24 September): Wanted: "Hogger" (176), whose target is
+   an elite; quest 147's missing earlier prerequisite 123; and out-of-region quest 109.
+   Exploration (V77), quest objects gathered or opened by their tooltip name (V86, V87)
+   returned 62/76/239, 3904/3905/5545 and 37/45/71/39/59, none yet completed live. Seven
+   service nodes still lack executors: four training, two hearth and one flight. Keep
+   these explicit. Add quest-item use,
    spell/event objectives, concurrent prerequisites and wider radio counters only when
    required by selected content. Do not describe all catalog names as independent gaps:
    some are already internal compositions of the 14 live executors.
