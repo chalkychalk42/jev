@@ -59,6 +59,11 @@ class Skill:
     stage: Stage = Stage.BUILTIN
     interruptible: bool = True
     on_fail: str | None = None       # a skill name to try once before escalating
+    # The budget is for the work in front of an NPC. A walk to get there is bounded by
+    # travel's own timeouts and is not charged to it: a step counts as reached a hundred
+    # yards out, and an accept that had to find its way out of Goldshire's inn cellar spent
+    # its sixty seconds on the stairs (session 90).
+    walk_free: bool = False
 
 
 def _alive(s: State) -> bool:
@@ -151,11 +156,11 @@ _SKILLS: tuple[Skill, ...] = (
           success=JUDGED_ELSEWHERE, pre=lambda s: _alive(s) and s.vitals.combat is not True),
 
     Skill("ACCEPT_QUEST", "take the quest from the NPC in front of us", 60.0,
-          success=JUDGED_ELSEWHERE,
+          success=JUDGED_ELSEWHERE, walk_free=True,
           pre=lambda s: _alive(s) and s.vitals.combat is not True),
 
     Skill("TURNIN_QUEST", "hand the quest back", 60.0,
-          success=JUDGED_ELSEWHERE,
+          success=JUDGED_ELSEWHERE, walk_free=True,
           pre=lambda s: _alive(s) and s.vitals.combat is not True),
 
     Skill("GOSSIP_PICK", "choose a gossip option", 20.0,

@@ -409,6 +409,32 @@ def test_a_body_that_keeps_its_routine_clock_is_timed_from_it(tmp_path):
         supervisor.close()
 
 
+def test_the_walk_to_an_npc_is_not_charged_to_the_accept(tmp_path):
+    """A step is reached a hundred yards out; the accept then walked out of Goldshire's
+    inn cellar and spent its sixty seconds on the stairs (session 90)."""
+    rt = runtime(tmp_path, [seen(t) for t in (0, 10, 40, 60, 61, 105, 112)])
+    body = Body()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        assert worker.arm.decision.skill == "ACCEPT_QUEST"
+        body.travelling = True                   # the accept walks to its NPC
+        for now in (10, 40, 60):
+            supervisor.step(now)
+        body.travelling = False                  # there: the work in front of the NPC
+        supervisor.step(61)
+        assert not worker.cancelled.is_set(), "the walk was charged to the accept"
+        supervisor.step(105)
+        assert not worker.cancelled.is_set(), "55 s of its own work"
+        supervisor.step(112)
+        assert worker.cancelled.is_set() and worker.reason == "skill timeout"
+    finally:
+        body.allow_finish.set()
+        supervisor.close()
+
+
 def test_a_catalog_timeout_is_a_counted_failure_not_a_retrying_preemption(tmp_path):
     rt = runtime(tmp_path, [seen(0), seen(61), seen(62)])
     body = Body()

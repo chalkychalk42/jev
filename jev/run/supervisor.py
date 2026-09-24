@@ -81,6 +81,9 @@ class Worker:
         self.done = threading.Event()
         self.result: Result | None = None
         self.completion_observed = False
+        # Seconds the body has spent walking inside this skill (`Skill.walk_free`).
+        self.walked_s = 0.0
+        self._walk_seen: float | None = None
         self._evidence = bind(recorder, arm, client_id=state.client_id)
         self._skill = arm.decision.skill if arm else None
         self._released = False
@@ -158,7 +161,8 @@ class Worker:
 def interruption(arm: Armed, state: State, *, travelling: bool = False,
                  completion_observed: bool = False, handles_modal: bool = False,
                  falling_s: float = FALL_GRACE_S,
-                 routine_age_s: float | None = None, exposed: bool = False) -> str | None:
+                 routine_age_s: float | None = None, exposed: bool = False,
+                 walked_s: float = 0.0) -> str | None:
     """Why the armed skill must stop now, or `None`.
 
     `falling_s` is how long falling has been observed continuously; a caller that does
@@ -188,6 +192,8 @@ def interruption(arm: Armed, state: State, *, travelling: bool = False,
         return "playhead changed"
     spec = get(skill or "")
     age = state.t - arm.at if routine_age_s is None else routine_age_s
+    if spec and spec.walk_free:
+        age -= walked_s
     if spec and age >= spec.timeout_s:
         return "skill timeout"
     return None
@@ -378,12 +384,17 @@ class Supervisor:
                 # Let the same input owner acknowledge Escape's observed result even
                 # if combat is active; the next arm can then service combat normally.
                 self.worker.completion_observed = True
+            walking = self.body.travelling is True
+            if walking and self.worker._walk_seen is not None:
+                self.worker.walked_s += max(0.0, now - self.worker._walk_seen)
+            self.worker._walk_seen = now if walking else None
             reason = "operator active" if operator else interruption(
                 self.worker.arm, state, travelling=self.body.travelling,
                 completion_observed=self.worker.completion_observed,
                 handles_modal=getattr(self.body, "handles_modal", False),
                 falling_s=falling_s, routine_age_s=routine_age,
-                exposed=getattr(self.body, "tutor_exposed", False) is True)
+                exposed=getattr(self.body, "tutor_exposed", False) is True,
+                walked_s=self.worker.walked_s)
             # Hunt yields between pulls, after looting. Interrupting it as combat drops
             # would leave the killed corpse behind. A standalone travel leg can yield now.
             if reason is None and self.worker.arm.decision.skill == "TRAVEL_TO":
