@@ -43,16 +43,19 @@ from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupp
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, for_class
 from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import load_worn, save_worn
+from jev.world.gear import keep as gear_keep
 from jev.world.gear import upgrades as gear_upgrades
 from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.training import placements as spell_placements
 from jev.world.training import trainer_due
 from jev.world.vendor import (
     bag_slots,
+    junk_prices,
     load_merchant_failures,
     merchants,
     note_merchant,
     supplies_for,
+    surplus_prices,
 )
 
 # Dying again this soon after getting up at the body means the body lies where something
@@ -89,6 +92,9 @@ EXPLORE_POLL_S = 0.25
 # and his plate was wagon, and Godric Rothgar stood in plain view beside it (run
 # 20260924T011327-6e5f4b stopped on its first full bags).
 MERCHANT_TRIES = 5
+# Free slots a bag service asks the merchant for: every stack it may sell (`Vendor._sell`
+# stops when all of them are gone).
+SELL_ALL = 999
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
 # Walks in a row that ended with the character wedged before it goes home by hearthstone.
@@ -837,6 +843,7 @@ class LiveBody:
                              and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id)
             if not supplies:
                 return Result(SkillOutcome.ABORTED, "no confirmed empty supported food/drink slot", "unsupported")
+        eligible, min_free = junk_prices(), 1 if supplies else 6
         if self.arm.decision.skill == "BAG_MAKE_SPACE":
             # A bag lying in the bags is the cheapest room there is: no merchant needed.
             equipper = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
@@ -845,6 +852,17 @@ class LiveBody:
                 after = self._read()
                 if after and (after.get("bags.free") or 0) > 0:
                     return Result(SkillOutcome.SUCCEEDED, "equipped a bag from the bags", "done")
+            # Gear not worth wearing, and goods no quest needs, go with the grey: all of it,
+            # since the character is at a merchant anyway and training wants the silver.
+            items = equipper.bag_items()
+            if items is not None:
+                keep = gear_keep(items, load_worn(self.gear_memory),
+                                 class_id=values.get("char.class_id"),
+                                 race_id=values.get("char.race_id"))
+                surplus = surplus_prices()
+                eligible = {**eligible, **{i: surplus[i] for i in set(items)
+                                           if i in surplus and i not in keep}}
+                min_free = SELL_ALL
         wanted = {s.item_id for s in supplies}
         candidates = [m for m in merchants(self.client.bounds.map_id)
                       if (not wanted or wanted & m.items)
@@ -861,11 +879,12 @@ class LiveBody:
             def visit(merchant=merchant):
                 return self._open_merchant(merchant.name, merchant.world,
                                            world_to_map(*merchant.world[:2], self.client.bounds))
-            vendor = Vendor(self.client.hid, self._read, visit, self.client.origin, self.client.size)
+            vendor = Vendor(self.client.hid, self._read, visit, self.client.origin, self.client.size,
+                            eligible=eligible)
             try:
                 outcome = vendor.run(expected_name=merchant.name,
                                      supplies=tuple(s for s in supplies if s.item_id in merchant.items),
-                                     min_free=1 if supplies else 6,
+                                     min_free=min_free,
                                      timeout_s=self.travel_timeout + 120)
             except BodyFailure as failure:
                 if failure.result.code in MERCHANT_UNREACHABLE:

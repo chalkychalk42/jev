@@ -68,12 +68,25 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
                         "world": [float(x), float(y), float(z)], "items": sorted(sold)})
     prices = {str(row[0]): int(row[1]) for row in db.execute(
         "select entry,SellPrice from world_item_template") if row[0] in set(junk)}
+    # White and green gear, trade goods and recipes that no quest asks for or hands over:
+    # sold when the bags want room, unless worth wearing (`jev.world.gear.keep`). A quest's
+    # reward is gear like any other once something better is worn. Thirty-odd slots of
+    # shovels, spare cloaks, wolf meat and a schematic filled a level 10's bags while only
+    # grey was for sale, and the merchant visit found "no junk" (session 80).
+    required_cols = [r[1] for r in db.execute("pragma table_info(world_quest_template)")
+                     if r[1].startswith(("ReqItemId", "ReqSourceId")) or r[1] == "SrcItemId"]
+    required = {int(i) for row in db.execute(
+        "select " + ",".join(required_cols) + " from world_quest_template") for i in row if i}
+    surplus = {str(row[0]): int(row[1]) for row in db.execute(
+        "select entry,SellPrice from world_item_template where class in (2,4,7,9) "
+        "and Quality in (1,2) and SellPrice>0 and startquest=0 order by entry")
+        if row[0] not in required}
     # General bags (any item fits) and their slots: one found in the bags goes on the belt.
     bags = {str(row[0]): int(row[1]) for row in db.execute(
         "select entry,ContainerSlots from world_item_template where class=1 and subclass=0 "
         "and InventoryType=18 and ContainerSlots>0 and BagFamily=0 order by entry")}
     return {"schema": 1, "junk": sorted(set(junk)), "junk_prices": prices, "supplies": supplies,
-            "vendors": vendors, "bags": bags}
+            "vendors": vendors, "bags": bags, "surplus_prices": surplus}
 
 
 def main() -> int:

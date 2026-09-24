@@ -59,3 +59,20 @@ def test_the_generated_catalog_knows_the_paladin_and_its_hammer():
     facts = gear.catalog()
     assert [2, 4] in facts["proficiencies"]["1:2"], "one-handed maces"
     assert usable(5580, 2, 1, 8) == Piece(5580, "main_hand", facts["items"]["5580"]["score"])
+
+
+
+def test_bag_gear_is_kept_only_when_it_beats_what_is_worn_now_or_later():
+    from jev.world.gear import keep
+
+    facts = {"items": {"1": {"classes": -1, "kind": [4, 1], "level": 1, "races": -1,
+                             "score": 5.0, "slot": "legs"},
+                       "2": {"classes": -1, "kind": [4, 1], "level": 1, "races": -1,
+                             "score": 2.0, "slot": "legs"},
+                       "3": {"classes": -1, "kind": [4, 1], "level": 20, "races": -1,
+                             "score": 9.0, "slot": "legs"},
+                       "4": {"classes": -1, "kind": [2, 8], "level": 1, "races": -1,
+                             "score": 9.0, "slot": "main_hand"}},
+             "proficiencies": {"1:2": [[4, 1]]}}
+    kept = keep([1, 2, 3, 4, 5], {"legs": 3.0}, class_id=2, race_id=1, facts=facts)
+    assert kept == {1, 3}, "better now, better later; not worse, not unwearable, not unknown"

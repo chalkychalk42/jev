@@ -37,6 +37,10 @@ class Piece:
     score: float
 
 
+# Past any item's required level: `keep` asks whether a piece will ever be worth wearing.
+MAX_LEVEL = 255
+
+
 @cache
 def catalog(path: pathlib.Path = CATALOG) -> dict:
     try:
@@ -75,6 +79,18 @@ def upgrades(bag_items: Iterable[int], worn: Mapping[str, float], *, class_id: i
         if piece.slot not in best or piece.score > best[piece.slot].score:
             best[piece.slot] = piece
     return sorted(best.values(), key=lambda p: p.slot)
+
+
+def keep(bag_items: Iterable[int], worn: Mapping[str, float], *, class_id: int | None,
+         race_id: int | None, facts: dict | None = None) -> frozenset[int]:
+    """Bag gear worth keeping: better than what is remembered worn in its slot, now or once
+    the character reaches the item's level. The rest of the gear may be sold."""
+    kept = set()
+    for item_id in set(bag_items):
+        piece = usable(item_id, class_id, race_id, MAX_LEVEL, facts)
+        if piece is not None and piece.score > worn.get(piece.slot, 0.0):
+            kept.add(item_id)
+    return frozenset(kept)
 
 
 def load_worn(path: pathlib.Path | None) -> dict[str, float]:

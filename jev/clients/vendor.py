@@ -16,6 +16,9 @@ from jev.perceive.radio_frame import name_id
 from jev.run.evidence import event, operation, traced
 from jev.world.vendor import Supply, junk_prices
 
+# Grey, white and green: what the price tables may offer for sale. Never blue or better.
+SELL_QUALITIES = (0, 1, 2)
+
 
 class Vended(StrEnum):
     DONE = "done"
@@ -309,7 +312,7 @@ class Vendor:
             seen.add(ordinal)
             item_id, count = values.get("inventory.item_id"), values.get("inventory.count")
             price = self.eligible.get(item_id, 0)
-            eligible = price > 0 and values.get("inventory.quality") == 0
+            eligible = price > 0 and values.get("inventory.quality") in SELL_QUALITIES
             eligible = eligible and values.get("inventory.locked") is False and count is not None and count > 0
             if eligible:
                 # Re-read immediately before input. An asynchronously changed slot or
@@ -317,7 +320,8 @@ class Vendor:
                 fresh = self._read()
                 if self._slot(fresh) != self._slot(values):
                     continue
-                if fresh.get("inventory.quality") != 0 or fresh.get("inventory.locked") is not False:
+                if (fresh.get("inventory.quality") not in SELL_QUALITIES
+                        or fresh.get("inventory.locked") is not False):
                     continue
                 if fresh.get("inventory.x") is None:
                     self._click(fresh, "inventory.open_")

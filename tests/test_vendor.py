@@ -84,7 +84,7 @@ def test_sells_then_restocks_using_confirmed_cash_and_inventory_deltas():
     assert shop.keys == ["esc"]
 
 
-@pytest.mark.parametrize("change", [{"inventory.quality": 1}, {"inventory.quality": None},
+@pytest.mark.parametrize("change", [{"inventory.quality": 3}, {"inventory.quality": None},
                                     {"inventory.item_id": 999999},
                                     {"inventory.locked": True}, {"inventory.locked": None},
                                     {"inventory.count": None}])
@@ -93,6 +93,15 @@ def test_never_sells_unapproved_or_unread_items(change):
     shop.v.update(change)
     assert shop.body().run(expected_name="Merchant", min_free=1) is Vended.NO_JUNK
     assert shop.clicks == []
+
+
+def test_a_white_item_the_price_table_offers_is_sold():
+    """Session 80: shovels, spare cloaks and wolf meat filled the bags while only grey was for
+    sale. What the caller offers (`surplus_prices`, less what is worth wearing) is sold."""
+    shop = Shop()
+    shop.v.update({"inventory.quality": 1})
+    assert shop.body().run(expected_name="Merchant", min_free=1) is Vended.DONE
+    assert shop.clicks and shop.clicks[0][2] is True
 
 
 def test_selling_every_eligible_stack_is_enough_even_short_of_the_target():

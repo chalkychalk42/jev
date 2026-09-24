@@ -45,6 +45,11 @@ def junk_prices() -> dict[int, int]:
     return {int(k): int(v) for k, v in catalog()["junk_prices"].items()}
 
 
+def surplus_prices() -> dict[int, int]:
+    """White and green gear, trade goods and recipes no quest needs, with their sell prices."""
+    return {int(k): int(v) for k, v in (catalog().get("surplus_prices") or {}).items()}
+
+
 def bag_slots() -> dict[int, int]:
     """General bags, any item fits, and how many slots each adds."""
     return {int(k): int(v) for k, v in (catalog().get("bags") or {}).items()}
