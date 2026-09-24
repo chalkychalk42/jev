@@ -180,6 +180,18 @@ local function CURSOR_OBJECT()
     return nameid(text)
 end
 
+-- --------------------------------------------------------------------- unit identity
+--
+-- Two Kobold Workers share a name, a level and full health; the client's GUID tells them
+-- apart. Hashed to 16 bits as names are: two units in one fight colliding is 1 in 65536.
+
+local function TARGET_GUID()
+    if type(UnitGUID) ~= "function" then return nil end
+    local guid = UnitGUID("target")
+    if not guid or guid == "" then return nil end
+    return nameid(guid)
+end
+
 -- --------------------------------------------------------------------- enum tables
 --
 -- Keyed by the client's own locale-independent tokens. tests/test_radio_frame.py parses
@@ -1007,6 +1019,7 @@ return {
     fnv1a16 = fnv1a16,
     CHARACTER_KEY = CHARACTER_KEY,
     CURSOR_OBJECT = CURSOR_OBJECT,
+    TARGET_GUID = TARGET_GUID,
     ZONE_ID = ZONE_ID,
     PLAYER_FACING = PLAYER_FACING,
     BAG_FREE = BAG_FREE,

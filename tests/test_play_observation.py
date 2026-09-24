@@ -366,3 +366,14 @@ def test_owned_observation_uses_one_real_frame_for_pixels_and_radio():
     assert np.array_equal(np.asarray(Image.open(io.BytesIO(observed.png))), pixels)
     assert retained[0][1] is pixels
     assert retained[0][2] == observed.data["captured_at"]
+
+
+def test_another_unit_of_the_same_name_and_health_is_a_new_selection():
+    """Clicking a second Kobold Worker while one is selected was never credited: same name,
+    both at full health. The strip's GUID tells them apart (schema 14)."""
+    worker = {"target.has": True, "target.name_id": 7, "target.hp": 1.0}
+    before = {"values": {**worker, "target.guid": 101}, "context": {"target_name_id": 7}}
+    after = {"values": {**worker, "target.guid": 202}}
+    assert "selected" in measured_effects(before, after)[0]
+    same = {"values": {**worker, "target.guid": 101}}
+    assert "selected" not in measured_effects(before, same)[0]

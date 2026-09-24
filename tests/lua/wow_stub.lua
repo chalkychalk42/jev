@@ -263,6 +263,7 @@ function GetNumQuestChoices() return STATE.choices and #STATE.choices or 0 end
 function SpellIsTargeting() return pick("spellTargeting", nil) end
 function UnitGUID(u)
     if u == "player" then return pick("playerGuid", "0x0000000000000042") end
+    if u == "target" then return pick("targetGuid", "0xF130000101000A2B") end
     return nil
 end
 function GetQuestItemInfo(kind, i)

@@ -1445,3 +1445,19 @@ def test_a_second_unprovable_pick_ends_the_fight(combat_clock):
     f.targeting.face = NOT_VISIBLE
     assert f.run(None, timeout_s=5.0) is Fought.NOT_VISIBLE
     assert reacquired == [None, None], "chose again more than once"
+
+
+def test_a_selection_that_becomes_another_unit_of_the_same_name_and_health_is_seen(combat_clock):
+    """The strip's GUID (schema 14) says what neither name nor health could: at full health a
+    second Kobold Worker is indistinguishable from the first."""
+    fighting = {**ALIVE, "vitals.combat": True, "target.melee_range": True, "target.hp": 1.0,
+                "target.guid": 501, "char.level": 4, "char.xp_pct": 0.68}
+    other = {**fighting, "target.guid": 502, "char.xp_pct": 0.72}
+    f = _fight([fighting, fighting, other])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+    unpaid = _fight([fighting, fighting, {**fighting, "target.guid": 502}])
+    unpaid.acquire = lambda name_id, **_: None
+    unpaid.engage = lambda *_: True
+    assert unpaid.run(1161) is Fought.LOST and "changed" in unpaid.detail

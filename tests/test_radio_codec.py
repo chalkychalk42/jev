@@ -67,11 +67,11 @@ def test_historical_schema_prefixes_keep_their_checksum_boundary(version, field_
 def test_appended_fields_fit_the_existing_grid():
     """Schemas 10-12 appended 27, 2 and 4 bits without growing the strip. Schema 13's
     31-bit character key did not fit the 6 spare bits and added one row, deliberately;
-    schema 14's 16-bit world object fits the row that left."""
+    schema 14's 16-bit world object and 16-bit unit identity fit the row that left."""
     lay = layout()
     assert (lay["cols"], lay["rows"]) == (12, 10)
-    assert lay["payload_bits"] == 1153
-    assert lay["field_count"] == 129
+    assert lay["payload_bits"] == 1169
+    assert lay["field_count"] == 130
     assert sum(f.bits for f in SCHEMA_FIELDS[13]) == 1137, "schema 13 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073, "schema 9 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[10]) == 1100, "schema 10 is a preserved prefix"

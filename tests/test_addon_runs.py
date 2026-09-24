@@ -225,6 +225,16 @@ def test_inventory_identity_exact_copper_and_supply_counts_survive_lua_wire():
     assert values["bags.drink_id"] == 159 and values["bags.drink_count"] == 0
 
 
+def test_the_selected_units_identity_is_its_guid_not_its_name():
+    from jev.perceive.radio_frame import name_id
+
+    one = radio.unpack(payload(paint({"targetGuid": "0xF130000101000A2B"}))[:PAYLOAD_CELLS])
+    two = radio.unpack(payload(paint({"targetGuid": "0xF130000101000A2C"}))[:PAYLOAD_CELLS])
+    assert one["target.guid"] == name_id("0xF130000101000A2B")
+    assert one["target.guid"] != two["target.guid"], "two Kobold Workers are two units"
+    assert one["target.name_id"] == two["target.name_id"]
+
+
 def test_a_world_object_under_the_pointer_is_named_by_the_stock_tooltip():
     from jev.perceive.radio_frame import name_id
 

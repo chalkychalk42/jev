@@ -279,6 +279,8 @@ class Fight:
     _last_aim_at: float = field(default=0.0, init=False)
     last_hp: float | None = field(default=None, init=False)
     _selected_name_id: int | None = field(default=None, init=False)
+    # The selected unit's own identity, where the strip paints it (schema 14).
+    _selected_guid: int | None = field(default=None, init=False)
     _aim_code: FaceCode | None = field(default=None, init=False)
     # The selected unit's plate at the last facing look: where a corpse will lie.
     last_plate: Plate | None = field(default=None, init=False)
@@ -323,6 +325,7 @@ class Fight:
         self._damage_mark = None
         self._damage_seen = self._input_refused = False
         self._selected_name_id = None
+        self._selected_guid = None
         self._aim_code = None
         self.last_plate = None
         self.killed_name_id = None
@@ -398,6 +401,7 @@ class Fight:
                 return acquired
         else:
             self._selected_name_id = v.get("target.name_id")
+            self._selected_guid = v.get("target.guid")
             self._damage_mark = v.get("target.hp")
             self.selected_plate = None
         if not self.engage(v) and not self._fight_blind(v):
@@ -460,8 +464,13 @@ class Fight:
             # 20260924T013702-7f5692).
             risen = (isinstance(hp, (int, float)) and isinstance(self.last_hp, (int, float))
                      and hp - self.last_hp >= REPLACED_HP_RISE)
-            if risen or (self._selected_name_id is not None
-                         and v.get("target.name_id") != self._selected_name_id):
+            guid = v.get("target.guid")
+            if self._selected_guid is None:
+                self._selected_guid = guid
+            other = (guid is not None and self._selected_guid is not None
+                     and guid != self._selected_guid)
+            if risen or other or (self._selected_name_id is not None
+                                  and v.get("target.name_id") != self._selected_name_id):
                 if self._gained(v) or self._experience_follows():
                     self.killed_name_id = self._selected_name_id
                     return Fought.KILLED
@@ -674,6 +683,7 @@ class Fight:
         if (name_id is None or v.get("target.name_id") == name_id
                 or (defend and v.get("target.attacking_me") is True)):
             self._selected_name_id = v.get("target.name_id")
+            self._selected_guid = v.get("target.guid")
             self._damage_mark = hp
             return True
         # Not what we came for. Worth fighting only if it is already hitting us.
@@ -710,6 +720,7 @@ class Fight:
                     and not (defend and v.get("target.attacking_me") is True)):
                 continue
             self._selected_name_id = v.get("target.name_id")
+            self._selected_guid = v.get("target.guid")
             self._damage_mark = v.get("target.hp")
             self._ahead = True
             self._mark_offset = self._mark(before, v)

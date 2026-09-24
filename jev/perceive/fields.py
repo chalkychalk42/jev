@@ -500,6 +500,11 @@ FIELDS: tuple[Field, ...] = (
     Field("cursor.object_id", 16, Kind.UINT, "return CURSOR_OBJECT()",
           "name hash of the world object whose tooltip is fully shown under the pointer"),
 
+    # Which unit is selected, not only its name: the next Kobold Worker after a kill, at
+    # full health, had been indistinguishable from the one being fought.
+    Field("target.guid", 16, Kind.UINT, "return TARGET_GUID()",
+          "UnitGUID('target') hashed as names are; unknown with nothing selected"),
+
 )
 
 # --------------------------------------------------------------------------- layout
@@ -510,6 +515,9 @@ FIELDS: tuple[Field, ...] = (
 SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS[:121],
                  10: FIELDS[:125], 11: FIELDS[:126], 12: FIELDS[:127], 13: FIELDS[:128],
                  14: FIELDS}
+# Schema 14 is the last the 4-bit header can name (15 is its not-available code). It was
+# redefined once, within the hour it was installed on one client, to add `target.guid`;
+# the next field needs a revision number in the header first.
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 assert sum(f.bits for f in SCHEMA_FIELDS[8]) == 1059

@@ -212,9 +212,13 @@ def measured_effects(before: dict, after: dict) -> tuple[list[str], float]:
     # a name-only test never credited (run 20260923T191946-2b79ed).
     revived = (a.get("target.has") is True and a.get("target.hp") == 0
                and _number(b.get("target.hp")) and b.get("target.hp") > 0)
+    # The unit's own identity where the strip paints it: another Kobold Worker at full
+    # health is a new selection, which neither its name nor its health could show.
+    other = (a.get("target.guid") is not None and b.get("target.guid") is not None
+             and a.get("target.guid") != b.get("target.guid"))
     if selected and (wanted is None or b.get("target.name_id") == wanted) and (
             a.get("target.has") is False or a.get("target.name_id") != b.get("target.name_id")
-            or revived):
+            or revived or other):
         effects.append("selected")
     if a.get("target.has") is True and b.get("target.has") is False:
         effects.append("target_cleared")
