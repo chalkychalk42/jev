@@ -10,8 +10,9 @@ database, like the vendor and gear catalogs:
 - `offers`: per trainer, the spells it teaches - the spell learned (a trainer spell whose
   effect is "learn spell" teaches its trigger spell: Judgement is taught by 10321), the
   level and the price;
-- `spells`: for every spell taught, and every spell a class starts with on its bar, what
-  it is: its name and rank, and a **role** read from what it does.
+- `spells`: for every spell taught (all of a trainer spell's "learn spell" effects), every
+  spell a class starts with on its bar, and every spell that replaces one of those on the
+  bar when learned, what it is: its name and rank, and a **role** read from what it does.
 
 Roles, from the spell's own data, never from its name:
 
@@ -161,6 +162,36 @@ def _gossip(db: sqlite3.Connection, menu: int) -> str | None:
     return row[0] if row and row[0] else None
 
 
+def _learned(db: sqlite3.Connection, spell: int) -> list[int]:
+    """What a trainer's spell teaches: itself, or every spell its "learn spell" effects
+    name. Judgement's (10321) teaches Judgement and a Seal of Righteousness (21084) that
+    replaces the one on the bar."""
+    row = db.execute("select Effect1, EffectTriggerSpell1, Effect2, EffectTriggerSpell2, "
+                     "Effect3, EffectTriggerSpell3 from world_spell_template where Id=?",
+                     (spell,)).fetchone()
+    if row is None:
+        return [spell]
+    taught = [trigger for effect, trigger in zip(row[::2], row[1::2], strict=True)
+              if effect == EFFECT_LEARN_SPELL and trigger]
+    return taught or [spell]
+
+
+def _successors(db: sqlite3.Connection, spells: set[int]) -> set[int]:
+    """The spells that replace these on a bar when learned (the skill line's successor,
+    SkillLineAbility's forward spell), and theirs in turn."""
+    out, frontier = set(spells), set(spells)
+    while frontier:
+        found = set()
+        for spell in frontier:
+            for (forward,) in db.execute("select c8 from dbc_SkillLineAbility where c2=? "
+                                         "and c8>0", (spell,)):
+                if forward not in out:
+                    found.add(forward)
+        out |= found
+        frontier = found
+    return out
+
+
 def generate(db: sqlite3.Connection) -> dict:
     trainers, offers, taught = [], {}, set()
     for entry, name, faction, klass, template, menu in db.execute(
@@ -184,12 +215,9 @@ def generate(db: sqlite3.Connection) -> dict:
                     "where entry=? and condition_id=0 order by reqlevel, spell", (owner,)):
                 if skill:
                     continue                      # a profession's recipe, not a class spell
-                teach = db.execute("select Effect1, EffectTriggerSpell1 from "
-                                   "world_spell_template where Id=?", (spell,)).fetchone()
-                learned = (teach[1] if teach and teach[0] == EFFECT_LEARN_SPELL and teach[1]
-                           else spell)
-                rows.append({"spell": learned, "level": level, "cost": cost})
-                taught.add(learned)
+                learned = _learned(db, spell)
+                rows.append({"spell": learned[0], "level": level, "cost": cost})
+                taught.update(learned)
             offers[key] = rows
         for map_id, x, y, z in spawns:
             trainers.append({"entry": entry, "name": name, "class": klass, "sides": sides,
@@ -198,7 +226,7 @@ def generate(db: sqlite3.Connection) -> dict:
     starting = {row[0] for row in db.execute(
         "select distinct action from world_playercreateinfo_action where type=0")}
     spells = {}
-    for spell_id in sorted(taught | starting):
+    for spell_id in sorted(_successors(db, taught | starting)):
         facts = spell_facts(db, spell_id)
         if facts is not None:
             spells[str(spell_id)] = facts

@@ -1840,3 +1840,11 @@ def test_below_a_quarter_the_heal_comes_behind_its_save_however_close_the_kill(c
     assert f._finishes_first(hurt) is False
     f._rotate(hurt)
     assert hid.taps == ["7"], "Divine Protection first, then the heal"
+
+
+def test_a_spell_the_catalog_does_not_know_keeps_its_slot_s_starting_row():
+    from jev.world.combat import from_bar
+
+    bar = {**TRAINED_BAR, 2: 999999}
+    rows = {a.slot: (a.name, a.role) for a in from_bar(bar, for_class(2, 1)).abilities}
+    assert rows[2] == ("Seal of Righteousness", Role.BUFF)

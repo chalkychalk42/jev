@@ -190,6 +190,11 @@ def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatPr
             continue
         facts = spell(held)
         if facts is None:
+            # A spell the catalog does not know keeps what the base profile says of its
+            # slot: the Seal of Righteousness that learning Judgement put in the starting
+            # seal's place (21084 for 20154) went unpressed a fight, and Judgement with it.
+            if slot in by_slot:
+                rows.append(by_slot[slot])
             continue
         lasting = facts.role in ("long_buff", "aura")
         started = by_name.get(facts.name)

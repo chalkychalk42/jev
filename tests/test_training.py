@@ -105,3 +105,11 @@ def test_a_second_copy_on_the_bar_makes_room_for_a_new_spell():
     plan = placements(bar, known)
     assert [(p.spell_id, p.slot, p.replaces) for p in plan] == [
         (498, 8, 0), (853, 9, 0), (633, 6, 465)]
+
+
+def test_every_spell_a_trainer_spell_teaches_is_known_with_its_successors():
+    """Judgement's trainer spell teaches Judgement and a Seal of Righteousness (21084) that
+    the client put in the starting seal's place on the bar (session 62)."""
+    seal = spell(21084)
+    assert seal is not None and seal.name == "Seal of Righteousness" and seal.role == "short_buff"
+    assert spell(10290) is not None and spell(10290).role == "aura"   # Devotion Aura 2
