@@ -2558,3 +2558,32 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
 - Session 86 failed at start ("radio or complete quest log unavailable") right after
   read-only observer runs on the fresh login; session 87 a minute later ran normally.
 - Testvvi: level 10, on Red Linen Goods; home Goldshire.
+
+## 2026-09-25 00:10 — nine-hour session, hour one: the desk, the corpus, four detours
+
+- **The bot pauses for a person at the desk** (V130, live from session 90). Measured
+  first: the bot's own input moves Windows' last-input time (67 times in 45 s of play) and
+  a held key does not repeat it, so every `SendInput` is stamped and other input is a
+  person's. One stray input 391 ms after the bot's own, then nothing for minutes with
+  nobody at the desk, paused session 91 mid-fight and the character died; a person is now
+  two such inputs within ten seconds, and each one is logged.
+- **The motor corpus survives new routines and spells** (V131). The controls manifest
+  changed five times in two days and each change restarted every capability; records now
+  join when their action means the same under both manifests. Live at 00:04: acquire
+  trains on 73 runs (85 qualified examples; 2 before), rest on 53 (133; 7 before). Both
+  still cover 0 of 21 held-out examples - acquire's labels are screen pixels, rest's are
+  ambiguous in state - so W6 needs features, not data, for those two.
+- **Session 90 lost five minutes to three bugs, all fixed:** the bag service sold to
+  Goldshire's warlock trainer in the inn cellar (merchants now ranked by their planned
+  walk: the forge 571 yards against the cellar's 818, V134); the quest accept for Marshal
+  Dughan spent its 60 s walking out of that cellar (a walk inside an accept or hand-in is
+  no longer charged to it, V133); and a fight that lost its target counted as an attempt
+  at the accept, so "quest not offered" sent the character 1,558 yards to a grind and back
+  (only the step's own work counts, V132).
+- **The Jasperlode Mine** was scouted in session 93, after about four minutes wedged in
+  its tunnels in session 92 (24 stuck events): the follower is weak in tight corridors.
+- **A/B, hour one:** tutor 4,022 XP/h over 0.5 h (sessions 89, 92); hybrid's two sessions
+  are left out (`session_report.py --skip 90 91`), each spoiled by a bug fixed since.
+  Tutor calls: 15 an hour in hybrid, 90 in teach.
+- The canary integration test no longer times its fake tutor with real sleeps; it failed
+  under load. Testvvi: level 11 at 14%, 18 silver, handing in The Jasperlode Mine.

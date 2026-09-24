@@ -234,6 +234,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--since", type=int, default=88, help="first session number")
     parser.add_argument("--compare", action="store_true", help="totals per arm")
+    parser.add_argument("--skip", type=int, nargs="*", default=[],
+                        help="sessions left out of --compare, e.g. ones a fixed bug spoiled")
     parser.add_argument("--csv", type=Path, help="write every session as a CSV row")
     parser.add_argument("--motor", action="store_true",
                         help="count qualified motor examples (reads the learning store)")
@@ -261,7 +263,7 @@ def main(argv=None) -> int:
                 row["top_skills"] = ";".join(f"{k}:{v}" for k, v in list(s.skills.items())[:4])
                 writer.writerow(row)
     if args.compare:
-        for row in compare(sessions):
+        for row in compare([s for s in sessions if s.number not in args.skip]):
             print(json.dumps(row))
         return 0
     print(f"{'#':>4} {'arm':12} {'min':>5} {'lvl':>5} {'xp':>6} {'xp/h':>6} {'kill':>4} {'die':>3} "
