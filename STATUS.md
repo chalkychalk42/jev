@@ -2115,3 +2115,30 @@ The real limit stays: an untrained paladin. No Divine Protection, Judgement or a
 level 6 wolves at once are a loss. See the trainer sketch below.
 
 NEXT: 54's hand-in, then quest 18 back in Northshire; a live Spirit Healer rise; heals held.
+
+### Trainer sketch (for the operator: approve, change or refuse)
+
+Why: every death tonight after the fixes above is two mobs at once on a paladin with Seal of
+Righteousness and Holy Light alone. A level 6 paladin should have Devotion Aura, Blessing of
+Might, Judgement and Divine Protection. Roughly 3-4 hours with live checks, so not started
+unasked. Everything below is HID input; the addon only paints, and nothing is typed.
+
+1. Which trainer: the class's own, from the world database (paladin: Brother Sammuel in
+   Northshire, Brother Wilhelm in Goldshire). The route's four `train` nodes are other
+   classes' trainers, picked by NPC flags (ROADMAP item 7).
+2. Open: right-click, then choose the gossip line by hash - "I would like to train further
+   in the ways of the Light." The same gossip also offers "I wish to unlearn my talents.",
+   so position is never trusted. `ui.trainer` already paints the frame.
+3. Buy: add `ClassTrainerTrainButton` to the addon's advance buttons (no new field). Each
+   click buys the selected service and the client selects the next learnable one; stop when
+   `bags.money_copper` stops falling. New ranks replace the old ones on the bars by
+   themselves.
+4. Put new spells on the bar: open the spellbook and drag each unplaced spell onto the next
+   empty main-bar slot. Needs the strip to paint unplaced spellbook buttons (and a tab
+   holding one) plus the first empty slot. Either the list and advance fields carry them
+   while the spellbook alone is open (no new fields), or the schema header gets its
+   revision number first (it is used up at 14). **Your call.**
+5. Use them: the profile generator adds trained rows in designated slots - an aura kept up,
+   a blessing kept up, Judgement on its cooldown, Divine Protection then Holy Light under
+   20%. A row whose slot is empty is already skipped. Each drop is checked against the
+   slot's usable bit before the next one.
