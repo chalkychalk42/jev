@@ -294,6 +294,39 @@ def test_new_stop_file_uses_termination_cleanup_without_screenshots(tmp_path, mo
     assert stop.exists()
 
 
+def test_a_stop_waits_out_a_fight_in_progress(tmp_path, monkeypatch, capsys):
+    """Stopped mid-fight at 25% health, the character stood idle through the restart and
+    died (run 20260924T075209-e0395d)."""
+    from types import SimpleNamespace
+
+    graph = route_file(tmp_path)
+    _client, _events = fake_live(monkeypatch, tmp_path)
+    stop = tmp_path / "STOP"
+    base = cli.Supervisor
+    fighting = SimpleNamespace(vitals=SimpleNamespace(combat=True, dead=False, ghost=False))
+    calm = SimpleNamespace(vitals=SimpleNamespace(combat=False, dead=False, ghost=False))
+    seen = []
+
+    class StoppingSupervisor(base):
+        def __init__(self, *args, housekeeping, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.housekeeping = housekeeping
+
+        def run(self, *args, **kwargs):
+            stop.touch()
+            self.housekeeping(fighting)
+            seen.append("waited out the fight")
+            self.housekeeping(calm)
+            raise AssertionError("stop did not interrupt the live loop once calm")
+
+    monkeypatch.setattr(cli, "Supervisor", StoppingSupervisor)
+    monkeypatch.setattr(cli, "Screenshots", Mock(side_effect=AssertionError("screenshots not requested")))
+    assert cli.main(["--graph", str(graph), "--run-for", "1", "--stop-file", str(stop),
+                     "--runs-dir", str(tmp_path / "runs")]) == 130
+    assert seen == ["waited out the fight"]
+    assert "stopping once this fight is over" in capsys.readouterr().out
+
+
 def test_explicit_learning_store_does_not_resolve_platform_default(tmp_path, monkeypatch, capsys):
     graph = route_file(tmp_path)
     monkeypatch.setattr(cli, "ROOT", tmp_path)

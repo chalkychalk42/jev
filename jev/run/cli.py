@@ -8,6 +8,7 @@ import json
 import math
 import re
 import signal
+import time
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -33,6 +34,8 @@ from jev.run.watchdog import Watchdog, reconnect_client
 from jev.world.state_v1 import StepKind
 
 ROOT = Path(__file__).resolve().parents[2]
+# How long an operator stop waits for a fight in progress to end before stopping anyway.
+STOP_COMBAT_GRACE_S = 90.0
 
 
 @contextmanager
@@ -300,7 +303,23 @@ def _live(args, graph) -> int:
                             reconnect=(lambda checkpoint: body.reconnect(checkpoint,
                                                                          env_file=args.env_file))
                             if args.reconnect else None)
+        stop_seen = []
+
         def housekeeping(state):
+            # An operator stop waits out a fight, up to `STOP_COMBAT_GRACE_S`: a session
+            # stopped at 25% health mid-fight left the character standing idle through the
+            # restart, and it died (run 20260924T075209-e0395d).
+            if args.stop_file is not None and args.stop_file.exists():
+                now = time.monotonic()
+                if not stop_seen:
+                    stop_seen.append(now)
+                fighting = (state is not None and state.vitals.combat is True
+                            and state.vitals.dead is not True and state.vitals.ghost is not True)
+                if fighting and now - stop_seen[0] < STOP_COMBAT_GRACE_S:
+                    if len(stop_seen) == 1:
+                        stop_seen.append(now)
+                        print("operator stop file observed; stopping once this fight is over")
+                    return
             operator_checkpoint()
             if screenshots is not None and screenshots.error:
                 supervisor.failure = screenshots.error
