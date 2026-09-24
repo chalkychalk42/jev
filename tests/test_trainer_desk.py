@@ -186,3 +186,12 @@ def test_an_addon_without_the_censuses_is_blind():
     placer = Spellbook(book, lambda: {"vitals.combat": False}, clock=lambda: book.now,
                        sleep=book.sleep)
     assert placer.place([Placement(465, 4)]) is Placed.BLIND
+
+
+def test_something_already_on_the_cursor_is_never_dropped():
+    """An item dropped on open world asks to be destroyed: not this routine's to drop."""
+    book = Book()
+    book.holding = 2070
+    placer = book.book()
+    assert placer.place([Placement(465, 4)]) is Placed.HOLDING
+    assert book.events == [] and book.holding == 2070 and book.keys == []

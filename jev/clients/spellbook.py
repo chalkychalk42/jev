@@ -86,7 +86,9 @@ class Spellbook:
         try:
             values = self._safe(self.read())
             if values.get("cursor.holding") is True:
-                self._drop_held()
+                # Not this routine's to drop: an item dropped on open world asks to be
+                # destroyed. Only the rank a swap hands back is dropped, below.
+                raise _Stop(Placed.HOLDING, "the cursor already holds something")
             opened = self._open()
             for placement in plan:
                 self._place(placement)
