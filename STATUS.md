@@ -2142,3 +2142,38 @@ unasked. Everything below is HID input; the addon only paints, and nothing is ty
    a blessing kept up, Judgement on its cooldown, Divine Protection then Holy Light under
    20%. A row whose slot is empty is already skipped. Each drop is checked against the
    slot's usable bit before the next one.
+
+## 2026-09-24 05:55 — overnight debrief 7: the Spirit Healer rises, and the fights that cannot be won
+
+Sessions 31-33. Testvvi: level 7 (quest 54 handed in at Goldshire), repaired, and quest 18
+(Brotherhood of Thieves) accepted; now hunting Defias Thugs in the Northshire vineyard.
+
+Verified live since debrief 6:
+- the Spirit Healer raises the ghost (V94): "up at the Spirit Healer; hearthstone: home";
+- every body reclaimed short of it (V94): session 31 got up 34 yards off and won;
+- heals held while the target dies first (V96): ten `heal.held` in session 32, a Forest
+  Spider at 6% killed instead of healed at;
+- loot onto a stack counted (V97): "took - an item onto a stack";
+- looted bags equipped at full bags (e89a814): slots 16 -> 22 -> 28.
+
+Fixed, general (offline-tested, live next):
+- a cast now holds the fight's evidence clocks still (V98): each Holy Light had aged the last
+  hit past the re-aim window, and the fight stepped, levelled and turned at a wolf already in
+  melee - eleven seconds without a swing after one heal;
+- a leg whose end comes no closer in 12 s is stuck, moving or not (V99): the character walked
+  up a hillside and slid back for 147 s on the way to Deputy Willem, and quest 18's accept
+  failed on its clock into the level 5-7 wolves;
+- experience is a grind teaching episode's progress (V100): kills went uncounted when the
+  client cleared the selection at the kill; one episode ran 872 s through several and ended
+  "stalled", and acquire gained 2 examples in six sessions;
+- an attacker that bites and cannot be hit is drawn out: back off, then turn round and run
+  clear (V101). A Mangy Wolf below a tree's roots, the character up on them, 3D melee reach
+  never met: four "unreachable" fights and one death.
+
+Deaths since debrief 6: three, all at the level 5-7 wolf camp - the tree above, and three
+attackers at once on the walk to a repairer. Durability went to 0; the hearth and repair
+recovered it.
+
+The limit is unchanged and now measured: at 26% health against one level 6 wolf, Holy Light
+(rank 1, five to six seconds a cast under pushback) left the wolf untouched for 22 s; the
+fight was a stalemate its six heals only just survived. Rank 2 alone doubles each heal.
