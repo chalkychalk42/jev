@@ -1403,7 +1403,9 @@ def test_an_attacker_in_melee_whose_plate_cannot_be_proved_is_fought_by_the_clie
     """Two Defias Thugs side by side: every hover below the selected one's plate landed on
     the other, and three fights in a row gave up "not visible" while the pair beat the
     character to death (run 20260924T002817-cee9c2). Something hitting us in melee is in
-    reach; the swing goes on, and "facing the wrong way" turns the character round."""
+    reach; the swing goes on, and "facing the wrong way" turns the character a quarter."""
+    from jev.clients.fight import TURN_RATE_SEED
+
     hit = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": True,
            "target.hp": 0.8, "ui.error_count": 3, "ui.error_last": 0, "bars.attacking": True}
     behind = {**hit, "ui.error_count": 4, "ui.error_last": 3}          # 3 = not_facing
@@ -1412,8 +1414,26 @@ def test_an_attacker_in_melee_whose_plate_cannot_be_proved_is_fought_by_the_clie
     f.targeting.face = NOT_VISIBLE
     outcome = f.run(1161, timeout_s=10.0)
     assert outcome is Fought.KILLED, f.detail
-    turns = [h for h in f.hid.holds if h[0] == "d" and h[1] > 1.0]
-    assert len(turns) == 1, "did not turn round on 'facing the wrong way'"
+    quarter = (math.pi / 2) / TURN_RATE_SEED
+    turns = [h for h in f.hid.holds if h[0] == "d" and h[1] == pytest.approx(quarter)]
+    assert len(turns) == 1, "did not turn on 'facing the wrong way'"
+
+
+def test_blind_melee_turns_quarters_the_same_way_until_the_errors_stop(combat_clock):
+    """A Mangy Wolf at the character's side stayed at its side through eight half turns,
+    forty seconds at 5% health (run 20260924T082110-0f56c6)."""
+    from jev.clients.fight import TURN_RATE_SEED
+
+    hit = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": True,
+           "target.hp": 0.05, "ui.error_count": 3, "ui.error_last": 0, "bars.attacking": True}
+    wrong = [{**hit, "ui.error_count": 4 + i, "ui.error_last": 3} for i in range(3)]
+    dead = {**wrong[-1], "target.hp": 0.0}
+    f = _fight([hit, hit, wrong[0], wrong[1], wrong[2], dead])
+    f.targeting.face = NOT_VISIBLE
+    assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
+    quarter = (math.pi / 2) / TURN_RATE_SEED
+    turns = [h for h in f.hid.holds if h[0] in ("a", "d") and h[1] == pytest.approx(quarter)]
+    assert len(turns) == 3 and {k for k, _ in turns} == {"d"}, "quarters, the same way"
 
 
 def test_an_attacker_whose_plate_never_settles_on_the_centre_is_fought_where_it_stands(

@@ -584,8 +584,11 @@ class Fight:
                 self._blind_melee = False          # it left reach: aim by its plate again
             if self._blind_melee:
                 # The client says where it is: a swing at something behind is "facing the
-                # wrong way", and melee reaches the whole front half, so round is enough.
-                if wrong_way and not self._turn_round():
+                # wrong way", and melee reaches the whole front half. A quarter turn, always
+                # the same way, not round: a Mangy Wolf at the character's side stayed at
+                # its side through eight half turns, forty seconds at 5% health, until the
+                # character died (run 20260924T082110-0f56c6). Four quarters face anything.
+                if wrong_way and not self._turn_quarter():
                     return Fought.REFUSED
             elif in_reach:
                 # Stand and swing. Turn back only on evidence the swings are not landing.
@@ -1184,6 +1187,16 @@ class Fight:
         self._blind_melee = True
         self._last_aim_at = time.monotonic()
         return self._ensure_attacking()
+
+    def _turn_quarter(self) -> bool:
+        turn = getattr(self.hid, "TURN_RIGHT", "d")
+        seconds = (math.pi / 2) / TURN_RATE_SEED
+        event("engage.turn_quarter", data={"key": turn, "seconds": round(seconds, 3)})
+        if not self.hid.hold(turn, seconds, exact=True):
+            self._input_refused = True
+            self.detail = "turn input refused"
+            return False
+        return True
 
     def _turn_round(self) -> bool:
         turn = getattr(self.hid, "TURN_RIGHT", "d")
