@@ -50,6 +50,14 @@ SPIRIT_HEALER = "Spirit Healer"
 GRAVEYARD_REACH = 0.004
 
 
+# Looks at the body's popup, a second apart, before giving up on getting up there. The
+# client makes a ghost wait before it may reclaim a body it died beside again, longer with
+# each death: twenty seconds gave up at the body five times in two sessions and walked the
+# ghost 400 yards to a Spirit Healer and back each time (runs 20260924T035309-97796e and
+# ...041014-a9781c). The corpse run's own limit is 420 s.
+CORPSE_WAIT_TRIES = 150
+
+
 class Recovered(StrEnum):
     RELEASED = "released"        # ghost positively observed after releasing
     NOT_RELEASED = "not_released"
@@ -98,7 +106,8 @@ class Recover:
 
     @traced("recovery")
     def run(self, corpse: tuple[float, float] | None = None, *,
-            settle_s: float = 3.0, tries: int = 20, release_only: bool = False) -> Recovered:
+            settle_s: float = 3.0, tries: int = CORPSE_WAIT_TRIES,
+            release_only: bool = False) -> Recovered:
         """Release, walk back, and get up. Reports where it stopped.
 
         `corpse` is for the case this skill cannot recover from on its own: a character
