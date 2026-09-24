@@ -161,9 +161,10 @@ def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
                 max_yards: float = MAX_TRAINER_YARDS) -> Trainer | None:
     """The trainer worth visiting now, or `None`.
 
-    One that teaches something the character can afford, the most of it first, and the
-    nearer of two that teach as much. Every input unknown is `None`: an unread spellbook
-    is not an empty one, and would send the character to train what it knows.
+    One that teaches something the character can afford, the most the purse can buy
+    there first (counted cheapest first), and the nearer of two that sell as many. Every
+    input unknown is `None`: an unread spellbook is not an empty one, and would send the
+    character to train what it knows.
     """
     if None in (class_id, race_id, level, known, money, map_id, here):
         return None
@@ -173,10 +174,14 @@ def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
         yards = math.dist(trainer.world[:2], here)
         if yards > max_yards:
             continue
-        affordable = [o for o in learnable(trainer, level, known) if o.cost <= money]
-        if not affordable:
+        bought, left = 0, money
+        for offer in sorted(learnable(trainer, level, known), key=lambda o: o.cost):
+            if offer.cost > left:
+                break
+            bought, left = bought + 1, left - offer.cost
+        if not bought:
             continue
-        key = (-len(affordable), yards)
+        key = (-bought, yards)
         if best_key is None or key < best_key:
             best, best_key = trainer, key
     return best

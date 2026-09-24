@@ -50,6 +50,9 @@ def test_the_trainer_teaching_most_of_what_is_affordable_is_chosen():
     assert trainer_due(2, 1, 8, everything, 626, 0, NORTHSHIRE) is None
     assert trainer_due(2, 1, 8, None, 626, 0, NORTHSHIRE) is None     # spellbook unread
     assert trainer_due(2, 1, 8, known, 626, 0, NORTHSHIRE, max_yards=100).name == "Brother Sammuel"
+    # What the purse buys, not what it could buy one at a time: 510 copper is all six of
+    # Brother Sammuel's and six of Brother Wilhelm's nine, so the nearer one.
+    assert trainer_due(2, 1, 8, known, 510, 0, NORTHSHIRE).name == "Brother Sammuel"
 
 
 def test_a_new_rank_goes_where_the_old_one_is_and_new_spells_on_free_slots():
