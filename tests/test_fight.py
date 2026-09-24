@@ -1430,6 +1430,20 @@ def test_an_attacker_whose_plate_never_settles_on_the_centre_is_fought_where_it_
     assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
 
 
+def test_facing_the_wrong_way_with_the_plate_on_the_centre_line_turns_round(combat_clock):
+    """A unit directly behind projects onto the centre line; the fight walked away from a
+    Mangy Wolf, closing, until the character died (run 20260924T035309-97796e)."""
+    hit = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": True,
+           "target.hp": 0.4, "ui.error_count": 3, "ui.error_last": 0, "bars.attacking": True}
+    behind = {**hit, "ui.error_count": 4, "ui.error_last": 3}          # 3 = not_facing
+    dead = {**behind, "target.hp": 0.0}
+    f = _fight([hit, hit, behind, behind, dead])
+    f.targeting.face = FACED
+    assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
+    turns = [h for h in f.hid.holds if h[0] == "d" and h[1] > 1.0]
+    assert len(turns) == 1, "did not turn round on 'facing the wrong way'"
+
+
 def test_an_unproved_plate_is_still_not_fought_blind_out_of_melee():
     far = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": False}
     f = _fight([far])

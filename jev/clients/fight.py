@@ -507,6 +507,17 @@ class Fight:
             stalled = now - max(self._damage_at, self._last_aim_at,
                                 self._reach_at or 0.0) > REAIM_AFTER_S
             wrong_way = self._new_error(v) == "not_facing"
+            if wrong_way and not self._blind_melee and self._aim_code is FaceCode.FACED:
+                # "Facing the wrong way" is the client saying the unit is in reach and
+                # behind, while its plate stands on the centre line: a unit directly behind
+                # the character projects there as surely as one ahead. Trusting the plate,
+                # the fight walked away from a Mangy Wolf, closing, until it killed the
+                # character (run 20260924T035309-97796e).
+                if not self._turn_round():
+                    return Fought.REFUSED
+                self._reach_at = time.monotonic()
+                self._aim_code = None              # the next aim proves the plate afresh
+                wrong_way = False
             if self._blind_melee and v.get("target.in_melee") is not True:
                 self._blind_melee = False          # it left reach: aim by its plate again
             if self._blind_melee:
