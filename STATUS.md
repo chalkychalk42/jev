@@ -2323,3 +2323,18 @@ seconds. Either changes what the learner is taught from, so it is your call.
 09:00: V114 (corpses released after a "nothing" loot) is in. The wolf rib ended on its
 two-deaths rule - two more multi-wolf deaths at level 8, the untrained paladin's limit - and
 the route is on quest 6 (Garrick Padfoot) at last.
+
+## 2026-09-24 09:20 — debrief 11: dressed at last
+
+Testvvi had fought all night with its Worn Mace (1-3 damage) and starting clothes while its
+bags held quest rewards and loot it never put on. The bot equipped bags but never gear.
+Now, before a meal whenever the bags have changed, it puts on the best usable piece per
+slot from a catalog of this server's items, remembered per character (V115). First look,
+live: **8 of 8 upgrades** - Militia Hammer (3-6, nearly twice the damage per second),
+Pikeman Shield (55 armour), Loose Chain Gloves (48), Outfitter Belt, Ancestral Cloak,
+shoes, a robe and pants: well over a hundred armour. Every fight lost tonight was fought
+without them.
+
+Also since debrief 10: looted corpses are released from the selection, so the tutor stops
+trying to loot them (V114; 43 attempts, none taking anything). Quest 6 accepted; Garrick
+Padfoot's camp next.
