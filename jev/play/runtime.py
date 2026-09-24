@@ -128,6 +128,8 @@ class PlayingBody:
         self.available = spine.available
         self._arm = None
         self.routine_clock: float | None = None
+        # The skill the tutor has handed to a routine right now, if any.
+        self._delegating: str | None = None
         self._checkpoint = lambda: None
         self._closed = False
         self.journal = PlayJournal(recorder.dir, run_id=recorder.run_id)
@@ -177,6 +179,14 @@ class PlayingBody:
     @property
     def travelling(self):
         return self.spine.travelling
+
+    @property
+    def tutor_exposed(self) -> bool:
+        """The tutor holds the objective and nothing is fighting back: no delegated fight
+        is running. Combat must not wait on a tutor's decision (V35): a level 7 paladin
+        lost 51% to 0 in 30 s to a Defias Thug it had not selected, while the tutor played
+        the hunt it was on (run 20260924T055951-0c4439)."""
+        return self.routine_clock == math.inf and self._delegating != "COMBAT_PROFILE"
 
     @property
     def policy_context(self):
@@ -303,9 +313,11 @@ class PlayingBody:
             return Result(SkillOutcome.SUCCEEDED if ok else SkillOutcome.ABORTED,
                           "current objective destination", "arrived" if ok else "unreachable")
         delegated = replace(arm, decision=decision, rule="play:trusted_skill")
+        self._delegating = action.name
         try:
             return self.spine.execute(delegated, state, self._checkpoint)
         finally:
+            self._delegating = None
             self.spine.arm = arm
 
     def poll(self, state):

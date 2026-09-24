@@ -158,13 +158,15 @@ class Worker:
 def interruption(arm: Armed, state: State, *, travelling: bool = False,
                  completion_observed: bool = False, handles_modal: bool = False,
                  falling_s: float = FALL_GRACE_S,
-                 routine_age_s: float | None = None) -> str | None:
+                 routine_age_s: float | None = None, exposed: bool = False) -> str | None:
     """Why the armed skill must stop now, or `None`.
 
     `falling_s` is how long falling has been observed continuously; a caller that does
     not track it gets the conservative answer, a fall that has already lasted long enough.
     `routine_age_s` is how long the body's current routine has run when the body keeps
     that clock itself (see `Body.routine_clock`); otherwise the arm's age is used.
+    `exposed` is a tutor holding the objective with no fight of its own running: a fighting
+    skill it plays is no defence, and combat takes the floor as it does from a walk.
     """
     skill = arm.decision.skill
     if not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5:
@@ -179,7 +181,7 @@ def interruption(arm: Armed, state: State, *, travelling: bool = False,
     fighting = skill in {"COMBAT_PROFILE", "APPROACH_TARGET", "ACQUIRE_TARGET", "GRIND_UNTIL", "LOOT"}
     modal_cleanup = (handles_modal and skill == "ABORT_WAIT"
                      and (state.ui.modal is True or completion_observed))
-    if (state.vitals.combat is True and (travelling or not fighting)
+    if (state.vitals.combat is True and (travelling or exposed or not fighting)
             and not recovery and not modal_cleanup):
         return "combat interrupted the leg or service"
     if arm.step_id != state.guide.step_id and not recovery and not completion_observed:
@@ -343,7 +345,8 @@ class Supervisor:
             reason = interruption(self.worker.arm, state, travelling=self.body.travelling,
                                   completion_observed=self.worker.completion_observed,
                                   handles_modal=getattr(self.body, "handles_modal", False),
-                                  falling_s=falling_s, routine_age_s=routine_age)
+                                  falling_s=falling_s, routine_age_s=routine_age,
+                                  exposed=getattr(self.body, "tutor_exposed", False) is True)
             # Hunt yields between pulls, after looting. Interrupting it as combat drops
             # would leave the killed corpse behind. A standalone travel leg can yield now.
             if reason is None and self.worker.arm.decision.skill == "TRAVEL_TO":

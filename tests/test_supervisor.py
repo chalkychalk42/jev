@@ -596,3 +596,32 @@ def test_full_bags_with_nothing_to_sell_are_not_a_failed_attempt(tmp_path):
         assert rt.policy_context.bags_blocked
     finally:
         supervisor.close()
+
+
+def test_combat_takes_a_hunt_from_a_tutor_with_no_fight_of_its_own_running(tmp_path):
+    """A level 7 paladin lost 51% to 0 in 30 s to a Defias Thug it had not selected while
+    the tutor played the hunt (run 20260924T055951-0c4439): a fighting skill the tutor
+    holds is no defence."""
+    from dataclasses import replace
+
+    rt = runtime(tmp_path, [seen(vitals=Vitals(hp=0.5, combat=True))])
+    state = rt.tick()
+    hunt = replace(rt.armed, decision=rt.armed.decision.model_copy(update={"skill": "GRIND_UNTIL"}))
+    assert interruption(hunt, state) is None, "the scripted hunt fights for itself"
+    assert interruption(hunt, state, exposed=True) == "combat interrupted the leg or service"
+
+
+def test_a_tutor_is_exposed_only_while_it_holds_the_objective_without_a_fight():
+    import math
+
+    from jev.play.runtime import PlayingBody
+
+    rt = object.__new__(PlayingBody)
+    rt.routine_clock, rt._delegating = math.inf, None
+    assert rt.tutor_exposed
+    rt._delegating = "COMBAT_PROFILE"
+    assert not rt.tutor_exposed, "its own delegated fight is fighting back"
+    rt._delegating = "EAT_DRINK"
+    assert rt.tutor_exposed
+    rt.routine_clock, rt._delegating = 12.0, None
+    assert not rt.tutor_exposed, "a scripted routine holds it"
