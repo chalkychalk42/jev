@@ -395,3 +395,30 @@ def test_a_short_ribs_end_outlives_the_session(tmp_path):
                        start_step="rib", start_rejoin="turnin", start_rib_until=1234.5)
     rt.tick(choose=False)
     assert rt.tracker.memory.until == 1234.5
+
+
+def test_the_rest_of_a_quest_whose_accept_was_passed_over_is_skipped(tmp_path):
+    """Quest 16's accept failed twice and was passed over; its objective then stopped a
+    session on the quest's absence and would have cost two ribs and a walk to Gerard."""
+    from jev.guide.tracker import Event
+    from jev.guide.tracker import Verdict as TrackVerdict
+
+    guide = Graph.load("content/tbc/ally_human_1_12.json")
+    rt = ClientRuntime("c", guide, ScriptedSource([seen(0)]), Recorder(tmp_path))
+    accept = "alli_human_1_12_16_give_gerard_a_drink_accept"
+    rt.tracker.enter("alli_human_1_12_16_give_gerard_a_drink_do", seen(0))
+    missing = TrackVerdict(Event.FAIL, goto="alli_human_1_12_grind_elwynn_1_3",
+                           reason="quest_missing=None")
+    assert rt._past_abandoned_quest(missing) is None, "its accept was never passed over"
+    rt._retried.add(accept)
+    beyond = rt._past_abandoned_quest(missing)
+    assert beyond is not None and guide.get(beyond).quest_id != 16
+    rt._apply(missing, seen(1))
+    assert rt.tracker.step_id == beyond, "went to a rib instead of on"
+    out_of_attempts = TrackVerdict(Event.FAIL, goto="alli_human_1_12_grind_elwynn_1_3",
+                                   reason="GRIND_UNTIL out of attempts: quest absent from readable log")
+    rt.tracker.enter("alli_human_1_12_16_give_gerard_a_drink_turnin", seen(2))
+    assert rt._past_abandoned_quest(out_of_attempts) == beyond
+    timeout = TrackVerdict(Event.FAIL, goto="alli_human_1_12_grind_elwynn_1_3",
+                           reason="timeout_s=240.0")
+    assert rt._past_abandoned_quest(timeout) is None, "only the quest's absence skips it"

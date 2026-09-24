@@ -31,7 +31,7 @@ from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
-from jev.guide.objectives import progress, select_objective, target_progress
+from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.episode import SkillOutcome
@@ -440,7 +440,11 @@ class LiveBody:
             if selection.complete is True:
                 return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
             if selection.target is None:
-                code = "blind" if log is None else "unsupported"
+                # A quest not in the log is the route's to resolve (its accept was passed
+                # over, or never reached), not a configuration fault that stops the run:
+                # session 67 stopped on quest 16's objective with its accept passed over.
+                code = ("blind" if log is None else
+                        "quest_absent" if selection.reason == QUEST_ABSENT else "unsupported")
                 return Result(SkillOutcome.PREEMPTED if log is None else SkillOutcome.ABORTED,
                               selection.reason or "objective unavailable", code)
             destination = selection.target

@@ -298,6 +298,24 @@ class ClientRuntime:
             self._progress()
         return self.tracker.step_id != before
 
+    def _past_abandoned_quest(self, verdict) -> str | None:
+        """The first step after the current quest's, when the step failed on its quest's
+        absence and the quest's accept was passed over; else `None`."""
+        node = self.graph.get(self.tracker.step_id)
+        reason = verdict.reason or ""
+        if (node is None or node.quest_id is None or node.quest_id in self.completed
+                or node.kind not in (StepKind.QUEST_OBJECTIVE, StepKind.QUEST_TURNIN)
+                or not (reason.startswith("quest_missing") or "quest absent" in reason)):
+            return None
+        accepts = [n.id for n in self.graph.nodes
+                   if n.quest_id == node.quest_id and n.kind is StepKind.QUEST_ACCEPT]
+        if not accepts or not set(accepts) & self._retried:
+            return None
+        step = node
+        while step is not None and step.quest_id == node.quest_id and step.next:
+            step = self.graph.get(step.next[0])
+        return step.id if step is not None and step.quest_id != node.quest_id else None
+
     def _progress(self) -> None:
         """Hand the playhead to whoever keeps it."""
         self.on_progress(self.tracker.step_id, set(self.completed),
@@ -324,7 +342,14 @@ class ClientRuntime:
                     self.finished = True
             case Event.FAIL:
                 self.counters.fails += 1
-                if verdict.goto:
+                beyond = self._past_abandoned_quest(verdict)
+                if beyond is not None:
+                    # The rest of a quest whose accept was passed over: its objective and
+                    # hand-in cannot happen, and a rib cannot put the quest in the log.
+                    # Quest 16's accept failed twice, and its objective then stopped a
+                    # session and would have cost two ribs and a walk to its hand-in.
+                    self.tracker.enter(beyond, state)
+                elif verdict.goto:
                     # Remember where to come back to. A rib is shared by every step in its
                     # zone, so the graph cannot name the way back — only the caller knows.
                     # From a rib, the failed step itself, once: a turn-in that timed out

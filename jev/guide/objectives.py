@@ -67,13 +67,16 @@ def target_progress(log: tuple[Quest, ...] | None, quest_id: int | None,
                     complete=objective.done)
 
 
+QUEST_ABSENT = "quest absent from readable log"
+
+
 def select_objective(node: Node, log: tuple[Quest, ...] | None) -> Selection:
     """Choose the first *observed* unfinished source requirement, or explain why not."""
     if log is None:
         return Selection(reason="quest log unread")
     quest = next((q for q in log if q.quest_id == node.quest_id), None)
     if quest is None:
-        return Selection(reason="quest absent from readable log")
+        return Selection(reason=QUEST_ABSENT)
     if quest.complete is True:
         return Selection(complete=True)
     if not node.objective_targets:
