@@ -553,3 +553,14 @@ def test_a_quest_at_a_body_is_opened_by_its_tooltip_then_advanced_as_ever():
     assert result.outcome.value == "succeeded"
     assert events == [("open", name_id("A half-eaten body")), ("advance", 1, Goal.CLEARED)]
     b.client.approach.assert_called_once()
+
+
+def test_a_fight_says_the_corpse_is_looted_so_no_one_loots_it_again():
+    """The tutor went on clicking corpses the fight had already emptied."""
+    b = body(StepKind.QUEST_OBJECTIVE)
+    b.fight = SimpleNamespace(run=lambda name: Fought.KILLED, last_plate=None, killed_name_id=7,
+                              detail="selected plate on the centre line")
+    b.loot = SimpleNamespace(run=lambda **kw: Looted.TOOK, detail="3 copper")
+    result = b._fight(seen())
+    assert result.outcome is SkillOutcome.SUCCEEDED
+    assert "corpse looted: took - 3 copper" in result.detail

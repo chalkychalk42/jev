@@ -484,6 +484,10 @@ class LiveBody:
                                    name_id=self.fight.killed_name_id)
             if not looted.ok:
                 return self._result(looted, f"post-kill loot: {self.loot.detail}")
+            # Said, so whoever delegated the fight knows the corpse is done with: the tutor
+            # went on clicking corpses this had already emptied.
+            return self._result(outcome, f"{self.fight.detail}; corpse looted: "
+                                         f"{looted.value} - {self.loot.detail}")
         return self._result(outcome, self.fight.detail)
 
     def _face(self, state) -> Result:
