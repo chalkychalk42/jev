@@ -382,3 +382,17 @@ def test_an_objectives_clock_starts_again_on_each_kill():
     stalled = [tr.tick(_with_quest(float(t), have=5)).event for t in range(300, 400)]
     assert Event.FAIL in stalled, "sixty seconds with no kill still fails over"
     assert stalled.index(Event.FAIL) <= 11
+
+
+def test_a_rib_that_keeps_killing_the_character_is_left_for_its_way_back():
+    """Mangy Wolves killed a level 6 paladin three times in one session, each time back at
+    its body among them (run 20260924T035309-97796e)."""
+    tr = Tracker(_graph(), "rib")
+    tr.enter("rib", _s(0.0), rejoin_to="do")
+    assert tr.tick(_s(1.0)).event is not Event.ADVANCE
+    tr.memory.deaths = 1
+    assert tr.tick(_s(2.0)).event is not Event.ADVANCE, "one death is bad luck"
+    tr.memory.deaths = 2
+    verdict = tr.tick(_s(3.0))
+    assert verdict.event is Event.ADVANCE and verdict.goto == "do"
+    assert tr.tick(_s(4.0, vitals=Vitals(hp=0.0, dead=True, ghost=False))).event is Event.DEATH

@@ -26,6 +26,8 @@ from jev.world.state_v1 import State, StepKind
 # Getting closer to a step's position by this much (map fractions, about three and a half
 # yards in Elwynn) within this long is progress, and stops the step's clock.
 PROGRESS_STEP = 0.001
+# Deaths on a grind rib before it is left for the step it came from.
+RIB_DEATHS = 2
 PROGRESS_WINDOW_S = 2.0
 
 
@@ -215,6 +217,15 @@ class Tracker:
         if node.kind is StepKind.GRIND and age > node.timeout_s and self.memory.rejoin_to:
             return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
                            reason="rib timed out; rejoin the spine", off_route_s=off_route_s)
+        # Nor is a rib that keeps killing the character: ribs have no fail edges, their
+        # clock stops while dead, and the level 5-7 wolves killed a level 6 paladin three
+        # times in one session, each time back at its body among them (run
+        # 20260924T035309-97796e).
+        if (node.kind is StepKind.GRIND and self.memory.deaths >= RIB_DEATHS
+                and self.memory.rejoin_to):
+            return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
+                           reason=f"the rib killed the character {self.memory.deaths} times; "
+                                  "rejoin the spine", off_route_s=off_route_s)
 
         if off_route_s > self.off_route_grace_s:
             return Verdict(Event.OFF_ROUTE, reason=f"{off_route_s:.0f}s off route",
