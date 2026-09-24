@@ -2541,3 +2541,20 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
   exactly - dropping them covers 4 of 21 at precision 0.5, still short of the 90% and 50%
   gates. More data helps both; acquire likely needs relative features (which plate, not
   which pixel) before it can cover much. Not changed.
+
+## 2026-09-24 16:15 — flights, ready for Westfall
+
+- **Flights (V127):** the strip's schema 16 paints the flight master's map one node per
+  paint (name hash, here or somewhere to fly, its button). A node is known by the hash
+  painted as here where its flight master stands, remembered beside the playhead; an
+  unvisited flight master within 150 yards is visited (`DISCOVER_FLIGHT`), and a walk of
+  1,500 yards or more flies its long part when that saves a quarter of the time. The
+  addon still only paints (`TakeTaxiNode` is forbidden by test). Installed on the live
+  client at 16:10 (a graceful restart and login); nothing to fly from in Elwynn's quest
+  areas, so the first live use will be Thor at Sentinel Hill, then the Westfall-Redridge
+  crossings once Lakeshire has been visited.
+- Found while testing it: a bind or visit that failed was compared by step id, and a state
+  with no step yet matched the unset block - fixed for both routines.
+- Session 86 failed at start ("radio or complete quest log unavailable") right after
+  read-only observer runs on the fresh login; session 87 a minute later ran normally.
+- Testvvi: level 10, on Red Linen Goods; home Goldshire.
