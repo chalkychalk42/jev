@@ -1509,3 +1509,69 @@ def test_a_selection_that_becomes_another_unit_of_the_same_name_and_health_is_se
     unpaid.acquire = lambda name_id, **_: None
     unpaid.engage = lambda *_: True
     assert unpaid.run(1161) is Fought.LOST and "changed" in unpaid.detail
+
+
+def _race(f, now, looks, *, step=0.5, casting=()):
+    """Feed `f` one look per `step` seconds: (our health, target health) pairs."""
+    for i, (mine, theirs) in enumerate(looks):
+        now[0] += step
+        f._sample_race({**ALIVE, "vitals.hp": mine, "target.hp": theirs,
+                        "bars.casting": i in casting, "target.guid": 7})
+
+
+def test_a_target_two_swings_from_dead_is_finished_before_the_heal(combat_clock):
+    """Healed at 44% with its wolf at 18%; the wolf sat at 18% through two casts and the
+    character died with both wolves alive (run 20260924T050644-f9f9fa)."""
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    # Target 0.60 -> 0.20 over eight seconds of swinging; us 0.70 -> 0.38 over six.
+    looks = [(0.70 - 0.02 * i, 0.60 - 0.025 * i) for i in range(17)]
+    _race(f, combat_clock, looks)
+    hurt = {**ALIVE, "vitals.hp": 0.38, "target.hp": 0.18, "vitals.combat": True,
+            "vitals.power": 0.9, "vitals.power_max": 100, "target.guid": 7}
+    f._rotate(hurt)
+    assert "3" not in hid.taps, "stopped swinging to heal a fight it was about to win"
+
+
+def test_the_heal_still_comes_when_the_target_will_outlast_us(combat_clock):
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    looks = [(0.70 - 0.04 * i, 0.95 - 0.005 * i) for i in range(9)]
+    _race(f, combat_clock, looks)
+    hurt = {**ALIVE, "vitals.hp": 0.36, "target.hp": 0.90, "vitals.combat": True,
+            "vitals.power": 0.9, "vitals.power_max": 100, "target.guid": 7}
+    f._rotate(hurt)
+    assert hid.taps == ["3"]
+
+
+def test_time_spent_casting_is_not_counted_against_the_kill(combat_clock):
+    """A cast stops the swings: the target's health standing still through it says
+    nothing about how fast the swings kill."""
+    from jev.clients.fight import FINISH_EVIDENCE_S
+
+    f = _fight([ALIVE])
+    # Swinging: 0.50 -> 0.30 in four seconds. Then five seconds casting, target unmoved.
+    looks = [(0.60 - 0.01 * i, 0.50 - 0.025 * i) for i in range(9)]
+    looks += [(0.51 - 0.02 * i, 0.30) for i in range(10)]
+    _race(f, combat_clock, looks, casting=range(9, 19))
+    assert f._finishes_first({"vitals.hp": 0.33, "target.hp": 0.30}) is True
+    assert FINISH_EVIDENCE_S <= 4.0
+
+
+def test_no_heal_is_held_on_too_little_evidence_or_below_the_floor(combat_clock):
+    from jev.clients.fight import FINISH_FLOOR
+
+    f = _fight([ALIVE])
+    _race(f, combat_clock, [(0.50, 0.30), (0.45, 0.25)])
+    assert f._finishes_first({"vitals.hp": 0.40, "target.hp": 0.05}) is False, "one second"
+    _race(f, combat_clock, [(0.45 - 0.02 * i, 0.25 - 0.02 * i) for i in range(12)])
+    assert f._finishes_first({"vitals.hp": FINISH_FLOOR - 0.01, "target.hp": 0.01}) is False
+
+
+def test_a_new_selection_starts_the_race_again(combat_clock):
+    f = _fight([ALIVE])
+    _race(f, combat_clock, [(0.70 - 0.02 * i, 0.60 - 0.03 * i) for i in range(12)])
+    combat_clock[0] += 0.5
+    f._sample_race({**ALIVE, "vitals.hp": 0.45, "target.hp": 1.0, "target.guid": 8})
+    assert len(f._race) == 1
+    assert f._finishes_first({"vitals.hp": 0.45, "target.hp": 1.0}) is False

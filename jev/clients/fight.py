@@ -212,6 +212,19 @@ REAIM_AFTER_S = 3.5
 # Not a class rule. A warrior has no heal row to give up on.
 HEAL_GIVE_UP = 2
 
+# Hold the heal while the target will die this much sooner than the character would.
+#
+# Holy Light is a two and a half second cast that stops the swings, and pushback makes it
+# four. A level 6 paladin between two Mangy Wolves healed at 44% with its target at 18%,
+# two swings from dead; the target sat at 18% through two casts, the mana ran out, and it
+# died with both wolves alive (run 20260924T050644-f9f9fa). Killing one first halves what
+# the heal has to outpace. Rates only once each has this much evidence behind it, and
+# never below the floor, where there is no margin left to be wrong with.
+FINISH_MARGIN = 0.8
+FINISH_EVIDENCE_S = 3.0
+FINISH_WINDOW_S = 6.0
+FINISH_FLOOR = 0.15
+
 # Which key an action slot is. The default bindings run 1-9, then 0, then the two keys
 # left of Backspace — which is where a fresh character's food and water sit, so getting
 # 10-12 wrong is not academic.
@@ -313,6 +326,8 @@ class Fight:
     _input_refused: bool = field(default=False, init=False)
     detail: str = field(default="", init=False)
     _last_use: dict[int, float] = field(default_factory=dict, init=False)
+    # (time, our health, target health, casting, target guid), this fight: who dies first.
+    _race: list[tuple] = field(default_factory=list, init=False)
 
     # -- the skill -----------------------------------------------------------
 
@@ -327,6 +342,7 @@ class Fight:
             return Fought.REFUSED
         self._toggled = False
         self._pending_heal = None
+        self._race = []
         self._damage_mark = None
         self._damage_seen = self._input_refused = False
         self._selected_name_id = None
@@ -1105,6 +1121,7 @@ class Fight:
         the engine asks for a row with `role=heal` and presses it if the bars say it is
         ready, so a warrior is the same list with one fewer row and nothing changes.
         """
+        self._sample_race(values)
         if values.get("bars.casting") is True:
             return
         gcd = values.get("bars.gcd")
@@ -1136,7 +1153,8 @@ class Fight:
                 and self._pending_heal is None
                 and values.get("vitals.combat") is True
                 and hp is not None and hp < HEAL_IN_COMBAT
-                and self._has_mana_for(heal, values)):
+                and self._has_mana_for(heal, values)
+                and not self._finishes_first(values)):
             if self._press(heal):
                 self._pending_heal = (hp, time.monotonic())
             return
@@ -1161,6 +1179,48 @@ class Fight:
             if self._press(attack) and attack.toggle:
                 self._toggled = True
             return
+
+    def _sample_race(self, values: dict) -> None:
+        """One look for `_finishes_first`. A new selection starts the samples again."""
+        guid = values.get("target.guid")
+        if self._race and self._race[-1][4] != guid:
+            self._race = []
+        self._race.append((time.monotonic(), values.get("vitals.hp"), values.get("target.hp"),
+                           values.get("bars.casting") is True, guid))
+
+    def _finishes_first(self, values: dict) -> bool:
+        """Will the target die well before we do, at the rates this fight has shown?
+
+        Our loss is read over the last `FINISH_WINDOW_S`, whatever we were doing. The
+        target's is read only across looks we were not casting, because a cast stops
+        the swings and counting it would make every fight with a heal in it look
+        unwinnable. The samples are this selection's (`_sample_race`).
+        """
+        now = time.monotonic()
+        hp, target = values.get("vitals.hp"), values.get("target.hp")
+        if hp is None or target is None or hp < FINISH_FLOOR:
+            return False
+
+        dealt = swinging = 0.0
+        for (t0, _, h0, casting, _), (t1, _, h1, _, _) in zip(self._race, self._race[1:], strict=False):
+            if casting or h0 is None or h1 is None:
+                continue
+            swinging += t1 - t0
+            dealt += max(0.0, h0 - h1)
+        recent = [(t, h) for t, h, *_ in self._race if h is not None and now - t <= FINISH_WINDOW_S]
+        if swinging < FINISH_EVIDENCE_S or dealt <= 0.0 or len(recent) < 2:
+            return False
+        span = recent[-1][0] - recent[0][0]
+        lost = recent[0][1] - recent[-1][1]
+        if span < FINISH_EVIDENCE_S or lost <= 0.0:
+            return False
+        to_kill = target / (dealt / swinging)
+        to_die = hp / (lost / span)
+        finishing = to_kill < FINISH_MARGIN * to_die
+        if finishing:
+            event("heal.held", data={"hp": hp, "target_hp": target,
+                                     "to_kill_s": round(to_kill, 1), "to_die_s": round(to_die, 1)})
+        return finishing
 
     @traced("heal.top_up")
     def top_up(self, target: float = HEAL_OUT_OF_COMBAT, *, tries: int = 4,
