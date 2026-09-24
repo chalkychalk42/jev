@@ -259,3 +259,66 @@ class _CountingHid(Hid):
         self.typed.append(text)
         self.unsendable = [c for c in text if c in self._cannot]
         return not self.unsendable
+
+
+# --- the realm screens a restarted client opened on (24 September) ---------------
+
+REALM_FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+
+
+def _realm(name: str) -> np.ndarray:
+    """The frame's own pixels round every point a stage samples, zero elsewhere."""
+    return np.load(REALM_FIXTURES / f"realm-{name}.npz")["frame"]
+
+
+@pytest.mark.parametrize(("name", "expected"), [
+    ("wizard", Stage.REALM_WIZARD), ("assigned", Stage.REALM_ASSIGNED),
+    ("list", Stage.REALM_LIST)])
+def test_the_realm_screens_are_read_from_their_red_plates(name, expected):
+    assert stage(_realm(name), radio_ok=False) is expected
+
+
+def test_the_login_form_is_not_a_realm_screen():
+    frame = np.load(LOGIN_EMPTY)["frame"]
+    assert stage(frame, radio_ok=False) is Stage.LOGIN
+
+
+def test_the_realm_screens_are_clicked_through_and_never_keyed(monkeypatch):
+    """Tick the one location, Suggest Realm, Accept, then a double click on the row: Okay
+    brought the list straight back."""
+    from jev.clients import session as module
+
+    frames = [_realm("wizard"), _realm("assigned"), _realm("list")]
+    s = _session()
+    s.read_frame = lambda: frames[0]
+    s.radio_ok = lambda: len(frames) == 0 or frames[0] is None
+    clicks, keys = [], []
+
+    def click(x, y, *a, **k):
+        clicks.append((x, y))
+        return True
+
+    s.hid.click = click
+    s.hid.tap = lambda key, *a, **k: keys.append(key) or True
+    s._wait = lambda seconds: None
+    steps = iter([frames[1], frames[2], None])
+    original = s._choose_realm
+
+    def advance(current):
+        original(current)
+        frames[0] = next(steps)
+
+    s._choose_realm = advance
+    assert s.sign_in("acct", "pw", timeout_s=5.0) is True
+    assert keys == [], "nothing is typed at a realm screen"
+    assert clicks == [s._screen(module.REALM_LOCATION), s._screen(module.REALM_SUGGEST),
+                      s._screen(module.REALM_ACCEPT), s._screen(module.REALM_ROW),
+                      s._screen(module.REALM_ROW)]
+
+
+def test_a_realm_screen_that_never_advances_stops_with_its_frame():
+    s = _session(frame=_realm("wizard"))
+    s.hid.click = lambda *a, **k: True
+    s._wait = lambda seconds: None
+    assert s.sign_in("acct", "pw", timeout_s=5.0) is False
+    assert "choosing a realm" in s.detail and s.unknown_frame is not None

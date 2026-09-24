@@ -36,6 +36,9 @@ class Stage(StrEnum):
     IN_WORLD = "in_world"      # certain: the strip decodes
     LOGIN = "login"            # a red plate where the Login button sits
     CHARACTER = "character"    # a red plate where Enter World sits
+    REALM_ASSIGNED = "realm_assigned"  # red plates at Accept and View Realm List
+    REALM_LIST = "realm_list"          # red plates at the list's Okay and Cancel
+    REALM_WIZARD = "realm_wizard"      # a red plate at the wizard's Cancel, and its Suggest
     ELSEWHERE = "elsewhere"    # none of the above, and nothing gets pressed
 
 
@@ -74,6 +77,24 @@ OKAY_BUTTON = (0.510, 0.513)
 # login button's position, so the two stages are told apart by *where* the red plate is.
 ENTER_WORLD = (0.500, 0.913)
 
+# The realm screens a restarted client opened on instead of character select, measured on
+# 24 September after an addon install: the first-time realm wizard (tick the one location,
+# "Development", then Suggest Realm), its "You have been assigned to the ... realm" popup
+# (Accept), and the realm list (a double click on the selected row enters it; Okay
+# brought the list straight back). Every button is the same interface red.
+REALM_WIZARD_CANCEL = (0.911, 0.945)
+REALM_LOCATION = (0.8025, 0.3322)
+REALM_SUGGEST = (0.882, 0.612)
+REALM_ACCEPT = (0.421, 0.528)
+REALM_VIEW_LIST = (0.573, 0.528)
+REALM_LIST_OKAY = (0.586, 0.791)
+REALM_LIST_CANCEL = (0.672, 0.791)
+REALM_ROW = (0.3375, 0.25)
+# The Suggest Realm plate before a location is ticked: disabled grey, measured (39, 39, 40).
+_GREY_MAX_SPREAD = 12
+# Clicks through the realm screens before this gives up and keeps the frame.
+MAX_REALM_STEPS = 4
+
 # The login and "Okay" buttons are the interface's red plates: red dominant, everything
 # else low. Measured at (100, 39, 19) and (95, 16, 4).
 _RED_MIN = 70
@@ -88,6 +109,16 @@ def _is_red_button(frame: np.ndarray, at: tuple[float, float], radius: int = 60)
         return False
     r, g, b = patch[:, :, 0].mean(), patch[:, :, 1].mean(), patch[:, :, 2].mean()
     return r > _RED_MIN and (r - g) > _RED_MARGIN and (r - b) > _RED_MARGIN
+
+
+def _is_grey_plate(frame: np.ndarray, at: tuple[float, float], radius: int = 60) -> bool:
+    h, w, _ = frame.shape
+    x, y = int(at[0] * w), int(at[1] * h)
+    patch = frame[max(0, y - 10):y + 10, max(0, x - radius):x + radius].astype(np.int16)
+    if patch.size == 0:
+        return False
+    means = patch.reshape(-1, 3).mean(axis=0)
+    return 20 < means.min() and means.max() < 80 and means.max() - means.min() < _GREY_MAX_SPREAD
 
 
 def _has_text(frame: np.ndarray, at: tuple[float, float], radius: int = 70) -> bool:
@@ -115,6 +146,13 @@ def stage(frame: np.ndarray | None, radio_ok: bool) -> Stage:
         return Stage.CHARACTER
     if _is_red_button(frame, LOGIN_BUTTON):
         return Stage.LOGIN
+    if _is_red_button(frame, REALM_ACCEPT) and _is_red_button(frame, REALM_VIEW_LIST):
+        return Stage.REALM_ASSIGNED
+    if _is_red_button(frame, REALM_LIST_OKAY) and _is_red_button(frame, REALM_LIST_CANCEL):
+        return Stage.REALM_LIST
+    if _is_red_button(frame, REALM_WIZARD_CANCEL) and (
+            _is_red_button(frame, REALM_SUGGEST) or _is_grey_plate(frame, REALM_SUGGEST)):
+        return Stage.REALM_WIZARD
     return Stage.ELSEWHERE
 
 
@@ -138,6 +176,7 @@ class Session:
     unknown_frame: object | None = field(default=None, init=False)
     dismissed_dialog: bool = field(default=False, init=False)
     entered_world: int = field(default=0, init=False)
+    realm_steps: int = field(default=0, init=False)
 
     def stage(self) -> Stage:
         if self.checkpoint:
@@ -200,6 +239,16 @@ class Session:
                 self._wait(6.0)
                 continue
 
+            if current in (Stage.REALM_WIZARD, Stage.REALM_ASSIGNED, Stage.REALM_LIST):
+                if self.realm_steps >= MAX_REALM_STEPS:
+                    self.unknown_frame = self.read_frame()
+                    self.detail = f"still choosing a realm after {self.realm_steps} steps"
+                    return False
+                self.realm_steps += 1
+                self._choose_realm(current)
+                self._wait(3.0)
+                continue
+
             # **Nothing is pressed at a screen this cannot read.**
             #
             # The first version pressed Escape and Enter here on the theory that realm
@@ -218,6 +267,19 @@ class Session:
                        f"({self.enters} enters, credentials "
                        f"{'sent' if self.typed_credentials else 'not sent'})")
         return False
+
+    def _choose_realm(self, current: Stage) -> None:
+        """One step through the realm screens, by clicks on measured plates only."""
+        if current is Stage.REALM_WIZARD:
+            self.hid.click(*self._screen(REALM_LOCATION))
+            self._wait(0.6)
+            self.hid.click(*self._screen(REALM_SUGGEST))
+        elif current is Stage.REALM_ASSIGNED:
+            self.hid.click(*self._screen(REALM_ACCEPT))
+        else:
+            self.hid.click(*self._screen(REALM_ROW))
+            self._wait(0.12)
+            self.hid.click(*self._screen(REALM_ROW))
 
     def _enter_credentials(self, account: str, password: str) -> bool:
         """Click the account field, clear it, type, tab, type, submit.
