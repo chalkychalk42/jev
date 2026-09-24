@@ -2143,6 +2143,25 @@ unasked. Everything below is HID input; the addon only paints, and nothing is ty
    20%. A row whose slot is empty is already skipped. Each drop is checked against the
    slot's usable bit before the next one.
 
+What the trainers offer (world database, `npc_trainer_template` 20 in Northshire, 21 in
+Goldshire), against Testvvi's 4 silver 26 copper at level 7:
+
+| Level | Spell | Cost | Needs a bar slot |
+|---|---|---|---|
+| 1 | Devotion Aura 1 | 10c | yes |
+| 4 | Judgement; Blessing of Might 1 | 1s each | yes |
+| 6 | Divine Protection 1; Seal of the Crusader 1 | 1s each | yes |
+| 6 | Holy Light 2 | 1s | no - replaces rank 1 on the bar |
+| 8 | Hammer of Justice 1; Purify | 1s each | yes |
+| 8 | Parry | 1s | no - passive |
+| 10 | Lay on Hands 1; Blessing of Protection 1 | 3s each | yes |
+| 10 | Devotion Aura 2; Seal of Righteousness 2 | 3s each | no - ranks |
+| 12 | Blessing of Might 2; Seal of the Crusader 2 | 10s each | no - ranks |
+| 14 | Holy Light 3 | 20s | no - rank |
+
+Northshire's Brother Sammuel stops at level 6; Goldshire's Brother Wilhelm goes on. Steps 1-3
+alone (no spellbook) would already buy Holy Light 2, Parry and every later rank.
+
 ## 2026-09-24 05:55 — overnight debrief 7: the Spirit Healer rises, and the fights that cannot be won
 
 Sessions 31-33. Testvvi: level 7 (quest 54 handed in at Goldshire), repaired, and quest 18
