@@ -2521,7 +2521,7 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
   48,000 over 114); its longest legs are the Westfall-Redridge crossings, up to 4,266
   yards, where a flight path would save the most.
 
-## 2026-09-24 16:00 — home at Goldshire; what the motor learner is short of
+## 2026-09-24 15:45 — home at Goldshire; what the motor learner is short of
 
 - **The hearthstone is bound at Goldshire** (V126, session 83): the character walked into
   the Lion's Pride Inn, chose "Make this inn your home." with Innkeeper Farley and
