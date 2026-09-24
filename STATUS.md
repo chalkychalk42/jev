@@ -2443,3 +2443,17 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
   are skipped at once, and the absence is its own code.
 - Seal of the Crusader was bought at level 9 and, rightly, not put on the bar. With the
   minimap clock off, no dialog followed the trainer's Escape.
+
+## 2026-09-24 12:40 — session 70: past quest 16; the save and its heal
+
+- Quest 16 (Give Gerard a Drink): its accept failed twice with the tutor and was passed
+  over; its objective and hand-in are now skipped as soon as the log shows the quest
+  absent, without walking to them. Session 70 opened on quest 2158 (Rest and Relaxation).
+- A save is now followed by the heal: Divine Protection went up at 40%, then a stun, and
+  health sat at exactly 40% under the immunity - not below the heal's line - until it
+  ran out; the heal came after it, was pushed back, and the character died. For 3.5 s
+  after a save the heal comes next below 80%, with no stun and no hold.
+- Deaths at level 9 are mostly two attackers at once (Murlocs by Crystal Lake on the way
+  to the Gray Forest Wolves, a second wolf while the first is stunned). Level 10 brings
+  Lay on Hands and Blessing of Protection; routing round hostile camps is the larger fix
+  still open.
