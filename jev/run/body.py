@@ -39,6 +39,8 @@ from jev.run.client import FOCUS_QUICK_S, Client
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role
+from jev.world.gear import load_worn, save_worn
+from jev.world.gear import upgrades as gear_upgrades
 from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.vendor import bag_slots, merchants, supplies_for
 
@@ -119,13 +121,16 @@ class LiveBody:
     def __init__(self, client: Client, graph: Graph, *, travel_timeout: float = 180,
                  hunt_timeout: float = 600, say: Callable[[str], None] = print,
                  record_frame: Callable[..., dict] | None = None,
-                 hunt_spawns: dict | None = None):
+                 hunt_spawns: dict | None = None, gear_memory=None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
         self.client, self.graph = client, graph
         self.travel_timeout, self.hunt_timeout, self.say = travel_timeout, hunt_timeout, say
         # Where each hunt's target spawns (`jev.guide.spawns`); empty walks rings.
         self.hunt_spawns = hunt_spawns or {}
+        # What this character has been given to wear, slot by slot (`jev.world.gear`).
+        self.gear_memory = gear_memory
+        self._gear_checked: object = object()     # the bags' revision last looked through
         self.travelling = False
         self.policy_context = Context()
         self.checkpoint: Callable[[], None] = lambda: None
@@ -552,11 +557,44 @@ class LiveBody:
 
     def _rest(self, state) -> Result:
         self._clear_of_spawns()
+        self._wear_upgrades()
         if state.vitals.power_type is PowerType.MANA and state.vitals.power is not None and state.vitals.power < 0.35:
             return self._result(self.rest.until(0.75, role=Role.DRINK), self.rest.detail)
         if self.fight.top_up():
             return Result(SkillOutcome.SUCCEEDED, "health topped up", "healthy")
         return self._result(self.rest.until(0.9), self.rest.detail)
+
+    def _wear_upgrades(self) -> None:
+        """Put on anything in the bags better than what this character wears (`jev.world.gear`).
+
+        Before a meal: out of combat, standing still, no shop open. Only when the bags have
+        changed since the last look, since a census of them takes a few seconds."""
+        values = self._read()
+        if not values or values.get("vitals.combat") is not False:
+            return
+        revision = values.get("inventory.revision")
+        if revision is None or revision == self._gear_checked:
+            return
+        wearer = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
+                        self.client.size)
+        items = wearer.bag_items()
+        if items is None:
+            return
+        self._gear_checked = revision
+        chosen = gear_upgrades(items, load_worn(self.gear_memory),
+                               class_id=values.get("char.class_id"),
+                               race_id=values.get("char.race_id"), level=values.get("char.level"))
+        if not chosen:
+            return
+        worn = set(wearer.equip_items({p.item_id for p in chosen}))
+        put_on = [p for p in chosen if p.item_id in worn]
+        save_worn(self.gear_memory, put_on)
+        self.say(f"  put on {len(put_on)} of {len(chosen)} upgrades: "
+                 + ", ".join(f"{p.slot} {p.item_id}" for p in put_on)
+                 + (f" ({wearer.detail})" if wearer.detail else ""))
+        after = self._read()
+        if after and after.get("inventory.revision") is not None:
+            self._gear_checked = after.get("inventory.revision")
 
     def _clear_of_spawns(self) -> None:
         """Walk out of reach of the step's own spawn points before a meal, where a way out

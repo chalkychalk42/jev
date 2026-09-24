@@ -786,3 +786,36 @@ def test_two_wedged_walks_running_go_home_by_hearthstone():
     for _ in range(WEDGED_WALKS + 1):
         b._approach((1.0, 2.0, 3.0))
     assert homes == [1], "blocked is not wedged: the planner still has ways round"
+
+
+def test_upgrades_in_the_bags_are_put_on_before_a_meal_and_remembered(tmp_path, monkeypatch):
+    """A Militia Hammer and a Pikeman Shield rode in the bags all night beside a Worn Mace
+    (run 20260924T090629-93a85b)."""
+    import jev.run.body as module
+    from jev.world.gear import load_worn
+
+    b = body()
+    b.gear_memory = tmp_path / "character.equipped.json"
+    b._read = lambda: {"vitals.combat": False, "inventory.revision": 7, "char.class_id": 2,
+                       "char.race_id": 1, "char.level": 8}
+    worn = []
+
+    class Wearer:
+        detail = ""
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def bag_items(self):
+            return {36, 5580, 6078, 2589}
+
+        def equip_items(self, items):
+            worn.append(set(items))
+            return sorted(items)
+
+    monkeypatch.setattr(module, "Vendor", Wearer)
+    b._wear_upgrades()
+    assert worn == [{5580, 6078}]
+    assert set(load_worn(b.gear_memory)) == {"main_hand", "off_hand"}
+    b._wear_upgrades()
+    assert len(worn) == 1, "the same bags are not looked through twice"

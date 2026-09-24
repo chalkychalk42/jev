@@ -205,6 +205,88 @@ class Vendor:
             self.detail = stop.detail
             return equipped
 
+    @traced("vendor.bag_items")
+    def bag_items(self, *, timeout_s: float = 10.0) -> set[int] | None:
+        """Every item id in the bags, from one full census; `None` if it did not complete."""
+        self._deadline = self.clock() + timeout_s
+        seen: dict[int, int] = {}
+        try:
+            while self.clock() < self._deadline:
+                values = self._read(merchant=False)
+                total, ordinal = values.get("inventory.total"), values.get("inventory.ordinal")
+                if total is None or ordinal is None:
+                    return None
+                seen[ordinal] = values.get("inventory.item_id") or 0
+                if len(seen) >= total:
+                    return {item for item in seen.values() if item}
+                self.sleep(0.05)
+        except _Stop:
+            return None
+        return None
+
+    @traced("vendor.equip_items")
+    def equip_items(self, items: set[int], *, timeout_s: float = 30.0) -> list[int]:
+        """Put on each of these items found in the bags; the ones that went on.
+
+        The same right-click that equips a bag: with no shop open, where it would sell. An
+        item that binds when worn asks first, and the popup's first button accepts. Put on
+        is the bag slot's contents changing (the worn item it replaced lands there).
+        """
+        self.detail = ""
+        self._deadline = self.clock() + timeout_s
+        wanted, done = set(items), []
+        seen: set[int] = set()
+        try:
+            while wanted:
+                values = self._read(merchant=False)
+                if values.get("ui.vendor") is not False:
+                    return done                          # a shop open: a click would sell
+                total, ordinal = values.get("inventory.total"), values.get("inventory.ordinal")
+                if total is None or ordinal is None:
+                    raise _Stop(Vended.BLIND, "bag slot census unreadable")
+                seen.add(ordinal)
+                item = values.get("inventory.item_id")
+                if item in wanted and values.get("inventory.locked") is False:
+                    if values.get("inventory.x") is None:
+                        self._click(values, "inventory.open_")
+                        bag = values.get("inventory.bag")
+                        self._await(lambda r, bag=bag: r.get("inventory.bag") == bag
+                                    and r.get("inventory.x") is not None, 4.0, merchant=False)
+                        continue
+                    revision = values.get("inventory.revision")
+                    self._click(values, "inventory.", right=True)
+                    self._await_worn(revision)
+                    wanted.discard(item)
+                    done.append(item)
+                    seen.clear()
+                    continue
+                if len(seen) >= total:
+                    return done
+                self.sleep(0.05)
+        except _Stop as stop:
+            self.detail = stop.detail
+        return done
+
+    def _await_worn(self, revision, seconds: float = 4.0) -> None:
+        """The bags changing after an equip click, answering "will bind it to you" on the
+        way. Read raw: every other read here refuses a dialog, and this one is expected."""
+        until = min(self._deadline, self.clock() + seconds)
+        accepted = False
+        while self.clock() < until:
+            values = self.read()
+            if values is None:
+                raise _Stop(Vended.BLIND, "inventory radio unreadable after the equip click")
+            if (values.get("vitals.combat") is True or values.get("vitals.dead") is True
+                    or values.get("vitals.ghost") is True):
+                raise _Stop(Vended.INTERRUPTED, "combat or death while putting an item on")
+            if values.get("ui.modal") is True and not accepted:
+                self._click(values, "ui.advance_")        # the popup's first button: Okay
+                accepted = True
+            elif values.get("ui.modal") is not True and values.get("inventory.revision") != revision:
+                return
+            self.sleep(0.05)
+        raise _Stop(Vended.NO_CHANGE, "the bags did not change after the equip click")
+
     @staticmethod
     def _slot(values: dict) -> tuple:
         return tuple(values.get("inventory." + k)

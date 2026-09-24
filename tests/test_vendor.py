@@ -353,3 +353,49 @@ def test_no_bag_is_right_clicked_while_a_shop_is_open():
     body = Vendor(shop, shop.read, shop.visit, clock=lambda: shop.now, sleep=shop.sleep)
     assert body.equip_bags({5572: 6}) == 0
     assert shop.clicks == []
+
+
+def test_an_item_worth_wearing_is_put_on_from_the_bags():
+    """A Militia Hammer rode in the bags all night beside a Worn Mace in the hand (run
+    20260924T090629-93a85b)."""
+    shop = Shop()
+    shop.v.update({"inventory.item_id": 5580, "inventory.count": 1, "inventory.quality": 1,
+                   "inventory.total": 16, "ui.vendor": False, "inventory.revision": 3})
+
+    def click(x, y, right=False):
+        shop.clicks.append((x, y, right))
+        if right:                                       # the old mace lands in the slot
+            shop.v.update({"inventory.item_id": 36, "inventory.revision": 4})
+        return True
+
+    shop.click = click
+    body = Vendor(shop, shop.read, shop.visit, clock=lambda: shop.now, sleep=shop.sleep)
+    assert body.equip_items({5580}) == [5580]
+    assert shop.clicks == [(1280, 450, True)]
+
+
+def test_a_bind_on_equip_question_is_answered_yes():
+    shop = Shop()
+    shop.v.update({"inventory.item_id": 2645, "inventory.total": 16, "ui.vendor": False,
+                   "inventory.revision": 3})
+
+    def click(x, y, right=False):
+        shop.clicks.append((x, y, right))
+        if right:
+            shop.v.update({"ui.modal": True, "ui.advance_x": 0.4, "ui.advance_y": 0.3})
+        else:
+            shop.v.update({"ui.modal": False, "inventory.item_id": 0, "inventory.revision": 4})
+        return True
+
+    shop.click = click
+    body = Vendor(shop, shop.read, shop.visit, clock=lambda: shop.now, sleep=shop.sleep)
+    assert body.equip_items({2645}) == [2645]
+    assert [right for *_, right in shop.clicks] == [True, False], "the item, then Okay"
+
+
+def test_nothing_is_put_on_while_a_shop_is_open():
+    shop = Shop()
+    shop.v.update({"inventory.item_id": 5580, "inventory.total": 16, "ui.vendor": True})
+    body = Vendor(shop, shop.read, shop.visit, clock=lambda: shop.now, sleep=shop.sleep)
+    assert body.equip_items({5580}) == []
+    assert shop.clicks == []

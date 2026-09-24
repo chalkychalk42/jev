@@ -248,7 +248,8 @@ def _live(args, graph) -> int:
                     route_memory=RouteMemory(ROOT / "var/route-memory.json"))
         body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt,
                         record_frame=screenshots.record_frame if screenshots is not None else None,
-                        hunt_spawns=spawns.load(args.graph))
+                        hunt_spawns=spawns.load(args.graph),
+                        gear_memory=path.with_name(path.stem + ".equipped.json"))
         if recorder is None:
             recorder = Recorder(root=args.runs_dir)
         if args.play_mode != "off":
