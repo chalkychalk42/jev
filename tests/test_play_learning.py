@@ -609,6 +609,84 @@ def test_a_new_guide_does_not_start_the_corpus_again(tmp_path):
     assert moved_on.action == {"kind": "key", "control": "turn_right", "duration_s": 0.4}
 
 
+TURNS = {"turn_left": {"command": "TURNLEFT", "keys": ["a"], "mode": "hold", "executable": True},
+         "turn_right": {"command": "TURNRIGHT", "keys": ["d"], "mode": "hold", "executable": True}}
+MANIFEST = {"bindings": TURNS, "skills": ["HUNT"], "limits": {"max_hold_s": 2.0}}
+
+
+def two_generations(learner, v2):
+    """Runs a and b under one controls generation, run c under the next."""
+    learner.remember_controls("controls-v1", MANIFEST)
+    learner.remember_controls("controls-v2", v2)
+    for number, run in enumerate(("fit-a", "fit-b", "fit-c")):
+        for side in range(2):
+            for index in range(2):
+                learner.record(record(run, side * 2 + index, side=side,
+                                      controls="controls-v1" if number < 2 else "controls-v2"))
+        finish(learner, run)
+    learner.update()
+    return learner.status()["capabilities"].get("approach")
+
+
+def test_a_new_routine_does_not_start_the_corpus_again(tmp_path):
+    """A generation is the whole controls manifest, which changed five times in two days
+    as routines were added and spells reached the bar; each restarted the corpus."""
+    learner = MotorLearner(tmp_path, config=config())
+    state = two_generations(learner, {**MANIFEST, "skills": ["HUNT", "BIND_HEARTH"]})
+    assert state and state["controls_fingerprint"] == "controls-v2"
+    assert set(state["corpus_runs"]) == {"fit-a", "fit-b", "fit-c"}, "earlier runs thrown away"
+    now = learner.predict(observation(side=1), "approach", decision_id="now",
+                          controls_fingerprint="controls-v2", knowledge_fingerprint="knowledge-v1")
+    assert now.action == {"kind": "key", "control": "turn_right", "duration_s": 0.4}
+
+
+def test_a_rebound_key_leaves_only_its_own_records_behind(tmp_path):
+    learner = MotorLearner(tmp_path, config=config())
+    rebound = {**TURNS, "turn_left": {**TURNS["turn_left"], "keys": ["q"]}}
+    state = two_generations(learner, {**MANIFEST, "bindings": rebound})
+    model = learner._load(state["model"], learner.status())
+    old_turns = [e for e in model["examples"] if e["action"]["control"] == "turn_left"
+                 and e["run_id"] != "fit-c"]
+    assert not old_turns, "a turn pressed with another key was taught as this one"
+    assert any(e["run_id"] != "fit-c" for e in model["examples"]), "the unchanged key's kept"
+    assert predict_v2(learner, side=0).action is None, "one run is not independent support"
+    assert predict_v2(learner, side=1).action is not None
+
+
+def predict_v2(learner, *, side):
+    return learner.predict(observation(side=side), "approach", decision_id=f"now-{side}",
+                           controls_fingerprint="controls-v2", knowledge_fingerprint="knowledge-v1")
+
+
+def test_a_run_brings_the_controls_it_played_under(tmp_path):
+    from jev.play.observation import fingerprint
+
+    learner = MotorLearner(tmp_path / "store", config=config())
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "play-config.json").write_text(json.dumps(
+        {"controls": MANIFEST, "controls_fingerprint": fingerprint(MANIFEST)}))
+    learner.ingest_run(run)
+    assert learner._manifests() == {fingerprint(MANIFEST): MANIFEST}
+    (run / "play-config.json").write_text(json.dumps(
+        {"controls": MANIFEST, "controls_fingerprint": "not-its-print"}))
+    learner.ingest_run(run)
+    assert "not-its-print" not in learner._manifests()
+
+
+def test_an_unknown_generation_is_still_kept_apart(tmp_path):
+    learner = MotorLearner(tmp_path, config=config())
+    learner.remember_controls("controls-v2", MANIFEST)       # v1's manifest never recorded
+    for number, run in enumerate(("fit-a", "fit-b", "fit-c")):
+        for side in range(2):
+            for index in range(2):
+                learner.record(record(run, side * 2 + index, side=side,
+                                      controls="controls-v1" if number < 2 else "controls-v2"))
+        finish(learner, run)
+    learner.update()
+    assert "approach" not in learner.status()["capabilities"]
+
+
 def test_new_key_bindings_still_start_a_new_generation(tmp_path):
     learner = MotorLearner(tmp_path, config=config())
     teach(learner)

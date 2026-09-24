@@ -5,13 +5,15 @@ They are never connected to a game or written outside pytest's temporary directo
 their successful handover is software verification, not measured live competence.
 """
 
-import asyncio
+import time
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
 from test_play_controller import Environment, Tutor, arm
 
 from jev.learn.episode import SkillOutcome
+from jev.play import controller as controller_module
 from jev.play.controller import PlayConfig, PlayController
 from jev.play.executor import ExecutionResult
 from jev.play.journal import PlayJournal
@@ -32,15 +34,30 @@ class ProvenanceFixture(Environment):
         return replace(observed, data={**observed.data, "synthetic": False})
 
 
+# What one tutor decision costs an episode, on the clock episodes are timed by. A zero-work
+# fake tutor is faster than reading and evaluating a real student, which correctly fails
+# the maintained-throughput gate, so decisions must cost time. Slept for real (20 ms, then
+# 200 ms, then 600 ms), a loaded machine still sometimes made the student's episode the
+# slower and the canary stayed a canary (24 September, beside a live session). Added to
+# the controller's clock instead, it costs the same every run.
+TUTOR_S = 5.0
+_tutor_time = [0.0]
+
+
+def tutor_clock():
+    return time.time() + _tutor_time[0]
+
+
+@pytest.fixture(autouse=True)
+def timed_tutor(monkeypatch):
+    _tutor_time[0] = 0.0
+    monkeypatch.setattr(controller_module, "time", SimpleNamespace(
+        time=tutor_clock, monotonic=time.monotonic, sleep=time.sleep))
+
+
 class MeasuredTutor(Tutor):
     async def decide(self, *args, **kwargs):
-        # A measured local delay models teacher latency. Without it this zero-work
-        # fake teacher is faster than reading/evaluating a real student, correctly
-        # failing the maintained-throughput gate rather than fabricating improvement.
-        # 20 ms sat inside scheduling jitter on a loaded full-suite run, and the student
-        # sometimes measured slower and stayed in canary; 200 ms still did beside a live
-        # session (24 September). Real tutor calls take seconds.
-        await asyncio.sleep(0.6)
+        _tutor_time[0] += TUTOR_S
         return await super().decide(*args, **kwargs)
 
 
@@ -67,7 +84,8 @@ def run_episode(tmp_path, learner, run_id, *, mode="teach", failure=False, max_a
 
 
 def test_actual_controller_corpus_trains_shadows_hands_over_and_rolls_back(tmp_path, monkeypatch):
-    learner = MotorLearner(tmp_path / "models", config=learning_config())
+    # The learner's clock is the episodes' clock: its rollback time is compared with them.
+    learner = MotorLearner(tmp_path / "models", config=learning_config(), clock=tutor_clock)
     for run in ("fit-a", "fit-b", "fit-c"):
         result, _, teacher = run_episode(tmp_path, learner, run)
         assert result.outcome is SkillOutcome.SUCCEEDED

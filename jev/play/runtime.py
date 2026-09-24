@@ -157,6 +157,8 @@ class PlayingBody:
         self.controls_fingerprint = fingerprint(self.manifest.to_dict())
         self.knowledge = LocalKnowledge(self.graph, world_db=world_db)
         self.learner = learner or MotorLearner(Path(store) / "motor")
+        # What these controls mean, for the learner to pool earlier generations' records.
+        self.learner.remember_controls(self.controls_fingerprint, self.manifest.to_dict())
         self.observer = LiveObserver(self.client, self.graph, screenshots=screenshots)
         self.executor = Executor(self.client.hid, self.observer.guard, manifest=self.manifest,
                                  checkpoint=lambda: self._checkpoint(),

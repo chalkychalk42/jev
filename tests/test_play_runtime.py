@@ -71,6 +71,9 @@ class Learner:
     def finish_episode(self, episode_id, **kwargs):
         self.episodes.append((episode_id, kwargs))
 
+    def remember_controls(self, fingerprint, manifest):
+        self.controls = (fingerprint, manifest)
+
 
 class Teacher:
     def __init__(self):

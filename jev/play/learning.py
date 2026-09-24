@@ -525,6 +525,39 @@ def _fit(rows: list[dict[str, Any]], config: LearningConfig, *,
     return model, "held-out gate passed" if model["evaluation"]["eligible"] else "held-out gate failed"
 
 
+def _meaning(action: Mapping[str, Any], manifest: Mapping[str, Any]) -> str:
+    """What an action's effect rests on in a controls manifest: equal means it means the same.
+
+    A controls generation is the whole manifest, and it changes whenever a routine is added
+    or a spell reaches the bar - five times in two days, each starting the corpus again
+    (24 September: 234 qualified examples in one generation, 15 in the current). An action
+    rests on much less: a routine on still being available, a key on its binding, a slot on
+    what sits in it, a click or a camera move on the pointer's rules.
+    """
+    kind = _kind(action)
+    limits = manifest.get("limits") or {}
+    if kind == "skill":
+        part: Any = action.get("name") in (manifest.get("skills") or ())
+    elif kind == "observe":
+        part = limits.get("max_wait_s")
+    elif kind == "key":
+        binding = (manifest.get("bindings") or {}).get(action.get("control")) or {}
+        part = [[binding.get(key) for key in ("command", "keys", "mode", "executable")],
+                limits.get("max_hold_s")]
+    elif kind == "action_slot":
+        slot = next((row for row in manifest.get("action_slots") or ()
+                     if row.get("slot") == action.get("slot")), {})
+        part = [slot.get(key) for key in ("command", "keys", "name", "role", "executable",
+                                          "toggle", "self_cast")]
+    elif kind in ("click", "pointer"):
+        part = manifest.get("pointer")
+    elif kind == "camera":
+        part = [manifest.get("pointer"), limits.get("max_camera_pixels")]
+    else:
+        part = manifest              # unknown: only an identical generation means the same
+    return _digest([kind, part])
+
+
 def _cost(rows: list[dict[str, Any]]) -> dict[str, Any]:
     calls = input_tokens = output_tokens = 0.0
     elapsed = 0.0
@@ -638,6 +671,43 @@ class MotorLearner:
             result.append(row)
         return result
 
+    def remember_controls(self, fingerprint: str, manifest: Mapping[str, Any]) -> None:
+        """Keep a controls generation's manifest, so later ones can tell what still holds."""
+        path = self.directory / "controls" / f"{fingerprint}.json"
+        if not path.exists():
+            atomic_json(path, dict(manifest))
+
+    def _remember_run_controls(self, directory: Path) -> None:
+        """A run's controls, from the manifest it played under, when it matches its print."""
+        from jev.play.observation import fingerprint
+
+        try:
+            played = json.loads((directory / "play-config.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        controls, printed = played.get("controls"), played.get("controls_fingerprint")
+        if isinstance(controls, dict) and isinstance(printed, str) and fingerprint(controls) == printed:
+            self.remember_controls(printed, controls)
+
+    def _manifests(self) -> dict[str, dict[str, Any]]:
+        return {path.stem: json.loads(path.read_text(encoding="utf-8"))
+                for path in (self.directory / "controls").glob("*.json")}
+
+    @staticmethod
+    def _generation(rows: list[dict[str, Any]], capability: str, controls: str,
+                    manifests: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
+        """A capability's records that mean the same under `controls` (`_meaning`).
+
+        Records of another generation join only when both manifests are known and the
+        action rests on the same part of each: a rebound key's records stay behind.
+        """
+        current = manifests.get(controls)
+        return [row for row in rows if row["capability"] == capability
+                and (row["controls_fingerprint"] == controls
+                     or (current is not None and row["controls_fingerprint"] in manifests
+                         and _meaning(row["action"], manifests[row["controls_fingerprint"]])
+                         == _meaning(row["action"], current)))]
+
     def finish_episode(self, episode_id: str, *, run_id: str, outcome: Mapping[str, Any]) -> bool:
         """Finalize independently observed task progress, never mere input delivery.
 
@@ -687,6 +757,7 @@ class MotorLearner:
         """
         directory = Path(directory)
         report: dict[str, Any] = {"records": 0, "episodes": 0, "errors": []}
+        self._remember_run_controls(directory)
         for name in ("actions", "episodes"):
             path = directory / f"play-{name}.jsonl"
             if not path.exists():
@@ -838,11 +909,12 @@ class MotorLearner:
                 stamp = max(_stamp(r) for r in records)
                 if key[0] not in latest or stamp > latest[key[0]][0]:
                     latest[key[0]] = (stamp, key)
+            manifests = self._manifests()
             for _, key in sorted(latest.values(), key=lambda item: str(item[1])):
                 if cancelled():
                     break
                 capability, controls = key
-                records = groups[key]
+                records = self._generation(rows, capability, controls, manifests)
                 knowledge = max(records, key=_stamp)["knowledge_fingerprint"]
                 state = registry["capabilities"].get(capability)
                 compatible = bool(state and state.get("controls_fingerprint") == controls)
