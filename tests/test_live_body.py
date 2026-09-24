@@ -732,3 +732,34 @@ def test_broken_gear_far_from_a_repairer_goes_home_by_hearthstone_first(
     b.repair = SimpleNamespace(run=lambda: calls.append("repair") or Repaired.DONE, detail="")
     b._repair(seen(bags=Bags(durability_min=durability, free=5)))
     assert calls == (["hearth", "repair"] if hearths else ["repair"])
+
+
+def test_a_meal_is_taken_out_of_reach_of_the_camps_spawns():
+    """Eating in the middle of the wolf camp was bitten at 26% health (run
+    20260924T053651-ac99b2)."""
+    import math
+
+    from jev.run.body import REST_CLEAR_YARDS, rest_spot
+
+    camp = [(0.0, 0.0, 40.0), (10.0, 0.0, 40.0), (0.0, 10.0, 40.0), (40.0, 40.0, 41.0)]
+    spot = rest_spot((3.0, 3.0), camp)
+    assert spot is not None
+    assert all(math.dist(spot[:2], s[:2]) >= REST_CLEAR_YARDS for s in camp)
+    assert math.dist(spot[:2], (3.0, 3.0)) <= 30.0, "the nearest ring with room"
+    assert rest_spot((-40.0, -40.0), camp) is None, "already clear of them"
+
+
+def test_the_rest_walks_clear_first_only_when_the_step_has_spawns():
+    from jev.guide.coords import world_to_map
+
+    b = body(StepKind.GRIND)
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b.client.position = lambda: world_to_map(-9000.0, 100.0, b.client.bounds)
+    walked = []
+    b._approach = lambda point: walked.append(point) or True
+    b.hunt_spawns = {"quest": ((-9000.0, 105.0, 40.0), (-9005.0, 100.0, 40.0))}
+    b._clear_of_spawns()
+    assert len(walked) == 1
+    b.hunt_spawns = {}
+    b._clear_of_spawns()
+    assert len(walked) == 1, "no spawns known, no walk"

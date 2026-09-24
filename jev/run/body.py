@@ -30,6 +30,7 @@ from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import progress, select_objective, target_progress
+from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
@@ -77,6 +78,13 @@ EXPLORE_POLL_S = 0.25
 MERCHANT_TRIES = 3
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
+# Where to eat: this far from every spawn point of the step's own creatures, found on rings
+# round the character. A level 6 paladin eating in the middle of the wolf camp was bitten at
+# 26% health and fought a 45 s stalemate of heals; another was at 30% when two more came
+# (runs 20260924T053651-ac99b2, ...050644-f9f9fa). Past an aggro reach, a meal is a meal.
+REST_CLEAR_YARDS = 25.0
+REST_RINGS = (10.0, 20.0, 30.0, 45.0, 60.0)
+REST_BEARINGS = 16
 # A step back, about two yards, before a second look at a spawn point that showed nothing.
 GATHER_STEP_BACK_S = 0.6
 MERCHANT_UNREACHABLE = frozenset({"not_visible", "no_target", "no_window", "approach_failed"})
@@ -523,11 +531,28 @@ class LiveBody:
                                           name_id=killed), self.loot.detail)
 
     def _rest(self, state) -> Result:
+        self._clear_of_spawns()
         if state.vitals.power_type is PowerType.MANA and state.vitals.power is not None and state.vitals.power < 0.35:
             return self._result(self.rest.until(0.75, role=Role.DRINK), self.rest.detail)
         if self.fight.top_up():
             return Result(SkillOutcome.SUCCEEDED, "health topped up", "healthy")
         return self._result(self.rest.until(0.9), self.rest.detail)
+
+    def _clear_of_spawns(self) -> None:
+        """Walk out of reach of the step's own spawn points before a meal, where a way out
+        is known: nearest point first, on rings round the character."""
+        node = self._node()
+        here = self._position()
+        if node is None or here is None:
+            return
+        spawns = spawn_around(self.hunt_spawns, node.id)
+        if not spawns:
+            return
+        spot = rest_spot(map_to_world(*here, self.client.bounds), spawns)
+        if spot is None:
+            return
+        self.say(f"  resting out of the camp's reach, {math.dist(spot[:2], map_to_world(*here, self.client.bounds)):.0f} yards off")
+        self._approach(spot)
 
     def _repair(self, state) -> Result:
         # Broken gear is no armour and no weapon: a level 6 paladin at full health lost the
@@ -732,3 +757,25 @@ class LiveBody:
 
     def _wait(self, state) -> Result:
         return Result(SkillOutcome.SUCCEEDED)
+
+
+def rest_spot(here: tuple[float, float], spawns, clear: float = REST_CLEAR_YARDS,
+              rings: tuple[float, ...] = REST_RINGS, bearings: int = REST_BEARINGS):
+    """The nearest point at least `clear` yards from every spawn, or `None` when `here`
+    already is one or no ring finds one. World yards; the height is the nearest spawn's."""
+    def clear_of(point) -> bool:
+        return all(math.dist(point, s[:2]) >= clear for s in spawns)
+
+    if clear_of(here[:2]):
+        return None
+    for reach in rings:
+        found = [(here[0] + reach * math.cos(2 * math.pi * i / bearings),
+                  here[1] + reach * math.sin(2 * math.pi * i / bearings))
+                 for i in range(bearings)]
+        found = [p for p in found if clear_of(p)]
+        if found:
+            # Of the ring's clear points, the one with the most room.
+            best = max(found, key=lambda p: min(math.dist(p, s[:2]) for s in spawns))
+            z = min(spawns, key=lambda s: math.dist(best, s[:2]))[2]
+            return (best[0], best[1], z)
+    return None

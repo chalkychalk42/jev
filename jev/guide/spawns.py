@@ -50,3 +50,9 @@ def lookup(table: dict[str, tuple[Point, ...]], step_id: str,
     if creature_id is not None and f"{step_id}#{creature_id}" in table:
         return table[f"{step_id}#{creature_id}"]
     return table.get(step_id, ())
+
+
+def around(table: dict[str, tuple[Point, ...]], step_id: str) -> tuple[Point, ...]:
+    """Every point a step's creatures spawn at, all its creatures together."""
+    return tuple(point for key, points in table.items()
+                 if key == step_id or key.startswith(f"{step_id}#") for point in points)
