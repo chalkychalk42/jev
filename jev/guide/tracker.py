@@ -216,6 +216,16 @@ class Tracker:
             return Verdict(Event.FAIL, goto=fail.goto,
                            reason=f"{fail.when}={fail.value}", off_route_s=off_route_s)
 
+        # A rib whose way back is already done has nothing left to wait for. Garrick Padfoot
+        # was killed on the rib forty seconds after his hunt failed over into it, and the
+        # rib ground on with quest 6 complete in the log (run 20260924T091648-c533a2). Only
+        # the kinds whose predicate needs no step memory: a hand-in cannot tell done from
+        # never taken without having watched it.
+        back = self._node(self.memory.rejoin_to) if node.kind is StepKind.GRIND else None
+        if (back is not None and back.kind in (StepKind.QUEST_OBJECTIVE, StepKind.QUEST_ACCEPT)
+                and _predicate(state, back, StepMemory(back.id, state.t))):
+            return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
+                           reason="the rib's way back is already done", off_route_s=off_route_s)
         # A rib that has run its course rejoins even without having levelled. It is a
         # detour, not a destination, and the step that sent us here may well be passable
         # now that the character is better fed and better geared.

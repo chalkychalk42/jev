@@ -409,3 +409,23 @@ def test_a_steps_clock_stands_still_while_a_service_runs():
     tr.serving = False
     events = [tr.tick(_s(t)).event for t in range(200, 300)]
     assert Event.FAIL in events and events.index(Event.FAIL) <= 61
+
+
+def test_a_rib_whose_way_back_is_already_done_ends_at_once():
+    """Garrick Padfoot was killed on the rib forty seconds after his hunt failed over into
+    it, and the rib ground on with quest 6 complete in the log (run
+    20260924T091648-c533a2)."""
+    tr = Tracker(_graph(), "rib")
+    tr.enter("rib", _with_quest(0.0, have=4), rejoin_to="do")
+    assert tr.tick(_with_quest(1.0, have=4)).event is not Event.ADVANCE, "still short"
+    verdict = tr.tick(_with_quest(2.0, have=10))
+    assert verdict.event is Event.ADVANCE and verdict.goto == "do" and not verdict.completed
+    tr.enter("do", _with_quest(2.0, have=10))
+    assert tr.tick(_with_quest(3.0, have=10)).goto == "turnin", "and on to the hand-in"
+
+
+def test_a_rib_back_to_a_hand_in_is_not_ended_by_an_empty_log():
+    """A hand-in cannot tell done from never taken without having watched it."""
+    tr = Tracker(_graph(), "rib")
+    tr.enter("rib", _s(0.0), rejoin_to="turnin")
+    assert tr.tick(_s(1.0)).event is not Event.ADVANCE
