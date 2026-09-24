@@ -2262,9 +2262,9 @@ Quests 3904 (Milly's Harvest: eight crates, the first object-gathering quest don
 
 Found and **not** fixed, for your view: the strip paints map x/y only, and the Abbey's
 stair has waypoints on different floors at the same x/y. A 2D follower can take an upper
-floor's waypoint as reached from below. Brother Neals (and any upstairs NPC) needs height:
-a strip field for it, or a follower that walks stair legs by time. The step now fails into
-the level 5-7 wolves until level 8, then comes back to him.
+floor's waypoint as reached from below. Brother Neals (and any upstairs NPC) needs a
+follower that walks stacked stair legs by distance or time: 2.4.3 has no API for the
+player's height (`GetPlayerMapPosition` is x/y only), so no strip field can carry it.
 
 Operator action, 08:00: the loop was stopped between sessions and the playhead given
 `retried: [3905_grape_manifest_turnin]` (V110): its first failure, in session 43, was only
