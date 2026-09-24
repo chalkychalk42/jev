@@ -2279,3 +2279,9 @@ in progress (V111). Testvvi at 08:05: level 7 at 85%, on the level 5-7 wolf rib 
 Neals' hand-in (3905) as its way back; one more failure there passes it over to quest 6.
 08:08: **level 8.** The wolf rib is done and the playhead is back on Brother Neals' hand-in,
 its last try before V110 passes it over to quest 6.
+
+08:23: the route is unblocked. The teaching launch allows one attempt a session, so the
+failed hand-in stopped each session and the next retried it with its clock at zero; a step
+whose own skill runs out of attempts now takes its own fail edge (V112, verified live).
+3905, retried once already, was passed over: the wolf rib now leads on to quest 6
+(Garrick Padfoot). Brother Neals keeps quest 3905 in the log for a later, height-aware try.
