@@ -461,3 +461,23 @@ def test_parquet_preserves_shadow_identity_and_skill_result_stream(tmp_path):
     converted = convert_run(path)
     assert read_parquet(converted["ticks"])[0]["shadow_model"] == "policy:v0"
     assert read_parquet(converted["skills"])[0]["decision_id"] == "d0"
+
+
+def test_publishing_flushes_through_a_handle_windows_can_flush(tmp_path, monkeypatch):
+    """Windows fsyncs only a handle that may write: through a read-only one it is EBADF,
+    and every live learning cycle failed at publish from 08:11 on 24 September."""
+    import errno
+    import fcntl
+    import os
+
+    real = os.fsync
+
+    def windows_fsync(fd):
+        if fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_ACCMODE == os.O_RDONLY:
+            raise OSError(errno.EBADF, "Bad file descriptor")
+        return real(fd)
+
+    monkeypatch.setattr("jev.learn.registry.os.fsync", windows_fsync)
+    monkeypatch.setattr("jev.persist.os.fsync", windows_fsync)
+    registry = ModelRegistry(tmp_path)
+    assert registry.publish(cold_start(1), metadata()) == "policy:v1"

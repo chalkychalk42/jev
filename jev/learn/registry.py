@@ -77,7 +77,10 @@ class ModelRegistry:
         staging = Path(tempfile.mkdtemp(prefix=".training-", dir=root))
         try:
             path = policy.save(staging / "policy.joblib")
-            with path.open("rb") as saved:
+            # Writable: Windows flushes only a handle that may write, and an fsync
+            # through a read-only one is EBADF. Every cycle on the live machine trained
+            # a candidate and threw it away here from 08:11 on 24 September.
+            with path.open("r+b") as saved:
                 os.fsync(saved.fileno())
             record = dict(metadata, version=policy.version, model=policy.model_name,
                           path=str((target / "policy.joblib").relative_to(self.directory)),
