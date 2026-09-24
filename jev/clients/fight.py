@@ -246,6 +246,10 @@ HEAL_GIVE_UP = 2
 # was pushed back to nothing (run 20260924T122236-108178).
 SAVE_HEAL_WINDOW_S = 3.5
 SAVE_HEAL_BELOW = 0.8
+# How long a fight begun below the heal's line spends on its save and heal before it
+# looks for the attacker, and how long with nothing pressable before it gives that up.
+HEAL_FIRST_S = 8.0
+HEAL_FIRST_IDLE_S = 0.8
 
 FINISH_MARGIN = 0.8
 FINISH_EVIDENCE_S = 3.0
@@ -436,6 +440,17 @@ class Fight:
         if not in_combat and hp is not None and hp < MIN_START_HP:
             self.detail = f"{hp:.0%} health; not starting a fight on that"
             return Fought.TOO_HURT
+        if in_combat and hp is not None and hp < HEAL_IN_COMBAT:
+            after = self._heal_first(v)
+            if self._input_refused:
+                return Fought.REFUSED
+            if after is None:
+                return Fought.BLIND
+            if after.get("vitals.dead") is True or after.get("vitals.ghost") is True:
+                self.detail = "the character died"
+                return Fought.DIED
+            v = after
+            in_combat = v.get("vitals.combat") is True
 
         # Already engaged with something alive: that is the fight, and shopping for a
         # better one just adds a second attacker. Only if it is the one fighting us,
@@ -1237,12 +1252,47 @@ class Fight:
                 FaceCode.NO_TARGET: Fought.LOST, FaceCode.WRONG_TARGET: Fought.LOST,
                 FaceCode.WRONG_KIND: Fought.LOST}.get(self._aim_code, Fought.NOT_VISIBLE)
 
-    def _rotate(self, values: dict) -> None:
+    def _heal_first(self, values: dict) -> dict | None:
+        """A fight already under way below the heal's line heals before it looks for the
+        attacker: a heal needs no target and no facing. At 17% the selection and facing of
+        a fresh attacker took five seconds with nothing pressed, and the heal came at 5%
+        (run 20260924T132256-fc8503). The save, then the heal, as the rotation has them.
+        """
+        deadline = time.monotonic() + HEAL_FIRST_S
+        v, idle_since = values, None
+        while time.monotonic() < deadline:
+            if (v is None or v.get("vitals.combat") is not True
+                    or v.get("vitals.dead") is True or v.get("vitals.ghost") is True):
+                return v
+            hp = v.get("vitals.hp")
+            saved = (self._saved_at is not None
+                     and time.monotonic() - self._saved_at < SAVE_HEAL_WINDOW_S)
+            if hp is None or (hp >= HEAL_IN_COMBAT and not saved and self._pending_heal is None):
+                return v
+            busy = (v.get("bars.casting") is True or (v.get("bars.gcd") or 0.0) > 0.0
+                    or self._pending_heal is not None)
+            pressed = len(self.pressed)
+            self._rotate(v, survival_only=True)
+            if self._input_refused:
+                return v
+            if len(self.pressed) > pressed or busy:
+                idle_since = None
+            elif idle_since is None:
+                idle_since = time.monotonic()
+            elif time.monotonic() - idle_since > HEAL_FIRST_IDLE_S:
+                return v                    # nothing to press: no heal ready, no mana
+            time.sleep(pace(self.hid, 0.15))
+            v = self.read()
+            self._observe(v)
+        return v
+
+    def _rotate(self, values: dict, *, survival_only: bool = False) -> None:
         """Press the highest-priority row the client says is ready.
 
         Roles, not classes. There is no `if paladin` here and there is not going to be:
         the engine asks for a row with `role=heal` and presses it if the bars say it is
         ready, so a warrior is the same list with one fewer row and nothing changes.
+        `survival_only` stops after the heal and its guards: no buff, no swing.
         """
         self._sample_race(values)
         if values.get("bars.casting") is True:
@@ -1303,6 +1353,8 @@ class Fight:
                     return
             if self._press(heal):
                 self._pending_heal = (hp, time.monotonic())
+            return
+        if survival_only:
             return
 
         # 2. Keep the buffs up, and only when one is actually lapsing: `bars.ready` says a

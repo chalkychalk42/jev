@@ -1875,3 +1875,18 @@ def test_the_heal_comes_straight_after_the_save_whatever_the_line(combat_clock):
     f._rotate(immune)
     assert hid.taps == ["7", "3"], "the heal next, not the stun, at exactly 40%"
     assert hid.chords[-1] == ("alt", "3")
+
+
+def test_a_fight_begun_near_death_heals_before_it_looks_for_the_attacker(combat_clock):
+    """At 17% the selection and facing of a fresh attacker took five seconds with nothing
+    pressed, and the heal came at 5% (run 20260924T132256-fc8503)."""
+    hurt = {**ALIVE, "vitals.combat": True, "vitals.hp": 0.17, "target.has": False,
+            "target.hp": None, "vitals.power": 0.9, "vitals.power_max": 100}
+    casting = {**hurt, "bars.casting": True}
+    healed = {**hurt, "vitals.hp": 0.65}
+    hid = _Hid()
+    f = _fight([hurt, casting, casting, healed, healed], hid=hid, frame=None)
+    f.run(timeout_s=1)
+    assert hid.taps[0] == "3", f"looked for the attacker before healing: {hid.taps}"
+    assert hid.chords[0] == ("alt", "3")
+    assert "tab" in hid.taps[1:], "never looked for the attacker after the heal"
