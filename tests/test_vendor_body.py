@@ -35,7 +35,9 @@ def test_body_buys_exact_empty_profile_supplies_at_nearest_matching_generated_sh
         detail = "observed service"
         def equip_bags(self, bags, **kw):
             return 0
-        def __init__(self, hid, read, open_shop, origin, size):
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
             self.open_shop = open_shop
             assert hid is b.client.hid and size == (1600, 900)
         def run(self, **kwargs):
@@ -84,7 +86,9 @@ def test_outside_zone_shop_is_not_selected_even_if_world_distance_is_shorter(mon
         detail = "observed service"
         def equip_bags(self, bags, **kw):
             return 0
-        def __init__(self, hid, read, open_shop, origin, size):
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
             self.open_shop = open_shop
         def run(self, **kwargs):
             assert kwargs["min_free"] == 6
@@ -113,7 +117,9 @@ def test_a_merchant_whose_body_cannot_be_clicked_is_passed_over_for_the_next(mon
         detail = "observed service"
         def equip_bags(self, bags, **kw):
             return 0
-        def __init__(self, hid, read, open_shop, origin, size):
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
             self.open_shop = open_shop
         def run(self, **kwargs):
             assert self.open_shop()
@@ -137,7 +143,9 @@ def test_a_merchant_that_refuses_for_another_reason_is_not_passed_over(monkeypat
         detail = ""
         def equip_bags(self, bags, **kw):
             return 0
-        def __init__(self, hid, read, open_shop, origin, size):
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
             self.open_shop = open_shop
         def run(self, **kwargs):
             self.open_shop()
@@ -166,3 +174,41 @@ def test_full_bags_put_on_a_bag_from_the_bags_before_any_merchant(monkeypatch):
     monkeypatch.setattr("jev.run.body.Vendor", Equipper)
     result = b.execute(b.arm, seen(), lambda: None)
     assert result.outcome.value == "succeeded" and "equipped a bag" in result.detail
+
+
+
+def test_a_bag_service_offers_every_stack_the_character_has_no_use_for(monkeypatch):
+    """Session 80: a merchant with 34 slots of shovels, spare cloaks and wolf meat, and one
+    grey sword, found "no junk". Unworn gear and goods no quest needs are offered too."""
+    b = body()
+    b.client.bounds = ZoneBounds(1, 0, 100, 0, 100, 0)
+    b.client.position = lambda: (0.5, 0.5)
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+    monkeypatch.setattr("jev.run.body.merchants",
+                        lambda map_id: (Merchant(2, "Inside", 0, (50, 50, 0), frozenset()),))
+    monkeypatch.setattr("jev.run.body.surplus_prices", lambda: {1195: 47, 2672: 4, 6078: 15})
+    monkeypatch.setattr("jev.run.body.gear_keep", lambda items, worn, **kw: frozenset({6078}))
+    b.interact = SimpleNamespace(open_on=Mock(return_value=Interacted.VENDOR))
+    offered = {}
+
+    class FakeVendor:
+        detail = "observed service"
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
+            self.open_shop, self.eligible = open_shop, eligible
+        def equip_bags(self, bags, **kw):
+            return 0
+        def bag_items(self, **kw):
+            return {1195, 2672, 6078, 773}
+        def run(self, **kwargs):
+            if self.eligible is not None:
+                offered.update(eligible=self.eligible, min_free=kwargs["min_free"])
+            assert self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
+    assert {1195: 47, 2672: 4}.items() <= offered["eligible"].items()
+    assert 6078 not in offered["eligible"], "a shield worth wearing is kept"
+    assert 773 not in offered["eligible"], "not in any price table"
+    assert offered["min_free"] > 34, "every eligible stack, not just six slots' worth"
