@@ -68,12 +68,28 @@ def close_observed(hid: object, read: Callable[[], dict | None],
             if not hid.tap("esc"):
                 result = Closed(CloseCode.REFUSED, "window close input refused", current)
             else:
-                paint = (wait_for_paint or Targeting(hid, read).wait_for_paint)()
+                waiting = wait_for_paint or Targeting(hid, read).wait_for_paint
+                paint = waiting()
                 if paint.code is not PaintCode.FRESH:
                     result = Closed(CloseCode.BLIND, paint.detail, paint.after)
                 else:
                     result = settled(paint.after) or Closed(
                         CloseCode.NOT_CLOSED, "window remains open after Escape", paint.after)
+                    raised = (result.code is CloseCode.NOT_CLOSED
+                              and (current or {}).get("ui.modal") is False
+                              and paint.after.get("ui.modal") is True)
+                    if raised and hid.tap("esc"):
+                        # The Escape that closed a merchant's window with the merchant
+                        # selected raised 2.4.3's "Blizzard_TimeManager has been blocked"
+                        # popup after every sale (24 September), and one pressed after a
+                        # window had gone opens the game menu. A popup takes the key before
+                        # anything else, and a second Escape closes either; nothing else is
+                        # pressed at a modal this did not raise.
+                        again = waiting()
+                        if again.code is PaintCode.FRESH:
+                            result = settled(again.after) or Closed(
+                                CloseCode.NOT_CLOSED, "window remains open after Escape",
+                                again.after)
         if span.enabled:
             span.finish(code=result.code.value, detail=result.detail, data={
                 "before": None if before is None else {key: before.get(key) for key in fields},

@@ -90,6 +90,21 @@ def test_escape_menu_replacing_loot_is_still_a_blocking_window():
     assert "modal" in result.detail
 
 
+def test_a_popup_raised_by_the_closing_escape_is_dismissed_by_one_more():
+    """Escape closing a merchant with the merchant selected raised 2.4.3's
+    "Blizzard_TimeManager has been blocked" popup after every sale."""
+    result, events = close([state(1, True), state(2), state(3, **{"ui.modal": True}),
+                            state(3, **{"ui.modal": True}), state(4)])
+    assert result.code is CloseCode.CLOSED
+    assert events.count("esc") == 2
+
+
+def test_a_modal_that_was_already_up_is_not_escaped_twice():
+    result, events = close([state(1, True, **{"ui.modal": True})])
+    assert result.code is CloseCode.NOT_CLOSED
+    assert events.count("esc") == 0
+
+
 def test_lost_radio_after_escape_is_unconfirmed():
     result, _ = close([state(1, True), None])
     assert result.code is CloseCode.BLIND
