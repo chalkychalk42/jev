@@ -2366,7 +2366,7 @@ Open risks, for the live run to settle: the drag from spellbook to bar (the mous
 moved off the spell button; a release anywhere but a bar button places nothing and casts
 nothing), and the click on open world that drops the rank-1 Holy Light a swap hands back.
 
-## 2026-09-24 11:35 — the trainer, live (sessions 55-61)
+## 2026-09-24 11:30 — the trainer, live (sessions 55-61)
 
 Verified live (V119):
 - `TRAIN_CLASS` chose Brother Wilhelm (Goldshire) from Northshire and walked there through
