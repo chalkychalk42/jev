@@ -285,9 +285,8 @@ class Fight:
     # where the camera points is neither. `None` means whoever wired it up is confident
     # the camera is already level, which nothing was, for an evening.
     level: Callable[[], object] | None = None
-    # A forced right-button levelling drag: mouse-look turns the character to face where the
-    # camera looks (`Camera.level`), which a turn by the keys cannot, since the camera turns
-    # with it.
+    # A right-button nudge: mouse-look turns the character to face where the camera looks
+    # (`Camera.face`), which a turn by the keys cannot, since the camera turns with it.
     realign: Callable[[], object] | None = None
     targeting: Targeting | None = None
     # The zone's map box, to measure the approach in yards; without it, blocked walks are

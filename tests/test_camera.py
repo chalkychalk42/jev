@@ -230,3 +230,25 @@ def test_invalidation_during_settle_cannot_be_overwritten_by_calibration_success
     assert hid.log == _calibration_inputs() * 2
     assert camera.ensure_level() is True
     assert hid.log == _calibration_inputs() * 2
+
+
+def test_facing_the_camera_is_a_held_nudge_not_a_levelling():
+    """5.4 s of levelling in a fight at 40% health stopped the rotation until the character
+    died (run 20260924T121445-3d2ab1). Facing needs mouse-look held, and a nudge either
+    way so the release is not a right-click; the pitch is left as it is."""
+    from jev.clients.camera import NUDGE_PX
+
+    hid = _Hid()
+    camera = _camera(hid)
+    assert camera.face()
+    assert hid.log[0] == ("move_to", 10 + 800, 20 + 450)
+    assert [e for e in hid.log if e[0] == "move_by"] == [
+        ("move_by", NUDGE_PX, 0), ("move_by", -NUDGE_PX, 0)]
+    assert hid.log[1] == ("button", True, True) and hid.log[-1] == ("button", False, True)
+    assert not camera.calibrated, "facing never claims a levelled camera"
+
+
+def test_a_failed_nudge_still_releases_mouse_look():
+    hid = _Hid(drags=(True, False))
+    assert _camera(hid).face() is False
+    assert hid.log[-1] == ("button", False, True)

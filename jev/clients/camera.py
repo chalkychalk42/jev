@@ -59,6 +59,10 @@ LEVEL_PX = 500
 GRAB_S = 0.15
 SETTLE_S = 0.6
 
+# Enough movement that releasing the button ends a drag, not a right-click on whatever is
+# under the pointer; small enough to leave the heading where it was.
+NUDGE_PX = 8
+
 
 @dataclass
 class Camera:
@@ -90,6 +94,31 @@ class Camera:
             event("camera.ready", code="retained")
             return True
         return self.level()
+
+    @traced("camera.face")
+    def face(self) -> bool:
+        """Turn the character to where the camera looks: hold mouse-look and nudge.
+
+        Mouse-look turns the character to the camera's heading as soon as it starts, and
+        leaves the pitch as it was. Half a second, where `level()` - a drag into the pitch
+        clamp and back - took 5.4 s in the middle of a fight at 40% health, the rotation
+        stopped through it, and the character died at its end (run 20260924T121445-3d2ab1).
+        """
+        ox, oy = self.window_origin
+        w, h = self.window_size
+        if not self.hid.move_to(ox + w // 2, oy + h // 2):
+            return False
+        time.sleep(GRAB_S)
+        if not self.hid.button(True, right=True):
+            return False
+        try:
+            time.sleep(GRAB_S)
+            if not self.hid.move_by(NUDGE_PX, 0) or not self.hid.move_by(-NUDGE_PX, 0):
+                return False
+            time.sleep(GRAB_S)
+        finally:
+            released = self.hid.button(False, right=True)
+        return bool(released)
 
     @traced("camera.calibrate")
     def level(self) -> bool:

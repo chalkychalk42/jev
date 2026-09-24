@@ -194,7 +194,7 @@ class LiveBody:
         self._wedged = 0
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
-        self.fight.realign = self.camera.level
+        self.fight.realign = self.camera.face
         client.travel.read_pos = self._position
 
     def has_focus(self) -> bool:
