@@ -492,3 +492,37 @@ def test_a_fight_on_the_way_is_not_an_attempt_at_the_step(tmp_path):
     rt.armed = step_work
     rt.finish(SkillOutcome.TIMED_OUT, "skill timeout")
     assert rt.tracker.memory.attempts == 1
+
+
+def detour_runtime(tmp_path, states):
+    """At the step after quest 1's hand-in, which failed twice and was passed over."""
+    return ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
+                         start_step="after", start_retried=frozenset({"turnin"}))
+
+
+def test_a_passed_over_hand_in_within_reach_is_made_on_the_way(tmp_path):
+    """Kobold Candles sat complete in the log after its hand-in was passed over, with
+    William Pestle twenty yards from the NPC the guide kept returning to (25 September)."""
+    from jev.orch.runtime import DETOUR
+
+    states = [held(0, 5), held(1, 5), seen(2)]          # the last: quest 1 handed in
+    rt = detour_runtime(tmp_path, states)
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("turnin", "after")
+    assert DETOUR + "turnin" in rt._retried
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "turnin", "still in the log: still handing it in"
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "after" and 1 in rt.completed, "handed in and back"
+
+
+def test_a_hand_in_on_the_way_that_fails_goes_straight_back_and_is_not_tried_again(tmp_path):
+    states = [held(t, 5) for t in (0, 1, 13, 14, 15)]
+    rt = detour_runtime(tmp_path, states)
+    visited = []
+    for _ in states:
+        rt.tick(choose=False)
+        visited.append((rt.tracker.step_id, rt.tracker.memory.rejoin_to))
+    assert visited[1] == ("turnin", "after")
+    assert ("rib", "after") not in visited, "a failed detour is not worth a rib"
+    assert visited[2:] == [("after", None)] * 3, "back, and once only"

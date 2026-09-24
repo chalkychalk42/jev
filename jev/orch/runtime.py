@@ -25,6 +25,7 @@ Four properties this loop must have, and each is a line you can point at:
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -60,6 +61,12 @@ from jev.world.state_v1 import ArmedBy, State, StepKind
 SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
                               "BUY_AMMO_REAGENT_FOOD", "LOOT", "RELEASE_SPIRIT", "CORPSE_RUN",
                               "TRAIN_CLASS", "BIND_HEARTH", "DISCOVER_FLIGHT", "COMBAT_PROFILE"})
+# A hand-in passed over after failing twice leaves its quest complete in the log for good:
+# Kobold Candles sat there with William Pestle twenty yards from Marshal Dughan, whom the
+# guide visits again and again (25 September). A later step that brings the character
+# within the hand-in's own arrival radius hands the quest in on the way, once ever - the
+# attempt is kept among the retried steps as `DETOUR` + its id - and comes back.
+DETOUR = "detour:"
 
 
 @dataclass
@@ -228,6 +235,12 @@ class ClientRuntime:
             if beyond is not None:
                 self.tracker.enter(beyond, state)
                 self._tracker_event = "rejoin_or_skip"
+        if (not self.finished and self.tracker.step_id == before
+                and verdict.event not in (Event.ADVANCE, Event.FAIL, Event.DEATH)
+                and (detour := self._handin_detour(state)) is not None):
+            self._retried.add(DETOUR + detour)
+            self.tracker.enter(detour, state, rejoin_to=before)
+            self._tracker_event = "rejoin_or_skip"
         node = self.graph.get(self.tracker.step_id)
         state = self._with_guide(state, verdict)
         record = record or verdict.event in (Event.ADVANCE, Event.FAIL, Event.DEATH)
@@ -333,6 +346,25 @@ class ClientRuntime:
             return None
         return self._beyond_abandoned()
 
+    def _handin_detour(self, state: State) -> str | None:
+        """A passed-over hand-in within reach, for a quest complete in the log (`DETOUR`)."""
+        node = self.graph.get(self.tracker.step_id)
+        if (node is None or node.kind is StepKind.GRIND or self.tracker.memory.rejoin_to
+                or state.quests is None or state.vitals.combat is True
+                or state.pos.mx is None or state.pos.my is None):
+            return None
+        complete = {q.quest_id for q in state.quests if q.complete is True}
+        here = (state.pos.mx, state.pos.my)
+        for step in self.graph.nodes:
+            if (step.kind is StepKind.QUEST_TURNIN and step.id != node.id
+                    and step.quest_id in complete and step.id in self._retried
+                    and DETOUR + step.id not in self._retried and step.pos is not None
+                    and (step.coord_zone_id is None or state.pos.coord_zone_id is None
+                         or step.coord_zone_id == state.pos.coord_zone_id)
+                    and math.dist(step.pos, here) <= step.r):
+                return step.id
+        return None
+
     def _beyond_abandoned(self) -> str | None:
         node = self.graph.get(self.tracker.step_id)
         if (node is None or node.quest_id is None or node.quest_id in self.completed
@@ -375,7 +407,11 @@ class ClientRuntime:
             case Event.FAIL:
                 self.counters.fails += 1
                 beyond = self._past_abandoned_quest(verdict)
-                if beyond is not None:
+                back = self.tracker.memory.rejoin_to
+                if back is not None and DETOUR + self.tracker.step_id in self._retried:
+                    # A hand-in on the way that could not be done: straight back, no rib.
+                    self.tracker.enter(back, state)
+                elif beyond is not None:
                     # The rest of a quest whose accept was passed over: its objective and
                     # hand-in cannot happen, and a rib cannot put the quest in the log.
                     # Quest 16's accept failed twice, and its objective then stopped a
