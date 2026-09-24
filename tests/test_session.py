@@ -322,3 +322,16 @@ def test_a_realm_screen_that_never_advances_stops_with_its_frame():
     s._wait = lambda seconds: None
     assert s.sign_in("acct", "pw", timeout_s=5.0) is False
     assert "choosing a realm" in s.detail and s.unknown_frame is not None
+
+
+def test_a_loading_character_list_is_waited_on_not_typed_at():
+    """Its red sunset sky passed the login button's red test: credentials were typed at it,
+    and the Enter that submitted them cancelled the retrieval (24 September)."""
+    frame = np.load(REALM_FIXTURES / "character-retrieving.npz")["frame"]
+    assert stage(frame, radio_ok=False) is Stage.CHARACTER_WAIT
+    s = _session(frame=frame)
+    s.hid.click = lambda *a, **k: pytest.fail("clicked at a loading list")
+    s.hid.tap = lambda *a, **k: pytest.fail("typed at a loading list")
+    s._wait = lambda seconds: None
+    assert s.sign_in("acct", "pw", timeout_s=5.0) is False
+    assert "did not load" in s.detail and s.typed_credentials is False

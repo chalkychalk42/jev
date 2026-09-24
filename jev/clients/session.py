@@ -36,6 +36,7 @@ class Stage(StrEnum):
     IN_WORLD = "in_world"      # certain: the strip decodes
     LOGIN = "login"            # a red plate where the Login button sits
     CHARACTER = "character"    # a red plate where Enter World sits
+    CHARACTER_WAIT = "character_wait"  # Enter World greyed: the character list is loading
     REALM_ASSIGNED = "realm_assigned"  # red plates at Accept and View Realm List
     REALM_LIST = "realm_list"          # red plates at the list's Okay and Cancel
     REALM_WIZARD = "realm_wizard"      # a red plate at the wizard's Cancel, and its Suggest
@@ -94,6 +95,12 @@ REALM_ROW = (0.3375, 0.25)
 _GREY_MAX_SPREAD = 12
 # Clicks through the realm screens before this gives up and keeps the frame.
 MAX_REALM_STEPS = 4
+# Character select while its list loads: Enter World a disabled grey plate, measured
+# (29, 28, 27), under a "Retrieving character list" dialog on a red sunset sky that the
+# login button's red test took for the login form - so credentials were typed at it, and
+# the Enter that submitted them cancelled the retrieval. Looked at again, never typed at.
+CHARACTER_WAIT_S = 2.0
+MAX_CHARACTER_WAITS = 15
 
 # The login and "Okay" buttons are the interface's red plates: red dominant, everything
 # else low. Measured at (100, 39, 19) and (95, 16, 4).
@@ -144,6 +151,8 @@ def stage(frame: np.ndarray | None, radio_ok: bool) -> Stage:
         return Stage.ELSEWHERE
     if _is_red_button(frame, ENTER_WORLD):
         return Stage.CHARACTER
+    if _is_grey_plate(frame, ENTER_WORLD):
+        return Stage.CHARACTER_WAIT
     if _is_red_button(frame, LOGIN_BUTTON):
         return Stage.LOGIN
     if _is_red_button(frame, REALM_ACCEPT) and _is_red_button(frame, REALM_VIEW_LIST):
@@ -177,6 +186,7 @@ class Session:
     dismissed_dialog: bool = field(default=False, init=False)
     entered_world: int = field(default=0, init=False)
     realm_steps: int = field(default=0, init=False)
+    character_waits: int = field(default=0, init=False)
 
     def stage(self) -> Stage:
         if self.checkpoint:
@@ -237,6 +247,16 @@ class Session:
                 self.hid.click(*self._screen(ENTER_WORLD))
                 self.entered_world += 1
                 self._wait(6.0)
+                continue
+
+            if current is Stage.CHARACTER_WAIT:
+                if self.character_waits >= MAX_CHARACTER_WAITS:
+                    self.unknown_frame = self.read_frame()
+                    self.detail = (f"the character list did not load in "
+                                   f"{MAX_CHARACTER_WAITS * CHARACTER_WAIT_S:.0f}s")
+                    return False
+                self.character_waits += 1
+                self._wait(CHARACTER_WAIT_S)
                 continue
 
             if current in (Stage.REALM_WIZARD, Stage.REALM_ASSIGNED, Stage.REALM_LIST):
