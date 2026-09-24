@@ -2269,3 +2269,6 @@ the level 5-7 wolves until level 8, then comes back to him.
 Operator action, 08:00: the loop was stopped between sessions and the playhead given
 `retried: [3905_grape_manifest_turnin]` (V110): its first failure, in session 43, was only
 in that session's memory. The previous file is at `/tmp/playhead-before-0800.json`.
+That stop cost a death: session 45 was stopped mid-fight (25% health against a level 6 mob
+at 71%), and the character stood idle through the restart and died. Operator stops go
+between fights from now on.
