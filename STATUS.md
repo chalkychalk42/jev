@@ -2394,3 +2394,23 @@ What the first live runs found, each fixed the same morning:
 Operator note: two deaths today happened with the loop stopped for these fixes, the
 character standing idle in the world; and a revived old loop ran a duplicate session 61
 for two seconds (the input lock refused it). `/tmp/session_loop2.sh` holds an flock.
+
+## 2026-09-24 12:00 — sessions 62-63: Judgement, and the seal it replaced
+
+- Level 9. A second visit to Brother Wilhelm (once the purse held 100 copper) bought
+  Judgement and dragged it onto slot 7 in one skill: `TRAIN_CLASS: done 1 spells bought;
+  placed 1 of 1`. Session 63's fights press Judgement on its cooldown and the seal straight
+  after it (5 Judgements, 7 seals in two kills), with the aura and blessing kept up.
+- Learning Judgement also taught a Seal of Righteousness (21084) that the client put in
+  the starting seal's place on slot 2, and the catalog did not know it: one session fought
+  without its seal, and without Judgement, which needs one. The catalog now holds every
+  spell a trainer spell teaches and each one's successors; an unknown spell keeps its
+  slot's starting row.
+- A heal is no longer held below a quarter of health (V96's floor was 15%): a death in
+  session 62 came from holding it nine times against a wolf "a second from dead" that took
+  five more, then meeting the next wolf at 14% with Divine Protection spent.
+- After each trainer visit Blizzard's taint notice appears ("Blizzard_TimeManager has been
+  blocked from an action only available to the Blizzard UI", Disable / Ignore), between the
+  Escape that closes the trainer and the P that opens the spellbook. ABORT_WAIT's Escape
+  answers it within 6 s. Its first button is Disable: nothing may click `ui.advance_` under
+  it (a stock popup's first button is what that field paints).
