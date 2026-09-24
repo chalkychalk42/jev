@@ -1605,3 +1605,31 @@ def test_without_a_cast_the_evidence_ages_as_ever(combat_clock):
         combat_clock[0] += 0.5
     assert combat_clock[0] - f._damage_at > REAIM_AFTER_S
     assert f._reach_at == 0.0
+
+
+def test_an_attacker_that_cannot_be_hit_is_drawn_out_by_backing_off(combat_clock):
+    """A Mangy Wolf inside a tree trunk bit the character from 69% to 35% while the fight
+    stepped into the bark twelve times (run 20260924T053651-ac99b2)."""
+    from jev.clients.fight import DRAW_OUT_S, UNANSWERED_STEPS
+
+    biting = {**ALIVE, "target.in_melee": True, "target.attacking_me": True,
+              "vitals.combat": True}
+    g = _fight([biting])
+    g.acquire = lambda name_id, **_: None
+    g.engage = lambda *_: True
+    g.run(timeout_s=4.0)
+    backs = [secs for key, secs in g.hid.holds if key == "s"]
+    assert backs and backs[0] == DRAW_OUT_S
+    steps = [key for key, _secs in g.hid.holds]
+    assert steps.index("s") == UNANSWERED_STEPS, "backed off after the unanswered steps"
+
+
+def test_an_attacker_being_hit_is_not_backed_away_from(combat_clock):
+    biting = {**ALIVE, "target.in_melee": True, "target.attacking_me": True,
+              "vitals.combat": True}
+    hits = [{**biting, "target.hp": 1.0 - 0.02 * i} for i in range(40)]
+    g = _fight(hits)
+    g.acquire = lambda name_id, **_: None
+    g.engage = lambda *_: True
+    g.run(timeout_s=3.0)
+    assert all(key != "s" for key, _secs in g.hid.holds)

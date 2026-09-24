@@ -170,6 +170,13 @@ MAX_SIDESTEP_S = 2.0
 # Ridge Mine a character stood on a stack of crates in a nook, rock to one side and a pit
 # prop ahead, and ten strafes moved it not at all (run 20260923T191946-2b79ed).
 BACK_OFF_S = 0.5
+# Steps at a unit that is biting us in melee, none of them bringing a swing or a hit: it is
+# somewhere a swing does not reach, and the character backs off for it to follow out. A
+# Mangy Wolf stood inside the trunk of a tree and bit a level 7 paladin from 69% to 35%
+# while the fight stepped into the bark twelve times, gave up "unreachable", and started
+# again (run 20260924T053651-ac99b2). What chases us comes out of the tree.
+UNANSWERED_STEPS = 4
+DRAW_OUT_S = 1.5
 
 # A toggle's new state reaches the radio a paint or two after the key. Pressing it again
 # inside this window would read the old state and switch it straight back.
@@ -309,6 +316,8 @@ class Fight:
     _approach_s: float = field(default=0.0, init=False)
     # Strafes off a blocked approach this fight, the side the next one goes, and how long.
     sidesteps: int = field(default=0, init=False)
+    # Steps in a row at an attacker in melee that brought no swing and no hit.
+    _unanswered: int = field(default=0, init=False)
     _side: int = field(default=1, init=False)
     _sidestep_s: float = field(default=SIDESTEP_S, init=False)
     _still_steps: int = field(default=0, init=False)
@@ -356,7 +365,7 @@ class Fight:
         self._xp_start = None
         self._strides = 0
         self._approach_s = 0.0
-        self.sidesteps = self._still_steps = 0
+        self.sidesteps = self._still_steps = self._unanswered = 0
         self._realigned = False
         self._sidestep_s = SIDESTEP_S
         h = humaniser(self.hid)
@@ -857,6 +866,7 @@ class Fight:
         if hit:
             self._damage_seen = True
             self._damage_at = self._reach_at = now
+            self._unanswered = 0
         if self._damage_mark is None:
             self._damage_at = now
         self._damage_mark = hp
@@ -871,6 +881,7 @@ class Fight:
         self._swings = count
         if new:
             self._reach_at = time.monotonic()
+            self._unanswered = 0
         return new
 
     def _close(self, values: dict, near: bool, *, deadline: float | None = None) -> bool:
@@ -909,6 +920,13 @@ class Fight:
                     return False
                 if self._note_damage(v) or self._note_swing(v):
                     return True
+            if (last is not None and last.get("target.in_melee") is True
+                    and last.get("target.attacking_me") is True):
+                self._unanswered += 1
+                if self._unanswered >= UNANSWERED_STEPS:
+                    self._unanswered = 0
+                    self._draw_out()
+                    return False
             after = self._position(last)
             if before is None or after is None:
                 return False
@@ -990,6 +1008,14 @@ class Fight:
             trail.popleft()
         return (now - trail[0][0] >= BLOCKED_AFTER_S
                 and distance_yards(trail[0][1], here, self.bounds) < BLOCKED_YARDS)
+
+    def _draw_out(self) -> None:
+        """Back off from an attacker that bites and cannot be hit, for it to follow out."""
+        event("approach.draw_out", data={"key": "s", "seconds": DRAW_OUT_S,
+                                          "closed": self.closed})
+        if not self.hid.hold("s", DRAW_OUT_S):
+            self._input_refused = True
+            self.detail = "back-off input refused"
 
     def _sidestep(self, mode: str) -> None:
         """Strafe off a blocked line to the unit; the next approach faces it again."""
