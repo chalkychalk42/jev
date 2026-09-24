@@ -45,6 +45,12 @@ from jev.world.vendor import merchants, supplies_for
 # this character cannot beat still stands: the next recovery gets up at the graveyard's
 # Spirit Healer instead, and goes home by hearthstone.
 DEATH_TRAP_S = 180.0
+# Where a ghost gets up when the body is such a trap and the Spirit Healer will not raise it:
+# this far short of the body, on the graveyard's side. A body can be reclaimed from inside
+# the server's 39-yard radius and the character stands up where the ghost stood; at the body
+# itself the Mangy Wolves round it killed a character at half health three times running,
+# the Spirit Healer answering nothing each time (run 20260924T041014-a9781c).
+TRAP_RECLAIM_YARDS = 32.0
 # Where to hover for a unit too close and tall for its nameplate to show, as fractions of
 # the client: down the middle first. The Spirit Healer stands over a fresh ghost and fills
 # the centre of the screen, with its plate drawn behind the strip at the top.
@@ -599,6 +605,20 @@ class LiveBody:
         z = min(placed, key=lambda n: math.dist(n.world[:2], (wx, wy))).world[2]
         return self._approach((wx, wy, z))
 
+    def _short_of_body(self, point) -> bool:
+        """Walk to within `TRAP_RECLAIM_YARDS` of the body, from the graveyard's side."""
+        graveyard = self.recover.graveyard
+        if graveyard is None:
+            return self._corpse_walk(point)
+        body = map_to_world(*point, self.client.bounds)
+        yard = map_to_world(*graveyard, self.client.bounds)
+        apart = math.dist(body, yard)
+        if apart <= TRAP_RECLAIM_YARDS:
+            return self._corpse_walk(graveyard)
+        share = TRAP_RECLAIM_YARDS / apart
+        short = (body[0] + (yard[0] - body[0]) * share, body[1] + (yard[1] - body[1]) * share)
+        return self._corpse_walk(world_to_map(*short, self.client.bounds))
+
     def _talk_to(self, name: str):
         """Right-click a named unit: by its nameplate, or where a fresh hover finds it."""
         opened = self.interact.open_on(name)
@@ -651,7 +671,17 @@ class LiveBody:
                 home = self.hearth.run()
                 self.say(f"  up at the Spirit Healer; hearthstone: {home.value} {self.hearth.detail}")
                 return self._result(up, f"up at the Spirit Healer; hearthstone {home.value}")
-            self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
+            self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body, "
+                     f"to get up {TRAP_RECLAIM_YARDS:.0f} yards short of it")
+            walk = self.recover.walk_to
+            self.recover.walk_to = self._short_of_body
+            try:
+                outcome = self.recover.run(self.recover.corpse)
+            finally:
+                self.recover.walk_to = walk
+            if outcome is Recovered.ALIVE:
+                self._revived_at = time.monotonic()
+            return self._result(outcome, self.recover.detail)
         # Recover reads painted corpse coordinates. No guessed quest-node corpse.
         outcome = self.recover.run(self.recover.corpse)
         if outcome is Recovered.ALIVE:

@@ -575,3 +575,38 @@ def test_a_kill_whose_corpse_is_not_found_is_still_a_kill():
     assert result.outcome is SkillOutcome.SUCCEEDED and "no_corpse" in result.detail
     b.loot = SimpleNamespace(run=lambda **kw: Looted.BAGS_FULL, detail="bags are full")
     assert b._fight(seen()).outcome is SkillOutcome.PREEMPTED, "full bags still call a vendor"
+
+
+def test_a_trap_body_the_healer_will_not_raise_us_from_is_reclaimed_from_short_of_it(
+        monkeypatch):
+    """Up at the body among the Mangy Wolves three times running, the Spirit Healer
+    answering nothing (run 20260924T041014-a9781c). A body is reclaimed from inside 39
+    yards and the character stands where the ghost stood."""
+    import math
+
+    from jev.guide.coords import map_to_world, world_to_map
+    from jev.run.body import TRAP_RECLAIM_YARDS
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    now = 10_000.0
+    monkeypatch.setattr("jev.run.body.time.monotonic", lambda: now)
+    b._revived_at = now - 30.0
+    corpse = world_to_map(-9000.0, 100.0, b.client.bounds)
+    b.recover.graveyard = world_to_map(-9100.0, 100.0, b.client.bounds)
+    b.recover.corpse = corpse
+    b.recover.run_spirit_healer = lambda: Recovered.STILL_GHOST
+    walked = []
+    b._corpse_walk = lambda point: walked.append(map_to_world(*point, b.client.bounds)) or True
+
+    def run(corpse_point):
+        b.recover.walk_to(corpse_point)
+        return Recovered.ALIVE
+
+    b.recover.run = run
+    original = b.recover.walk_to
+    assert b._recover(seen()).code == "alive"
+    assert len(walked) == 1
+    assert math.dist(walked[0], (-9000.0, 100.0)) == pytest.approx(TRAP_RECLAIM_YARDS, abs=0.5)
+    assert walked[0][0] < -9000.0, "on the graveyard's side"
+    assert b.recover.walk_to is original, "the normal walk is restored"
