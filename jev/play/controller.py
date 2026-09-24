@@ -220,6 +220,7 @@ class PlayController:
         self.skills_for = skills_for or (lambda arm: ())
         self.recent = deque(maxlen=12)
         self.learning_error = None
+        self._learning_busy = False
         # A teaching episode combat cut short after it had engaged something, waiting for
         # the fight's verdict: (episode id, first, last observation, actions, started, held).
         self._held: tuple | None = None
@@ -237,14 +238,30 @@ class PlayController:
         if self.learner is not None:
             try:
                 self.learner.record(row)
+                self._learning_busy = False
             except Exception as exc:
                 # Evidence is already in the run. An optional trainer failure removes
                 # student authority, never silently loses the trace or crashes input.
-                self.learning_error = f"{type(exc).__name__}: {exc}"
-                self.say(f"motor learning unavailable: {self.learning_error}")
+                self._learning_failed(exc)
+
+    def _learning_failed(self, exc: Exception) -> None:
+        """A store another writer held past Windows' ten-second lock is busy, not broken.
+
+        The row is in this run's journal, and the learner service ingests the run after it
+        ends; the student is only silenced until the next row the store takes. It was
+        disabled for the rest of the session, twice in four sessions (runs of sessions 52
+        and 54, `PermissionError: [Errno 13]`). Anything else still disables it.
+        """
+        if isinstance(exc, (PermissionError, BlockingIOError)):
+            if not self._learning_busy:
+                self.say(f"motor learning store busy ({exc}); the run's journal keeps the row")
+            self._learning_busy = True
+            return
+        self.learning_error = f"{type(exc).__name__}: {exc}"
+        self.say(f"motor learning unavailable: {self.learning_error}")
 
     def _prediction(self, observation, bucket, decision_id):
-        if self.learner is None or self.learning_error:
+        if self.learner is None or self.learning_error or self._learning_busy:
             return None
         try:
             return self.learner.predict(
@@ -253,7 +270,7 @@ class PlayController:
                 knowledge_fingerprint=self.knowledge_fingerprint,
                 allow_student=self.config.mode == "adaptive")
         except Exception as exc:
-            self.learning_error = f"{type(exc).__name__}: {exc}"
+            self._learning_failed(exc)
             return None
 
     def _close(self, episode_id, first, current, result: Result, *, count: int,
@@ -277,7 +294,7 @@ class PlayController:
             try:
                 self.learner.finish_episode(episode_id, run_id=self.journal.run_id, outcome=final)
             except Exception as exc:
-                self.learning_error = f"{type(exc).__name__}: {exc}"
+                self._learning_failed(exc)
 
     def settle(self, observation=None) -> None:
         """Finish an episode combat cut short, now that its fight has had its say.

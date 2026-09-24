@@ -524,3 +524,27 @@ def test_an_episode_cut_short_by_anything_but_combat_is_closed_at_once(tmp_path)
     with pytest.raises(FocusLost):
         controller.run(grind, checkpoint)
     assert [e["code"] for e in _episodes(journal)] == ["preempted"]
+
+
+def test_a_learner_store_another_writer_holds_is_busy_not_broken(tmp_path):
+    """Windows gives up a held file lock after ten seconds with `PermissionError`. The row
+    is in the run's journal and the learner reads the run in later; the student is silent
+    only until the store takes a row again, not for the rest of the session."""
+    learner = MotorLearner(tmp_path / "models")
+    real_record, calls = learner.record, []
+
+    def record(row):
+        calls.append(row["decision_id"])
+        if len(calls) == 1:
+            raise PermissionError(13, "Permission denied")
+        return real_record(row)
+
+    learner.record = record
+    said = []
+    _env, _teacher, journal, controller = setup(tmp_path, CORRECTION, learner=learner)
+    controller.say = said.append
+    assert controller.run(arm(), lambda: None).outcome is SkillOutcome.SUCCEEDED
+    assert controller.learning_error is None
+    assert controller._learning_busy is False                   # the next rows went in
+    assert len(result_rows(journal)) == 4 and len(learner.records()) == 3
+    assert sum("busy" in line for line in said) == 1
