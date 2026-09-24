@@ -175,9 +175,18 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
             if _executable(controls, name) and (name != "attack_target" or living)]
     clicks = []
     if context.get("target_name_id") is not None:
+        unit = context.get("target_name") or "objective unit"
         clicks.append(Choice("select_unit", ("x", "y"), (),
-                             f"left-click the {context.get('target_name') or 'objective unit'} "
-                             "at x,y to select it; the pointer must be over that unit"))
+                             f"left-click a living {unit} at x,y to select it; the pointer "
+                             "must be over that unit"))
+        # A corpse lying there unselected was only reachable through `select_unit`, which
+        # proves a living unit, so each try was refused: two decisions spent on one corpse
+        # (run 20260924T005824-740147). Not offered over one of its own kind already
+        # selected, where a new selection cannot be told from the old one.
+        if values.get("target.name_id") != context.get("target_name_id"):
+            clicks.append(Choice("select_corpse", ("x", "y"), (),
+                                 f"left-click a dead {unit} at x,y to select its corpse "
+                                 "for looting"))
     if living:
         clicks.append(Choice("interact_unit", ("x", "y"), (),
                              "right-click the selected living unit's body at x,y: talk, open "
@@ -307,9 +316,10 @@ def to_action(choice: TutorChoice, choices: list[Choice], observation: dict):
         return KeyAction(control=name, duration_s=0.0)
     if name.startswith("slot_"):
         return ActionSlotAction(slot=int(name.removeprefix("slot_")))
-    if name == "select_unit":
+    if name in ("select_unit", "select_corpse"):
         return ClickAction(button="left", intent="select", x=choice.x, y=choice.y,
-                           expected_target_id=context.get("target_name_id"))
+                           expected_target_id=context.get("target_name_id"),
+                           expected_dead=name == "select_corpse")
     if name in ("interact_unit", "loot_corpse"):
         return ClickAction(button="right", intent="interact", x=choice.x, y=choice.y,
                            expected_target_id=values.get("target.name_id"),
@@ -348,8 +358,10 @@ def describe(action: dict) -> str:
     if kind == "click":
         if action.get("intent") == "ui":
             return str(action.get("ui_control"))
-        name = ("select_unit" if action.get("intent") == "select" else
-                "loot_corpse" if action.get("expected_dead") else "interact_unit")
+        if action.get("intent") == "select":
+            name = "select_corpse" if action.get("expected_dead") else "select_unit"
+        else:
+            name = "loot_corpse" if action.get("expected_dead") else "interact_unit"
         return f"{name} at ({action.get('x', 0):.2f}, {action.get('y', 0):.2f})"
     if kind == "pointer":
         return f"pointer at ({action.get('x', 0):.2f}, {action.get('y', 0):.2f})"

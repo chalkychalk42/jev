@@ -59,6 +59,22 @@ def test_select_needs_an_objective_unit_and_ui_needs_painted_controls():
     assert "select_unit" not in names({})
     assert "select_unit" in names({}, context={"target_name_id": 2864, "target_name": "Young Wolf"})
     assert "quest_advance" not in names({"ui.quest_frame": True})
+
+
+def test_an_unselected_corpse_of_the_objective_can_be_selected_for_looting():
+    wolf = {"target_name_id": 2864, "target_name": "Young Wolf"}
+    assert "select_corpse" in names({"target.has": False}, context=wolf)
+    assert "select_corpse" in names({"target.has": True, "target.name_id": 99,
+                                     "target.hp": 1.0}, context=wolf)
+    assert "select_corpse" not in names({"target.has": True, "target.name_id": 2864,
+                                         "target.hp": 0.0}, context=wolf)
+    assert "select_corpse" not in names({"target.has": False})
+    seen = {"values": {**ALIVE, "target.has": False}, "context": wolf}
+    choice = tutor.TutorChoice(observation_id="o", action="select_corpse", x=0.4, y=0.6)
+    action = tutor.to_action(choice, tutor.menu(seen, CONTROLS), seen)
+    assert action.intent == "select" and action.button == "left"
+    assert action.expected_dead is True and action.expected_target_id == 2864
+    assert tutor.describe(action_dict(action)) == "select_corpse at (0.40, 0.60)"
     assert "quest_advance" in names({"ui.quest_frame": True, "ui.advance_x": 0.3})
     assert "gossip_line" not in names({"ui.gossip": True})
     assert "gossip_line" in names({"ui.gossip": True, "ui.list_hash1": 777})
