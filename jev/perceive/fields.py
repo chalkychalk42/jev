@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 13                                   # bump when the field table changes shape
+SCHEMA = 14                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -495,6 +495,11 @@ FIELDS: tuple[Field, ...] = (
     Field("char.key", 31, Kind.UINT, "return CHARACTER_KEY()",
           "the player's name and realm, FNV-1a mod 2^31-1 (radio_frame.character_key)"),
 
+    # A world object under the pointer - a crate of Milly's Harvest, a Bundle of Wood - by
+    # the stock tooltip's first line, hashed as names are; unknown with a unit under it.
+    Field("cursor.object_id", 16, Kind.UINT, "return CURSOR_OBJECT()",
+          "name hash of the world object whose tooltip is fully shown under the pointer"),
+
 )
 
 # --------------------------------------------------------------------------- layout
@@ -503,7 +508,8 @@ FIELDS: tuple[Field, ...] = (
 # captures and installed addons readable without inventing merchant or cursor telemetry.
 # Preserve this prefix when adding future schemas; migrations are declared, not guessed.
 SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS[:121],
-                 10: FIELDS[:125], 11: FIELDS[:126], 12: FIELDS[:127], 13: FIELDS}
+                 10: FIELDS[:125], 11: FIELDS[:126], 12: FIELDS[:127], 13: FIELDS[:128],
+                 14: FIELDS}
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 assert sum(f.bits for f in SCHEMA_FIELDS[8]) == 1059
@@ -511,6 +517,7 @@ assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073
 assert sum(f.bits for f in SCHEMA_FIELDS[10]) == 1100
 assert sum(f.bits for f in SCHEMA_FIELDS[11]) == 1102
 assert sum(f.bits for f in SCHEMA_FIELDS[12]) == 1106
+assert sum(f.bits for f in SCHEMA_FIELDS[13]) == 1137
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

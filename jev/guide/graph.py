@@ -18,9 +18,8 @@ to do and no error to explain it.
 
 from __future__ import annotations
 
-import math
-
 import json
+import math
 import pathlib
 from enum import StrEnum
 from typing import Literal

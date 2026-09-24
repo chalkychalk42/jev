@@ -95,6 +95,12 @@ function CreateFrame(_, name, _)
 end
 UIParent = newFrame()
 WorldFrame = newFrame()
+-- The stock tooltip, over a world object: shown while `tooltipText` is set, fading below 1.
+GameTooltip = {
+    IsVisible = function() return STATE.tooltipText ~= nil end,
+    GetAlpha = function() return pick("tooltipAlpha", 1) end,
+}
+GameTooltipTextLeft1 = { GetText = function() return STATE.tooltipText end }
 
 function GetTexturesPainted() return textures end
 

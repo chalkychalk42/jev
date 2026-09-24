@@ -1,5 +1,7 @@
 """Shared body switches proven Hunt composition between DB-backed objective targets."""
 
+from types import SimpleNamespace
+
 from test_live_body import body
 from test_runtime_records import seen
 
@@ -151,3 +153,39 @@ def test_arriving_without_the_credit_is_not_exploring(monkeypatch):
     b.client.approach.return_value = False
     result = b._hunt(seen(quests=b.client.log.complete))
     assert result.outcome is SkillOutcome.ABORTED and result.code == "unreachable"
+
+
+def test_a_quest_object_is_gathered_at_its_spawn_points_nearest_first(monkeypatch):
+    """Milly's Harvest: crates in the vineyard, eight to bring back."""
+    from jev.clients.gather import Gathered
+
+    quest = Quest(quest_id=1, complete=False, objectives=(
+        Objective(text="crates", have=6, need=8, counter_index=0),))
+    b = body(StepKind.QUEST_OBJECTIVE, log=(quest,))
+    target = ObjectiveTarget(kind="loot", required_id=11119, required_count=8, counter_index=0,
+                             target_kind="gameobject", target_name="Milly's Harvest",
+                             target_id=161557, world=(50, 50, 0), map_id=0, pos=(0.5, 0.5))
+    node = b.graph.nodes[0].model_copy(update={"objective_targets": (target,)})
+    b.graph = b.graph.model_copy(update={"nodes": (node,)})
+    b.hunt_spawns = {f"{node.id}#161557": ((90.0, 90.0, 0.0), (52.0, 52.0, 0.0), (60.0, 60.0, 0.0))}
+    b.client.position = lambda: (0.5, 0.5)            # world (50, 50)
+    monkeypatch.setattr("jev.run.body.Hunt", lambda **kw: (_ for _ in ()).throw(
+        AssertionError("an object is not a creature to hunt")))
+    walked = []
+    b.client.approach.side_effect = lambda world, **kw: walked.append(world) or True
+    picked = []
+
+    def pick(wanted, progress):
+        picked.append(wanted)
+        current = b.client.log.complete[0]
+        have = current.objectives[0].have + 1
+        b.client.log.complete = (current.model_copy(update={
+            "objectives": (Objective(text="crates", have=have, need=8, counter_index=0),),
+            "complete": have >= 8}),)
+        return Gathered.TOOK
+
+    b.gather = SimpleNamespace(pick=pick, detail="objective")
+    result = b._hunt(seen(quests=b.client.log.complete))
+    assert result.outcome is SkillOutcome.SUCCEEDED
+    assert walked == [(52.0, 52.0, 0.0), (60.0, 60.0, 0.0)], "nearest first, and no further"
+    assert picked == [name_id("Milly's Harvest")] * 2

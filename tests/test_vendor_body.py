@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-
 from test_live_body import body
 from test_runtime_records import seen
 

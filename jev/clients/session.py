@@ -118,7 +118,7 @@ def _is_grey_plate(frame: np.ndarray, at: tuple[float, float], radius: int = 60)
     if patch.size == 0:
         return False
     means = patch.reshape(-1, 3).mean(axis=0)
-    return 20 < means.min() and means.max() < 80 and means.max() - means.min() < _GREY_MAX_SPREAD
+    return means.min() > 20 and means.max() < 80 and means.max() - means.min() < _GREY_MAX_SPREAD
 
 
 def _has_text(frame: np.ndarray, at: tuple[float, float], radius: int = 70) -> bool:

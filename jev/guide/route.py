@@ -62,6 +62,8 @@ def _gap(node: Node, available_skills: frozenset[str],
             return "objective count exceeds the radio's verified counter range"
         if target.world is None or target.pos is None or target.map_id != node.map_id:
             return "objective destination is outside the placed route"
+        if target.target_kind == "gameobject" and target.kind == "loot" and target.target_name:
+            continue  # Gathered where a fresh hover's tooltip names it (`jev.clients.gather`).
         if target.target_kind != "creature" or not target.target_name:
             return "objective needs a measured gameobject locator or creature identity"
     return None

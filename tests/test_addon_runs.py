@@ -225,6 +225,18 @@ def test_inventory_identity_exact_copper_and_supply_counts_survive_lua_wire():
     assert values["bags.drink_id"] == 159 and values["bags.drink_count"] == 0
 
 
+def test_a_world_object_under_the_pointer_is_named_by_the_stock_tooltip():
+    from jev.perceive.radio_frame import name_id
+
+    crate = {"mouseFocus": "world", "tooltipText": "Milly's Harvest"}
+    values = radio.unpack(payload(paint(crate))[:PAYLOAD_CELLS])
+    assert values["cursor.object_id"] == name_id("Milly's Harvest")
+    for change in ({"hasMouseover": 1, "mouseoverName": "Kobold Worker"},
+                   {"mouseFocus": "ui"}, {"tooltipAlpha": 0.6}, {"tooltipText": None}):
+        values = radio.unpack(payload(paint({**crate, **change}))[:PAYLOAD_CELLS])
+        assert values["cursor.object_id"] is None, change
+
+
 def test_a_quality_the_container_withholds_is_read_from_the_item_itself():
     """2.4.3's container gives -1 for grey trade junk; three stacks of it went unsold and
     the run stopped at a full backpack (run 20260924T012429-b33d27)."""

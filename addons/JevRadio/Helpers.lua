@@ -160,6 +160,26 @@ local function CHARACTER_KEY()
     return characterKey
 end
 
+-- --------------------------------------------------------------------- world objects
+--
+-- A crate or a bundle of wood has no unit behind it, so the mouseover token says nothing;
+-- the stock tooltip names it. Only while the pointer is over the world with no unit under
+-- it, and only a fully shown tooltip: one fading out still names what the pointer left.
+
+local function CURSOR_OBJECT()
+    if UnitExists("mouseover") then return nil end
+    if type(GetMouseFocus) ~= "function" or not WorldFrame or GetMouseFocus() ~= WorldFrame then
+        return nil
+    end
+    if not GameTooltip or not GameTooltip:IsVisible() or GameTooltip:GetAlpha() < 0.99 then
+        return nil
+    end
+    local line = GameTooltipTextLeft1
+    local text = line and line:GetText()
+    if not text or text == "" then return nil end
+    return nameid(text)
+end
+
 -- --------------------------------------------------------------------- enum tables
 --
 -- Keyed by the client's own locale-independent tokens. tests/test_radio_frame.py parses
@@ -986,6 +1006,7 @@ return {
     nameid = nameid,
     fnv1a16 = fnv1a16,
     CHARACTER_KEY = CHARACTER_KEY,
+    CURSOR_OBJECT = CURSOR_OBJECT,
     ZONE_ID = ZONE_ID,
     PLAYER_FACING = PLAYER_FACING,
     BAG_FREE = BAG_FREE,

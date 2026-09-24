@@ -15,6 +15,7 @@ from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
 from jev.clients.fight import Fight
+from jev.clients.gather import Gather
 from jev.clients.hearth import Hearth
 from jev.clients.interact import Interact
 from jev.clients.interact import Result as Interacted
@@ -65,7 +66,21 @@ EXPLORE_POLL_S = 0.25
 # and his plate was wagon, and Godric Rothgar stood in plain view beside it (run
 # 20260924T011327-6e5f4b stopped on its first full bags).
 MERCHANT_TRIES = 3
+# Every spawn point of a quest's world object, twice round: taken crates respawn.
+GATHER_LAPS = 2
 MERCHANT_UNREACHABLE = frozenset({"not_visible", "no_target", "no_window", "approach_failed"})
+
+
+def _tour(points, start) -> list[tuple[float, float, float]]:
+    """Every point, from the one nearest `start`, always on to the nearest one left."""
+    left, tour = [tuple(p) for p in points], []
+    here = tuple(start[:2])
+    while left:
+        point = min(left, key=lambda p: math.dist(here, p[:2]))
+        left.remove(point)
+        tour.append(point)
+        here = point[:2]
+    return tour
 
 
 class LiveBody:
@@ -115,6 +130,8 @@ class LiveBody:
         self.rest = Rest(hid=client.hid, read=self._read)
         self.loot = Loot(hid=client.hid, read=self._read, read_frame=self._frame,
                          window_origin=client.origin, targeting=self.targeting)
+        self.gather = Gather(hid=client.hid, read=self._read, targeting=self.targeting,
+                             window_origin=client.origin, window_size=client.size)
         self.repair = Repair(hid=client.hid, read=self._read, visit=self._visit_repairer,
                              window_origin=client.origin, window_size=client.size)
         self.recover = Recover(hid=client.hid, read=self._read, walk_to=self._corpse_walk,
@@ -350,6 +367,9 @@ class LiveBody:
                 return selected_progress().complete
         if isinstance(destination, ObjectiveTarget) and destination.kind == "explore":
             return self._explore(destination, complete_reader)
+        if (isinstance(destination, ObjectiveTarget) and destination.kind == "loot"
+                and destination.target_kind == "gameobject"):
+            return self._gather(node, destination, progress_reader, complete_reader)
         if (destination.target_kind != "creature" or not destination.target_name
                 or destination.world is None or destination.map_id != self.client.bounds.map_id):
             return Result(SkillOutcome.ABORTED, "objective needs a supported creature target; objects need their own locator", "unsupported")
@@ -391,6 +411,33 @@ class LiveBody:
                 return Result(SkillOutcome.ABORTED, "at the exploration point with no credit", "nothing")
             time.sleep(EXPLORE_POLL_S)
         return Result(SkillOutcome.SUCCEEDED, "exploration credited", "done")
+
+    def _gather(self, node, target: ObjectiveTarget, progress, complete) -> Result:
+        """Walk a quest object's spawn points, nearest first, taking it wherever it stands."""
+        points = spawn_points(self.hunt_spawns, node.id, target.target_id)
+        if not points and target.world is not None:
+            points = (tuple(target.world),)
+        if not points or not target.target_name or target.map_id != self.client.bounds.map_id:
+            return Result(SkillOutcome.ABORTED, "object has no placed spawn points", "unsupported")
+        wanted = name_id(target.target_name)
+        deadline = time.monotonic() + self.hunt_timeout
+        here = self._position()
+        start = map_to_world(*here, self.client.bounds) if here is not None else points[0][:2]
+        for point in _tour(points, start) * GATHER_LAPS:
+            if complete() is True:
+                return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
+            if time.monotonic() > deadline:
+                return Result(SkillOutcome.TIMED_OUT,
+                              f"{self.hunt_timeout:.0f}s and the objective is not done", "timeout")
+            self._approach(point)
+            got = self.gather.pick(wanted, progress)
+            self.say(f"    gather: {got.value} - {self.gather.detail}")
+            if not got.ok:
+                return self._result(got, self.gather.detail)
+        if complete() is True:
+            return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
+        return Result(SkillOutcome.ABORTED, "every spawn point walked and the objective is short",
+                      "nothing")
 
     def _service_needed(self) -> str | None:
         self.checkpoint()
