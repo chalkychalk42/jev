@@ -416,3 +416,24 @@ def test_experience_is_a_level_objectives_progress_whatever_is_selected():
     quest = {"context": {"until_level": None}, "values": later["values"]}
     assert not progressed({**first, "context": {"until_level": None}}, quest), \
         "a quest's counter is its own progress, not experience"
+
+
+def test_arriving_again_where_it_already_arrived_is_not_useful(tmp_path):
+    """A tutor on Milly's Harvest walked to the objective's point and "arrived" for ten
+    minutes at 6/8, each arrival resetting the no-effect count (run
+    20260924T070341-9b2441)."""
+    walk = ({"kind": "skill", "name": "TRAVEL_TO", "params": {}}, "arrived")
+    grind = replace(arm(), decision=arm().decision.model_copy(update={"skill": "GRIND_UNTIL"}))
+    env, _, _journal, controller = setup(tmp_path, [walk] * 10, max_repeats=3, max_no_effect=10)
+    original = env.observe
+
+    def observe(arm_, *, retain=True):
+        observation = original(arm_, retain=retain)
+        observation.data["context"].update(destination=[0.5, 0.5], arrival_radius=0.01,
+                                           coord_zone_id=None)
+        return observation
+
+    env.observe = observe
+    result = controller.run(grind, lambda: None)
+    assert result.code == "teaching_stalled"
+    assert len(env.actions) == 4, "one arrival, then three that went nowhere"

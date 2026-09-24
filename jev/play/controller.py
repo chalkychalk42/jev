@@ -407,6 +407,7 @@ class PlayController:
                 if outcome["fatal"]:
                     result = Result(SkillOutcome.PREEMPTED, "death observed", "died")
                     return result
+                arrived_before = "arrived" in observed_effects
                 if outcome["verified"]:
                     observed_effects.update(outcome["effects"])
                 if finished(first.data, current.data, observed_effects=observed_effects):
@@ -433,7 +434,12 @@ class PlayController:
                     no_effect = repeats = 0
                     last_futile = None
                     continue
-                useful = (outcome["success"] and expected not in {"observed", "scene_changed", "moved"})
+                # Arriving where it already arrived is no step toward anything: a tutor on
+                # Milly's Harvest walked to the objective's point and "arrived" for ten
+                # minutes at 6/8, each arrival resetting the no-effect count, so the
+                # episode never handed over (run 20260924T070341-9b2441).
+                useful = (outcome["success"] and expected not in {"observed", "scene_changed", "moved"}
+                          and not (expected == "arrived" and arrived_before))
                 no_effect = 0 if useful else no_effect + 1
                 same = json.dumps(doc, sort_keys=True)
                 repeats = 0 if useful else (repeats + 1 if same == last_futile else 1)
