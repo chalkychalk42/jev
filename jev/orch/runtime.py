@@ -49,6 +49,12 @@ from jev.skills.catalog import NAMES, judges_itself
 from jev.skills.catalog import get as get_skill
 from jev.world.state_v1 import ArmedBy, State, StepKind
 
+# Skills that serve the character rather than its step: while one runs, the step's clock
+# stands still (`Tracker.serving`).
+# A dialog nobody closes is a stall, so ABORT_WAIT is not among them.
+SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
+                              "BUY_AMMO_REAGENT_FOOD", "LOOT", "RELEASE_SPIRIT", "CORPSE_RUN"})
+
 
 @dataclass
 class Counters:
@@ -194,6 +200,8 @@ class ClientRuntime:
         before = self.tracker.step_id
         completed_before = set(self.completed)
         deaths_before = self.tracker.memory.deaths
+        self.tracker.serving = (self.armed is not None
+                                and self.armed.decision.skill in SERVICING_SKILLS)
         verdict = TrackVerdict(Event.NONE) if self.finished else self.tracker.tick(state)
         self._tracker_event, self._tracker_from = verdict.event.value, before
         if verdict.event is Event.ADVANCE and not verdict.completed:

@@ -396,3 +396,16 @@ def test_a_rib_that_keeps_killing_the_character_is_left_for_its_way_back():
     verdict = tr.tick(_s(3.0))
     assert verdict.event is Event.ADVANCE and verdict.goto == "do"
     assert tr.tick(_s(4.0, vitals=Vitals(hp=0.0, dead=True, ghost=False))).event is Event.DEATH
+
+
+def test_a_steps_clock_stands_still_while_a_service_runs():
+    """A hand-in's 240 s ran out 150 yards from the abbey on a sale and a meal (run
+    20260924T043610)."""
+    tr = Tracker(_graph(), "accept")            # times out after 60 s at the step
+    tr.enter("accept", _s(0))
+    tr.serving = True
+    for t in range(1, 200):
+        assert tr.tick(_s(t)).event is not Event.FAIL
+    tr.serving = False
+    events = [tr.tick(_s(t)).event for t in range(200, 300)]
+    assert Event.FAIL in events and events.index(Event.FAIL) <= 61

@@ -97,6 +97,11 @@ class Tracker:
     step_id: str
     memory: StepMemory = field(init=False)
     off_route_grace_s: float = 20.0
+    # Set by the runtime while a service or rest skill runs for this step: selling, eating,
+    # repairing and looting are not the step stalling. A hand-in's 240 s ran out 150 yards
+    # from the abbey on a sale and a meal, and it failed over into the wolves (run
+    # 20260924T043610).
+    serving: bool = False
 
     def __post_init__(self) -> None:
         self.memory = StepMemory(step_id=self.step_id, entered_at=0.0)
@@ -271,7 +276,8 @@ class Tracker:
         approaching = (not there and mem.closest_at is not None
                        and state.t - mem.closest_at <= PROGRESS_WINDOW_S)
         v = state.vitals
-        stopped = v.dead is True or v.ghost is True or v.combat is True or approaching
+        stopped = (v.dead is True or v.ghost is True or v.combat is True or approaching
+                   or self.serving)
         if mem.clocked_at is not None and not stopped:
             mem.working_s += max(0.0, state.t - mem.clocked_at)
         mem.clocked_at = state.t
