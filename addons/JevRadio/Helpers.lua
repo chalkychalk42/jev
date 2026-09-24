@@ -955,10 +955,16 @@ local function snapshotSpells()
         btn = page > shownPage and _G["SpellBookNextPageButton"] or _G["SpellBookPrevPageButton"]
         spellSnapshot.go_x, spellSnapshot.go_y = point(btn, "x"), point(btn, "y")
     else
+        -- The page's k-th entry is on the button whose ID is k, not the one named k: the
+        -- stock buttons are numbered down each column (SpellButton2 has ID 7), so only the
+        -- first entry of a page was ever found on a live client.
         local k = (within - 1) % SPELLS_PER_PAGE + 1
-        btn = _G["SpellButton" .. k]
-        if btn and btn.GetID and btn:GetID() == k then
-            spellSnapshot.x, spellSnapshot.y = point(btn, "x"), point(btn, "y")
+        for b = 1, SPELLS_PER_PAGE do
+            btn = _G["SpellButton" .. b]
+            if btn and btn.GetID and btn:GetID() == k then
+                spellSnapshot.x, spellSnapshot.y = point(btn, "x"), point(btn, "y")
+                break
+            end
         end
     end
 end

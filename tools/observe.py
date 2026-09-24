@@ -33,7 +33,8 @@ SUMMARY = ("schema", "seq", "char.level", "char.xp_pct", "pos.zone_id", "pos.mx"
            "quests.count", "quests.slot_id", "quests.o0_have", "quests.o0_need",
            "cursor.has", "cursor.world", "bars.revision", "bars.slot", "bars.slot_spell",
            "spells.revision", "spells.total",
-           "spells.index", "spells.id", "ui.spellbook", "ui.trainer", "cursor.holding")
+           "spells.index", "spells.id", "spells.x", "spells.y", "spells.go_x", "spells.go_y",
+           "bars.slot_x", "bars.slot_y", "ui.spellbook", "ui.trainer", "cursor.holding")
 
 
 def held_inputs() -> dict:

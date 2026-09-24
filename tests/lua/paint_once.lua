@@ -108,8 +108,12 @@ if STATE.spellFixture then
     frame.bookType = "spell"
     frame.selectedSkillLine = STATE.shownTab or 2
     SPELLBOOK_PAGENUMBERS = {1, STATE.shownPage or 1}
-    for k = 1, 12 do
-        button("SpellButton" .. k, k, 60 + (k % 2) * 140, 700 - math.floor((k - 1) / 2) * 50)
+    -- Named across the rows, numbered down the columns, as the stock 2.4.3 frame is:
+    -- SpellButton2 has ID 7. The ID is the entry's place on the page.
+    local ids = {1, 7, 2, 8, 3, 9, 4, 10, 5, 11, 6, 12}
+    for b = 1, 12 do
+        local id = ids[b]
+        button("SpellButton" .. b, id, 60 + (id > 6 and 140 or 0), 700 - ((id - 1) % 6) * 50)
     end
     button("SpellBookSkillLineTab1", 1, 330, 650)
     button("SpellBookSkillLineTab2", 2, 330, 600)

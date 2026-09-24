@@ -516,6 +516,13 @@ def test_the_spellbook_census_names_each_entry_and_shows_the_way_to_its_button()
     shown = _painted(4, bookOpen=1)                          # Holy, page 1: its button
     assert shown["ui.spellbook"] is True and shown["spells.x"] is not None
     assert shown["spells.go_x"] is None
+    # The third entry of the page is on the button numbered 3, which is SpellButton5: down
+    # the left column, at the third row.
+    assert abs(shown["spells.x"] - 60 / 1600) < 0.002
+    assert abs(shown["spells.y"] - (1 - 600 / 900)) < 0.002
+    seventh = _painted(8, bookOpen=1)                        # the seventh: right column, top
+    assert abs(seventh["spells.x"] - 200 / 1600) < 0.002
+    assert abs(seventh["spells.y"] - (1 - 700 / 900)) < 0.002
     other_tab = _painted(4, bookOpen=1, shownTab=1)          # General showing: Holy's tab
     assert other_tab["spells.x"] is None
     assert abs(other_tab["spells.go_y"] - (1 - 600 / 900)) < 0.002
