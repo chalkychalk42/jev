@@ -381,6 +381,31 @@ def test_spawn_stations_are_a_walk_not_a_zigzag():
     assert [p[0] for p in tour[: len(tour) // SPAWN_LAPS]] == [0.0, 20.0, 40.0, 80.0, 100.0]
 
 
+def test_a_camps_lone_spawns_are_walked_before_its_pack():
+    """Elwynn's wolf camp opened on its core: three other spawns inside twenty yards, four
+    Mangy Wolves pulled at once, a level 6 paladin dead (run 20260924T045140-ec8686)."""
+    from jev.run.hunt import SPAWN_LAPS, spawn_stations
+
+    pack = ((0.0, 0.0, 0.0), (12.0, 0.0, 0.0), (0.0, 12.0, 0.0), (12.0, 12.0, 0.0))
+    lone = ((60.0, 0.0, 0.0), (-50.0, 10.0, 0.0), (5.0, 70.0, 0.0))
+    tour = spawn_stations(pack + lone)
+    first = tour[: len(tour) // SPAWN_LAPS]
+    assert set(first[:3]) == set(lone), "every lone spawn before any of the pack"
+    assert set(first[3:]) <= set(pack)
+
+
+def test_the_way_between_lone_spawns_goes_round_a_pack_when_it_can():
+    from jev.run.hunt import SPAWN_LAPS, spawn_stations
+
+    pack = ((0.0, 0.0, 0.0), (8.0, 14.0, 0.0), (-8.0, 14.0, 0.0))
+    # From the west spawn, the east one is nearer than the north one, but straight
+    # through the pack.
+    lone = ((-40.0, 0.0, 0.0), (40.0, 0.0, 0.0), (-40.0, 90.0, 0.0))
+    tour = spawn_stations((lone[0], *pack, lone[1], lone[2]))
+    first = tour[: len(tour) // SPAWN_LAPS]
+    assert first[:3] == [lone[0], lone[2], lone[1]]
+
+
 def test_without_spawns_the_rings_remain():
     h, _ = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
     assert h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5, spawns=()) is Hunted.UNREACHABLE

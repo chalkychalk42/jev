@@ -101,24 +101,62 @@ SPAWN_MERGE_YARDS = 10.0
 # Young Wolves in fifteen seconds - so a second lap finds what the first one killed.
 SPAWN_LAPS = 2
 
+# A mob's aggro reach at the character's own level (CMaNGOS `Creature::GetAttackDistance`:
+# twenty yards, a yard more for each level it is above). Spawns closer together than this
+# are one pull for a character that cannot pull from range.
+PACK_YARDS = 20.0
+# What each other spawn inside `PACK_YARDS` adds to a point's distance on the tour, so a
+# lone spawn is walked to before a pack up to this much further off per packmate.
+PACK_PENALTY_YARDS = 40.0
+
 
 def spawn_stations(spawns) -> list[tuple[float, float, float]]:
-    """Where the target actually spawns, as a walk: from the point nearest the cluster's
-    centre (the generator lists it first), always on to the nearest one left.
+    """Where the target actually spawns, as a walk: lone spawns before packs, each step to
+    the nearest point left once its packmates are counted, from the cluster's centre (the
+    generator lists it first).
 
     Rings round a centre stand where the mobs may not be. Northshire's Young Wolves spawn
     24 to 170 yards from their cluster's centre, and rings at 0, 13 and 31 yards looked 38
     times and found nothing (run 20260923T233909-8b1484).
+
+    The centre is the pack's core, though. Elwynn's level 5-7 wolf camp opens on a spawn
+    with three others inside twenty yards and seven inside thirty: the walk to it pulled
+    four Mangy Wolves onto a level 6 paladin, which died at the first (run
+    20260924T045140-ec8686). A pack is still walked, last, for a camp that is all pack.
     """
     left = [tuple(p) for p in spawns]
+    crowd = [sum(1 for q in left if q is not p and math.dist(p[:2], q[:2]) < PACK_YARDS)
+             for p in left]
+    packed = [i for i, n in enumerate(crowd) if n >= 2]
+
+    def cost(here, i: int) -> float:
+        # Walking past a pack pulls it as surely as walking to it: the way from one lone
+        # spawn to the next can cross a camp's core.
+        through = sum(1 for j in packed if j != i
+                      and _passes(here, left[i], left[j], PACK_YARDS / 2))
+        return (math.dist(here[:2], left[i][:2])
+                + PACK_PENALTY_YARDS * (crowd[i] + through))
+
+    order = list(range(len(left)))
     tour: list[tuple[float, float, float]] = []
-    while left:
-        here = tour[-1] if tour else None
-        point = left[0] if here is None else min(left, key=lambda p: math.dist(here[:2], p[:2]))
-        left.remove(point)
+    here = left[0] if left else None
+    while order:
+        pick = min(order, key=lambda i: cost(here, i))
+        order.remove(pick)
+        point = left[pick]
         if all(math.dist(point[:2], t[:2]) > SPAWN_MERGE_YARDS for t in tour):
             tour.append(point)
+            here = point
     return tour * SPAWN_LAPS
+
+
+def _passes(a, b, c, reach: float) -> bool:
+    """Does the straight walk from `a` to `b` come within `reach` of `c`?"""
+    (ax, ay), (bx, by), (cx, cy) = a[:2], b[:2], c[:2]
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy
+    t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((cx - ax) * dx + (cy - ay) * dy) / length2))
+    return math.dist((ax + t * dx, ay + t * dy), (cx, cy)) < reach
 
 
 @dataclass
