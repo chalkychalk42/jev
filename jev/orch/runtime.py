@@ -217,6 +217,11 @@ class ClientRuntime:
         if verdict.event is Event.ADVANCE and not verdict.completed:
             self._tracker_event = "rejoin_or_skip"
         self._apply(verdict, state)
+        if verdict.event is Event.NONE and not self.finished:
+            beyond = self._abandoned_now(state)
+            if beyond is not None:
+                self.tracker.enter(beyond, state)
+                self._tracker_event = "rejoin_or_skip"
         node = self.graph.get(self.tracker.step_id)
         state = self._with_guide(state, verdict)
         record = record or verdict.event in (Event.ADVANCE, Event.FAIL, Event.DEATH)
@@ -301,11 +306,25 @@ class ClientRuntime:
     def _past_abandoned_quest(self, verdict) -> str | None:
         """The first step after the current quest's, when the step failed on its quest's
         absence and the quest's accept was passed over; else `None`."""
-        node = self.graph.get(self.tracker.step_id)
         reason = verdict.reason or ""
+        if not (reason.startswith("quest_missing") or "quest absent" in reason):
+            return None
+        return self._beyond_abandoned()
+
+    def _abandoned_now(self, state: State) -> str | None:
+        """The same, before the step is even walked to: the log read, the quest not in it,
+        its accept passed over. Quest 16's hand-in, entered from a rib at Northshire, was
+        a walk to Gerard Tiller in Goldshire only to find the quest missing there."""
+        node = self.graph.get(self.tracker.step_id)
+        if (node is None or node.quest_id is None or state.quests is None
+                or any(q.quest_id == node.quest_id for q in state.quests)):
+            return None
+        return self._beyond_abandoned()
+
+    def _beyond_abandoned(self) -> str | None:
+        node = self.graph.get(self.tracker.step_id)
         if (node is None or node.quest_id is None or node.quest_id in self.completed
-                or node.kind not in (StepKind.QUEST_OBJECTIVE, StepKind.QUEST_TURNIN)
-                or not (reason.startswith("quest_missing") or "quest absent" in reason)):
+                or node.kind not in (StepKind.QUEST_OBJECTIVE, StepKind.QUEST_TURNIN)):
             return None
         accepts = [n.id for n in self.graph.nodes
                    if n.quest_id == node.quest_id and n.kind is StepKind.QUEST_ACCEPT]

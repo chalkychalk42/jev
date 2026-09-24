@@ -422,3 +422,17 @@ def test_the_rest_of_a_quest_whose_accept_was_passed_over_is_skipped(tmp_path):
     timeout = TrackVerdict(Event.FAIL, goto="alli_human_1_12_grind_elwynn_1_3",
                            reason="timeout_s=240.0")
     assert rt._past_abandoned_quest(timeout) is None, "only the quest's absence skips it"
+
+
+def test_a_step_of_an_abandoned_quest_is_skipped_before_it_is_walked_to(tmp_path):
+    guide = Graph.load("content/tbc/ally_human_1_12.json")
+    turnin = "alli_human_1_12_16_give_gerard_a_drink_turnin"
+    log_without_16 = seen(0, quests=(Quest(quest_id=783),))
+    rt = ClientRuntime("c", guide, ScriptedSource([log_without_16]), Recorder(tmp_path))
+    rt.tracker.enter(turnin, log_without_16)
+    assert rt._abandoned_now(log_without_16) is None, "its accept was never passed over"
+    rt._retried.add("alli_human_1_12_16_give_gerard_a_drink_accept")
+    beyond = rt._abandoned_now(log_without_16)
+    assert beyond is not None and guide.get(beyond).quest_id != 16
+    assert rt._abandoned_now(seen(0, quests=None)) is None, "an unread log skips nothing"
+    assert rt._abandoned_now(seen(0, quests=(Quest(quest_id=16),))) is None
