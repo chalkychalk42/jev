@@ -2272,3 +2272,8 @@ in that session's memory. The previous file is at `/tmp/playhead-before-0800.jso
 That stop cost a death: session 45 was stopped mid-fight (25% health against a level 6 mob
 at 71%), and the character stood idle through the restart and died. Operator stops go
 between fights from now on.
+
+Also since debrief 9: retried steps are kept in the playhead, so a step that fails after
+its rib is passed over across sessions too (V110), and an operator stop waits out a fight
+in progress (V111). Testvvi at 08:05: level 7 at 85%, on the level 5-7 wolf rib with Brother
+Neals' hand-in (3905) as its way back; one more failure there passes it over to quest 6.
