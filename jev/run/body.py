@@ -15,7 +15,7 @@ from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
 from jev.clients.fight import Fight
-from jev.clients.gather import Gather
+from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth
 from jev.clients.interact import Interact
 from jev.clients.interact import Result as Interacted
@@ -68,6 +68,8 @@ EXPLORE_POLL_S = 0.25
 MERCHANT_TRIES = 3
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
+# A step back, about two yards, before a second look at a spawn point that showed nothing.
+GATHER_STEP_BACK_S = 0.6
 MERCHANT_UNREACHABLE = frozenset({"not_visible", "no_target", "no_window", "approach_failed"})
 
 
@@ -442,6 +444,9 @@ class LiveBody:
                               f"{self.hunt_timeout:.0f}s and the objective is not done", "timeout")
             self._approach(point)
             got = self.gather.pick(wanted, progress)
+            if got is Gathered.NOT_HERE and self.client.hid.hold("s", GATHER_STEP_BACK_S):
+                # Stood on the spawn point, the character itself hides what lies underfoot.
+                got = self.gather.pick(wanted, progress)
             self.say(f"    gather: {got.value} - {self.gather.detail}")
             if not got.ok:
                 return self._result(got, self.gather.detail)

@@ -189,3 +189,32 @@ def test_a_quest_object_is_gathered_at_its_spawn_points_nearest_first(monkeypatc
     assert result.outcome is SkillOutcome.SUCCEEDED
     assert walked == [(52.0, 52.0, 0.0), (60.0, 60.0, 0.0)], "nearest first, and no further"
     assert picked == [name_id("Milly's Harvest")] * 2
+
+
+def test_a_spawn_point_that_shows_nothing_is_looked_at_again_a_step_back(monkeypatch):
+    """Stood on the spawn point, the character hides what lies underfoot."""
+    from jev.clients.gather import Gathered
+
+    quest = Quest(quest_id=1, complete=False, objectives=(
+        Objective(text="crates", have=7, need=8, counter_index=0),))
+    b = body(StepKind.QUEST_OBJECTIVE, log=(quest,))
+    target = ObjectiveTarget(kind="loot", required_id=11119, required_count=8, counter_index=0,
+                             target_kind="gameobject", target_name="Milly's Harvest",
+                             target_id=161557, world=(50, 50, 0), map_id=0, pos=(0.5, 0.5))
+    node = b.graph.nodes[0].model_copy(update={"objective_targets": (target,)})
+    b.graph = b.graph.model_copy(update={"nodes": (node,)})
+    b.hunt_spawns = {f"{node.id}#161557": ((52.0, 52.0, 0.0),)}
+    holds = []
+    b.client.hid.hold = lambda key, seconds, **kw: holds.append(key) or True
+    answers = iter([Gathered.NOT_HERE, Gathered.TOOK])
+
+    def pick(wanted, progress):
+        got = next(answers)
+        if got is Gathered.TOOK:
+            b.client.log.complete = (Quest(quest_id=1, complete=True, objectives=(
+                Objective(text="crates", have=8, need=8, counter_index=0),)),)
+        return got
+
+    b.gather = SimpleNamespace(pick=pick, detail="")
+    assert b._hunt(seen(quests=b.client.log.complete)).outcome is SkillOutcome.SUCCEEDED
+    assert holds == ["s"]
