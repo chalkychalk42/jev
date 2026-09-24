@@ -2309,3 +2309,13 @@ Since debrief 9:
   there through eight half turns, forty seconds at 5% health, and the character died;
 - the first motor model (acquire) trained and was held in shadow by its gate, 0/20
   held-out coverage: sparse data, not a broken learner (above).
+
+**A trade-off for you to weigh (learning vs. safety).** Since V105 (combat takes the floor
+from a tutor with no fight of its own running), grind teaching episodes mostly end
+preempted: 3 of 42 succeeded since 07:00, against 17 of 63 (27%) between 02:00 and 05:00.
+The reflex fight's kill now lands outside the episode, so the tutor's acquire and approach
+rows earn no credit. V105 stopped two deaths in session 34, so it is not reverted. Two ways
+to have both: run the fight inside the teaching episode as a delegated routine (the
+episode continues and the kill is its progress), or finalise a combat-preempted grind
+episode after the reflex fight, crediting it only if that fight's kill came within
+seconds. Either changes what the learner is taught from, so it is your call.
