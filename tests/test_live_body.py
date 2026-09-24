@@ -763,3 +763,26 @@ def test_the_rest_walks_clear_first_only_when_the_step_has_spawns():
     b.hunt_spawns = {}
     b._clear_of_spawns()
     assert len(walked) == 1, "no spawns known, no walk"
+
+
+def test_two_wedged_walks_running_go_home_by_hearthstone():
+    """Against a barrel inside Northshire Abbey, walk after walk ended "could not free the
+    character" (run 20260924T074713-f215ef)."""
+    from jev.clients.hearth import Hearthed
+    from jev.run.body import WEDGED_WALKS
+
+    b = body()
+    homes = []
+    b.hearth = SimpleNamespace(run=lambda: homes.append(1) or Hearthed.HOME, detail="")
+    wedged = SimpleNamespace(detail="leg 1 of 24: could not free the character")
+    b.client.approach = lambda world, timeout_s=0: False
+    b.client.last_travel = wedged
+    for _ in range(WEDGED_WALKS - 1):
+        assert b._approach((1.0, 2.0, 3.0)) is False
+    assert homes == []
+    assert b._approach((1.0, 2.0, 3.0)) is False
+    assert homes == [1]
+    b.client.last_travel = SimpleNamespace(detail="8 detours did not get around it")
+    for _ in range(WEDGED_WALKS + 1):
+        b._approach((1.0, 2.0, 3.0))
+    assert homes == [1], "blocked is not wedged: the planner still has ways round"

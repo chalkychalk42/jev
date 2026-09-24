@@ -102,6 +102,8 @@ class Client:
     query: PathQuery | None = field(default=None, init=False)
     # Spots where walking got stuck and the way round that worked (`RouteMemory`).
     route_memory: object | None = field(default=None, init=False)
+    # How the last `approach` walk ended, for a caller that needs more than arrived or not.
+    last_travel: object | None = field(default=None, init=False)
     bounds: ZoneBounds | None = field(default=None, init=False)
     coordinate_zones: dict[int, ZoneBounds] = field(default_factory=dict, init=False)
     coordinate_names: dict[int, str] = field(default_factory=dict, init=False)
@@ -298,6 +300,7 @@ class Client:
         self._say(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "
                   f"{result.stuck_events} stuck"
                   + (f" - {result.detail}" if result.detail else ""))
+        self.last_travel = result
         return result.outcome.value == "arrived"
 
     def _plan(self, here: tuple[float, float], world: tuple[float, float, float]):

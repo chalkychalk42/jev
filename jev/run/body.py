@@ -78,6 +78,8 @@ EXPLORE_POLL_S = 0.25
 MERCHANT_TRIES = 3
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
+# Walks in a row that ended with the character wedged before it goes home by hearthstone.
+WEDGED_WALKS = 2
 # Where to eat: this far from every spawn point of the step's own creatures, found on rings
 # round the character. A level 6 paladin eating in the middle of the wolf camp was bitten at
 # 26% health and fought a 45 s stalemate of heals; another was at 30% when two more came
@@ -159,6 +161,7 @@ class LiveBody:
         self.hearth = Hearth(hid=client.hid, read=self._read,
                              window_origin=client.origin, window_size=client.size)
         self._revived_at: float | None = None
+        self._wedged = 0
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
         self.fight.realign = self.camera.level
@@ -303,9 +306,26 @@ class LiveBody:
                     raise BodyFailure(self._result(rested, f"not fit to travel: {self.rest.detail}"))
         self.travelling = True
         try:
-            return self.client.approach(world, timeout_s=self.travel_timeout)
+            arrived = self.client.approach(world, timeout_s=self.travel_timeout)
         finally:
             self.travelling = False
+        self._note_wedged(arrived)
+        return arrived
+
+    def _note_wedged(self, arrived: bool) -> None:
+        """Home by hearthstone after `WEDGED_WALKS` walks in a row found the character
+        wedged: every unstick heading tried and none moved it. Inside Northshire Abbey,
+        against a barrel below Brother Neals' stairs, walk after walk ended "could not free
+        the character" (run 20260924T074713-f215ef). A stone on cooldown does nothing."""
+        last = getattr(self.client, "last_travel", None)
+        wedged = (not arrived and last is not None
+                  and "could not free the character" in (getattr(last, "detail", "") or ""))
+        self._wedged = self._wedged + 1 if wedged else 0
+        if self._wedged >= WEDGED_WALKS:
+            self._wedged = 0
+            home = self.hearth.run()
+            self.say(f"  wedged {WEDGED_WALKS} walks running: hearthstone {home.value} "
+                     f"{self.hearth.detail}".rstrip())
 
     def _travel(self, state) -> Result:
         node = self._node()
