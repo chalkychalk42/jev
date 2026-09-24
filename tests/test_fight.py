@@ -1993,3 +1993,17 @@ def test_a_heal_pressed_under_a_stun_is_pressed_again_not_the_seal(combat_clock)
     f._rotate(hurt)
     assert [k for m, k in hid.chords] == ["3", "3"], "the unanswered heal was not retried"
     assert "2" not in hid.taps, "sealed at 12% health instead of healing"
+
+
+def test_a_press_the_client_never_answers_is_counted_after_three(combat_clock):
+    """An aura already up, or a Judgement on a unit out of reach: re-pressed on every look,
+    it would hold the rotation on that row for the whole fight."""
+    hid = _Hid()
+    f, calm = _trained(hid, **{"bars.attacking": True})
+    f._lasting = {"Blessing of Might": 0.0}
+    f._last_use = {2: 0.0}
+    for _ in range(4):
+        f._rotate(calm)
+        combat_clock[0] += 0.9
+    assert hid.taps[:3] == ["4", "4", "4"]
+    assert hid.taps[3] != "4", "the aura was pressed a fourth time in a row"

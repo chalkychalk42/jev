@@ -121,6 +121,10 @@ FLEE_HP = 0.30
 # after `PRESS_TELL_S` comes too late to tell, the 1.5 s global cooldown being over.
 PRESS_ANSWER_S = 0.8
 PRESS_TELL_S = 1.4
+# Unanswered presses of one slot in a row before the last is counted anyway. A stun lasts
+# two seconds, three presses; a press the client will never answer - an aura already up,
+# a Judgement on a unit out of reach - must not hold the rotation on that one row.
+PRESS_GIVE_UP = 3
 
 # After a target vanishes, how long to watch for the experience that proves a kill.
 SETTLE_LOOKS = 3
@@ -395,6 +399,8 @@ class Fight:
     # The last press not yet answered by the client (`_press_answered`): the ability, when,
     # and the clocks as they were before it, to put back if it came to nothing.
     _pending_press: tuple | None = field(default=None, init=False)
+    # The slot whose presses have gone unanswered, and how many times in a row.
+    _dropped: tuple[int, int] = field(default=(0, 0), init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
     _race: list[tuple] = field(default_factory=list, init=False)
     # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
@@ -414,6 +420,7 @@ class Fight:
         self._toggled = False
         self._pending_heal = None
         self._pending_press = None
+        self._dropped = (0, 0)
         self._race = []
         self._look_at = None
         self._damage_mark = None
@@ -1578,6 +1585,7 @@ class Fight:
         if (values.get("bars.casting") is True or (gcd is not None and gcd > 0.0)
                 or (ready is not None and not ready & (1 << (ability.slot - 1)))):
             self._pending_press = None
+            self._dropped = (0, 0)
             return True
         age = time.monotonic() - when
         if age < PRESS_ANSWER_S:
@@ -1585,10 +1593,17 @@ class Fight:
         self._pending_press = None
         if age > PRESS_TELL_S:
             return True                        # its global cooldown would be over by now
+        slot, times = self._dropped
+        times = times + 1 if slot == ability.slot else 1
+        event("ability.unanswered", data={"slot": ability.slot, "role": ability.role.value,
+                                          "times": times})
+        if times >= PRESS_GIVE_UP:
+            self._dropped = (0, 0)
+            return True                        # counted after all, as before
+        self._dropped = (ability.slot, times)
         self._last_use, self._lasting, self._saved_at = last_use, lasting, saved_at
         if ability.role is Role.HEAL:
             self._pending_heal = None
-        event("ability.unanswered", data={"slot": ability.slot, "role": ability.role.value})
         return True
 
     def _has_mana_for(self, ability: Ability, values: dict) -> bool:
