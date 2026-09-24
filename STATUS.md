@@ -2504,3 +2504,19 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
   (207 calls, median 7.6 s, Opus 4.7 at medium effort - V51, the operator's choice).
 - Testvvi: level 10, 40 copper, on Gold Dust Exchange (step 70 of 147); the 16-slot
   backpack fills between vendor trips.
+
+## 2026-09-24 15:30 — surplus sold, bags early
+
+- **Verified live (session 81):** one merchant visit sold 22 stacks for 732 copper -
+  four Kobold Mining Shovels, both old hammers, a spare Pikeman Shield, three cloaks, five
+  stacks of Stringy Wolf Meat, a schematic - taking the bags from 0 free slots to 22 and
+  the purse from 229 to 961 copper (V125). Quest items, food, drink, the hearthstone and
+  the cloth and spider legs quests ask for stayed. Session 82 bought the last level 10
+  spell with it.
+- The merchant is now visited at two free slots, so the fights on the way there are
+  looted; a visit that found nothing to sell waits for a slot freed and filled again.
+- No deaths in sessions 78-82 (36 kills). Session 81 gained 0.14 of a level in fifteen
+  minutes, against 0.37 levels an hour over the day.
+- The 12-20 guide's spine is 81 steps and about 50,000 yards of walking (the 1-12's is
+  48,000 over 114); its longest legs are the Westfall-Redridge crossings, up to 4,266
+  yards, where a flight path would save the most.
