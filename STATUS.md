@@ -2457,3 +2457,26 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
   to the Gray Forest Wolves, a second wolf while the first is stunned). Level 10 brings
   Lay on Hands and Blessing of Protection; routing round hostile camps is the larger fix
   still open.
+
+## 2026-09-24 14:25 — sessions 71-77: the hill out of the vineyards, and a Defias Bandit
+
+- **Routes keep to ground a character can climb (V120).** Hearthed home to Northshire at
+  level 9, the character spent sessions 74-76 on the vineyard hillside: the planner's
+  navmesh is the server's creature mesh, and its routes out of the valley went up a 55
+  degree face, then (with the mesh's own steep band excluded) up the 40-50 degree slope
+  beside it. The sidecar now uses the filter the server gives its own player bots and
+  costs ground by its slope (30 degrees four times, 40 twenty times), from 13,400 ticks
+  of where the character actually slid. Session 77 went round by the road.
+- **A grey target's vanish is its kill (V121).** Level 3-4 Defias grant a level 9 no
+  experience, so their kills were settled "lost" and never looted. Session 77 looted its
+  first one.
+- **A press counts only when the client answers it (V122).** A Defias Bandit's Snap Kick
+  (a two-second stun every five to nine) swallowed a seal press that was then counted as
+  up for 25 s, and at 12% a heal pressed under the next stun held the heal row off while
+  the rotation sealed and judged. Presses now have to show a cast or a cooldown within
+  0.8 s. In effect from session 78.
+- Also since 12:40: a fight on the way no longer eats the step's clock (8eeda23); a fight
+  that starts near death heals before looking for its attacker (d4bbe25).
+- Testvvi: level 9 at 99%, 576 copper, on Gold Dust Exchange by Fargodeep Mine. Level 10
+  training (Lay on Hands, Blessing of Protection, Devotion Aura 2, Seal of Righteousness
+  2) is about 11 silver in all; the trainer buys in its own list order what it can afford.
