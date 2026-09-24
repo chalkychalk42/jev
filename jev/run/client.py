@@ -308,6 +308,15 @@ class Client:
         self.last_travel = result
         return result.outcome.value == "arrived"
 
+    def plan_to(self, world: tuple[float, float, float]):
+        """The plan `approach` would follow from here to `world`, without walking it."""
+        if self.travel is None or self.query is None or self.bounds is None:
+            return None
+        here = self.travel.position()
+        if here is None:
+            return None
+        return self._plan(map_to_world(here[0], here[1], self.bounds), world)
+
     def _plan(self, here: tuple[float, float], world: tuple[float, float, float]):
         """The first complete plan over `START_HEIGHTS`, else the partial one ending nearest."""
         heights = [world[2] + dz for dz in START_HEIGHTS]

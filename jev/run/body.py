@@ -100,6 +100,15 @@ EXPLORE_POLL_S = 0.25
 # and his plate was wagon, and Godric Rothgar stood in plain view beside it (run
 # 20260924T011327-6e5f4b stopped on its first full bags).
 MERCHANT_TRIES = 5
+# Merchants are ranked by their walk, not their distance. A corner costs more than its
+# length: doorways and stairs are where the follower sticks. Goldshire's warlock trainer
+# sells too, in the inn's cellar: the nearest in a straight line from the south, and the
+# way back out took 155 turns and 18 stuck events (session 90). Planned from there, the
+# cellar costs 818 yards and the smith at the forge 571. The `MERCHANT_PLANS` nearest in a
+# straight line, within `MERCHANT_WINDOW_YARDS` of the nearest, are planned (a few ms).
+CORNER_YARDS = 15.0
+MERCHANT_WINDOW_YARDS = 100.0
+MERCHANT_PLANS = 12
 # Binding the hearthstone (`LiveBody.bindable`): an inn this near the guide's current step,
 # while home is farther than `HOME_FAR_YARDS` from it or unknown. Goldshire's inn is 590
 # yards from Northshire's quests, which bind nowhere, and 360 from Fargodeep Mine's.
@@ -1096,9 +1105,16 @@ class LiveBody:
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
         world = map_to_world(*here, self.client.bounds)
         failed = load_merchant_failures(self.merchant_memory)
-        # The ones that answered before first, then the nearest.
-        ranked = sorted(candidates, key=lambda m: (failed.get(m.entry, 0),
-                                                   math.dist(m.world[:2], world)))[:MERCHANT_TRIES]
+        # The ones that answered before first, then the shortest walk.
+        nearest = min(math.dist(m.world[:2], world) for m in candidates)
+        near = sorted((m for m in candidates
+                       if math.dist(m.world[:2], world) <= nearest + MERCHANT_WINDOW_YARDS),
+                      key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_PLANS]
+        walks = {m.entry: self._walk_yards(m.world, math.dist(m.world[:2], world)) for m in near}
+        ranked = sorted(near, key=lambda m: (failed.get(m.entry, 0), walks[m.entry]))
+        ranked += sorted((m for m in candidates if m.entry not in walks),
+                         key=lambda m: (failed.get(m.entry, 0), math.dist(m.world[:2], world)))
+        ranked = ranked[:MERCHANT_TRIES]
         for merchant in ranked:
             def visit(merchant=merchant):
                 return self._open_merchant(merchant.name, merchant.world,
@@ -1122,6 +1138,14 @@ class LiveBody:
             return self._result(outcome, vendor.detail or
                                 f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
         raise AssertionError("unreachable: the last merchant returns or raises")
+
+    def _walk_yards(self, world, straight: float) -> float:
+        """What walking to `world` costs, in yards: its plan's length and corners."""
+        plan_to = getattr(self.client, "plan_to", None)
+        planned = plan_to(world) if plan_to is not None else None
+        if planned is None or not planned.usable:
+            return straight
+        return planned.length_yards() + CORNER_YARDS * max(0, len(planned.points) - 2)
 
     def _open_merchant(self, name, world, point) -> bool:
         opened = self.interact.open_on(name, node_world=world, node_map=point)

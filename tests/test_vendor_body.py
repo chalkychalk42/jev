@@ -212,3 +212,36 @@ def test_a_bag_service_offers_every_stack_the_character_has_no_use_for(monkeypat
     assert 6078 not in offered["eligible"], "a shield worth wearing is kept"
     assert 773 not in offered["eligible"], "not in any price table"
     assert offered["min_free"] > 34, "every eligible stack, not just six slots' worth"
+
+
+def test_merchants_are_ranked_by_their_walk_not_their_distance(monkeypatch):
+    """Goldshire's warlock trainer sells from the inn's cellar: nearest in a straight line,
+    and the way back out took 155 turns and 18 stuck events (session 90)."""
+    b = body()
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+    vendors = (Merchant(1, "In The Cellar", 0, (50, 52, -7), frozenset()),
+               Merchant(2, "At The Forge", 0, (58, 58, 0), frozenset()))
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    plans = {(50, 52, -7): SimpleNamespace(usable=True, points=[(0, 0, 0)] * 15,
+                                           length_yards=lambda: 40.0),
+             (58, 58, 0): SimpleNamespace(usable=True, points=[(0, 0, 0)] * 3,
+                                          length_yards=lambda: 12.0)}
+    b.client.plan_to = lambda world: plans[tuple(world)]
+    visit = Mock(return_value=Interacted.VENDOR)
+    b.interact = SimpleNamespace(open_on=visit)
+    class FakeVendor:
+        detail = "observed service"
+        def equip_bags(self, bags, **kw):
+            return 0
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
+            self.open_shop = open_shop
+        def run(self, **kwargs):
+            assert self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
+    assert visit.call_args.args == ("At The Forge",)
