@@ -51,6 +51,9 @@ DEATH_TRAP_S = 180.0
 # itself the Mangy Wolves round it killed a character at half health three times running,
 # the Spirit Healer answering nothing each time (run 20260924T041014-a9781c).
 TRAP_RECLAIM_YARDS = 32.0
+# Broken gear this far from the nearest repairer goes home by hearthstone first.
+BROKEN_DURABILITY = 0.05
+HEARTH_TO_REPAIR_YARDS = 150.0
 # Where to hover for a unit too close and tall for its nameplate to show, as fractions of
 # the client: down the middle first. The Spirit Healer stands over a fresh ghost and fills
 # the centre of the screen, with its plate drawn behind the strip at the top.
@@ -526,7 +529,27 @@ class LiveBody:
         return self._result(self.rest.until(0.9), self.rest.detail)
 
     def _repair(self, state) -> Result:
+        # Broken gear is no armour and no weapon: a level 6 paladin at full health lost the
+        # first fight on its 310-yard walk to a repairer through wolf country (run
+        # 20260924T042040-e86c88). Far from one, home by hearthstone first: a new
+        # character's stone is bound beside its starting area's armourer.
+        durability = state.bags.durability_min
+        distance = self._repairer_yards()
+        if (durability is not None and durability <= BROKEN_DURABILITY
+                and distance is not None and distance > HEARTH_TO_REPAIR_YARDS):
+            home = self.hearth.run()
+            self.say(f"  broken gear and the nearest repairer {distance:.0f} yards off: "
+                     f"hearthstone {home.value} {self.hearth.detail}".rstrip())
         return self._result(self.repair.run(), self.repair.detail)
+
+    def _repairer_yards(self) -> float | None:
+        here = self._position()
+        if here is None:
+            return None
+        world = map_to_world(*here, self.client.bounds)
+        placed = [n for n in self.graph.nodes if n.kind is StepKind.REPAIR
+                  and n.world is not None and n.map_id == self.client.bounds.map_id]
+        return min((math.dist(n.world[:2], world) for n in placed), default=None)
 
     def _vendor(self, state) -> Result:
         values, here = self._read(), self._position()

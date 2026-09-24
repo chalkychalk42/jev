@@ -12,6 +12,7 @@ from jev.clients.fight import Fought
 from jev.clients.interact import Result as Interacted
 from jev.clients.loot import Looted
 from jev.clients.recover import Recover, Recovered
+from jev.clients.repair import Repaired
 from jev.clients.rest import Rested
 from jev.coach.schema import Decision, Intent
 from jev.guide.coords import ZoneBounds
@@ -610,3 +611,30 @@ def test_a_trap_body_the_healer_will_not_raise_us_from_is_reclaimed_from_short_o
     assert math.dist(walked[0], (-9000.0, 100.0)) == pytest.approx(TRAP_RECLAIM_YARDS, abs=0.5)
     assert walked[0][0] < -9000.0, "on the graveyard's side"
     assert b.recover.walk_to is original, "the normal walk is restored"
+
+
+@pytest.mark.parametrize(("durability", "repairer_x", "hearths"), [
+    (0.0, 400.0, True), (0.0, 60.0, False), (0.5, 400.0, False)])
+def test_broken_gear_far_from_a_repairer_goes_home_by_hearthstone_first(
+        durability, repairer_x, hearths):
+    """A level 6 paladin at full health lost the first fight on its 310-yard walk to a
+    repairer with broken gear (run 20260924T042040-e86c88)."""
+    from jev.clients.hearth import Hearthed
+    from jev.world.state_v1 import Bags
+
+    b = body()
+    b.client.bounds = ZoneBounds(1, 0, 1000, 0, 1000, 0)
+    b.client.position = lambda: (0.5, 0.5)
+    from jev.guide.coords import map_to_world
+
+    here = map_to_world(0.5, 0.5, b.client.bounds)
+    base = b.graph.nodes[0]
+    repairer = base.model_copy(update={"id": "armourer", "kind": StepKind.REPAIR,
+                                       "world": (here[0] + repairer_x, here[1], 0),
+                                       "target_name": "Godric Rothgar"})
+    b.graph = Graph(graph_id="g", faction="alliance", entry="quest", nodes=(base, repairer))
+    calls = []
+    b.hearth = SimpleNamespace(run=lambda: calls.append("hearth") or Hearthed.HOME, detail="")
+    b.repair = SimpleNamespace(run=lambda: calls.append("repair") or Repaired.DONE, detail="")
+    b._repair(seen(bags=Bags(durability_min=durability, free=5)))
+    assert calls == (["hearth", "repair"] if hearths else ["repair"])
