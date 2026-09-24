@@ -858,18 +858,24 @@ end
 -- The spell on an action, by id. GetActionInfo's second value is a spellbook index on
 -- 2.4.3 and a spell id on later clients; whichever reading's icon is the button's own is
 -- the one believed, and neither matching is unknown rather than a guess.
+--
+-- Except while the action is on: an aura or a stance that is active shows its active icon
+-- on the bar (Spell.dbc's ActiveIconID), not its spellbook icon, and Devotion Aura read as
+-- unknown from the moment it was first pressed. An active action's spellbook entry is
+-- believed as it stands; the live client answered with spellbook indices throughout.
 local function actionSpell(action)
     local kind, id, book = GetActionInfo(action)
     if kind ~= "spell" or id == nil then return nil end
     local icon = GetActionTexture(action)
-    if icon == nil then return nil end
-    if GetSpellTexture(id, book or BOOK) == icon then
+    local on = IsCurrentAction ~= nil and IsCurrentAction(action)
+    if icon == nil and not on then return nil end
+    if on or GetSpellTexture(id, book or BOOK) == icon then
         local sid = spellLinkID(GetSpellLink(id, book or BOOK))
         if sid then return sid end
     end
     if GetSpellInfo then
         local _, _, texture = GetSpellInfo(id)
-        if texture == icon then return id end
+        if texture ~= nil and (on or texture == icon) then return id end
     end
     return nil
 end

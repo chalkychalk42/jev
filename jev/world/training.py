@@ -209,11 +209,17 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
     lines = _lines(known, facts)
     out: list[Placement] = []
     on_bar: dict[str, SpellFacts] = {}
+    # A second copy of a spell already on the bar holds a slot for nothing: one a new spell
+    # can go over, after the empty ones.
+    spare: list[tuple[int, int]] = []
     for slot in range(1, BAR_SLOTS + 1):
         here = spell(bar.get(slot), facts)
         if here is None:
             continue
-        on_bar.setdefault(here.name, here)
+        if here.name in on_bar:
+            spare.append((slot, here.spell_id))
+            continue
+        on_bar[here.name] = here
         best = lines.get(here.name)
         if best is not None and best.rank > here.rank:
             out.append(Placement(best.spell_id, slot, here.spell_id))
@@ -234,8 +240,9 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
                                              for w in wanted)):
             continue
         wanted.append(f)
-    free = [slot for slot in range(1, BAR_SLOTS + 1) if bar.get(slot) == 0]
-    out.extend(Placement(f.spell_id, slot) for f, slot in zip(wanted, free, strict=False))
+    free = [(slot, 0) for slot in range(1, BAR_SLOTS + 1) if bar.get(slot) == 0] + spare
+    out.extend(Placement(f.spell_id, slot, old)
+               for f, (slot, old) in zip(wanted, free, strict=False))
     return out
 
 

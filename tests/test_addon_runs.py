@@ -498,6 +498,8 @@ def test_the_bar_census_names_each_slot_s_spell_and_where_its_button_is():
     assert _painted(4)["bars.slot_spell"] == 0               # empty
     assert _painted(11)["bars.slot_spell"] is None           # water: an item, not a spell
     assert _painted(3, wrongIcon=True)["bars.slot_spell"] is None   # no match, no guess
+    # An aura that is on shows its active icon: its spellbook entry is believed as it stands.
+    assert _painted(3, activeSlot=3)["bars.slot_spell"] == 635
 
 
 def test_the_spellbook_census_names_each_entry_and_shows_the_way_to_its_button():

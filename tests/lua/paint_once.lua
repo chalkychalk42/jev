@@ -75,9 +75,12 @@ if STATE.spellFixture then
         if items[slot] then return "item", 159 end
     end
     function GetActionTexture(slot)
+        -- An aura that is on shows its active icon on the bar, not its spellbook one.
+        if bar[slot] and STATE.activeSlot == slot then return "activeicon" end
         if bar[slot] then return STATE.wrongIcon and "other" or ("tex" .. book[bar[slot]]) end
         if items[slot] then return "itemtex" end
     end
+    function IsCurrentAction(slot) return STATE.activeSlot == slot end
     local function button(name, id, x, y, enabled)
         local b = CreateFrame("Button", name)
         function b:GetID() return id end

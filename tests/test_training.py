@@ -91,6 +91,17 @@ def test_a_placed_spell_is_not_placed_again():
 
 
 def test_new_spells_stop_when_the_bar_is_full():
-    bar = {**STARTING_BAR, **{slot: 6603 for slot in range(4, 10)}}
+    bar = {**STARTING_BAR, **{slot: None for slot in range(4, 10)}}    # items
     plan = placements(bar, {6603, 20154, 635, 465, 20271, 19740})
     assert [p.slot for p in plan] == [10]
+
+
+def test_a_second_copy_on_the_bar_makes_room_for_a_new_spell():
+    """Devotion Aura, placed three times while the bar could not read it (session 57): the
+    copies' slots take new spells, after the empty ones."""
+    bar = {**STARTING_BAR, **{4: 465, 5: 19740, 6: 465, 7: 465, 8: 0, 9: 0, 10: 0}}
+    bar[10] = 20154
+    known = {6603, 20154, 635, 465, 19740, 498, 853, 633}
+    plan = placements(bar, known)
+    assert [(p.spell_id, p.slot, p.replaces) for p in plan] == [
+        (498, 8, 0), (853, 9, 0), (633, 6, 465)]
