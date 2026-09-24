@@ -199,9 +199,13 @@ class Supervisor:
                  has_focus: Callable[[], bool] | None = None,
                  focus: Callable[[Callable[[], None]], bool] | None = None,
                  housekeeping: Callable[[State], None] | None = None,
-                 watchdog=None):
+                 watchdog=None, operator_active: Callable[[], bool] | None = None):
         if (has_focus is None) != (focus is None):
             raise ValueError("focus observation and restoration must be supplied together")
+        # A person at the desk pauses everything (`jev.clients.operator`): no skill, no
+        # focus taken, until the desk has been quiet for the operator module's window.
+        self.operator_active = operator_active
+        self._operator_paused = False
         self.runtime, self.body, self.say = runtime, body, say
         self.has_focus, self.focus = has_focus, focus
         self.housekeeping, self.watchdog = housekeeping, watchdog
@@ -303,6 +307,11 @@ class Supervisor:
                 self.stopped.set()
 
         needs_focus = self.has_focus is not None and not self.has_focus()
+        operator = self.operator_active is not None and self.operator_active()
+        if operator != self._operator_paused:
+            self._operator_paused = operator
+            self.say("operator active: paused until the desk is quiet" if operator
+                     else "operator quiet: resuming")
         choose = (self.worker is None and not needs_focus and now >= self.next_coach
                   and not self.stopped.is_set())
         record = now >= self.next_record
@@ -315,7 +324,8 @@ class Supervisor:
                 self.worker.cancel(self.failure)
         if self.watchdog:
             memory = getattr(getattr(self.runtime, "tracker", None), "memory", None)
-            self.watchdog.observe(state, now, closest=getattr(memory, "closest", None))
+            self.watchdog.observe(state, now, closest=getattr(memory, "closest", None),
+                                  paused=operator)
             if self.watchdog.escalate:
                 self.watchdog.escalate = False
                 step = self.runtime.tracker.step_id
@@ -368,11 +378,12 @@ class Supervisor:
                 # Let the same input owner acknowledge Escape's observed result even
                 # if combat is active; the next arm can then service combat normally.
                 self.worker.completion_observed = True
-            reason = interruption(self.worker.arm, state, travelling=self.body.travelling,
-                                  completion_observed=self.worker.completion_observed,
-                                  handles_modal=getattr(self.body, "handles_modal", False),
-                                  falling_s=falling_s, routine_age_s=routine_age,
-                                  exposed=getattr(self.body, "tutor_exposed", False) is True)
+            reason = "operator active" if operator else interruption(
+                self.worker.arm, state, travelling=self.body.travelling,
+                completion_observed=self.worker.completion_observed,
+                handles_modal=getattr(self.body, "handles_modal", False),
+                falling_s=falling_s, routine_age_s=routine_age,
+                exposed=getattr(self.body, "tutor_exposed", False) is True)
             # Hunt yields between pulls, after looting. Interrupting it as combat drops
             # would leave the killed corpse behind. A standalone travel leg can yield now.
             if reason is None and self.worker.arm.decision.skill == "TRAVEL_TO":
@@ -381,17 +392,18 @@ class Supervisor:
                     reason = f"service needed: {needed.decision.why}"
             if reason:
                 self.worker.cancel(reason)
-        elif self.worker is None and not self.stopped.is_set() and needs_focus:
+        elif self.worker is None and not self.stopped.is_set() and needs_focus and not operator:
             # Raising the already-bound window sends no game keys. Keep recording while
             # the existing focus backoff runs, even if another window hides the radio.
             self.worker = Worker(self.body, None, state, focus=self.focus)
             self.worker.thread.start()
-        elif (self.worker is None and not self.stopped.is_set() and self.watchdog
+        elif (self.worker is None and not self.stopped.is_set() and self.watchdog and not operator
               and (maintenance := self.watchdog.maintenance(now)) is not None):
             self.runtime.finish(SkillOutcome.PREEMPTED, "session reconnect")
             self.worker = Worker(self.body, None, state, maintenance=maintenance)
             self.worker.thread.start()
-        elif (self.worker is None and choose and not self.stopped.is_set() and self.runtime.armed
+        elif (self.worker is None and choose and not operator and not self.stopped.is_set()
+              and self.runtime.armed
               and self.runtime.armed.decision.skill not in (None, "IDLE")
               and (self.runtime.armed.decision.skill != "ABORT_WAIT"
                    or getattr(self.body, "executes_wait", False))):

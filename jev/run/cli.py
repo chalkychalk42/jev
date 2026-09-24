@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 
-from jev.clients import win32
+from jev.clients import operator, win32
 from jev.clients.interact import GOSSIP_YARDS
 from jev.guide import playhead, spawns
 from jev.guide.coords import bounds_by_radio_id, navigation_frame
@@ -239,6 +239,14 @@ def _live(args, graph) -> int:
             screenshots = Screenshots(client.frame, recorder.dir / "screenshots")
             screenshots.start()
         startup_checkpoint()
+        # A person at the desk: wait for them rather than fail. A failed start costs the
+        # loop a restart and three in a row stop it; the waiting session costs nothing.
+        if operator.active():
+            print("operator active: waiting for the desk to be quiet before starting")
+            while operator.active():
+                startup_checkpoint()
+                time.sleep(1)
+            print("operator quiet: starting")
         if not client.focused(checkpoint=startup_checkpoint):
             raise NotRunning("client is not focused")
         values = client.read()
@@ -359,7 +367,8 @@ def _live(args, graph) -> int:
                                 has_focus=body.has_focus,
                                 focus=lambda checkpoint: client.focused(FOCUS_QUICK_S,
                                                                          checkpoint=checkpoint),
-                                housekeeping=housekeeping, watchdog=watchdog)
+                                housekeeping=housekeeping, watchdog=watchdog,
+                                operator_active=operator.active)
         print(f"recording to {recorder.dir}")
         supervisor.run(args.run_for, max_steps=args.steps)
         if screenshots is not None:

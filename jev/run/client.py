@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from jev.clients import win32
+from jev.clients import operator, win32
 from jev.clients.capture import Backend, WindowCapture
 from jev.clients.hid import Hid, Humaniser
 from jev.clients.source import blind
@@ -337,6 +337,9 @@ class Client:
         while True:
             if checkpoint is not None:
                 checkpoint()
+            if operator.active():
+                # A person is at the desk: the window is theirs to give back, never taken.
+                return win32.is_foreground(self.hwnd)
             if win32.focus(self.hwnd) and win32.is_foreground(self.hwnd):
                 return True
             if time.monotonic() + wait >= deadline:

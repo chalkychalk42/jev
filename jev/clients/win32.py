@@ -16,6 +16,8 @@ import sys
 import time
 from ctypes import wintypes
 
+from jev.clients import operator
+
 IS_WINDOWS = sys.platform == "win32"
 
 
@@ -381,6 +383,25 @@ def focus(hwnd: int) -> bool:
     return is_foreground(hwnd)                          # pragma: no cover - platform
 
 
+class LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+
+def last_input_tick() -> int | None:
+    """The tick of the last input from anyone - the bot's own included (`operator`)."""
+    _require()                                          # pragma: no cover - platform
+    info = LASTINPUTINFO(cbSize=ctypes.sizeof(LASTINPUTINFO))   # pragma: no cover - platform
+    if not user32.GetLastInputInfo(ctypes.byref(info)):  # pragma: no cover - platform
+        return None
+    return int(info.dwTime)                             # pragma: no cover - platform
+
+
+def tick_now() -> int:
+    """Milliseconds since boot, on the clock `last_input_tick` uses."""
+    _require()                                          # pragma: no cover - platform
+    return int(kernel32.GetTickCount())                 # pragma: no cover - platform
+
+
 def send_inputs(inputs: list[INPUT]) -> int:
     """Send a batch. Returns how many events were accepted.
 
@@ -391,7 +412,10 @@ def send_inputs(inputs: list[INPUT]) -> int:
     _require()                                          # pragma: no cover - platform
     n = len(inputs)                                     # pragma: no cover - platform
     arr = (INPUT * n)(*inputs)                          # pragma: no cover - platform
-    return user32.SendInput(n, arr, ctypes.sizeof(INPUT))  # pragma: no cover - platform
+    accepted = user32.SendInput(n, arr, ctypes.sizeof(INPUT))  # pragma: no cover - platform
+    # Ours, not a person's: every injection is stamped (`jev.clients.operator`).
+    operator.stamp()                                    # pragma: no cover - platform
+    return accepted                                     # pragma: no cover - platform
 
 
 def scan_code(vk: int) -> int:

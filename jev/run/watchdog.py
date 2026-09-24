@@ -40,7 +40,7 @@ class Watchdog:
     walk_step: float = 0.003
     _walk: tuple = (None, None)
 
-    def observe(self, state, now, closest: float | None = None):
+    def observe(self, state, now, closest: float | None = None, paused: bool = False):
         if not state.sense.addon_ok:
             if self.blind_since is None:
                 self.blind_since = now
@@ -75,8 +75,9 @@ class Watchdog:
         # that had killed it (run 20260924T041014-a9781c). A spiral of deaths is the death
         # edges' and the rib's own rule to end, as the step's clock already assumes.
         recovering = state.vitals.dead is True or state.vitals.ghost is True
+        # Paused for a person at the desk is not a stall either: nothing was tried.
         facts = (self._level, self._xp, self._quests)
-        if facts != self._facts or self.progress_at is None or walked or recovering:
+        if facts != self._facts or self.progress_at is None or walked or recovering or paused:
             self._facts, self.progress_at = facts, now
             self.escalated = False
         elif now - self.progress_at >= self.no_progress_s:
