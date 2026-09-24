@@ -215,3 +215,23 @@ def test_a_start_far_above_the_destination_is_found_by_widening_the_heights():
         outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0, stuck_events=0, detail="")
     assert client.approach(wolves)
     assert walked == [route]
+
+
+@pytest.mark.parametrize(("yards", "limit"), [(100.0, 180.0), (1038.0, 1038.0 / 7.0 * 2.0),
+                                              (3000.0, 540.0)])
+def test_a_walks_limit_grows_with_its_route(yards, limit):
+    """A flat 180 s was about the clean time for the 1,038 yards to Gerard Tiller."""
+    from jev.clients.travel import Outcome
+    from jev.guide.path import Path, PathStatus
+
+    client, _values = client_in("Elwynn", (0.49, 0.42))
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    end = (here[0] + yards, here[1], 60.0)
+    client.query.path = lambda map_id, start, finish: Path(
+        PathStatus.COMPLETE, ((here[0], here[1], 60.0), end))
+    client.travel.position = lambda: (0.49, 0.42)
+    given = []
+    client.travel.follow = lambda path, *, timeout_s, **kw: given.append(timeout_s) or SimpleNamespace(
+        outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0, stuck_events=0, detail="")
+    client.approach(end, timeout_s=180.0)
+    assert given == [pytest.approx(limit)]

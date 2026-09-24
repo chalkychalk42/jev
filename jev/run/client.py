@@ -72,6 +72,12 @@ STALE_AFTER_S = 4.0
 START_HEIGHTS = (0.0, -3.0, 3.0, -6.0, 6.0, -10.0,
                  *(sign * dz for dz in range(12, 61, 4) for sign in (1, -1)))
 GROUND_MEMORY_YARDS = 15.0
+# A walk's limit grows with the route planned for it: twice the time at running pace, up to
+# just under TRAVEL_TO's own 600 s. A flat 180 s was about the clean time for the 1,038
+# yards between Northshire and Gerard Tiller, so one stuck corner failed the step.
+RUN_YARDS_PER_S = 7.0
+WALK_SLACK = 2.0
+MAX_WALK_S = 540.0
 
 
 class NotRunning(RuntimeError):
@@ -250,6 +256,8 @@ class Client:
                   f"{path.length_yards():.1f} yards")
         if not path.usable:
             return False
+        timeout_s = max(timeout_s, min(MAX_WALK_S,
+                                       path.length_yards() / RUN_YARDS_PER_S * WALK_SLACK))
 
         followed = [path]
 
