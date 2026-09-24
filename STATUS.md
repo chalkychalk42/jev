@@ -2085,7 +2085,7 @@ alone. The trainer and a way to use trained spells are the operator's call (belo
 
 NEXT: Goldshire (54), then 18; the first live gather at 3904.
 
-## 2026-09-24 05:35 — overnight debrief 6: a pack, a heal, and the Spirit Healer explained
+## 2026-09-24 05:20 — overnight debrief 6: a pack, a heal, and the Spirit Healer explained
 
 Sessions 28-31. Testvvi: level 6 at 80%, walking to Goldshire for quest 54's hand-in. Nine
 deaths in sessions 29-30, all from one chain, each link now fixed and general:
