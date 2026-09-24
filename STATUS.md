@@ -2520,3 +2520,24 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
 - The 12-20 guide's spine is 81 steps and about 50,000 yards of walking (the 1-12's is
   48,000 over 114); its longest legs are the Westfall-Redridge crossings, up to 4,266
   yards, where a flight path would save the most.
+
+## 2026-09-24 16:00 — home at Goldshire; what the motor learner is short of
+
+- **The hearthstone is bound at Goldshire** (V126, session 83): the character walked into
+  the Lion's Pride Inn, chose "Make this inn your home." with Innkeeper Farley and
+  accepted - the chat says "Goldshire is now your home." Recoveries by hearthstone now
+  land 360 yards from Fargodeep and Goldshire's quest givers, not in Northshire.
+- **A trainer visit for nothing** (session 83): Devotion Aura rank 2 took rank 1 out of the
+  spellbook, and the trainer check offered rank 1 again. A rank below one the spellbook
+  holds is now held (8e22287).
+- **Motor learner, measured offline on a copy of its store:** 1,751 recorded actions, 336
+  qualified (both the action and its teaching episode verified successful), from 66 runs.
+  Acquire has 880 records and 83 qualified: 371 actions failed, 160 unverified, 266
+  succeeded in an episode that did not. Since V118 (a fight's verdict settles the episode
+  it cut short) 19 of 41 settled episodes behind successful acquires were credited, against
+  64 of 200 before. Both models abstain on every held-out example: acquire's are unseen
+  on visual features (a click is a screen coordinate, and 63 examples rarely resemble each
+  other across runs); rest's are split by the 24 action-bar bits, which are compared
+  exactly - dropping them covers 4 of 21 at precision 0.5, still short of the 90% and 50%
+  gates. More data helps both; acquire likely needs relative features (which plate, not
+  which pixel) before it can cover much. Not changed.
