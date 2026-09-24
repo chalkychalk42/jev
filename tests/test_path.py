@@ -202,11 +202,12 @@ def test_an_unreachable_destination_is_partial_not_complete():
 
 
 # Northshire Vineyards to the Gray Forest Wolves (the 7-9 grind): session 74 climbed a
-# 55 degree face on this leg and slid back down it for four minutes.
+# 55 degree face on this leg and slid back down it for four minutes; session 76, clear of
+# the mesh's steep band, slid on the 40-50 degree hillside beside it. The way round by
+# the road climbs no more than one in two anywhere.
 VINEYARDS = (-9191.5, -349.9, 0.0)
 GRAY_FOREST_WOLVES = (-9455.9, -566.2, 66.1)
-# The generator marks 50-60 degree ground steep, "unwalkable for players".
-CLIMBABLE_GRADE = 1.19   # tan(50 degrees)
+CLIMBABLE_GRADE = 0.5
 
 
 @pytest.mark.skipif(not HAVE_MESH, reason="needs tools/jevpath and extracted mmaps")

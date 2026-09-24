@@ -1890,3 +1890,42 @@ def test_a_fight_begun_near_death_heals_before_it_looks_for_the_attacker(combat_
     assert hid.taps[0] == "3", f"looked for the attacker before healing: {hid.taps}"
     assert hid.chords[0] == ("alt", "3")
     assert "tab" in hid.taps[1:], "never looked for the attacker after the heal"
+
+
+def test_the_grey_level_is_the_servers():
+    """`MaNGOS::XP::GetGrayLevel`: level 3-4 Defias were grey to a level 9 paladin."""
+    from jev.clients.fight import grey_level
+
+    assert [grey_level(n) for n in (1, 5, 6, 9, 10, 39, 40, 59, 60, 70)] == \
+        [0, 0, 1, 4, 4, 31, 31, 47, 51, 61]
+
+
+def test_a_grey_target_gone_below_half_health_is_a_kill(monkeypatch):
+    """Session 74: six level 3-4 Defias last seen at 3-34% health, each settled "lost" at
+    level 9 because a grey kill grants no experience, and none was looted."""
+    monkeypatch.setattr("jev.clients.fight.time.sleep", lambda _: None)
+    gone = {**ALIVE, "target.has": False, "target.hp": None, "target.name_id": None,
+            "char.level": 9, "char.xp_pct": 0.95}
+    f = _fight([gone] * 4)
+    f._xp_start = (9, 0.95)
+    f._selected_name_id = 1161
+    f._target_level = 4
+    f.last_hp = 0.34
+    assert f._settle(gone) is Fought.KILLED
+    assert f.killed_name_id == 1161
+    for level, hp in ((5, 0.34), (4, 0.9), (None, 0.1)):
+        g = _fight([gone] * 4)
+        g._xp_start = (9, 0.95)
+        g._target_level = level
+        g.last_hp = hp
+        assert g._settle(gone) is Fought.LOST, (level, hp)
+
+
+def test_a_grey_target_whose_selection_moves_on_is_a_kill(combat_clock):
+    fighting = {**ALIVE, "vitals.combat": True, "target.melee_range": True, "target.hp": 0.2,
+                "target.level": 3, "char.level": 9, "char.xp_pct": 0.95}
+    f = _fight([fighting, fighting, {**fighting, "target.name_id": 99, "target.hp": 1.0}])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+    assert f.killed_name_id == 1161

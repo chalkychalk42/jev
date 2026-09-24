@@ -39,5 +39,8 @@ polygon is under the guess.
 Routes keep to ground a character can climb: the filter is the one the server gives the
 bots it drives itself - ground and water, water twenty times as costly, never lava, slime
 or the mesh's steep ground (50 to 60 degrees, which the server's creatures walk and a
-character slides down). Only where that finds no complete route is everything allowed,
-and the answer says so: `"filter":"any"` and a `detail`.
+character slides down). The character slides well below 50 degrees too, so at start-up
+every ground polygon is relabelled by the mean slope of its detail triangles, and the
+filter costs one averaging 30 degrees four times its length and one averaging 40 twenty
+times. Only where all that finds no complete route is everything allowed, at no extra
+cost, and the answer says so: `"filter":"any"` and a `detail`.

@@ -119,6 +119,25 @@ FLEE_HP = 0.30
 # After a target vanishes, how long to watch for the experience that proves a kill.
 SETTLE_LOOKS = 3
 SETTLE_LOOK_S = 0.25
+# A grey target's kill grants no experience to prove it, so the vanish is the evidence:
+# gone from the selection below half its health, it died. Back in Northshire at level 9,
+# six level 3-4 Defias were each last seen at 3-34% and settled "lost", none looted
+# (session 74, run 20260924T133800-b58ab2).
+GREY_KILL_HP = 0.5
+
+
+def grey_level(level: int) -> int:
+    """The highest target level worth no experience to a character of `level`.
+
+    The server's rule (`MaNGOS::XP::GetGrayLevel`); a kill at or below it grants nothing.
+    """
+    if level <= 5:
+        return 0
+    if level <= 39:
+        return level - 5 - level // 10
+    if level <= 59:
+        return level - 1 - level // 5
+    return level - 9
 
 # Tab presses before giving up on finding something attackable. With a humaniser the count
 # is drawn per search, so a camp is not searched with the same burst every time.
@@ -335,6 +354,7 @@ class Fight:
     # The name of the unit the last fight killed, for finding its corpse by hover.
     killed_name_id: int | None = field(default=None, init=False)
     _xp_start: tuple | None = field(default=None, init=False)
+    _target_level: int | None = field(default=None, init=False)
     _strides: int = field(default=0, init=False)
     _approach_s: float = field(default=0.0, init=False)
     # Strafes off a blocked approach this fight, the side the next one goes, and how long.
@@ -394,6 +414,7 @@ class Fight:
         self.last_plate = None
         self.killed_name_id = None
         self._xp_start = None
+        self._target_level = None
         self._strides = 0
         self._approach_s = 0.0
         self.sidesteps = self._still_steps = self._unanswered = self._draw_outs = 0
@@ -555,13 +576,15 @@ class Fight:
                      and guid != self._selected_guid)
             if risen or other or (self._selected_name_id is not None
                                   and v.get("target.name_id") != self._selected_name_id):
-                if self._gained(v) or self._experience_follows():
+                if self._gained(v) or self._grey_gone() or self._experience_follows():
                     self.killed_name_id = self._selected_name_id
                     return Fought.KILLED
                 self.detail = "selected target changed during fight"
                 return Fought.LOST
             if hp is not None:
                 self.last_hp = hp
+            if isinstance(v.get("target.level"), int):
+                self._target_level = v["target.level"]
             if hp == DEAD_HP:
                 return self._settle(v)
 
@@ -1565,14 +1588,24 @@ class Fight:
         (23 September, the wolf at 20% one paint and gone the next, with XP arriving on the
         same tick), and in a fight nothing but a kill grants experience. Experience can
         lag the disappearance by a paint, so a vanished target is watched briefly for it.
+        A grey target grants none, and its vanish below half health is taken as the kill.
         A caller that needs certainty still counts `quests.o0_have`.
         """
-        event("fight.last_health", data={"target_hp": self.last_hp})
-        if self.last_hp == 0.0 or self._gained(values) or self._experience_follows():
+        event("fight.last_health", data={"target_hp": self.last_hp,
+                                         "target_level": self._target_level})
+        if (self.last_hp == 0.0 or self._gained(values) or self._grey_gone()
+                or self._experience_follows()):
             self.killed_name_id = self._selected_name_id
             return Fought.KILLED
         self.detail = "target disappeared without observed death"
         return Fought.LOST
+
+    def _grey_gone(self) -> bool:
+        """The fought unit was grey to the character and last seen below half health."""
+        mine = self._xp_start[0] if self._xp_start else None
+        return (isinstance(self._target_level, int) and isinstance(mine, int)
+                and self._target_level <= grey_level(mine)
+                and isinstance(self.last_hp, (int, float)) and self.last_hp < GREY_KILL_HP)
 
     def _experience_follows(self) -> bool:
         """Watch briefly for the experience of a kill; it can lag the selection by a paint."""

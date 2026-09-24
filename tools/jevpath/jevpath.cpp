@@ -29,6 +29,7 @@
 // whatever polygon is under or over the guess, which is right in a world where the only
 // thing at a given x/y is the ground.
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -65,7 +66,21 @@ static const unsigned short NAV_GROUND_STEEP = 0x02;
 static const unsigned short NAV_WATER = 0x04;
 static const unsigned short NAV_MAGMA_SLIME = 0x08;
 static const unsigned char NAV_AREA_WATER = 9;
+static const unsigned char NAV_AREA_GROUND = 11;
 static const float WATER_COST = 20.0f;
+
+// Ground a character climbs badly. The steep band starts at 50 degrees and the character
+// slides well before that: over 13,400 half-second ticks of sessions 60-76, the share of
+// moving ticks spent falling rose with the mean slope of the polygon underfoot - 2-7%
+// below 25 degrees, 20-26% from 30 to 45, 37-53% above 45. Session 76, on a route clear of
+// the steep band, slid for three minutes on a vineyard hillside whose polygons average 42
+// to 51 degrees. So ground costs more the steeper it is: a polygon whose detail triangles
+// average 30 degrees or more costs four times its length, 40 or more twenty times. The
+// guide's 110 legs grow 1.7% in all, 1.19 times at most; the vineyard leg goes round by the
+// road, 1,077 yards for 424, and no stretch of it climbs more than one in two.
+static const float SLOPE_DEG[2] = {30.0f, 40.0f};
+static const unsigned char SLOPE_AREA[2] = {20, 21};   // areas the mesh does not use
+static const float SLOPE_COST[2] = {4.0f, 20.0f};
 
 struct MmapTileHeader {
     unsigned int mmapMagic;
@@ -112,6 +127,51 @@ static bool loadTiles(dtNavMesh* mesh, const std::string& dir, int mapId, int& l
         }
     }
     return true;
+}
+
+// Area-weighted mean slope of a polygon's detail triangles, in degrees from level.
+static float meanSlope(const dtMeshTile* tile, const dtPoly* poly) {
+    const dtPolyDetail* pd = &tile->detailMeshes[poly - tile->polys];
+    float area = 0.0f, weighted = 0.0f;
+    for (int j = 0; j < pd->triCount; ++j) {
+        const unsigned char* t = &tile->detailTris[(pd->triBase + j) * 4];
+        const float* v[3];
+        for (int k = 0; k < 3; ++k)
+            v[k] = t[k] < poly->vertCount
+                ? &tile->verts[poly->verts[t[k]] * 3]
+                : &tile->detailVerts[(pd->vertBase + (t[k] - poly->vertCount)) * 3];
+        float e0[3], e1[3], n[3];
+        dtVsub(e0, v[1], v[0]);
+        dtVsub(e1, v[2], v[0]);
+        dtVcross(n, e0, e1);
+        const float len = dtVlen(n);   // twice the triangle's area; Detour's y is up
+        if (len < 1e-6f) continue;
+        area += len;
+        weighted += len * acosf(fabsf(n[1]) / len) * (180.0f / 3.14159265f);
+    }
+    return area > 0.0f ? weighted / area : 0.0f;
+}
+
+// Relabel sloping ground so the walking filter can cost it.
+static void costSlopes(dtNavMesh* mesh) {
+    const dtNavMesh* view = mesh;
+    for (int i = 0; i < view->getMaxTiles(); ++i) {
+        const dtMeshTile* tile = view->getTile(i);
+        if (!tile || !tile->header) continue;
+        const dtPolyRef base = view->getPolyRefBase(tile);
+        for (int ip = 0; ip < tile->header->polyCount; ++ip) {
+            const dtPoly* poly = &tile->polys[ip];
+            if (poly->getType() != DT_POLYTYPE_GROUND || poly->getArea() != NAV_AREA_GROUND)
+                continue;
+            const float slope = meanSlope(tile, poly);
+            for (int k = 1; k >= 0; --k) {
+                if (slope >= SLOPE_DEG[k]) {
+                    mesh->setPolyArea(base | (dtPolyRef)ip, SLOPE_AREA[k]);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 // One filter's answer: the straight path, or why there is none.
@@ -191,6 +251,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    costSlopes(mesh);
+
     dtNavMeshQuery* query = dtAllocNavMeshQuery();
     if (!query || dtStatusFailed(query->init(mesh, 65535))) {
         fprintf(stderr, "query init failed\n");
@@ -206,6 +268,8 @@ int main(int argc, char** argv) {
     walkable.setIncludeFlags(NAV_GROUND | NAV_WATER);
     walkable.setExcludeFlags(NAV_GROUND_STEEP | NAV_MAGMA_SLIME);
     walkable.setAreaCost(NAV_AREA_WATER, WATER_COST);
+    for (int k = 0; k < 2; ++k)
+        walkable.setAreaCost(SLOPE_AREA[k], SLOPE_COST[k]);
     // Everything the mesh has, as before: for a character already standing on steep
     // ground, a destination on it, or a place only steep ground reaches. The old route
     // there beats no route.
