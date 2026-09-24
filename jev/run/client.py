@@ -35,7 +35,7 @@ from jev.guide.coords import (
     names_by_radio_id,
     world_to_map,
 )
-from jev.guide.path import PathQuery
+from jev.guide.path import PathQuery, PathStatus
 from jev.guide.route_memory import AvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
@@ -61,6 +61,14 @@ FOCUS_QUICK_S = 6.0            # mid-run, where standing still costs stations
 # Both look like a position that never changes. An hour went into terrain that was never
 # the problem before anyone looked at `seq`.
 STALE_AFTER_S = 4.0
+
+# Heights to start a plan at, the radio painting none: the ground where the last walk ended
+# when that is near, then the destination's height, then either side of it. From beside
+# Northshire's merchant wagons the destination's height snapped the start onto a wagon, and
+# the planner answered with five yards of partial path that the walk then called arrival;
+# four yards lower it answers with the whole 164-yard route (run 20260924T013702-7f5692).
+START_HEIGHTS = (0.0, -3.0, 3.0, -6.0, 6.0, -10.0)
+GROUND_MEMORY_YARDS = 15.0
 
 
 class NotRunning(RuntimeError):
@@ -89,6 +97,8 @@ class Client:
     coordinate_zones: dict[int, ZoneBounds] = field(default_factory=dict, init=False)
     coordinate_names: dict[int, str] = field(default_factory=dict, init=False)
     on_path: Callable[[str], None] | None = field(default=None, init=False)
+    # Where the last walk ended, with the height of the route that got it there.
+    _ground: tuple[float, float, float] | None = field(default=None, init=False)
     # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
     # context and bitmap once and reuses them, so two threads grabbing at the same time
     # tear each other's frame in half. The heartbeat samples on its own thread, so every
@@ -232,7 +242,7 @@ class Client:
             self._say("  cannot read a position")
             return False
         hw = map_to_world(here[0], here[1], self.bounds)
-        path = self.query.path(self.bounds.map_id, (hw[0], hw[1], world[2]), world)
+        path = self._plan(hw, world)
         self._say(f"  {path.status.value}: {len(path.points)} waypoints, "
                   f"{path.length_yards():.1f} yards")
         if not path.usable:
@@ -267,12 +277,33 @@ class Client:
             if self.focused(FOCUS_QUICK_S):
                 result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
                                             memory=self.route_memory)
+        ended = self.travel.position()
+        if ended is not None:
+            w = map_to_world(ended[0], ended[1], self.bounds)
+            z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
+            self._ground = (w[0], w[1], z)
         remaining = ("unknown" if result.remaining_yards is None
                      else f"{result.remaining_yards:.1f} yards")
         self._say(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "
                   f"{result.stuck_events} stuck"
                   + (f" - {result.detail}" if result.detail else ""))
         return result.outcome.value == "arrived"
+
+    def _plan(self, here: tuple[float, float], world: tuple[float, float, float]):
+        """The first complete plan over `START_HEIGHTS`, else the partial one ending nearest."""
+        heights = [world[2] + dz for dz in START_HEIGHTS]
+        if (self._ground is not None
+                and math.dist(self._ground[:2], here[:2]) <= GROUND_MEMORY_YARDS):
+            heights.insert(0, self._ground[2])
+        best = None
+        for z in heights:
+            path = self.query.path(self.bounds.map_id, (here[0], here[1], z), world)
+            if path.usable and path.status is PathStatus.COMPLETE:
+                return path
+            if path.usable and (best is None or math.dist(path.points[-1][:2], world[:2])
+                                < math.dist(best.points[-1][:2], world[:2])):
+                best = path
+        return best if best is not None else path
 
     def focused(self, patience_s: float = FOCUS_PATIENCE_S, *,
                 checkpoint: Callable[[], None] | None = None) -> bool:

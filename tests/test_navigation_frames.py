@@ -159,3 +159,39 @@ def test_a_replan_starts_at_the_height_of_the_route_that_got_us_here():
     client.travel.follow = follow
     assert client.approach(mcbride)
     assert asked == [82.0, 80.6], "the re-plan borrowed the destination's height"
+
+
+def test_a_start_height_that_snaps_onto_the_wrong_floor_is_not_the_plan():
+    """Beside Northshire's merchant wagons the destination's height put the start on a
+    wagon: five yards of partial path, walked and called arrival, 160 yards short (run
+    20260924T013702-7f5692). Four yards lower the mesh has the whole route."""
+    from jev.clients.travel import Outcome
+    from jev.guide.path import Path, PathStatus
+
+    client, _values = client_in("Elwynn", (0.4766, 0.4137))
+    here = map_to_world(0.4766, 0.4137, ELWYNN)
+    rib = (here[0] + 157.0, here[1] - 43.0, 86.4)
+    island = Path(PathStatus.PARTIAL, ((here[0], here[1], 85.6), (here[0] + 4.3, here[1] + 1.6, 86.4)))
+    ground = Path(PathStatus.COMPLETE, ((here[0], here[1], 81.9), (here[0] + 90.0, here[1] - 20.0, 81.6),
+                                        rib))
+    asked = []
+
+    def path(map_id, start, end):
+        asked.append(round(start[2], 1))
+        return island if start[2] > 84.0 else ground
+
+    client.query.path = path
+    client.travel.position = lambda: (0.4766, 0.4137)
+    walked = []
+
+    def follow(route, *, timeout_s, replan, memory=None):
+        walked.append(route)
+        return SimpleNamespace(outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0,
+                               stuck_events=0, detail="")
+
+    client.travel.follow = follow
+    assert client.approach(rib)
+    assert walked == [ground] and asked == [86.4, 83.4]
+    asked.clear()
+    client.approach(rib)
+    assert asked == [81.9], "the next plan from here starts on the ground the walk ended on"
