@@ -613,6 +613,100 @@ def test_a_trap_body_the_healer_will_not_raise_us_from_is_reclaimed_from_short_o
     assert b.recover.walk_to is original, "the normal walk is restored"
 
 
+def test_every_body_is_reclaimed_short_of_it_from_where_the_ghost_stands(monkeypatch):
+    """Up at the body itself, among the wolves that killed it, four times in two sessions
+    (runs 20260924T045140-ec8686 and ...050644-f9f9fa); the second session started as a
+    ghost and never saw the graveyard."""
+    import math
+
+    from jev.guide.coords import map_to_world, world_to_map
+    from jev.run.body import TRAP_RECLAIM_YARDS
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._revived_at = None
+    b.recover.corpse = world_to_map(-9000.0, 100.0, b.client.bounds)
+    b.client.position = lambda: world_to_map(-9000.0, 300.0, b.client.bounds)
+    walked = []
+    b._corpse_walk = lambda point: walked.append(map_to_world(*point, b.client.bounds)) or True
+
+    def run(corpse_point):
+        b.recover.walk_to(corpse_point)
+        return Recovered.ALIVE
+
+    b.recover.run = run
+    assert b._recover(seen()).code == "alive"
+    assert len(walked) == 1
+    assert math.dist(walked[0], (-9000.0, 100.0)) == pytest.approx(TRAP_RECLAIM_YARDS, abs=0.5)
+    assert walked[0][1] > 100.0, "on the side the ghost comes from"
+
+
+def test_a_ghost_already_inside_the_short_ring_stays_where_it_is():
+    from jev.guide.coords import world_to_map
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b.client.position = lambda: world_to_map(-9000.0, 120.0, b.client.bounds)
+    b._corpse_walk = lambda point: pytest.fail("walked in to the body")
+    assert b._short_of_body(world_to_map(-9000.0, 100.0, b.client.bounds)) is True
+
+
+def test_a_right_click_nothing_answers_is_out_of_reach_too():
+    """Six hover-proved clicks on the Spirit Healer opened nothing and raised no error: the
+    server drops a right-click from beyond five yards without a word."""
+    from jev.clients.targeting import HoverCode, HoverResult
+    from jev.perceive.radio_frame import name_id
+
+    b = body()
+    b.interact = SimpleNamespace(open_on=lambda name: Interacted.NOT_VISIBLE)
+    healer = {"cursor.has": True, "cursor.name_id": name_id("Spirit Healer"), "ui.error_count": 4}
+    b.targeting.probe = lambda point, require_target=True: HoverResult(
+        HoverCode.OTHER, point, None, healer, "fixture")
+    clicks, steps = [], []
+    b._read = lambda: {"ui.gossip": len(steps) >= 2, "ui.error_count": 4}
+    b.client.hid.click = lambda x, y, right=False: clicks.append(right) or True
+    b.client.hid.hold = lambda key, seconds, **_: steps.append(key) or True
+    assert b._talk_to("Spirit Healer") == "hovered"
+    assert clicks == [True, True, True] and steps == ["w", "w"], "stepped in until it answered"
+
+
+def test_a_right_click_that_never_answers_is_not_reported_as_talked_to():
+    from jev.clients.targeting import HoverCode, HoverResult
+    from jev.perceive.radio_frame import name_id
+    from jev.run.body import HOVER_STEPS
+
+    b = body()
+    b.interact = SimpleNamespace(open_on=lambda name: Interacted.NOT_VISIBLE)
+    healer = {"cursor.has": True, "cursor.name_id": name_id("Spirit Healer")}
+    b.targeting.probe = lambda point, require_target=True: HoverResult(
+        HoverCode.OTHER, point, None, healer, "fixture")
+    b._read = lambda: {}
+    clicks = []
+    b.client.hid.click = lambda x, y, right=False: clicks.append(right) or True
+    b.client.hid.hold = lambda key, seconds, **_: True
+    assert b._talk_to("Spirit Healer") is Interacted.NOT_VISIBLE
+    assert len(clicks) == HOVER_STEPS + 1
+
+
+def test_the_spirit_healers_gossip_line_is_chosen_to_raise_its_popup(monkeypatch):
+    """Menu 83 in the world database: one line, "Return me to life.", and only choosing it
+    raises the popup."""
+    import jev.clients.recover
+    from jev.clients.recover import RETURN_TO_LIFE
+    monkeypatch.setattr(jev.clients.recover.time, "sleep", lambda seconds: None)
+    ghost = {"vitals.ghost": True, "vitals.dead": False, "pos.mx": 0.39, "pos.my": 0.60}
+    states = iter([ghost, {**ghost, "ui.gossip": True},
+                   {**ghost, "ui.modal": True, "ui.advance_x": 0.5, "ui.advance_y": 0.2},
+                   {"vitals.ghost": False, "vitals.dead": False}])
+    chosen, pressed = [], []
+    recovery = Recover(hid=None, read=lambda: next(states), interact=lambda name: "hovered",
+                       choose=lambda title: chosen.append(title) or "chose")
+    recovery.graveyard = (0.39, 0.60)
+    recovery._press = lambda values: pressed.append(values.get("ui.advance_x")) or True
+    assert recovery.run_spirit_healer() is Recovered.ALIVE
+    assert chosen == [RETURN_TO_LIFE] == ["Return me to life."] and pressed == [0.5]
+
+
 @pytest.mark.parametrize(("durability", "repairer_x", "hearths"), [
     (0.0, 400.0, True), (0.0, 60.0, False), (0.5, 400.0, False)])
 def test_broken_gear_far_from_a_repairer_goes_home_by_hearthstone_first(

@@ -45,6 +45,11 @@ from jev.run.evidence import event, traced
 # The graveyard's resurrector, visible only to the dead. Resurrecting there costs
 # durability, and below level 10 nothing else.
 SPIRIT_HEALER = "Spirit Healer"
+# Its one gossip line (menu 83 in the world database): a right-click opens a gossip, not
+# the popup, and only choosing this line raises the "return to life" popup. Six clicks in
+# run 20260924T045140-ec8686 opened nothing at all, but a healer that does answer answers
+# with this.
+RETURN_TO_LIFE = "Return me to life."
 # A ghost this close to where it appeared is still beside the Spirit Healer (map fractions,
 # about fifteen yards in Elwynn).
 GRAVEYARD_REACH = 0.004
@@ -98,6 +103,8 @@ class Recover:
     walk_to: Callable[[tuple[float, float]], bool] | None = None
     # Right-click a named unit through the shared, identity-checked interaction.
     interact: Callable[[str], object] | None = None
+    # Click a gossip line by its title, through the shared hash-matched chooser.
+    choose: Callable[[str], object] | None = None
 
     corpse: tuple[float, float] | None = field(default=None, init=False)
     # Where the ghost appeared: the graveyard, and its Spirit Healer.
@@ -185,11 +192,14 @@ class Recover:
         For a body lying where something that kills this character still stands: run
         20260923T181209-bc03ba resurrected beside a level 6 wolf three times, at half
         health each time, and died each time. The Spirit Healer answers a right-click with
-        the same kind of popup as the body, so the same painted button accepts it.
+        a gossip whose one line, `RETURN_TO_LIFE`, raises the same kind of popup as the
+        body, so the same painted button accepts it.
 
         The first right-click can open nothing: three seconds after releasing, run
         20260923T183905-e273a3's click on the healer at its feet got no popup, and the same
-        click a minute later got one and got up. So it talks again when nothing opens.
+        click a minute later got one and got up. So it talks again when nothing opens. The
+        server ignores a click from beyond five yards without a word, so the interaction
+        steps closer when nothing answers.
         """
         self.detail = ""
         v = self.read()
@@ -221,6 +231,8 @@ class Recover:
                     return Recovered.ALIVE
                 if v.get("ui.modal") is True:
                     self._press(v)
+                elif v.get("ui.gossip") is True and self.choose is not None:
+                    event("spirit_healer.choose", data={"result": str(self.choose(RETURN_TO_LIFE))})
                 time.sleep(1.0)
         self.detail = f"talked to the Spirit Healer {talks} times ({opened}) and did not get up"
         return Recovered.STILL_GHOST

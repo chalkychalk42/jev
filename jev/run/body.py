@@ -45,11 +45,11 @@ from jev.world.vendor import bag_slots, merchants, supplies_for
 # this character cannot beat still stands: the next recovery gets up at the graveyard's
 # Spirit Healer instead, and goes home by hearthstone.
 DEATH_TRAP_S = 180.0
-# Where a ghost gets up when the body is such a trap and the Spirit Healer will not raise it:
-# this far short of the body, on the graveyard's side. A body can be reclaimed from inside
-# the server's 39-yard radius and the character stands up where the ghost stood; at the body
-# itself the Mangy Wolves round it killed a character at half health three times running,
-# the Spirit Healer answering nothing each time (run 20260924T041014-a9781c).
+# Where a ghost gets up: this far short of the body, on the graveyard's side. A body can be
+# reclaimed from inside the server's 39-yard radius and the character stands up where the
+# ghost stood; at the body itself the Mangy Wolves round it killed a character at half
+# health three times running, the Spirit Healer answering nothing each time (run
+# 20260924T041014-a9781c).
 TRAP_RECLAIM_YARDS = 32.0
 # Broken gear this far from the nearest repairer goes home by hearthstone first.
 BROKEN_DURABILITY = 0.05
@@ -146,7 +146,7 @@ class LiveBody:
         self.repair = Repair(hid=client.hid, read=self._read, visit=self._visit_repairer,
                              window_origin=client.origin, window_size=client.size)
         self.recover = Recover(hid=client.hid, read=self._read, walk_to=self._corpse_walk,
-                               interact=self._talk_to,
+                               interact=self._talk_to, choose=self.chooser.run,
                                window_origin=client.origin, window_size=client.size)
         self.hearth = Hearth(hid=client.hid, read=self._read,
                              window_origin=client.origin, window_size=client.size)
@@ -638,17 +638,21 @@ class LiveBody:
         return self._approach((wx, wy, z))
 
     def _short_of_body(self, point) -> bool:
-        """Walk to within `TRAP_RECLAIM_YARDS` of the body, from the graveyard's side."""
-        graveyard = self.recover.graveyard
-        if graveyard is None:
+        """Walk to within `TRAP_RECLAIM_YARDS` of the body, from the graveyard's side.
+
+        The graveyard is where this process saw the ghost appear; a session that starts
+        as a ghost never saw that, and the ghost's own position is the same side of the
+        body until it walks."""
+        origin = self.recover.graveyard or self._position()
+        if origin is None:
             return self._corpse_walk(point)
         body = map_to_world(*point, self.client.bounds)
-        yard = map_to_world(*graveyard, self.client.bounds)
-        apart = math.dist(body, yard)
+        start = map_to_world(*origin, self.client.bounds)
+        apart = math.dist(body, start)
         if apart <= TRAP_RECLAIM_YARDS:
-            return self._corpse_walk(graveyard)
+            return True
         share = TRAP_RECLAIM_YARDS / apart
-        short = (body[0] + (yard[0] - body[0]) * share, body[1] + (yard[1] - body[1]) * share)
+        short = (body[0] + (start[0] - body[0]) * share, body[1] + (start[1] - body[1]) * share)
         return self._corpse_walk(world_to_map(*short, self.client.bounds))
 
     def _talk_to(self, name: str):
@@ -662,7 +666,12 @@ class LiveBody:
         """Right-click where a fresh hover says `name` is, for a unit whose nameplate does
         not show: run 20260923T182125-9c54ea's ghost stood under the Spirit Healer, its plate
         behind the strip, and the plate-first interaction found none. Out of reach (run
-        ...182544-7dad55: "You are too far away!"), it steps closer and clicks again."""
+        ...182544-7dad55: "You are too far away!"), it steps closer and clicks again.
+
+        Silence is out of reach too. The server drops a right-click from beyond five yards
+        without a word (`INTERACTION_DISTANCE`, CMaNGOS `GetNPCIfCanInteractWith`): six
+        hover-proved clicks on the Spirit Healer in run 20260924T045140-ec8686 opened
+        nothing and raised no error, so only a window opening is an answer."""
         wanted = name_id(name)
         (ox, oy), (w, h) = self.client.origin, self.client.size
         too_far = UI_ERROR_KEYS.index("out_of_range")
@@ -678,16 +687,15 @@ class LiveBody:
                 return False
             if self.client.hid.click(*point, right=True) is False:
                 return False
-            deadline, far = time.monotonic() + HOVER_ANSWER_S, False
+            deadline = time.monotonic() + HOVER_ANSWER_S
             while time.monotonic() < deadline:
                 answer = self._read() or {}
-                far = (answer.get("ui.error_last") == too_far
-                       and answer.get("ui.error_count") != errors)
-                if far or answer.get("ui.modal") is True:
+                if answer.get("ui.modal") is True or answer.get("ui.gossip") is True:
+                    return True
+                if (answer.get("ui.error_last") == too_far
+                        and answer.get("ui.error_count") != errors):
                     break
                 time.sleep(0.1)
-            if not far:
-                return True
             if not self.client.hid.hold("w", HOVER_STEP_S):
                 return False
         return False
@@ -705,17 +713,16 @@ class LiveBody:
                 return self._result(up, f"up at the Spirit Healer; hearthstone {home.value}")
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body, "
                      f"to get up {TRAP_RECLAIM_YARDS:.0f} yards short of it")
-            walk = self.recover.walk_to
-            self.recover.walk_to = self._short_of_body
-            try:
-                outcome = self.recover.run(self.recover.corpse)
-            finally:
-                self.recover.walk_to = walk
-            if outcome is Recovered.ALIVE:
-                self._revived_at = time.monotonic()
-            return self._result(outcome, self.recover.detail)
-        # Recover reads painted corpse coordinates. No guessed quest-node corpse.
-        outcome = self.recover.run(self.recover.corpse)
+        # Always short of the body. Whatever killed the character stands beside it, back at
+        # its spawn: the first reclaim at the body itself, at half health, died again four
+        # times in runs 20260924T045140-ec8686 and ...050644-f9f9fa, and a new session
+        # never knows the last one's revive. Recover reads painted corpse coordinates.
+        walk = self.recover.walk_to
+        self.recover.walk_to = self._short_of_body
+        try:
+            outcome = self.recover.run(self.recover.corpse)
+        finally:
+            self.recover.walk_to = walk
         if outcome is Recovered.ALIVE:
             self._revived_at = time.monotonic()
         return self._result(outcome, self.recover.detail)
