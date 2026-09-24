@@ -149,10 +149,29 @@ def _find_trainers(class_id: int | None, race_id: int | None, map_id: int | None
     return out
 
 
-def learnable(trainer: Trainer, level: int, known: Iterable[int]) -> list[Offer]:
-    """What this trainer would teach a character of this level knowing `known`."""
+def learnable(trainer: Trainer, level: int, known: Iterable[int], *,
+              facts: dict | None = None) -> list[Offer]:
+    """What this trainer would teach a character of this level knowing `known`.
+
+    A rank below one the spellbook holds is known too: learning Devotion Aura rank 2 takes
+    rank 1 out of the spellbook, and the rank 1 the census then lacked sent a level 10
+    paladin to Brother Wilhelm for a spell he no longer offers (session 83).
+    """
     have = set(known)
-    return [o for o in trainer.offers if o.level <= level and o.spell_id not in have]
+    ranks: dict[str, int] = {}
+    for spell_id in have:
+        facts_of = spell(spell_id, facts)
+        if facts_of is not None and facts_of.rank:
+            ranks[facts_of.name] = max(ranks.get(facts_of.name, 0), facts_of.rank)
+
+    def held(offer: Offer) -> bool:
+        if offer.spell_id in have:
+            return True
+        facts_of = spell(offer.spell_id, facts)
+        return (facts_of is not None and bool(facts_of.rank)
+                and ranks.get(facts_of.name, 0) >= facts_of.rank)
+
+    return [o for o in trainer.offers if o.level <= level and not held(o)]
 
 
 def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
@@ -175,7 +194,7 @@ def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
         if yards > max_yards:
             continue
         bought, left = 0, money
-        for offer in sorted(learnable(trainer, level, known), key=lambda o: o.cost):
+        for offer in sorted(learnable(trainer, level, known, facts=facts), key=lambda o: o.cost):
             if offer.cost > left:
                 break
             bought, left = bought + 1, left - offer.cost

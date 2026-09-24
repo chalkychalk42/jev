@@ -113,3 +113,15 @@ def test_every_spell_a_trainer_spell_teaches_is_known_with_its_successors():
     seal = spell(21084)
     assert seal is not None and seal.name == "Seal of Righteousness" and seal.role == "short_buff"
     assert spell(10290) is not None and spell(10290).role == "aura"   # Devotion Aura 2
+
+
+def test_a_rank_below_one_the_spellbook_holds_is_not_for_sale():
+    """Session 83: Devotion Aura rank 2 took rank 1 out of the spellbook, and the census
+    that lacked it sent the character to Brother Wilhelm for nothing."""
+    trainer = next(t for t in training.trainers(2, 1, 0) if t.name == "Brother Wilhelm")
+    known = [81, 107, 498, 633, 635, 639, 853, 1022, 1152, 3127, 6603, 10290, 19740, 20271,
+             20287, 20597, 20598, 20599, 20600, 20864, 21082, 21084]
+    assert training.learnable(trainer, 10, known) == []
+    sale = {o.spell_id for o in training.learnable(trainer, 10, [465])}
+    assert 10290 in sale and 465 not in sale, "rank 1 held: rank 2 is still for sale"
+    assert 465 not in {o.spell_id for o in training.learnable(trainer, 10, [10290])}
