@@ -2047,3 +2047,40 @@ The strip's 4-bit schema header is now used up (14 is its last value): the next 
 needs a revision number in the header first.
 
 NEXT: the hand-in after the wolves, then Goldshire (54); the first live gather at 3904.
+
+## 2026-09-24 04:40 — overnight debrief 5: a death spiral, and the way out of it
+
+Sessions 23-27. Testvvi, level 6: quest 21 handed in (by the routine, nine seconds after its
+step had timed out into a rib, so the tracker never credited it; the next resume did), quest
+54 accepted, now walking to Goldshire. Learner: acquire 55/60, approach 42/60, rest 16/60 -
+and acquire can now train at all (V90: the held-out split had asked two runs for twenty
+examples, which at five a run it could never have).
+
+Ten deaths in sessions 24-26, on the level 5-7 wolf rib the failed hand-in sent it to, each
+link a general fault, each fixed:
+- a unit directly behind the character stands on the screen's centre line too; the fight
+  trusted the plate over the client's "facing the wrong way" and walked away from a wolf
+  biting its back (V91);
+- ribs have no fail edges and a step's deaths were counted in memory only, restarting every
+  session: a rib that has killed the character twice is now left for its way back, and the
+  count is kept in the playhead (V92);
+- the watchdog counted time dead and running back as a stall, and failed the hand-in over
+  into the wolves;
+- at the body the 20 s of looking gave up during the reclaim delay; the Spirit Healer
+  answered three right-clicks with nothing, twice (unexplained - it worked yesterday); and
+  getting up at the body, at half health among the wolves, killed it again. The body is
+  now watched for 150 s, and a trap body is reclaimed 32 yards short of it, on the
+  graveyard's side (the server's reclaim radius is 39) (V92);
+- with its gear broken it lost at full health on the walk to a repairer: broken gear far
+  from one now goes home by hearthstone first. Verified live: hearthed, walked 49 yards
+  to Godric Rothgar, repaired, accepted quest 54.
+
+Also: gathered-object search steps back and looks again where the character hides what is
+underfoot; a kill whose corpse is not found is still a kill; NPC interactions look round
+before giving up (McBride out of view); the Escape popup is dismissed by the close that
+raised it; an attacker whose plate never settles is fought where it stands.
+
+The real limit under all of it: a level 6 paladin with Seal of Righteousness and Holy Light
+alone. The trainer and a way to use trained spells are the operator's call (below).
+
+NEXT: Goldshire (54), then 18; the first live gather at 3904.
