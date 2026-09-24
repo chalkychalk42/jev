@@ -1036,7 +1036,12 @@ class Fight:
         (run 20260924T002817-cee9c2). Something hitting us in melee is within reach; the
         swing is on, and "facing the wrong way" is the only bearing needed.
         """
-        if (self._aim_code is not FaceCode.NOT_VISIBLE or values.get("vitals.combat") is not True
+        # Or proved and never settled on the centre line: a Mangy Wolf in melee drifted
+        # right faster than the pulses turned, and eight turns left its plate 0.18 of the
+        # width off centre - well inside the front half a swing reaches - and the fight was
+        # given up at full health while the wolf bit (run 20260924T033806-a3254d).
+        if (self._aim_code not in (FaceCode.NOT_VISIBLE, FaceCode.UNSETTLED)
+                or values.get("vitals.combat") is not True
                 or values.get("target.attacking_me") is not True
                 or values.get("target.in_melee") is not True):
             return False

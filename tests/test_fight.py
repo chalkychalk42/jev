@@ -1416,6 +1416,20 @@ def test_an_attacker_in_melee_whose_plate_cannot_be_proved_is_fought_by_the_clie
     assert len(turns) == 1, "did not turn round on 'facing the wrong way'"
 
 
+def test_an_attacker_whose_plate_never_settles_on_the_centre_is_fought_where_it_stands(
+        combat_clock):
+    """A Mangy Wolf in melee drifted faster than the pulses turned; eight turns left its
+    plate 0.18 of the width off centre and the fight was given up at full health."""
+    hit = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": True,
+           "target.hp": 0.8, "ui.error_count": 3, "ui.error_last": 0, "bars.attacking": True}
+    dead = {**hit, "target.hp": 0.0}
+    f = _fight([hit, hit, hit, dead])
+    f.targeting.face = FaceResult(FaceCode.UNSETTLED,
+                                  "8 turns left the plate +0.179 of the width off centre",
+                                  0.179, None, 8, 3.1)
+    assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
+
+
 def test_an_unproved_plate_is_still_not_fought_blind_out_of_melee():
     far = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": False}
     f = _fight([far])
