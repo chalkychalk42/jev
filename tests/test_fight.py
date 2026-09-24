@@ -1810,3 +1810,14 @@ def test_judgement_spends_the_seal_and_the_seal_goes_straight_back_on(combat_clo
     assert hid.taps == ["2", "6"]
     f._rotate({**calm, "bars.ready": ALL_READY & ~(1 << 5)})   # Judgement on its cooldown
     assert hid.taps == ["2", "6", "2"], "the seal Judgement released was not put back"
+
+
+def test_a_starting_spell_keeps_its_starting_role_at_any_rank_and_page():
+    """Heroic Strike rank 2 is still the warrior's blow, found on button 2 though the class
+    starts it on its stance page (action 74); the food stays on its key."""
+    from jev.world.combat import from_bar
+
+    bar = {1: 6603, 2: 284, **{s: 0 for s in range(3, 12)}, 12: None}
+    rows = {a.slot: (a.name, a.role) for a in from_bar(bar, for_class(1, 1)).abilities}
+    assert rows == {1: ("Attack", Role.ATTACK), 2: ("Heroic Strike", Role.ATTACK),
+                    12: ("Tough Jerky", Role.FOOD)}

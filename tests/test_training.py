@@ -19,6 +19,8 @@ def test_the_catalog_reads_each_paladin_spell_by_what_it_does():
                      853: "stun", 633: "last_resort", 1022: "save", 1152: "utility",
                      3127: "passive", 25780: "utility", 879: "utility", 21082: "short_buff"}
     assert spell(20271).spends                      # Judgement releases the seal
+    # Weapon blows and drains are strikes too, whatever the class.
+    assert {spell(sid).role for sid in (78, 1752, 75, 2973, 28734)} == {"strike"}
     assert spell(19740).self_cast and not spell(20154).self_cast
     assert spell(19740).every_s == 595.0
 

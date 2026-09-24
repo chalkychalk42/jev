@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 PROFILES_PATH = (pathlib.Path(__file__).resolve().parent.parent.parent
@@ -175,7 +175,11 @@ def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatPr
         return base
     from jev.world.training import spell
 
-    by_slot = {a.slot: a for a in base.abilities}
+    # The census speaks in main-bar buttons, 1-12; a class that starts in a stance keeps
+    # its starting rows on that stance's page (a warrior's 73-84), the same twelve keys.
+    by_slot = {(a.slot - 1) % 12 + 1: replace(a, slot=(a.slot - 1) % 12 + 1)
+               for a in base.abilities}
+    by_name = {a.name: a for a in base.abilities if a.name}
     rows: list[Ability] = []
     for slot in sorted(set(by_slot) | set(bar)):
         held = bar.get(slot)
@@ -185,14 +189,24 @@ def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatPr
                 rows.append(by_slot[slot])
             continue
         facts = spell(held)
-        role = TRAINED_ROLES.get(facts.role) if facts else None
+        if facts is None:
+            continue
+        lasting = facts.role in ("long_buff", "aura")
+        started = by_name.get(facts.name)
+        if started is not None:
+            # A spell the class starts with, at any rank, wherever it now is: its starting
+            # role (a racial's, a weapon blow's), and a long buff's clock kept.
+            rows.append(replace(started, slot=slot, mana=facts.mana or started.mana,
+                                every_s=facts.every_s or started.every_s, lasting=lasting,
+                                spell_id=facts.spell_id))
+            continue
+        role = TRAINED_ROLES.get(facts.role)
         if role is None:
             continue
         rows.append(Ability(slot=slot, role=role, name=facts.name, mana=facts.mana,
                             every_s=(float("inf") if role is Role.AURA else facts.every_s),
                             toggle=facts.role == "attack", friendly=facts.self_cast,
-                            lasting=facts.role in ("long_buff", "aura"),
-                            spends=facts.spends, spell_id=facts.spell_id))
+                            lasting=lasting, spends=facts.spends, spell_id=facts.spell_id))
     return CombatProfile(name=base.name, abilities=tuple(rows))
 
 

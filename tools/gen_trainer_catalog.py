@@ -22,7 +22,7 @@ Roles, from the spell's own data, never from its name:
     short_buff   an aura on the caster lasting under a minute (a seal)
     save         the caster or a friend made immune to damage (aura 39 or 40, any effect)
     stun         the enemy stunned (aura 12)
-    strike       an effect on the enemy target, on a cooldown or not
+    strike       damage, a weapon blow or a drain on the enemy target, on a cooldown or not
     attack       melee auto-attack (78), a toggle
     passive      a passive spell: nothing to press
     utility      anything else (dispels, resurrection, a strike only some creatures take)
@@ -48,6 +48,10 @@ SIDES = {"alliance": MASK_ALLIANCE, "horde": MASK_HORDE}
 EFFECT_SCHOOL_DAMAGE = 2
 EFFECT_DUMMY = 3
 EFFECT_APPLY_AURA = 6
+EFFECT_POWER_DRAIN = 8
+# Weapon damage: without school (Heroic Strike), by percent, plain (Raptor Strike, Auto
+# Shot) and normalised (Sinister Strike).
+EFFECTS_WEAPON = (17, 31, 58, 121)
 EFFECT_HEAL = 10
 EFFECT_AREA_AURA_PARTY = 35
 EFFECT_LEARN_SPELL = 36
@@ -129,7 +133,8 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         facts["role"] = "long_buff" if duration_s >= LONG_BUFF_S else "short_buff"
         facts["aura"] = aura
         facts["every_s"] = max(1.0, duration_s - BUFF_MARGIN_S)
-    elif (effect in (EFFECT_SCHOOL_DAMAGE, EFFECT_DUMMY, EFFECT_SCRIPT)
+    elif (effect in (EFFECT_SCHOOL_DAMAGE, EFFECT_DUMMY, EFFECT_SCRIPT, EFFECT_POWER_DRAIN,
+                     *EFFECTS_WEAPON)
           and target == TARGET_ENEMY and not creature_type):
         facts["role"] = "strike"
     else:
