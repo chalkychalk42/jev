@@ -2177,3 +2177,38 @@ recovered it.
 The limit is unchanged and now measured: at 26% health against one level 6 wolf, Holy Light
 (rank 1, five to six seconds a cast under pushback) left the wolf untouched for 22 s; the
 fight was a stalemate its six heals only just survived. Rank 2 alone doubles each heal.
+
+## 2026-09-24 06:10 — overnight summary, for the operator
+
+Testvvi went from level 3 (15%) at 00:10 to level 7: 32 supervised sessions, all on the
+session loop, 73 commits (all local, none pushed). Quests done since the fresh level 1: 783,
+7, 15, 33, 5261, 21 (handed in; the playhead missed it) and 54. Now: quest 18 (Brotherhood of
+Thieves) in the Northshire vineyard, 2/12 bandanas.
+
+What stopped it, and the general fix for each (DECISIONS V75-V105; debriefs 1-7 above):
+- getting around: stairs and start heights, the Abbey's doorways, fences, slopes it slides
+  back down (V99), NPCs out of view, the realm and character screens;
+- merchants and bags: grey gear sold, placeholder NPCs skipped, looted bags equipped (live);
+- quests: objects gathered or opened by tooltip name, exploration, elite quests left out;
+- deaths, the largest cost of the night (24 since midnight, 21 of them lost fights):
+  - reclaim short of the body, and the Spirit Healer answering once stepped in on (live);
+  - broken gear sent home by hearthstone (live);
+  - ribs left after two deaths, and chosen among mobs never above the character's level;
+  - packs walked last (V95), meals eaten out of the camp's reach (V104);
+  - "facing the wrong way" behind the character, casts no longer read as a lost target
+    (V98), a nearly dead target finished before a heal (V96, live), an attacker that
+    cannot be hit drawn out (V101);
+  - a tutor holding the hunt no longer left to decide while something kills the character
+    (V105; two deaths in session 34, fixed within the hour);
+- learning: grind kills now count as progress (V100) and the tutor's own fights as kills
+  (V103, live). Qualified examples: acquire 55, approach 39, rest 35, interact 27; the
+  gates want 40 training examples on top of the held-out ones, so still no model.
+
+Decisions waiting for you:
+1. **The class trainer.** Every fight this character loses is a Seal of Righteousness and
+   Holy Light rank 1 fight. Sketch above ("Trainer sketch"); the open question is how the
+   strip paints the spellbook (reuse the list fields, or give the header a revision).
+2. **Pushing.** 95 commits are local. The remote is public, and the addon's in-game name
+   (StatusStrip) would be published with them: push as is, or make the repo private first?
+3. **Connectors.** Gmail and Google Calendar need authorising in claude.ai's connector
+   settings before they can be used here.
