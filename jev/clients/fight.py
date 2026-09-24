@@ -177,6 +177,11 @@ BACK_OFF_S = 0.5
 # again (run 20260924T053651-ac99b2). What chases us comes out of the tree.
 UNANSWERED_STEPS = 4
 DRAW_OUT_S = 1.5
+# Backing off keeps facing the attacker, so from a tree's roots with the wolf below it
+# backed further up the trunk, five times, and the character died with the wolf at full
+# health (run 20260924T054447-632295). Every other draw-out turns round and runs clear
+# instead; forward is the way a walk gets down off whatever the character is standing on.
+RUN_CLEAR_S = 2.0
 
 # A toggle's new state reaches the radio a paint or two after the key. Pressing it again
 # inside this window would read the old state and switch it straight back.
@@ -316,8 +321,10 @@ class Fight:
     _approach_s: float = field(default=0.0, init=False)
     # Strafes off a blocked approach this fight, the side the next one goes, and how long.
     sidesteps: int = field(default=0, init=False)
-    # Steps in a row at an attacker in melee that brought no swing and no hit.
+    # Steps in a row at an attacker in melee that brought no swing and no hit, and how
+    # often this fight has moved off for such an attacker to follow.
     _unanswered: int = field(default=0, init=False)
+    _draw_outs: int = field(default=0, init=False)
     _side: int = field(default=1, init=False)
     _sidestep_s: float = field(default=SIDESTEP_S, init=False)
     _still_steps: int = field(default=0, init=False)
@@ -365,7 +372,7 @@ class Fight:
         self._xp_start = None
         self._strides = 0
         self._approach_s = 0.0
-        self.sidesteps = self._still_steps = self._unanswered = 0
+        self.sidesteps = self._still_steps = self._unanswered = self._draw_outs = 0
         self._realigned = False
         self._sidestep_s = SIDESTEP_S
         h = humaniser(self.hid)
@@ -1010,12 +1017,25 @@ class Fight:
                 and distance_yards(trail[0][1], here, self.bounds) < BLOCKED_YARDS)
 
     def _draw_out(self) -> None:
-        """Back off from an attacker that bites and cannot be hit, for it to follow out."""
-        event("approach.draw_out", data={"key": "s", "seconds": DRAW_OUT_S,
-                                          "closed": self.closed})
-        if not self.hid.hold("s", DRAW_OUT_S):
+        """Move off from an attacker that bites and cannot be hit, for it to follow out:
+        back off first, then turn round and run clear, alternately."""
+        self._draw_outs += 1
+        if self._draw_outs % 2 == 1:
+            event("approach.draw_out", data={"key": "s", "seconds": DRAW_OUT_S,
+                                              "closed": self.closed})
+            if not self.hid.hold("s", DRAW_OUT_S):
+                self._input_refused = True
+                self.detail = "back-off input refused"
+            return
+        event("approach.run_clear", data={"key": "w", "seconds": RUN_CLEAR_S,
+                                           "closed": self.closed})
+        if not self._turn_round():
+            return
+        if not self.hid.hold("w", RUN_CLEAR_S):
             self._input_refused = True
-            self.detail = "back-off input refused"
+            self.detail = "run-clear input refused"
+            return
+        self._aim_code = None                   # the next look faces it afresh
 
     def _sidestep(self, mode: str) -> None:
         """Strafe off a blocked line to the unit; the next approach faces it again."""

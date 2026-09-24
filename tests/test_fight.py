@@ -1633,3 +1633,22 @@ def test_an_attacker_being_hit_is_not_backed_away_from(combat_clock):
     g.engage = lambda *_: True
     g.run(timeout_s=3.0)
     assert all(key != "s" for key, _secs in g.hid.holds)
+
+
+def test_the_second_draw_out_turns_round_and_runs_clear(combat_clock):
+    """Backing off from a tree's roots with the wolf below went further up the trunk, five
+    times (run 20260924T054447-632295)."""
+    from jev.clients.fight import DRAW_OUT_S, RUN_CLEAR_S
+
+    biting = {**ALIVE, "target.in_melee": True, "target.attacking_me": True,
+              "vitals.combat": True}
+    g = _fight([biting])
+    g.acquire = lambda name_id, **_: None
+    g.engage = lambda *_: True
+    g.run(timeout_s=8.0)
+    moves = [(key, secs) for key, secs in g.hid.holds
+             if key == "d" or (key in ("s", "w") and secs in (DRAW_OUT_S, RUN_CLEAR_S))]
+    assert ("s", DRAW_OUT_S) in moves and ("w", RUN_CLEAR_S) in moves
+    first_back = moves.index(("s", DRAW_OUT_S))
+    run = moves.index(("w", RUN_CLEAR_S))
+    assert first_back < run and moves[run - 1][0] == "d", "turned round before running"
