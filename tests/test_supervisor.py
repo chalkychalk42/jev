@@ -562,7 +562,7 @@ def test_another_character_logging_in_stops_the_run_with_this_ones_playhead_save
               seen(0.75, char=theirs)]
     saved = []
     rt = runtime(tmp_path, states, character_key=1,
-                 on_progress=lambda step, done, rejoin, deaths: saved.append(step))
+                 on_progress=lambda step, done, rejoin, deaths, retried=frozenset(): saved.append(step))
     body = Body()
     supervisor = Supervisor(rt, body, say=lambda line: None)
     try:

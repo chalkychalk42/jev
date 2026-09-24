@@ -123,8 +123,11 @@ class ClientRuntime:
     start_step: str | None = None
     start_rejoin: str | None = None
     start_deaths: int = 0
-    # (step, completed quests, where the step leads back to when that is not its next)
-    on_progress: Callable[[str, set[int], str | None, int], None] | None = None
+    # Steps already failed into a rib once, in earlier sessions (`playhead.Remembered`).
+    start_retried: frozenset[str] = frozenset()
+    # (step, completed quests, where the step leads back to when that is not its next,
+    # deaths on the step, steps already retried)
+    on_progress: Callable[[str, set[int], str | None, int, frozenset[str]], None] | None = None
     # The character whose playhead this run keeps (`char.key`). Another character's state
     # is not tracked, recorded or saved: it sets `foreign`, and the run stops.
     character_key: int | None = None
@@ -195,11 +198,13 @@ class ClientRuntime:
                                           rejoin_to=self.start_rejoin)
             if start is not None and self.tracker.step_id == start:
                 self.tracker.memory.deaths = self.start_deaths
+            self._retried |= set(self.start_retried)
             self._entered = True
 
         before = self.tracker.step_id
         completed_before = set(self.completed)
         deaths_before = self.tracker.memory.deaths
+        retried_before = set(self._retried)
         self.tracker.serving = (self.armed is not None
                                 and self.armed.decision.skill in SERVICING_SKILLS)
         verdict = TrackVerdict(Event.NONE) if self.finished else self.tracker.tick(state)
@@ -214,9 +219,11 @@ class ClientRuntime:
         if self.on_progress is not None and (before != self.tracker.step_id
                                             or completed_before != self.completed
                                             or deaths_before != self.tracker.memory.deaths
+                                            or retried_before != self._retried
                                             or self.last_state is None):
             self.on_progress(self.tracker.step_id, set(self.completed),
-                             self.tracker.memory.rejoin_to, self.tracker.memory.deaths)
+                             self.tracker.memory.rejoin_to, self.tracker.memory.deaths,
+                             frozenset(self._retried))
 
         if choose:
             plan, by, rule, decision_id = self._choose(state, node)

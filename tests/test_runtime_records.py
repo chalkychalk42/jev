@@ -198,7 +198,7 @@ def test_terminal_step_is_completed_and_persisted_once(tmp_path):
     saved = []
     rt = runtime(tmp_path, [seen(0, quests=(Quest(quest_id=1),)), seen(1), seen(2), seen(3)],
                  start_step="turnin",
-                 on_progress=lambda step, done, rejoin, deaths: saved.append((step, done)))
+                 on_progress=lambda step, done, rejoin, deaths, retried=frozenset(): saved.append((step, done)))
     rt.run(4, 0)
     assert rt.finished
     assert rt.completed == {1}
@@ -259,7 +259,7 @@ def test_a_step_that_failed_into_a_rib_is_retried_once_then_passed_over(tmp_path
     saved = []
     states = [held(0, 3), held(12, 3), held(13, 4), held(25, 4), held(26, 5)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
-                       on_progress=lambda step, done, rejoin, deaths: saved.append((step, rejoin)))
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(): saved.append((step, rejoin)))
     visited = []
     for _ in states:
         rt.tick(choose=False)
@@ -304,7 +304,7 @@ def test_deaths_on_a_step_outlive_the_session_that_counted_them(tmp_path):
     states = [held(0, 6), held(1, 6)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
                        start_step="rib", start_rejoin="turnin", start_deaths=2,
-                       on_progress=lambda step, done, rejoin, deaths: saved.append((step, deaths)))
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(): saved.append((step, deaths)))
     rt.tick(choose=False)
     assert rt.tracker.step_id == "turnin", "a rib that killed twice is left for its way back"
 
@@ -314,3 +314,26 @@ def test_deaths_on_a_step_outlive_the_session_that_counted_them(tmp_path):
     assert playhead.load("g", path).deaths == 3
     playhead.save("g", "rib", {1}, path, rejoin_to="turnin")
     assert playhead.load("g", path).deaths == 0
+
+
+def test_a_step_retried_in_an_earlier_session_is_passed_over_on_its_next_failure(tmp_path):
+    """Kept in memory alone, every fifteen-minute session gave quest 3905's hand-in its
+    first failure afresh, and it cycled between Brother Neals' stair and the wolves."""
+    saved = []
+    states = [held(0, 3), held(12, 3)]
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       start_retried=frozenset({"turnin"}),
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset():
+                       saved.append((step, rejoin, retried)))
+    for _ in states:
+        rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "after")
+    assert saved[-1][2] == frozenset({"turnin"})
+
+    from jev.guide import playhead
+    path = tmp_path / "character.json"
+    playhead.save("g", "rib", {1}, path, rejoin_to="after", retried={"turnin"})
+    assert playhead.load("g", path).retried == frozenset({"turnin"})
+    assert playhead.load("other", path).retried == frozenset(), "another guide's steps"
+    playhead.save("g", "rib", {1}, path)
+    assert playhead.load("g", path).retried == frozenset()

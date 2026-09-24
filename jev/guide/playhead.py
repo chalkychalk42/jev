@@ -74,6 +74,10 @@ class Remembered:
     # Deaths on `step_id` so far. Counted in memory alone, a death edge needed all its deaths
     # inside one fifteen-minute session, and a rib's four in two sessions never counted.
     deaths: int = 0
+    # Steps that have failed into a rib once already: the next failure passes them over.
+    # Kept in memory alone, every fifteen-minute session gave quest 3905's hand-in its
+    # first failure afresh, and it cycled between Brother Neals' stair and the wolves.
+    retried: frozenset[str] = frozenset()
 
 
 def load(graph_id: str, path: pathlib.Path = DEFAULT_PATH) -> Remembered:
@@ -105,23 +109,27 @@ def load(graph_id: str, path: pathlib.Path = DEFAULT_PATH) -> Remembered:
     deaths = data.get("deaths")
     if step is None or not isinstance(deaths, int) or isinstance(deaths, bool) or deaths < 0:
         deaths = 0
+    tried = data.get("retried")
+    retried = (frozenset(s for s in tried if isinstance(s, str) and s)
+               if isinstance(tried, list) and data.get("graph_id") == graph_id else frozenset())
     return Remembered(graph_id=graph_id, step_id=step, completed=completed, rejoin_to=rejoin,
-                      deaths=deaths)
+                      deaths=deaths, retried=retried)
 
 
 def save(graph_id: str, step_id: str | None = None,
          completed: frozenset[int] | set[int] = frozenset(),
          path: pathlib.Path = DEFAULT_PATH, rejoin_to: str | None = None,
-         deaths: int = 0) -> None:
+         deaths: int = 0, retried: frozenset[str] | set[str] = frozenset()) -> None:
     """Write the position. Best effort: failing to remember must not fail the run."""
     with suppress(OSError):
         atomic_json(path, {"graph_id": graph_id, "step_id": step_id,
                            "completed": sorted(completed), "rejoin_to": rejoin_to,
-                           "deaths": deaths})
+                           "deaths": deaths, "retried": sorted(retried)})
 
 
 def with_completed(remembered: Remembered, quest_id: int) -> Remembered:
     """A record with one more quest finished."""
     return Remembered(graph_id=remembered.graph_id, step_id=remembered.step_id,
                       completed=remembered.completed | {quest_id},
-                      rejoin_to=remembered.rejoin_to, deaths=remembered.deaths)
+                      rejoin_to=remembered.rejoin_to, deaths=remembered.deaths,
+                      retried=remembered.retried)
