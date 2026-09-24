@@ -258,6 +258,8 @@ class Supervisor:
             else:
                 self.runtime.finish(result.outcome, result.detail, state=state)
                 self.say(f"{worker.arm.decision.skill}: {result.code or result.outcome.value} {result.detail}")
+                if result.code == "no_junk":
+                    self.runtime.policy_context.bags_failed()
                 if result.code == "too_poor":
                     if worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
                         self.runtime.policy_context.supplies_failed(state.bags.money_copper)
@@ -267,7 +269,8 @@ class Supervisor:
                 if result.outcome is SkillOutcome.SUCCEEDED:
                     self.failures.pop(key, None)
                 elif (result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
-                      and result.code != "too_poor" and not reflex(worker.arm.rule)):
+                      and result.code not in ("too_poor", "no_junk")
+                      and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if self.failures[key] >= self.max_failures:
                         exhausted = key, result.detail

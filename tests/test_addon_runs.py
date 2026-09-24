@@ -225,6 +225,17 @@ def test_inventory_identity_exact_copper_and_supply_counts_survive_lua_wire():
     assert values["bags.drink_id"] == 159 and values["bags.drink_count"] == 0
 
 
+def test_a_quality_the_container_withholds_is_read_from_the_item_itself():
+    """2.4.3's container gives -1 for grey trade junk; three stacks of it went unsold and
+    the run stopped at a full backpack (run 20260924T012429-b33d27)."""
+    values = radio.unpack(payload(paint({"inventoryFixture": True, "itemQuality": -1,
+                                         "itemRarity": 0}))[:PAYLOAD_CELLS])
+    assert values["inventory.quality"] == 0
+    unknown = radio.unpack(payload(paint({"inventoryFixture": True,
+                                          "itemQuality": -1}))[:PAYLOAD_CELLS])
+    assert unknown["inventory.quality"] is None
+
+
 def test_uncached_item_is_unknown_and_invalidates_exact_supply_counts():
     values = radio.unpack(payload(paint({"inventoryFixture": True, "itemUnread": True,
                                          "class": "PALADIN"}))[:PAYLOAD_CELLS])

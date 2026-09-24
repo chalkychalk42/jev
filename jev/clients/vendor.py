@@ -221,6 +221,10 @@ class Vendor:
                 seen.clear()
                 continue
             if len(seen) >= total:
+                if self.sold_stacks:
+                    # Short of the target, but every sale-eligible stack is gone: the bags
+                    # have room again, and the policy asks for more when they are full.
+                    return
                 raise _Stop(Vended.NO_JUNK, "no confirmed sale-eligible junk can make enough bag space")
             self.sleep(0.05)
 

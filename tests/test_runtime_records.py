@@ -145,6 +145,18 @@ def test_an_unaffordable_repair_does_not_hide_full_bags():
     assert decide(state, context=context).rule == "service.bags_full"
 
 
+def test_full_bags_with_nothing_to_sell_wait_for_a_slot_to_free():
+    """Asked again, a sale that found nothing sellable stops the run on the same bags."""
+    context = Context()
+    full = seen(bags=Bags(free=0, durability_min=1.0))
+    assert decide(full, context=context).rule == "service.bags_full"
+    context.bags_failed()
+    assert decide(full, context=context).rule != "service.bags_full"
+    decide(seen(bags=Bags(free=1, durability_min=1.0)), context=context)
+    assert decide(full, context=context).rule == "service.bags_full", \
+        "a slot freed and filled again is worth another visit"
+
+
 def test_service_waits_for_observed_out_of_combat_state():
     from jev.coach.policy import service
 

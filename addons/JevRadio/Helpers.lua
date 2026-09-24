@@ -496,6 +496,13 @@ local function snapshotInventory()
             local id = itemID(GetContainerItemLink(bag, slot))
             if texture and not id then complete = false end
             if not texture then id, count = 0, 0 end
+            -- The container gives no quality (-1) for trade goods, food and grey trade junk
+            -- (Melted Candle, Chipped Claw) while armour gives its own; the item's record
+            -- has it for anything in the bags.
+            if id and id > 0 and (not quality or quality < 0) and GetItemInfo then
+                local _, _, rarity = GetItemInfo(id)
+                quality = rarity
+            end
             if id and id > 0 and count then owned[id] = (owned[id] or 0) + count end
             slots[#slots + 1] = { bag = bag, slot = slot, item_id = id,
                 count = count, quality = quality, locked = tri(locked) }

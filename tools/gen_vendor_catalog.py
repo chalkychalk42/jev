@@ -2,8 +2,10 @@
 """Generate conservative vendor facts from the server DB and starting bar profiles.
 
 No prices are used to author transactions: the open merchant's observed offer wins.
-The sell allowlist deliberately excludes every equipped-item class and every item
-mentioned as a requirement/source/reward by any quest, even when its quality is poor.
+The sell allowlist deliberately excludes every item mentioned as a requirement/source/
+reward by any quest, even when its quality is poor. Poor weapons and armour are sold:
+nothing here equips gear, and a first-levels backpack of sixteen slots filled with them
+(Frayed Shoes, Unkempt Pants) until the character could loot nothing.
 """
 
 from __future__ import annotations
@@ -36,6 +38,9 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
         "select entry from world_item_template where Quality=0 and SellPrice>0 "
         "and class=15 and InventoryType=0 and startquest=0 order by entry")
              if row[0] not in protected]
+    junk += [int(row[0]) for row in db.execute(
+        "select entry from world_item_template where Quality=0 and SellPrice>0 "
+        "and class in (2,4) and startquest=0 order by entry") if row[0] not in protected]
     vendors = []
     for row in db.execute(
         "select distinct t.Entry,t.Name,c.map,c.position_x,c.position_y,c.position_z "

@@ -82,6 +82,18 @@ class Context:
         return not self.supplies_blocked or (
             money is not None and self.supplies_money is not None and money > self.supplies_money)
 
+    bags_blocked: bool = False
+
+    def bags_failed(self) -> None:
+        self.bags_blocked = True
+
+    def can_make_space(self, free: int | None) -> bool:
+        # Full bags with nothing a merchant may buy: another visit changes nothing until a
+        # slot frees (food eaten, an item used), and a run asking again stops on it.
+        if free is not None and free > 0:
+            self.bags_blocked = False
+        return not self.bags_blocked
+
 
 def _d(intent: Intent, skill: str | None, why: str, confidence: float,
        abort_if: tuple[str, ...] = ("dead",), goal: str = "", **params) -> Decision:
@@ -145,6 +157,7 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
         return None
     b = state.bags
     can_repair = context is None or context.can_repair(b.money_copper)
+    can_sell = context is None or context.can_make_space(b.free)
 
     # `is not None` throughout: unknown bags are not full bags, and a service loop on an
     # unread number is the failure the verifier's `no_service_loop` rule also guards.
@@ -152,7 +165,7 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "equipment is broken", 0.85,
                        ("dead", "combat"), service="repair"), True, "service.broken")
 
-    if b.free is not None and b.free == 0:
+    if can_sell and b.free is not None and b.free == 0:
         return Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are full; nothing can drop",
                        0.75, ("dead", "combat"), service="bags"), True, "service.bags_full")
 

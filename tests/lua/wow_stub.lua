@@ -182,6 +182,10 @@ function GetContainerItemInfo(bag, slot)
     end
     return nil
 end
+function GetItemInfo(item)
+    if STATE.itemRarity == nil then return nil end
+    return "item", "link", STATE.itemRarity
+end
 function GetContainerItemLink(bag, slot)
     if STATE.inventoryFixture and bag == 0 then
         if slot == 1 and not STATE.itemUnread then return "|Hitem:7073:0:0:0|h[Broken Fang]|h" end

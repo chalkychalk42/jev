@@ -95,6 +95,14 @@ def test_never_sells_unapproved_or_unread_items(change):
     assert shop.clicks == []
 
 
+def test_selling_every_eligible_stack_is_enough_even_short_of_the_target():
+    """Room to loot again is the point; the policy asks again when the bags are full."""
+    shop = Shop()
+    body = shop.body()
+    assert body.run(expected_name="Merchant", min_free=6) is Vended.DONE
+    assert body.sold_stacks == 1 and shop.v["bags.free"] == 1
+
+
 def test_a_click_is_not_a_sale_and_never_retries_it_blindly():
     shop = Shop()
     shop.no_change = True
@@ -273,15 +281,18 @@ def test_blind_modal_combat_and_refused_input_are_bounded():
 
 
 @pytest.mark.skipif(not Path("data/knowledge/tbc-243.sqlite").exists(), reason="local DB required")
-def test_generated_allowlist_excludes_equipment_and_all_quest_references():
+def test_generated_allowlist_is_poor_and_excludes_all_quest_references():
+    """Poor weapons and armour are sold (nothing here equips gear); other kinds of
+    equipment, containers, consumables and quest references never are."""
     raw = catalog()
     with sqlite3.connect("file:data/knowledge/tbc-243.sqlite?mode=ro", uri=True) as db:
         for item_id in raw["junk"]:
             kind, quality, equip, quest, price = db.execute(
                 "select class,Quality,InventoryType,startquest,SellPrice "
                 "from world_item_template where entry=?", (item_id,)).fetchone()
-            assert kind not in (0, 1, 2, 4, 6, 11, 12, 13, 16)
-            assert quality == equip == quest == 0 and price > 0
+            assert kind not in (0, 1, 6, 11, 12, 13, 16)
+            assert kind in (2, 4) or equip == 0
+            assert quality == quest == 0 and price > 0
             assert raw["junk_prices"][str(item_id)] == price
         cols = [r[1] for r in db.execute("pragma table_info(world_quest_template)")
                 if r[1].startswith(("ReqItemId", "ReqSourceId", "RewItemId", "RewChoiceItemId"))

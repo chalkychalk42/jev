@@ -575,3 +575,24 @@ def test_another_character_logging_in_stops_the_run_with_this_ones_playhead_save
     finally:
         body.allow_finish.set()
         supervisor.close()
+
+
+def test_full_bags_with_nothing_to_sell_are_not_a_failed_attempt(tmp_path):
+    """Every session stopped at the merchant on one full backpack, and the next session
+    walked straight back to it (runs 20260924T011327-6e5f4b to ...012802)."""
+    full = Bags(free=0, durability_min=1.0)
+    rt = runtime(tmp_path, [seen(0, bags=full), seen(1, bags=full), seen(2, bags=full)])
+    body = Body()
+    body.available = body.available | {"BAG_MAKE_SPACE"}
+    body.execute = lambda arm, state, checkpoint: Result(
+        SkillOutcome.ABORTED, "no confirmed sale-eligible junk", "no_junk")
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert supervisor.worker.arm.decision.skill == "BAG_MAKE_SPACE"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert not supervisor.stopped.is_set()
+        assert rt.policy_context.bags_blocked
+    finally:
+        supervisor.close()
