@@ -290,3 +290,17 @@ def test_the_corpse_search_starts_under_the_last_living_plate():
     skill = _loot([HAVE, {**HAVE, "bags.free": 7}])
     assert skill.run(settle_s=1.0, anchor=plate) is Looted.TOOK
     assert skill.targeting.requests == [{"expected_name_id": 1161, "anchor": plate}]
+
+
+def test_an_item_onto_a_stack_is_a_take():
+    """Stringy Wolf Meat onto its own stack took no slot and read "nothing" (13 of 24
+    loots, runs 20260924T043637 to ...050644); the strip's revision moved."""
+    skill = _loot([{**HAVE, "inventory.revision": 40}, {**HAVE, "inventory.revision": 41}])
+    assert skill.run(settle_s=1.0) is Looted.TOOK
+    assert skill.detail == "an item onto a stack"
+
+
+def test_a_meal_moving_the_revision_is_not_a_take():
+    before = {**HAVE, "inventory.revision": 40, "bags.food_count": 5}
+    skill = _loot([before, {**before, "inventory.revision": 41, "bags.food_count": 4}])
+    assert skill.run(settle_s=0.5) is Looted.NOTHING

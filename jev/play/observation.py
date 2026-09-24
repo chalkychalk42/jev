@@ -360,10 +360,17 @@ def measured_effects(before: dict, after: dict) -> tuple[list[str], float]:
                     and _number(b.get("bags.money_copper"))
                     and b["bags.money_copper"] < a["bags.money_copper"]):
                 effects.append("supplies_bought")
+    # An item onto a stack takes no bag slot; the strip's revision moves on every bag
+    # update, and on a meal too, so only when neither supply went down.
+    stacked = (_number(a.get("inventory.revision")) and _number(b.get("inventory.revision"))
+               and a["inventory.revision"] != b["inventory.revision"]
+               and not any(_number(a.get(k)) and _number(b.get(k)) and b[k] < a[k]
+                           for k in ("bags.food_count", "bags.drink_count")))
     if (a.get("ui.loot") is True or (same and a.get("target.hp") == 0)) and (
             _increase(a, b, "bags.money_copper") or "quest_progress" in effects
             or (_number(a.get("bags.free")) and _number(b.get("bags.free"))
-                and b["bags.free"] < a["bags.free"])):
+                and b["bags.free"] < a["bags.free"])
+            or stacked):
         effects.append("loot_received")
     point, radius = (before.get("context", {}).get(k) for k in ("destination", "arrival_radius"))
     coord = before.get("context", {}).get("coord_zone_id")

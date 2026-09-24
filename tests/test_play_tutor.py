@@ -241,3 +241,14 @@ def test_a_failed_routine_tells_jev_why_it_stopped():
     text = tutor.render(observation, choices=tutor.menu(observation, CONTROLS), recent=recent)
     assert ("skill:COMBAT_PROFILE -> did not work (delegated); effects: none; did not observe "
             "target_dead; the routine said: not_visible no plate proved") in text
+
+
+def test_loot_onto_a_stack_is_received_and_a_meal_is_not():
+    corpse = {"target.has": True, "target.name_id": 1, "target.hp": 0, "ui.loot": True,
+              "bags.free": 8, "inventory.revision": 40, "bags.food_count": 5}
+    before = {"values": corpse}
+    stacked = {"values": {**corpse, "ui.loot": False, "inventory.revision": 41}}
+    assert "loot_received" in measured_effects(before, stacked)[0]
+    meal = {"values": {**corpse, "ui.loot": False, "inventory.revision": 41,
+                       "bags.food_count": 4}}
+    assert "loot_received" not in measured_effects(before, meal)[0]

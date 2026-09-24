@@ -188,6 +188,15 @@ class Loot:
         was, now = before.get("bags.free"), after.get("bags.free")
         if was is not None and now is not None and now < was:
             return f"{was - now} bag slot{'s' if was - now > 1 else ''}"
+
+        # An item onto a stack it already has takes no slot: Stringy Wolf Meat looted
+        # beside a stack of it read "nothing" (13 of 24 loots in runs 20260924T043637 to
+        # ...050644). The strip's revision moves on every bag update; a meal moves it too,
+        # so only when neither supply went down.
+        was, now = before.get("inventory.revision"), after.get("inventory.revision")
+        if (was is not None and now is not None and now != was
+                and not any(_fell(before, after, f"bags.{s}_count") for s in ("food", "drink"))):
+            return "an item onto a stack"
         return ""
 
     def _close_if_open(self, values: dict) -> Looted | None:
@@ -202,3 +211,8 @@ class Loot:
         self.detail = f"{self.detail}; {closed.detail}" if self.detail else closed.detail
         return {CloseCode.REFUSED: Looted.REFUSED, CloseCode.BLIND: Looted.BLIND,
                 CloseCode.NOT_CLOSED: Looted.WINDOW_OPEN}[closed.code]
+
+
+def _fell(before: dict, after: dict, key: str) -> bool:
+    was, now = before.get(key), after.get(key)
+    return isinstance(was, int) and isinstance(now, int) and now < was
