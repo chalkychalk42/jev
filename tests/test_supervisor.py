@@ -625,3 +625,30 @@ def test_a_tutor_is_exposed_only_while_it_holds_the_objective_without_a_fight():
     assert rt.tutor_exposed
     rt.routine_clock, rt._delegating = 12.0, None
     assert not rt.tutor_exposed, "a scripted routine holds it"
+
+
+def test_a_trainer_out_of_reach_waits_a_level_and_never_stops_the_run(tmp_path):
+    """One nameplate Brother Wilhelm did not answer from inside Goldshire's smithy stopped
+    session 66: training is optional, and its failure waits for the next level."""
+    from jev.world.state_v1 import Char
+
+    class TrainingBody(Body):
+        available = Body.available | {"TRAIN_CLASS"}
+
+    rt = runtime(tmp_path, [seen(0, char=Char(level=9)), seen(1, char=Char(level=9)),
+                            seen(2, char=Char(level=9))])
+    body = TrainingBody(result=Result(SkillOutcome.ABORTED, "Brother Wilhelm: hover: ground",
+                                      "not_visible"))
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    rt.policy_context.trainable = lambda state: True
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == "TRAIN_CLASS"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert not supervisor.stopped.is_set(), supervisor.failure
+        assert rt.policy_context.train_blocked_level == 9
+    finally:
+        supervisor.close()

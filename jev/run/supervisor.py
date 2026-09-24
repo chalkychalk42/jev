@@ -277,6 +277,10 @@ class Supervisor:
                     self.failures.pop(key, None)
                 elif (result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                       and result.code not in ("too_poor", "no_junk")
+                      # Training is optional: a trainer out of reach waits for the next
+                      # level (above), never stops the run. One nameplate Brother Wilhelm
+                      # did not answer from inside Goldshire's smithy stopped session 66.
+                      and worker.arm.decision.skill != "TRAIN_CLASS"
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if self.failures[key] >= self.max_failures:
