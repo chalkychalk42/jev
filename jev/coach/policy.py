@@ -52,8 +52,9 @@ def reflex(rule: str) -> bool:
 
 
 # Services only a routine can do, never put to the tutor: training ends in drags from the
-# spellbook onto the bar, which the tutor has no control for.
-ROUTINE_RULES = ("service.train",)
+# spellbook onto the bar, which the tutor has no control for, and binding the hearthstone
+# answers a confirmation the tutor has no row for either.
+ROUTINE_RULES = ("service.train", "service.bind")
 
 
 def routine_only(rule: str) -> bool:
@@ -129,6 +130,20 @@ class Context:
         if self.trainable is None or level is None or level == self.train_blocked_level:
             return False
         return self.trainable(state)
+
+    # Whether an inn stands near the guide's work while home is far or unknown
+    # (`LiveBody.bindable`). Absent, the hearthstone is never bound.
+    bindable: Callable[[State], bool] | None = None
+    bind_blocked_step: str | None = None
+
+    def bind_failed(self, step_id: str | None) -> None:
+        # One try a step: the next step may be near another inn, or this one reachable.
+        self.bind_blocked_step = step_id
+
+    def can_bind(self, state: State) -> bool:
+        if self.bindable is None or state.guide.step_id == self.bind_blocked_step:
+            return False
+        return self.bindable(state)
 
 
 def _d(intent: Intent, skill: str | None, why: str, confidence: float,
@@ -225,6 +240,12 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
     if context is not None and _recover(state) is None and context.can_train(state):
         return Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
                        0.6, ("dead", "combat"), service="train"), True, "service.train")
+
+    # And a home near the work: a hearthstone bound to Northshire took a level 9 back
+    # there four times in a day from Goldshire and Fargodeep.
+    if context is not None and _recover(state) is None and context.can_bind(state):
+        return Plan(_d(Intent.SERVICE, "BIND_HEARTH", "home is far from the guide's work",
+                       0.55, ("dead", "combat"), service="bind"), True, "service.bind")
 
     return None
 

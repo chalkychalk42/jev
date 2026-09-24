@@ -16,6 +16,21 @@ import pathlib
 import sqlite3
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+# Faction template masks, as in tools/gen_trainer_catalog.py.
+MASK_PLAYER, MASK_ALLIANCE, MASK_HORDE = 1, 2, 4
+SIDES = {"alliance": MASK_ALLIANCE, "horde": MASK_HORDE}
+NPC_FLAG_INNKEEPER = 65536
+
+
+def _sides(db: sqlite3.Connection, template: int) -> list[str]:
+    """The sides a creature's faction template serves: not an enemy, and a friend."""
+    row = db.execute("select c3, c4, c5 from dbc_FactionTemplate where id=?",
+                     (template,)).fetchone()
+    if row is None:
+        return []
+    ours, friends, enemies = row
+    return [side for side, mask in SIDES.items()
+            if not enemies & mask and (ours | friends) & (mask | MASK_PLAYER)]
 
 
 def generate(db: sqlite3.Connection, profiles: dict) -> dict:
@@ -85,8 +100,23 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
     bags = {str(row[0]): int(row[1]) for row in db.execute(
         "select entry,ContainerSlots from world_item_template where class=1 and subclass=0 "
         "and InventoryType=18 and ContainerSlots>0 and BagFamily=0 order by entry")}
+    # Innkeepers, where the hearthstone is bound: the one nearest the guide's work becomes
+    # home (`LiveBody._bind`). A game event's spawns stand there only while it runs.
+    innkeepers = []
+    for entry, name, faction, map_id, x, y, z in db.execute(
+            "select t.Entry,t.Name,t.Faction,c.map,c.position_x,c.position_y,c.position_z "
+            "from world_creature_template t join world_creature c on c.id=t.Entry "
+            "where (t.NpcFlags & ?)!=0 and c.guid not in "
+            "(select guid from world_game_event_creature where event > 0) "
+            "order by t.Entry,c.map,c.position_x,c.position_y", (NPC_FLAG_INNKEEPER,)):
+        sides = _sides(db, faction)
+        if not name or name.startswith("[") or not sides:
+            continue
+        innkeepers.append({"entry": entry, "name": name, "map_id": map_id, "sides": sides,
+                           "world": [float(x), float(y), float(z)]})
     return {"schema": 1, "junk": sorted(set(junk)), "junk_prices": prices, "supplies": supplies,
-            "vendors": vendors, "bags": bags, "surplus_prices": surplus}
+            "vendors": vendors, "bags": bags, "surplus_prices": surplus,
+            "innkeepers": innkeepers}
 
 
 def main() -> int:

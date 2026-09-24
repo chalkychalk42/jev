@@ -265,7 +265,8 @@ def _live(args, graph) -> int:
                         record_frame=screenshots.record_frame if screenshots is not None else None,
                         hunt_spawns=spawns.load(args.graph),
                         gear_memory=path.with_name(path.stem + ".equipped.json"),
-                        merchant_memory=ROOT / "var" / "merchant-memory.json")
+                        merchant_memory=ROOT / "var" / "merchant-memory.json",
+                        home_memory=path.with_name(path.stem + ".home.json"))
         if recorder is None:
             recorder = Recorder(root=args.runs_dir)
         if args.play_mode != "off":

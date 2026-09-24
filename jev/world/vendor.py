@@ -45,6 +45,22 @@ def junk_prices() -> dict[int, int]:
     return {int(k): int(v) for k, v in catalog()["junk_prices"].items()}
 
 
+@dataclass(frozen=True)
+class Innkeeper:
+    entry: int
+    name: str
+    map_id: int
+    world: tuple[float, float, float]
+
+
+def innkeepers(map_id: int, side: str | None) -> tuple[Innkeeper, ...]:
+    """Innkeepers on this world map who serve this side; caller ranks by distance."""
+    return tuple(Innkeeper(entry=i["entry"], name=i["name"], map_id=i["map_id"],
+                           world=tuple(float(v) for v in i["world"]))
+                 for i in catalog().get("innkeepers") or ()
+                 if i["map_id"] == map_id and (side is None or side in i.get("sides", ())))
+
+
 def surplus_prices() -> dict[int, int]:
     """White and green gear, trade goods and recipes no quest needs, with their sell prices."""
     return {int(k): int(v) for k, v in (catalog().get("surplus_prices") or {}).items()}

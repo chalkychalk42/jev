@@ -263,6 +263,11 @@ class Supervisor:
                 if result.code == "no_junk":
                     self.runtime.policy_context.bags_failed(
                         state.bags.free if state is not None else None)
+                if (worker.arm.decision.skill == "BIND_HEARTH"
+                        and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
+                    # An inn out of reach is not walked to again on this step.
+                    self.runtime.policy_context.bind_failed(
+                        state.guide.step_id if state is not None else None)
                 if (worker.arm.decision.skill == "TRAIN_CLASS"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
                     # A trainer out of reach is not walked to again this level; a visit a
@@ -281,7 +286,7 @@ class Supervisor:
                       # Training is optional: a trainer out of reach waits for the next
                       # level (above), never stops the run. One nameplate Brother Wilhelm
                       # did not answer from inside Goldshire's smithy stopped session 66.
-                      and worker.arm.decision.skill != "TRAIN_CLASS"
+                      and worker.arm.decision.skill not in ("TRAIN_CLASS", "BIND_HEARTH")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if self.failures[key] >= self.max_failures:

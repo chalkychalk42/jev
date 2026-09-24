@@ -17,6 +17,7 @@ from jev.clients.choose import ChooseListLine
 from jev.clients.fight import Fight
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth
+from jev.clients.windows import close_observed
 from jev.clients.interact import Interact
 from jev.clients.interact import Result as Interacted
 from jev.clients.loot import Loot, Looted
@@ -44,12 +45,14 @@ from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, for_class
 from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import load_worn, save_worn
 from jev.world.gear import keep as gear_keep
+from jev.world.home import load_home, save_home
 from jev.world.gear import upgrades as gear_upgrades
 from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.training import placements as spell_placements
 from jev.world.training import trainer_due
 from jev.world.vendor import (
     bag_slots,
+    innkeepers,
     junk_prices,
     load_merchant_failures,
     merchants,
@@ -92,6 +95,17 @@ EXPLORE_POLL_S = 0.25
 # and his plate was wagon, and Godric Rothgar stood in plain view beside it (run
 # 20260924T011327-6e5f4b stopped on its first full bags).
 MERCHANT_TRIES = 5
+# Binding the hearthstone (`LiveBody.bindable`): an inn this near the guide's current step,
+# while home is farther than `HOME_FAR_YARDS` from it or unknown. Goldshire's inn is 590
+# yards from Northshire's quests, which bind nowhere, and 360 from Fargodeep Mine's.
+INN_NEAR_YARDS = 500.0
+HOME_FAR_YARDS = 900.0
+# An inn this close to the remembered home is home already.
+SAME_INN_YARDS = 40.0
+# The innkeeper's line for it, the same on all 58 of this server's innkeepers who have one.
+BIND_LINE = "Make this inn your home."
+# How long the confirmation takes to appear, and to go once accepted.
+POPUP_S = 4.0
 # Free slots a bag service asks the merchant for: every stack it may sell (`Vendor._sell`
 # stops when all of them are gone).
 SELL_ALL = 999
@@ -143,13 +157,15 @@ class LiveBody:
         "RELEASE_SPIRIT": "_release", "CORPSE_RUN": "_recover",
         "IDLE": "_wait", "ABORT_WAIT": "_wait", "FACE_TARGET": "_face",
         "TRAIN_CLASS": "_train",
+        "BIND_HEARTH": "_bind",
     }
     available = frozenset(HANDLERS)
 
     def __init__(self, client: Client, graph: Graph, *, travel_timeout: float = 180,
                  hunt_timeout: float = 600, say: Callable[[str], None] = print,
                  record_frame: Callable[..., dict] | None = None,
-                 hunt_spawns: dict | None = None, gear_memory=None, merchant_memory=None):
+                 hunt_spawns: dict | None = None, gear_memory=None, merchant_memory=None,
+                 home_memory=None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
         self.client, self.graph = client, graph
@@ -160,6 +176,8 @@ class LiveBody:
         self.gear_memory = gear_memory
         # Which merchants could not be reached or clicked (`jev.world.vendor`).
         self.merchant_memory = merchant_memory
+        # Where the hearthstone takes this character (`jev.world.home`).
+        self.home_memory = home_memory
         self._gear_checked: object = object()     # the bags' revision last looked through
         self._placing_checked: object = object()  # the bar and spellbook last planned from
         self.travelling = False
@@ -301,6 +319,8 @@ class LiveBody:
             expected["service"] = "supplies"
         if decision.skill == "TRAIN_CLASS":
             expected["service"] = "train"
+        if decision.skill == "BIND_HEARTH":
+            expected["service"] = "bind"
         for key, value in decision.params.items():
             if key == "profile" and decision.skill == "COMBAT_PROFILE" and value in ("default", "panic"):
                 continue  # Fight's measured health branch owns panic within the rotation.
@@ -366,7 +386,7 @@ class LiveBody:
         self._wedged = self._wedged + 1 if wedged else 0
         if self._wedged >= WEDGED_WALKS:
             self._wedged = 0
-            home = self.hearth.run()
+            home = self._go_home()
             self.say(f"  wedged {WEDGED_WALKS} walks running: hearthstone {home.value} "
                      f"{self.hearth.detail}".rstrip())
 
@@ -714,6 +734,7 @@ class LiveBody:
         # The supervisor hands the body the runtime's context; training is asked of it.
         self._policy_context = context
         context.trainable = self.trainable
+        context.bindable = self.bindable
 
     def _train(self, state) -> Result:
         trainer = self._trainer()
@@ -740,6 +761,97 @@ class LiveBody:
         placed = self._place_spells(force=True)
         detail = f"{desk.bought} spells bought at {trainer.name}; {placed}"
         return self._result(outcome, detail)
+
+    def _go_home(self):
+        """Home by hearthstone; where it sets the character down is home from then on."""
+        home = self.hearth.run()
+        here = self._position() if home.ok else None
+        world = map_to_world(*here, self.client.bounds) if here is not None else None
+        if world is not None:
+            save_home(self.home_memory, (world[0], world[1], 0.0), name="hearthstone arrival")
+        return home
+
+    def _inn(self, state: State | None = None):
+        """The innkeeper nearest the guide's current step, within `INN_NEAR_YARDS` of it."""
+        node = self.graph.get(state.guide.step_id) if state is not None and state.guide.step_id \
+            else self._node()
+        if node is not None and node.world is not None and node.map_id == self.client.bounds.map_id:
+            at = node.world[:2]
+        else:
+            here = self._position()
+            if here is None:
+                return None
+            at = map_to_world(*here, self.client.bounds)
+        side = getattr(state.char, "faction", None) if state is not None else None
+        side = getattr(side, "value", side)
+        near = [(math.dist(i.world[:2], at), i)
+                for i in innkeepers(self.client.bounds.map_id, side)]
+        near = [(d, i) for d, i in near if d <= INN_NEAR_YARDS]
+        return min(near, key=lambda pair: pair[0])[1] if near else None
+
+    def bindable(self, state: State) -> bool:
+        """An inn near the guide's work while home is far from it, or unknown."""
+        try:
+            inn = self._inn(state)
+            if inn is None:
+                return False
+            home = load_home(self.home_memory)
+            if home is None:
+                return True
+            node = self.graph.get(state.guide.step_id or "")
+            at = node.world[:2] if node is not None and node.world is not None else inn.world[:2]
+            return (math.dist(home[:2], inn.world[:2]) > SAME_INN_YARDS
+                    and math.dist(home[:2], at) > HOME_FAR_YARDS)
+        except Exception:
+            return False
+
+    def _bind(self, state) -> Result:
+        """Walk to the innkeeper, choose "Make this inn your home.", accept, remember it."""
+        inn = self._inn(state)
+        if inn is None:
+            return Result(SkillOutcome.ABORTED, "no inn near the guide's work", "nothing")
+        point = world_to_map(*inn.world[:2], self.client.bounds)
+        opened = self.interact.open_on(inn.name, node_world=inn.world, node_map=point)
+        if not opened.opened:
+            return self._result(opened, f"{inn.name}: {self.interact.detail or opened.value}")
+        try:
+            if opened is not Interacted.GOSSIP:
+                return Result(SkillOutcome.ABORTED, f"{inn.name} opened {opened.value}, not a gossip",
+                              "no_gossip")
+            chose = self.chooser.run(BIND_LINE)
+            if not chose.ok:
+                return Result(SkillOutcome.ABORTED, f"{inn.name}: {self.chooser.detail or chose.value}",
+                              "no_bind_line")
+            if not self._accept_popup():
+                return Result(SkillOutcome.ABORTED, f"{inn.name}: no confirmation to accept",
+                              "no_confirmation")
+        finally:
+            values = self._read()
+            if values and values.get("ui.modal") is not True:
+                close_observed(self.client.hid, self._read, values=values)
+        save_home(self.home_memory, inn.world, name=inn.name)
+        return Result(SkillOutcome.SUCCEEDED, f"{inn.name}'s inn is home", "done")
+
+    def _accept_popup(self) -> bool:
+        """Press the confirmation's first button (Accept) and see the confirmation go."""
+        deadline = time.monotonic() + POPUP_S
+        while time.monotonic() < deadline:
+            values = self._read()
+            if (values and values.get("ui.modal") is True
+                    and values.get("ui.advance_x") is not None and values.get("ui.advance_y") is not None):
+                ox, oy = self.client.origin
+                w, h = self.client.size
+                self.client.hid.click(ox + round(values["ui.advance_x"] * w),
+                                      oy + round(values["ui.advance_y"] * h))
+                gone = time.monotonic() + POPUP_S
+                while time.monotonic() < gone:
+                    after = self._read()
+                    if after and after.get("ui.modal") is False:
+                        return True
+                    time.sleep(0.1)
+                return False
+            time.sleep(0.1)
+        return False
 
     def _open_trainer(self, trainer) -> bool:
         point = world_to_map(*trainer.world[:2], self.client.bounds)
@@ -818,7 +930,7 @@ class LiveBody:
         distance = self._repairer_yards()
         if (durability is not None and durability <= BROKEN_DURABILITY
                 and distance is not None and distance > HEARTH_TO_REPAIR_YARDS):
-            home = self.hearth.run()
+            home = self._go_home()
             self.say(f"  broken gear and the nearest repairer {distance:.0f} yards off: "
                      f"hearthstone {home.value} {self.hearth.detail}".rstrip())
         return self._result(self.repair.run(), self.repair.detail)
@@ -1009,7 +1121,7 @@ class LiveBody:
             up = self.recover.run_spirit_healer()
             if up is Recovered.ALIVE:
                 self._revived_at = None
-                home = self.hearth.run()
+                home = self._go_home()
                 self.say(f"  up at the Spirit Healer; hearthstone: {home.value} {self.hearth.detail}")
                 return self._result(up, f"up at the Spirit Healer; hearthstone {home.value}")
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body, "

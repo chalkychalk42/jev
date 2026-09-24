@@ -22,13 +22,20 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
             CREATE TABLE world_quest_template (SrcItemId INT);
             INSERT INTO world_quest_template VALUES (0);
             CREATE TABLE world_creature_template (
-                Entry INT, Name TEXT, NpcFlags INT, VendorTemplateId INT);
-            INSERT INTO world_creature_template VALUES (465,'Fixture Merchant',128,0);
-            INSERT INTO world_creature_template VALUES (14845,'Stamp Thunderhorn',128,0);
+                Entry INT, Name TEXT, NpcFlags INT, VendorTemplateId INT, Faction INT);
+            INSERT INTO world_creature_template VALUES (465,'Fixture Merchant',128,0,12);
+            INSERT INTO world_creature_template VALUES (14845,'Stamp Thunderhorn',128,0,12);
+            INSERT INTO world_creature_template VALUES (295,'Fixture Innkeeper',65536,0,12);
+            INSERT INTO world_creature_template VALUES (296,'Hostile Innkeeper',65536,0,29);
+            CREATE TABLE dbc_FactionTemplate (id INT, c3 INT, c4 INT, c5 INT);
+            INSERT INTO dbc_FactionTemplate VALUES (12, 2, 0, 4);
+            INSERT INTO dbc_FactionTemplate VALUES (29, 4, 0, 2);
             CREATE TABLE world_creature (
                 guid INT, id INT, map INT, position_x TEXT, position_y TEXT, position_z TEXT);
             INSERT INTO world_creature VALUES (1,465,0,'-1.25','2.5','3e-2');
             INSERT INTO world_creature VALUES (12420,14845,0,'5','5','5');
+            INSERT INTO world_creature VALUES (2,295,0,'10','20','30');
+            INSERT INTO world_creature VALUES (3,296,0,'40','50','60');
             CREATE TABLE world_game_event_creature (guid INT, event INT);
             INSERT INTO world_game_event_creature VALUES (12420, 81);
             CREATE TABLE world_npc_vendor (entry INT,item INT,ExtendedCost INT,condition_id INT);
@@ -45,6 +52,13 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
     assert json.loads(json.dumps(result))["vendors"][0]["world"] == [-1.25, 2.5, 0.03]
     assert merchant["entry"] == 465 and merchant["items"] == [159]
     assert result["bags"] == {"5572": 6}
+    assert result["innkeepers"] == [{"entry": 295, "name": "Fixture Innkeeper", "map_id": 0,
+                                     "sides": ["alliance"], "world": [10.0, 20.0, 30.0]},
+                                    {"entry": 296, "name": "Hostile Innkeeper", "map_id": 0,
+                                     "sides": ["horde"], "world": [40.0, 50.0, 60.0]}]
+    inn, = [vendor.Innkeeper(**{k: v for k, v in i.items() if k != "sides"})
+            for i in result["innkeepers"] if "alliance" in i["sides"]]
+    assert inn.name == "Fixture Innkeeper"
 
 
 def test_loader_accepts_older_string_coordinates_as_numeric_yards(monkeypatch):

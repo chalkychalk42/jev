@@ -114,6 +114,11 @@ _SKILLS: tuple[Skill, ...] = (
                              and s.bags.durability_min > 0.7),
           pre=_alive, on_fail="STUCK_RECOVER"),
 
+    Skill("BIND_HEARTH", "make the inn nearest the guide's work home", 420.0,
+          # A walk to the innkeeper, a gossip line and a confirmation; the body judges it
+          # by the confirmation closing (`LiveBody._bind`).
+          success=JUDGED_ELSEWHERE, pre=_alive),
+
     Skill("TRAIN_CLASS", "learn available spells and put them on the bar", 600.0,
           # The walk is most of it: Goldshire's paladin trainer is 640 yards from
           # Northshire Abbey. A purchase is the money falling and a placement is the bar's
