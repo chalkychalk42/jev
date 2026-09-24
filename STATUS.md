@@ -2480,3 +2480,27 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
 - Testvvi: level 9 at 99%, 576 copper, on Gold Dust Exchange by Fargodeep Mine. Level 10
   training (Lay on Hands, Blessing of Protection, Devotion Aura 2, Seal of Righteousness
   2) is about 11 silver in all; the trainer buys in its own list order what it can afford.
+
+## 2026-09-24 15:00 — level 10, loot, the learner back, and a guide after this one
+
+- **Level 10 (session 78):** Brother Wilhelm, 2 spells for 570 copper; Lay on Hands went
+  onto slot 8 (a spare Devotion Aura's). No deaths since the press fix (V122); a third
+  unanswered press of one slot is counted anyway, so an aura already up cannot hold the
+  rotation (session 78 pressed Devotion Aura four times running).
+- **Loot (V123):** 39 of 104 corpses went unlooted today - half refused because the client
+  had selected a living packmate of the same name at the kill, half never reached by 16
+  probes round the plate. Session 79 looted 7 of 7.
+- **The learner was down from 08:11 to 14:51.** Every live cycle trained a candidate and
+  failed to publish it: Windows fsyncs only a writable handle, and the registry flushed the
+  saved model through a read-only one (`OSError: [Errno 9]`). Fixed in 46bf168; session
+  80's first cycle published `policy:v1` from 493 graded examples (shadow only; teach
+  mode never lets it drive).
+- **After level 12 (V124):** the human 1-12 guide ends at Sentinel Hill, and a finished
+  guide only waited. The playhead now records a finished guide and the next session takes
+  the one after it: a generated Westfall and Redridge 12-20 guide (111 supported steps of
+  162; flights and the Stormwind errands not yet).
+- **Where the time goes** (12:00-14:40, 138 min): grinding 38%, fights 22%, travel 18%,
+  meals 7%, corpse runs 6%, bags 5%. Waiting on the tutor model is 29 of those minutes
+  (207 calls, median 7.6 s, Opus 4.7 at medium effort - V51, the operator's choice).
+- Testvvi: level 10, 40 copper, on Gold Dust Exchange (step 70 of 147); the 16-slot
+  backpack fills between vendor trips.
