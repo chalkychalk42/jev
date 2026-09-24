@@ -199,3 +199,27 @@ def test_an_unreachable_destination_is_partial_not_complete():
         assert result.usable, "a partial route is still worth walking"
     finally:
         q.close()
+
+
+# Northshire Vineyards to the Gray Forest Wolves (the 7-9 grind): session 74 climbed a
+# 55 degree face on this leg and slid back down it for four minutes.
+VINEYARDS = (-9191.5, -349.9, 0.0)
+GRAY_FOREST_WOLVES = (-9455.9, -566.2, 66.1)
+# The generator marks 50-60 degree ground steep, "unwalkable for players".
+CLIMBABLE_GRADE = 1.19   # tan(50 degrees)
+
+
+@pytest.mark.skipif(not HAVE_MESH, reason="needs tools/jevpath and extracted mmaps")
+def test_routes_keep_to_ground_a_character_can_climb():
+    import math
+
+    q = MmapQuery(JEVPATH, MMAPS)
+    try:
+        result = q.path(0, VINEYARDS, GRAY_FOREST_WOLVES)
+        assert result.status is PathStatus.COMPLETE, result.detail
+        for a, b in zip(result.points, result.points[1:]):
+            run = math.dist(a[:2], b[:2])
+            if run > 1.0:
+                assert (b[2] - a[2]) / run <= CLIMBABLE_GRADE, (a, b)
+    finally:
+        q.close()

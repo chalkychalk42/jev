@@ -47,6 +47,26 @@ static const int MAX_POLYS = 2048;
 static const float EXTENT_XZ = 6.0f;
 static const float EXTENT_Y = 200.0f;
 
+// What a character can walk, as the server tells the bots it drives itself
+// (`PathFinder::createFilter` under ENABLE_PLAYERBOTS): ground and water, never lava or
+// slime, and never steep ground - the 50 to 60 degree band the mesh generator marks
+// "walkable for mobs, unwalkable for players" (`rcModAlmostUnwalkableTriangles`; the
+// comment in MoveMapSharedDefines.h calling that area unused is stale). Water costs
+// twenty times ground there as well: swimming is slow.
+//
+// Measured 24 September: the leg out of Northshire Vineyards to the Gray Forest Wolves
+// crossed seven steep polygons, up a 55 degree face, and the character slid back down it
+// for four minutes until the watchdog failed the step. Asked this way, the same leg climbs
+// the hill by a 44 degree slope, 75 yards longer. All 110 of the guide's legs still plan
+// complete; 45 had crossed steep ground and 38 had swum, and the longest detour is 1.46
+// times the old route, round a lake.
+static const unsigned short NAV_GROUND = 0x01;         // MoveMapSharedDefines.h
+static const unsigned short NAV_GROUND_STEEP = 0x02;
+static const unsigned short NAV_WATER = 0x04;
+static const unsigned short NAV_MAGMA_SLIME = 0x08;
+static const unsigned char NAV_AREA_WATER = 9;
+static const float WATER_COST = 20.0f;
+
 struct MmapTileHeader {
     unsigned int mmapMagic;
     unsigned int dtVersion;
@@ -94,6 +114,52 @@ static bool loadTiles(dtNavMesh* mesh, const std::string& dir, int mapId, int& l
     return true;
 }
 
+// One filter's answer: the straight path, or why there is none.
+struct Route {
+    bool complete = false;
+    int count = 0;
+    const char* detail = "";
+    char where[16] = "";
+    float straight[MAX_POLYS * 3];
+};
+
+static void plan(dtNavMeshQuery* query, const dtQueryFilter& filter,
+                 const float* start, const float* end, Route& out) {
+    const float extents[3] = {EXTENT_XZ, EXTENT_Y, EXTENT_XZ};
+    dtPolyRef startRef = 0, endRef = 0;
+    float startPt[3], endPt[3];
+    query->findNearestPoly(start, extents, &filter, &startRef, startPt);
+    query->findNearestPoly(end, extents, &filter, &endRef, endPt);
+    if (!startRef || !endRef) {
+        snprintf(out.where, sizeof(out.where), "%s",
+                 !startRef ? (!endRef ? "both ends" : "start") : "end");
+        out.detail = "off mesh";
+        return;
+    }
+
+    dtPolyRef polys[MAX_POLYS];
+    int polyCount = 0;
+    query->findPath(startRef, endRef, startPt, endPt, &filter, polys, &polyCount, MAX_POLYS);
+    if (polyCount == 0) {
+        out.detail = "no polygon path";
+        return;
+    }
+
+    // A path whose last polygon is not the destination's is a *partial* one: Detour
+    // got as close as the mesh allows. Saying "complete" there would have the caller
+    // walk confidently to the wrong side of a wall.
+    out.complete = polys[polyCount - 1] == endRef;
+    float target[3];
+    dtVcopy(target, endPt);
+    if (!out.complete)
+        query->closestPointOnPoly(polys[polyCount - 1], endPt, target, nullptr);
+
+    unsigned char flags[MAX_POLYS];
+    dtPolyRef refs[MAX_POLYS];
+    query->findStraightPath(startPt, target, polys, polyCount,
+                            out.straight, flags, refs, &out.count, MAX_POLYS);
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         fprintf(stderr, "usage: jevpath <mmaps_dir> <map_id>\n");
@@ -136,10 +202,18 @@ int main(int argc, char** argv) {
     printf("{\"status\":\"ready\",\"map\":%d,\"tiles\":%d}\n", mapId, loaded);
     fflush(stdout);
 
-    dtQueryFilter filter;
-    filter.setIncludeFlags(0xffff);
-    filter.setExcludeFlags(0);
+    dtQueryFilter walkable;
+    walkable.setIncludeFlags(NAV_GROUND | NAV_WATER);
+    walkable.setExcludeFlags(NAV_GROUND_STEEP | NAV_MAGMA_SLIME);
+    walkable.setAreaCost(NAV_AREA_WATER, WATER_COST);
+    // Everything the mesh has, as before: for a character already standing on steep
+    // ground, a destination on it, or a place only steep ground reaches. The old route
+    // there beats no route.
+    dtQueryFilter anything;
+    anything.setIncludeFlags(0xffff);
+    anything.setExcludeFlags(0);
 
+    static Route player, any;
     char line[512];
     while (fgets(line, sizeof(line), stdin)) {
         float ax, ay, az, bx, by, bz;
@@ -150,47 +224,38 @@ int main(int argc, char** argv) {
 
         const float start[3] = {ay, az, ax};
         const float end[3] = {by, bz, bx};
-        const float extents[3] = {EXTENT_XZ, EXTENT_Y, EXTENT_XZ};
 
-        dtPolyRef startRef = 0, endRef = 0;
-        float startPt[3], endPt[3];
-        query->findNearestPoly(start, extents, &filter, &startRef, startPt);
-        query->findNearestPoly(end, extents, &filter, &endRef, endPt);
-        if (!startRef || !endRef) {
-            printf("{\"status\":\"nopath\",\"detail\":\"%s off mesh\",\"points\":[]}\n",
-                   !startRef ? (!endRef ? "both ends" : "start") : "end");
+        player = Route();
+        plan(query, walkable, start, end, player);
+        const Route* best = &player;
+        const char* used = "player";
+        if (!player.complete) {
+            any = Route();
+            plan(query, anything, start, end, any);
+            if (any.complete || player.count == 0) {
+                best = &any;
+                used = "any";
+            }
+        }
+
+        if (best->count == 0) {
+            if (best->where[0])
+                printf("{\"status\":\"nopath\",\"detail\":\"%s %s\",\"filter\":\"%s\","
+                       "\"points\":[]}\n", best->where, best->detail, used);
+            else
+                printf("{\"status\":\"nopath\",\"detail\":\"%s\",\"filter\":\"%s\","
+                       "\"points\":[]}\n", best->detail, used);
             fflush(stdout);
             continue;
         }
 
-        dtPolyRef polys[MAX_POLYS];
-        int polyCount = 0;
-        query->findPath(startRef, endRef, startPt, endPt, &filter, polys, &polyCount, MAX_POLYS);
-        if (polyCount == 0) {
-            printf("{\"status\":\"nopath\",\"detail\":\"no polygon path\",\"points\":[]}\n");
-            fflush(stdout);
-            continue;
-        }
-
-        // A path whose last polygon is not the destination's is a *partial* one: Detour
-        // got as close as the mesh allows. Saying "complete" there would have the caller
-        // walk confidently to the wrong side of a wall.
-        const bool complete = polys[polyCount - 1] == endRef;
-        float target[3];
-        dtVcopy(target, endPt);
-        if (!complete)
-            query->closestPointOnPoly(polys[polyCount - 1], endPt, target, nullptr);
-
-        float straight[MAX_POLYS * 3];
-        unsigned char flags[MAX_POLYS];
-        dtPolyRef refs[MAX_POLYS];
-        int count = 0;
-        query->findStraightPath(startPt, target, polys, polyCount,
-                                straight, flags, refs, &count, MAX_POLYS);
-
-        printf("{\"status\":\"%s\",\"points\":[", complete ? "complete" : "partial");
-        for (int i = 0; i < count; ++i) {
-            const float* p = &straight[i * 3];
+        printf("{\"status\":\"%s\",\"filter\":\"%s\",", best->complete ? "complete" : "partial",
+               used);
+        if (best == &any)
+            printf("\"detail\":\"no route on ground a character can climb; steep ground allowed\",");
+        printf("\"points\":[");
+        for (int i = 0; i < best->count; ++i) {
+            const float* p = &best->straight[i * 3];
             printf("%s[%.3f,%.3f,%.3f]", i ? "," : "", p[2], p[0], p[1]);
         }
         printf("]}\n");
