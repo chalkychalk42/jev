@@ -67,7 +67,10 @@ STALE_AFTER_S = 4.0
 # Northshire's merchant wagons the destination's height snapped the start onto a wagon, and
 # the planner answered with five yards of partial path that the walk then called arrival;
 # four yards lower it answers with the whole 164-yard route (run 20260924T013702-7f5692).
-START_HEIGHTS = (0.0, -3.0, 3.0, -6.0, 6.0, -10.0)
+# Then outward in four-yard steps: on Echo Ridge Mine's wooden platform the grind below
+# was 44 yards down, and only a start between 88 and 96 was on the platform's mesh.
+START_HEIGHTS = (0.0, -3.0, 3.0, -6.0, 6.0, -10.0,
+                 *(sign * dz for dz in range(12, 61, 4) for sign in (1, -1)))
 GROUND_MEMORY_YARDS = 15.0
 
 

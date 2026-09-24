@@ -177,7 +177,9 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
     corpse = has and hp == 0
     # Escape with nothing to close opens the game menu, and the next one closes it: the
     # tutor alternated the two for a whole episode at a merchant (run ...012829-382fd4).
-    closable = has or any(values.get(f"ui.{window}") is True for window in (
+    # Nor does it clear a selection here: in a fight it raised 2.4.3's "Blizzard_
+    # TimeManager has been blocked" popup instead, four times (run ...015205-5e57fc).
+    closable = any(values.get(f"ui.{window}") is True for window in (
         "loot", "gossip", "vendor", "quest_frame", "trainer", "mail"))
     taps = [Choice(name, (), (), meaning) for name, meaning in TAPS.items()
             if _executable(controls, name) and (name != "attack_target" or living)

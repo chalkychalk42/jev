@@ -195,3 +195,23 @@ def test_a_start_height_that_snaps_onto_the_wrong_floor_is_not_the_plan():
     asked.clear()
     client.approach(rib)
     assert asked == [81.9], "the next plan from here starts on the ground the walk ended on"
+
+
+def test_a_start_far_above_the_destination_is_found_by_widening_the_heights():
+    """Echo Ridge Mine's wooden platform stands 44 yards above the grind below it; only a
+    start between 88 and 96 was on its mesh (run 20260924T015205-5e57fc)."""
+    from jev.clients.travel import Outcome
+    from jev.guide.path import Path, PathStatus
+
+    client, _values = client_in("Elwynn", (0.4787, 0.3220))
+    here = map_to_world(0.4787, 0.3220, ELWYNN)
+    wolves = (here[0] - 900.0, here[1] + 600.0, 43.9)
+    nowhere = Path(PathStatus.PARTIAL, ((here[0], here[1], 88.0),))
+    route = Path(PathStatus.COMPLETE, ((here[0], here[1], 90.35), wolves))
+    client.query.path = lambda map_id, start, end: route if 86.0 <= start[2] <= 97.0 else nowhere
+    client.travel.position = lambda: (0.4787, 0.3220)
+    walked = []
+    client.travel.follow = lambda path, **kw: walked.append(path) or SimpleNamespace(
+        outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0, stuck_events=0, detail="")
+    assert client.approach(wolves)
+    assert walked == [route]

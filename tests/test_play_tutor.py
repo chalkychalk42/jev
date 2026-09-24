@@ -64,7 +64,8 @@ def test_select_needs_an_objective_unit_and_ui_needs_painted_controls():
 def test_escape_is_offered_only_when_there_is_something_to_close():
     """With nothing to close it opens the game menu (run 20260924T012829-382fd4)."""
     assert "escape" not in names({"target.has": False})
-    assert "escape" in names({"target.has": True, "target.hp": 1.0})
+    assert "escape" not in names({"target.has": True, "target.hp": 1.0}), \
+        "in a fight it raised the TimeManager's blocked-action popup instead"
     assert "escape" in names({"target.has": False, "ui.vendor": True})
 
 
