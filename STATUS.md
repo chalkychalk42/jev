@@ -2414,3 +2414,20 @@ for two seconds (the input lock refused it). `/tmp/session_loop2.sh` holds an fl
   Escape that closes the trainer and the P that opens the spellbook. ABORT_WAIT's Escape
   answers it within 6 s. Its first button is Disable: nothing may click `ui.advance_` under
   it (a stock popup's first button is what that field paints).
+
+## 2026-09-24 12:12 — operator note: the minimap clock is off
+
+Blizzard's taint notice ("Blizzard_TimeManager has been blocked from an action only
+available to the Blizzard UI") followed every Escape that closed a merchant or trainer
+window: 2.4.3's Escape handler reads the clock addon's frame, which taints it, then reaches
+the protected `SpellStopCasting()` before it closes any window. Besides the dialog, a
+tainted Escape cannot stop a cast or cancel a spell waiting for a target, which the bot
+relies on. `WTF/Config.wtf` now has `SET showClock "0"`, so the clock addon never loads
+(disabling the addon instead makes the interface report a failed load at every login).
+To have the clock back: Interface Options, Display, Show Clock (the previous file is at
+`/tmp/Config.wtf.before-showclock`).
+
+Also fixed since 12:00: the vendor and trainer catalogs no longer hold spawns only a game
+event places (the Darkmoon Faire's merchants, walked to twice with full bags); a merchant
+that cannot be reached or clicked is remembered (`var/merchant-memory.json`) and five are
+tried; a failed trainer visit waits for the next level instead of stopping the session.
