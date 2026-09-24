@@ -24,15 +24,21 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
             CREATE TABLE world_creature_template (
                 Entry INT, Name TEXT, NpcFlags INT, VendorTemplateId INT);
             INSERT INTO world_creature_template VALUES (465,'Fixture Merchant',128,0);
+            INSERT INTO world_creature_template VALUES (14845,'Stamp Thunderhorn',128,0);
             CREATE TABLE world_creature (
-                id INT, map INT, position_x TEXT, position_y TEXT, position_z TEXT);
-            INSERT INTO world_creature VALUES (465,0,'-1.25','2.5','3e-2');
+                guid INT, id INT, map INT, position_x TEXT, position_y TEXT, position_z TEXT);
+            INSERT INTO world_creature VALUES (1,465,0,'-1.25','2.5','3e-2');
+            INSERT INTO world_creature VALUES (12420,14845,0,'5','5','5');
+            CREATE TABLE world_game_event_creature (guid INT, event INT);
+            INSERT INTO world_game_event_creature VALUES (12420, 81);
             CREATE TABLE world_npc_vendor (entry INT,item INT,ExtendedCost INT,condition_id INT);
             INSERT INTO world_npc_vendor VALUES (465,159,0,0);
             CREATE TABLE world_npc_vendor_template (
                 entry INT,item INT,ExtendedCost INT,condition_id INT);
         """)
         result = generate(db, {})
+    # The Darkmoon Faire's merchant stands there only while the event runs.
+    assert [v["name"] for v in result["vendors"]] == ["Fixture Merchant"]
     merchant = result["vendors"][0]
     assert merchant["world"] == [-1.25, 2.5, 0.03]
     assert all(type(value) is float for value in merchant["world"])
