@@ -2277,3 +2277,5 @@ Also since debrief 9: retried steps are kept in the playhead, so a step that fai
 its rib is passed over across sessions too (V110), and an operator stop waits out a fight
 in progress (V111). Testvvi at 08:05: level 7 at 85%, on the level 5-7 wolf rib with Brother
 Neals' hand-in (3905) as its way back; one more failure there passes it over to quest 6.
+08:08: **level 8.** The wolf rib is done and the playhead is back on Brother Neals' hand-in,
+its last try before V110 passes it over to quest 6.
