@@ -1575,3 +1575,33 @@ def test_a_new_selection_starts_the_race_again(combat_clock):
     f._sample_race({**ALIVE, "vitals.hp": 0.45, "target.hp": 1.0, "target.guid": 8})
     assert len(f._race) == 1
     assert f._finishes_first({"vitals.hp": 0.45, "target.hp": 1.0}) is False
+
+
+def test_a_cast_does_not_age_the_evidence_that_the_target_is_in_reach(combat_clock):
+    """Each Holy Light aged the last hit past the re-aim and reach windows, and the fight
+    stepped, levelled the camera and turned at a wolf already in melee - eleven seconds
+    without a swing after one heal (run 20260924T052148-85c63f)."""
+    from jev.clients.fight import REACH_HOLD_S, REAIM_AFTER_S
+
+    f = _fight([ALIVE])
+    f._reach_at = f._damage_at = f._last_aim_at = 0.0
+    f._hold_clocks_while_casting({"bars.casting": False})
+    for _ in range(8):                        # four seconds of casting
+        combat_clock[0] += 0.5
+        f._hold_clocks_while_casting({"bars.casting": True})
+    combat_clock[0] += 0.5
+    f._hold_clocks_while_casting({"bars.casting": False})
+    assert combat_clock[0] - f._reach_at == pytest.approx(0.5)
+    assert combat_clock[0] - max(f._damage_at, f._last_aim_at) < REAIM_AFTER_S < REACH_HOLD_S
+
+
+def test_without_a_cast_the_evidence_ages_as_ever(combat_clock):
+    from jev.clients.fight import REAIM_AFTER_S
+
+    f = _fight([ALIVE])
+    f._reach_at = f._damage_at = f._last_aim_at = 0.0
+    for _ in range(9):
+        f._hold_clocks_while_casting({"bars.casting": False})
+        combat_clock[0] += 0.5
+    assert combat_clock[0] - f._damage_at > REAIM_AFTER_S
+    assert f._reach_at == 0.0

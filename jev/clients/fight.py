@@ -328,6 +328,8 @@ class Fight:
     _last_use: dict[int, float] = field(default_factory=dict, init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
     _race: list[tuple] = field(default_factory=list, init=False)
+    # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
+    _look_at: float | None = field(default=None, init=False)
 
     # -- the skill -----------------------------------------------------------
 
@@ -343,6 +345,7 @@ class Fight:
         self._toggled = False
         self._pending_heal = None
         self._race = []
+        self._look_at = None
         self._damage_mark = None
         self._damage_seen = self._input_refused = False
         self._selected_name_id = None
@@ -510,6 +513,7 @@ class Fight:
             # rotation was behind the gate — so a live run reported
             # `unreachable pressed [] closed 8` eight times over. It had walked at the
             # kobold and never once pressed anything at it.
+            self._hold_clocks_while_casting(v)
             if self._note_damage(v) or self._note_swing(v):
                 self._strides = 0              # progress: the approach budget starts again
                 self._approach_s = 0.0
@@ -823,6 +827,25 @@ class Fight:
             return False
         self._last_aim_at = time.monotonic()
         return self._ensure_attacking()
+
+    def _hold_clocks_while_casting(self, values: dict) -> None:
+        """A cast stops the swings, so no hit or swing can arrive while one runs: the
+        clocks that wait for that evidence stand still for it.
+
+        Otherwise every heal reads as a lost target. Each Holy Light, four seconds under
+        pushback, aged the last hit past `REAIM_AFTER_S` and `REACH_HOLD_S`; the fight
+        then stepped at a wolf already in melee, levelled the camera and turned, eleven
+        seconds without a swing after one heal, and ran out its 45 s with the wolf at
+        30% (run 20260924T052148-85c63f).
+        """
+        now = time.monotonic()
+        if self._look_at is not None and values.get("bars.casting") is True:
+            held = now - self._look_at
+            self._damage_at += held
+            self._last_aim_at += held
+            if self._reach_at is not None:
+                self._reach_at += held
+        self._look_at = now
 
     def _note_damage(self, values: dict) -> bool:
         """The target lost health since the last look: a swing reached it."""
