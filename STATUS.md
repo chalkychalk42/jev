@@ -2431,3 +2431,15 @@ Also fixed since 12:00: the vendor and trainer catalogs no longer hold spawns on
 event places (the Darkmoon Faire's merchants, walked to twice with full bags); a merchant
 that cannot be reached or clicked is remembered (`var/merchant-memory.json`) and five are
 tried; a failed trainer visit waits for the next level instead of stopping the session.
+
+## 2026-09-24 12:30 — deaths traced to their causes
+
+- The death in run 20260924T121445-3d2ab1 was to a Murloc Streamrunner, not a Defias as
+  commit df2b2e2's message says: "facing the wrong way" at 40% health set off a full camera
+  levelling (5.4 s, the rotation stopped through it) and the heal at 8% came too late.
+  Facing the camera is now a held right-button nudge, half a second, pitch untouched.
+- A quest whose accept was passed over (quest 16, Give Gerard a Drink) stopped a session
+  when its objective found the quest absent ("unsupported"); now its objective and hand-in
+  are skipped at once, and the absence is its own code.
+- Seal of the Crusader was bought at level 9 and, rightly, not put on the bar. With the
+  minimap clock off, no dialog followed the trainer's Escape.
