@@ -2212,3 +2212,9 @@ Decisions waiting for you:
    (StatusStrip) would be published with them: push as is, or make the repo private first?
 3. **Connectors.** Gmail and Google Calendar need authorising in claude.ai's connector
    settings before they can be used here.
+
+Operator action, 06:10: quest 18's objective failed on its three-deaths edge into the level
+5-7 wolves, 988 yards off, at 6/12 bandanas. Two of the three deaths were V105's bug, fixed
+at 06:06. The loop was stopped, the playhead put back on `18_brotherhood_of_thieves_do` with
+its deaths cleared (the previous file is at `/tmp/playhead-before-0610.json`), and the loop
+restarted at session 37.
