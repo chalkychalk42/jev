@@ -2297,3 +2297,15 @@ their nearest training state beyond the calibrated radius (0.15; nearest 0.17-0.
 were near enough but lacked support from enough independent runs. Sparse data, not a broken
 learner: forty examples across a whole night's varied fights. Coverage should come with
 volume, or with a looser radius if you prefer it sooner.
+
+## 2026-09-24 08:45 — debrief 10: level 8, the first model, and a spin
+
+Level 8 at 17%, on the level 5-7 wolves until level 9, then quest 6 (Garrick Padfoot).
+Since debrief 9:
+- the route no longer loops on a step it cannot finish: a step's own skill out of attempts
+  takes the step's fail edge (V112), and retries are remembered across sessions (V110) -
+  Brother Neals' hand-in was passed over, quest 3905 left in the log;
+- blind melee turns quarters, not halves (V113): a wolf at the character's side stayed
+  there through eight half turns, forty seconds at 5% health, and the character died;
+- the first motor model (acquire) trained and was held in shadow by its gate, 0/20
+  held-out coverage: sparse data, not a broken learner (above).
