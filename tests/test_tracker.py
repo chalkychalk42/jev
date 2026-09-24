@@ -364,3 +364,21 @@ def test_a_steps_clock_stops_while_dead_or_fighting_and_runs_at_the_step():
     assert tr.memory.working_s == 0.0
     events = [tr.tick(_s(t)).event for t in range(201, 270)]
     assert events.index(Event.FAIL) in (59, 60), "standing at the step counts"
+
+
+def test_an_objectives_clock_starts_again_on_each_kill():
+    """Twelve Kobold Laborers took longer than ten minutes of searching and eating between
+    fights; the step failed over at 7/12, still killing (run 20260924T005824-740147)."""
+    base = dict(zone="Elwynn", zone_id=12, pos=(0.5, 0.5))
+    graph = Graph(graph_id="g", faction="alliance", entry="do", nodes=(
+        Node(id="do", kind=StepKind.QUEST_OBJECTIVE, quest_id=7, next=("rib",), timeout_s=60.0,
+             on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=60, goto="rib"),), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(1, 10), **base),
+    ))
+    tr = Tracker(graph, "do")
+    tr.enter("do", _with_quest(0.0, have=0))
+    working = [tr.tick(_with_quest(float(t), have=t // 50)).event for t in range(1, 300)]
+    assert Event.FAIL not in working, "a kill every fifty seconds is never a stall"
+    stalled = [tr.tick(_with_quest(float(t), have=5)).event for t in range(300, 400)]
+    assert Event.FAIL in stalled, "sixty seconds with no kill still fails over"
+    assert stalled.index(Event.FAIL) <= 11

@@ -72,6 +72,8 @@ class StepMemory:
     closest: float | None = None
     closest_at: float | None = None
     closest_to: tuple[float, float] | None = None
+    # The step's quest counters as last seen: a kill or a pickup starts its clock again.
+    counters: int | None = None
 
 
 @dataclass(frozen=True)
@@ -237,6 +239,11 @@ class Tracker:
         is in combat, and while it is getting closer to where the step is; it runs at the
         step's position and whenever a walk stalls, so a character stuck on the way still
         fails over to its rib.
+
+        And it starts again whenever the step's own quest counters rise. Twelve Kobold
+        Laborers took longer than ten minutes of searching and eating between fights, and
+        the step failed over to a grind at 7/12 while every few minutes brought another
+        kill (run 20260924T005824-740147). A kill or a pickup is the step working.
         """
         mem = self.memory
         destination = route_destination(state, node)
@@ -257,6 +264,11 @@ class Tracker:
         if mem.clocked_at is not None and not stopped:
             mem.working_s += max(0.0, state.t - mem.clocked_at)
         mem.clocked_at = state.t
+        counted = _counters(state, node)
+        if counted is not None:
+            if mem.counters is not None and counted > mem.counters:
+                mem.working_s = 0.0
+            mem.counters = counted if mem.counters is None else max(mem.counters, counted)
 
     def _backfill(self, state: State) -> None:
         """Fill in entry facts that were unreadable when the step was entered.
@@ -368,6 +380,16 @@ def _quest_in_log(state: State, node: Node | None) -> bool:
     if node is None or node.quest_id is None or state.quests is None:
         return False
     return any(q.quest_id == node.quest_id for q in state.quests)
+
+
+def _counters(state: State, node: Node) -> int | None:
+    """How far an objective step's quest has got, summed over its counters; `None` unread."""
+    if node.kind is not StepKind.QUEST_OBJECTIVE or node.quest_id is None or state.quests is None:
+        return None
+    for quest in state.quests:
+        if quest.quest_id == node.quest_id:
+            return sum(min(o.have, o.need) for o in quest.objectives)
+    return None
 
 
 def _quest_log_readable(state: State) -> bool:
