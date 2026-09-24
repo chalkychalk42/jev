@@ -492,7 +492,7 @@ def _painted(ticks: int, **state) -> dict:
 
 def test_the_bar_census_names_each_slot_s_spell_and_where_its_button_is():
     third = _painted(3)
-    assert third["schema"] == 15 and third["bars.slot"] == 3
+    assert third["schema"] == 16 and third["bars.slot"] == 3
     assert third["bars.slot_spell"] == 635                   # Holy Light, by its spell link
     assert abs(third["bars.slot_x"] - 220 / 1600) < 0.002
     assert _painted(4)["bars.slot_spell"] == 0               # empty
@@ -541,3 +541,28 @@ def test_train_is_the_advance_button_only_while_it_is_enabled():
 def test_the_cursor_holding_something_is_painted():
     assert _painted(1, cursorType="spell")["cursor.holding"] is True
     assert _painted(1)["cursor.holding"] is False
+
+
+
+# --- schema 16: the flight master's map -----------------------------------------
+
+def _taxi(ticks: int, **state) -> dict:
+    return radio.unpack(payload(paint({"taxiFixture": True, **state}, ticks=ticks))[:PAYLOAD_CELLS])
+
+
+def test_the_flight_map_names_each_node_and_where_its_button_is():
+    from jev.perceive.radio_frame import name_id
+
+    here = _taxi(1, taxiOpen=1)
+    assert here["ui.taxi"] is True and here["taxi.total"] == 3 and here["taxi.index"] == 1
+    assert here["taxi.name_id"] == name_id("Sentinel Hill, Westfall") and here["taxi.type"] == 1
+    assert abs(here["taxi.x"] - 400 / 1600) < 0.002
+    there = _taxi(2, taxiOpen=1)
+    assert there["taxi.name_id"] == name_id("Stormwind, Elwynn") and there["taxi.type"] == 2
+    unknown = _taxi(3, taxiOpen=1)
+    assert unknown["taxi.type"] == 0 and unknown["taxi.x"] is None, "never visited: no button"
+
+
+def test_a_closed_flight_map_paints_nothing_of_it():
+    shut = _taxi(1)
+    assert shut["ui.taxi"] is False and shut["taxi.total"] is None and shut["taxi.x"] is None

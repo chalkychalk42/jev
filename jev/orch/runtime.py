@@ -59,7 +59,7 @@ from jev.world.state_v1 import ArmedBy, State, StepKind
 # hand-in out of its four minutes with the quest complete (run 20260924T132256-fc8503).
 SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
                               "BUY_AMMO_REAGENT_FOOD", "LOOT", "RELEASE_SPIRIT", "CORPSE_RUN",
-                              "TRAIN_CLASS", "BIND_HEARTH", "COMBAT_PROFILE"})
+                              "TRAIN_CLASS", "BIND_HEARTH", "DISCOVER_FLIGHT", "COMBAT_PROFILE"})
 
 
 @dataclass

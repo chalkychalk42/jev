@@ -114,6 +114,11 @@ _SKILLS: tuple[Skill, ...] = (
                              and s.bags.durability_min > 0.7),
           pre=_alive, on_fail="STUCK_RECOVER"),
 
+    Skill("DISCOVER_FLIGHT", "visit a flight master so its node can be flown to", 240.0,
+          # Talk to it and read its map; the node painted as here is remembered
+          # (`LiveBody._discover`).
+          success=JUDGED_ELSEWHERE, pre=_alive),
+
     Skill("BIND_HEARTH", "make the inn nearest the guide's work home", 420.0,
           # A walk to the innkeeper, a gossip line and a confirmation; the body judges it
           # by the confirmation closing (`LiveBody._bind`).

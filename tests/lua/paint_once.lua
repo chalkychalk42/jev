@@ -124,6 +124,24 @@ if STATE.spellFixture then
     end
 end
 
+-- A flight master's map of three nodes: here, one to fly to, and one never visited, its
+-- button hidden as the stock map hides it.
+if STATE.taxiFixture then
+    local nodes = {{"Sentinel Hill, Westfall", "CURRENT"}, {"Stormwind, Elwynn", "REACHABLE"},
+                   {"Lakeshire, Redridge", "NONE"}}
+    function NumTaxiNodes() return #nodes end
+    function TaxiNodeName(i) return nodes[i] and nodes[i][1] end
+    function TaxiNodeGetType(i) return nodes[i] and nodes[i][2] end
+    local frame = CreateFrame("Frame", "TaxiFrame")
+    function frame:IsVisible() return STATE.taxiOpen == 1 end
+    for i = 1, #nodes do
+        local b = CreateFrame("Button", "TaxiButton" .. i)
+        function b:IsVisible() return nodes[i][2] ~= "NONE" end
+        function b:IsEnabled() return 1 end
+        function b:GetCenter() return 300 + 100 * i, 450 end
+    end
+end
+
 -- The addon exactly as a client installs it: the one file `tools/gen_addon_fields.py`
 -- builds. It owns no global names, so any global it assigns fails the run, attributed by
 -- the chunk doing the assigning - the event arguments this harness sets (arg2, ...) are

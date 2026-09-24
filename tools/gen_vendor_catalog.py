@@ -20,6 +20,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 MASK_PLAYER, MASK_ALLIANCE, MASK_HORDE = 1, 2, 4
 SIDES = {"alliance": MASK_ALLIANCE, "horde": MASK_HORDE}
 NPC_FLAG_INNKEEPER = 65536
+NPC_FLAG_FLIGHTMASTER = 8192
+GOSSIP_OPTION_TAXI = 4
 
 
 def _sides(db: sqlite3.Connection, template: int) -> list[str]:
@@ -114,9 +116,28 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
             continue
         innkeepers.append({"entry": entry, "name": name, "map_id": map_id, "sides": sides,
                            "world": [float(x), float(y), float(z)]})
+    # Flight masters, and the gossip line that opens each one's map where it has one ("I
+    # need a ride." at Sentinel Hill, "Show me where I can fly." at Lakeshire): a flight
+    # is taken from the map (`jev.clients.taxi`).
+    flightmasters = []
+    for entry, name, faction, menu, map_id, x, y, z in db.execute(
+            "select t.Entry,t.Name,t.Faction,t.GossipMenuId,c.map,c.position_x,c.position_y,"
+            "c.position_z from world_creature_template t join world_creature c on c.id=t.Entry "
+            "where (t.NpcFlags & ?)!=0 and c.guid not in "
+            "(select guid from world_game_event_creature where event > 0) "
+            "order by t.Entry,c.map,c.position_x,c.position_y", (NPC_FLAG_FLIGHTMASTER,)):
+        sides = _sides(db, faction)
+        if not name or name.startswith("[") or not sides:
+            continue
+        line = db.execute("select option_text from world_gossip_menu_option where menu_id=? "
+                          "and option_id=? order by id limit 1",
+                          (menu, GOSSIP_OPTION_TAXI)).fetchone() if menu else None
+        flightmasters.append({"entry": entry, "name": name, "map_id": map_id, "sides": sides,
+                              "world": [float(x), float(y), float(z)],
+                              "gossip": line[0] if line else None})
     return {"schema": 1, "junk": sorted(set(junk)), "junk_prices": prices, "supplies": supplies,
             "vendors": vendors, "bags": bags, "surplus_prices": surplus,
-            "innkeepers": innkeepers}
+            "innkeepers": innkeepers, "flightmasters": flightmasters}
 
 
 def main() -> int:

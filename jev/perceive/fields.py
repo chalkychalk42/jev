@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 15                                   # bump when the field table changes shape
+SCHEMA = 16                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -71,6 +71,8 @@ keeps its own saved place in the guide.
 15: the header's revision byte, then the main action bar and the spellbook, one entry per
 paint each, and the Train button: a trained spell goes on the bar only by a drag the
 strip can show the ends of.
+16: the flight master's map, one node per paint: which node is here and which can be
+flown to, by name hash, and where each node's button is.
 Old schema 6, 7 and 8 reads remain supported, with appended observations unknown."""
 LAST_HEADER_SCHEMA = 14
 EXTENDED = 0
@@ -557,6 +559,26 @@ FIELDS: tuple[Field, ...] = (
          "if type(GetCursorInfo) ~= 'function' then return nil end\n"
          "return tri(GetCursorInfo() ~= nil)",
          "something is on the cursor: a picked-up spell, action or item"),
+
+    # -- schema 16: the flight master's map --------------------------------------------
+    #
+    # The Westfall-Redridge guide crosses Elwynn five times, up to 4,266 yards a crossing.
+    # A flight is a click on a node's button on the flight master's map, so the strip
+    # shows the nodes one per paint: the node's name hashed as names are (a node is known
+    # by the hash painted CURRENT where its flight master stands), whether it is here or
+    # can be flown to, and where its button is.
+    _tri("ui.taxi", "return tri(TAXI_OPEN())", "the flight master's map is open"),
+    Field("taxi.total", 6, Kind.UINT, "return TAXI_CENSUS('total')",
+          "nodes on the flight master's map"),
+    Field("taxi.index", 6, Kind.UINT, "return TAXI_CENSUS('index')",
+          "the node the next fields describe; advances once per paint"),
+    Field("taxi.name_id", 16, Kind.UINT, "return TAXI_CENSUS('name_id')",
+          "its name, hashed as names are"),
+    Field("taxi.type", 2, Kind.UINT, "return TAXI_CENSUS('type')",
+          "0 not reachable, 1 where the character stands, 2 somewhere to fly"),
+    Field("taxi.x", 11, Kind.FRAC, "return TAXI_CENSUS('x')",
+          "fraction across the interface of its button, while shown"),
+    Field("taxi.y", 11, Kind.FRAC, "return TAXI_CENSUS('y')"),
 )
 
 # --------------------------------------------------------------------------- layout
@@ -568,7 +590,7 @@ FIELDS: tuple[Field, ...] = (
 _LEGACY = FIELDS[:1] + FIELDS[2:131]
 SCHEMA_FIELDS = {6: _LEGACY[:75], 7: _LEGACY[:112], 8: _LEGACY[:117], 9: _LEGACY[:121],
                  10: _LEGACY[:125], 11: _LEGACY[:126], 12: _LEGACY[:127], 13: _LEGACY[:128],
-                 14: _LEGACY, 15: FIELDS}
+                 14: _LEGACY, 15: FIELDS[:147], 16: FIELDS}
 # Schema 14 was the last the 4-bit header could name (15 is its not-available code), and
 # was redefined once, within the hour it was installed on one client, to add `target.guid`.
 # From 15 the header says EXTENDED and the number is in `schema_rev`; a new layout appends
@@ -583,6 +605,8 @@ assert sum(f.bits for f in SCHEMA_FIELDS[11]) == 1102
 assert sum(f.bits for f in SCHEMA_FIELDS[12]) == 1106
 assert sum(f.bits for f in SCHEMA_FIELDS[13]) == 1137
 assert sum(f.bits for f in SCHEMA_FIELDS[14]) == 1169
+assert sum(f.bits for f in SCHEMA_FIELDS[15]) == 1317
+assert SCHEMA_FIELDS[15][-1].name == "cursor.holding"
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

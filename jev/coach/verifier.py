@@ -22,7 +22,8 @@ TRAVELLING = frozenset({"TRAVEL_TO", "FOLLOW_PATH", "HEARTH", "FLIGHT_PATH", "BO
 
 # Skills that talk to an NPC and therefore need a living character in front of one.
 SOCIAL = frozenset({"VENDOR_REPAIR", "TRAIN_CLASS", "ACCEPT_QUEST", "TURNIN_QUEST",
-                    "GOSSIP_PICK", "BUY_AMMO_REAGENT_FOOD", "BAG_MAKE_SPACE", "BIND_HEARTH"})
+                    "GOSSIP_PICK", "BUY_AMMO_REAGENT_FOOD", "BAG_MAKE_SPACE", "BIND_HEARTH",
+                    "DISCOVER_FLIGHT"})
 
 Rule = Callable[[Decision, State, frozenset[str]], Verdict]
 

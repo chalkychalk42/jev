@@ -214,6 +214,7 @@ local function paint()
     -- Likewise one bar slot and one spellbook entry per paint.
     pcall(Helpers.snapshotBar)
     pcall(Helpers.snapshotSpells)
+    pcall(Helpers.snapshotTaxi)
 
     ENV.SEQ = (ENV.SEQ + 1) % 256
 

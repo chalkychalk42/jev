@@ -17,6 +17,7 @@ from jev.clients.choose import ChooseListLine
 from jev.clients.fight import Fight
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth
+from jev.clients.taxi import TaxiDesk
 from jev.clients.windows import close_observed
 from jev.clients.interact import Interact
 from jev.clients.interact import Result as Interacted
@@ -46,12 +47,16 @@ from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import load_worn, save_worn
 from jev.world.gear import keep as gear_keep
 from jev.world.home import load_home, save_home
+from jev.world.taxi import Node as TaxiNode
+from jev.world.taxi import flight as flight_plan
+from jev.world.taxi import load_nodes, save_node, visited
 from jev.world.gear import upgrades as gear_upgrades
 from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.training import placements as spell_placements
 from jev.world.training import trainer_due
 from jev.world.vendor import (
     bag_slots,
+    flightmasters,
     innkeepers,
     junk_prices,
     load_merchant_failures,
@@ -106,6 +111,12 @@ SAME_INN_YARDS = 40.0
 BIND_LINE = "Make this inn your home."
 # How long the confirmation takes to appear, and to go once accepted.
 POPUP_S = 4.0
+# A flight master this near the character, its node not yet remembered, is visited
+# (`LiveBody.discoverable`): a node can only be flown to once it has been.
+DISCOVER_YARDS = 150.0
+# How long a flight may take: the take-off, then ten yards a second at the least.
+FLIGHT_BASE_S = 90.0
+FLIGHT_YARDS_PER_S = 10.0
 # Free slots a bag service asks the merchant for: every stack it may sell (`Vendor._sell`
 # stops when all of them are gone).
 SELL_ALL = 999
@@ -158,6 +169,7 @@ class LiveBody:
         "IDLE": "_wait", "ABORT_WAIT": "_wait", "FACE_TARGET": "_face",
         "TRAIN_CLASS": "_train",
         "BIND_HEARTH": "_bind",
+        "DISCOVER_FLIGHT": "_discover",
     }
     available = frozenset(HANDLERS)
 
@@ -165,7 +177,7 @@ class LiveBody:
                  hunt_timeout: float = 600, say: Callable[[str], None] = print,
                  record_frame: Callable[..., dict] | None = None,
                  hunt_spawns: dict | None = None, gear_memory=None, merchant_memory=None,
-                 home_memory=None):
+                 home_memory=None, taxi_memory=None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
         self.client, self.graph = client, graph
@@ -178,6 +190,10 @@ class LiveBody:
         self.merchant_memory = merchant_memory
         # Where the hearthstone takes this character (`jev.world.home`).
         self.home_memory = home_memory
+        # The flight nodes this character has visited (`jev.world.taxi`).
+        self.taxi_memory = taxi_memory
+        self._side: str | None = None
+        self._flying = False
         self._gear_checked: object = object()     # the bags' revision last looked through
         self._placing_checked: object = object()  # the bar and spellbook last planned from
         self.travelling = False
@@ -256,6 +272,8 @@ class LiveBody:
 
     def execute(self, arm: Armed, state: State, checkpoint: Callable[[], None]) -> Result:
         self.arm = arm
+        faction = getattr(state.char, "faction", None) if state is not None else None
+        self._side = getattr(faction, "value", faction) or self._side
         def focused_checkpoint():
             checkpoint()
             if not self.has_focus():
@@ -321,6 +339,8 @@ class LiveBody:
             expected["service"] = "train"
         if decision.skill == "BIND_HEARTH":
             expected["service"] = "bind"
+        if decision.skill == "DISCOVER_FLIGHT":
+            expected["service"] = "discover"
         for key, value in decision.params.items():
             if key == "profile" and decision.skill == "COMBAT_PROFILE" and value in ("default", "panic"):
                 continue  # Fight's measured health branch owns panic within the rotation.
@@ -367,6 +387,8 @@ class LiveBody:
                 rested = self.rest.until(0.9)
                 if not rested.ok:
                     raise BodyFailure(self._result(rested, f"not fit to travel: {self.rest.detail}"))
+        if not ghost and not self._flying:
+            self._fly_toward(world)
         self.travelling = True
         try:
             arrived = self.client.approach(world, timeout_s=self.travel_timeout)
@@ -374,6 +396,95 @@ class LiveBody:
             self.travelling = False
         self._note_wedged(arrived)
         return arrived
+
+    def _fly_toward(self, world) -> bool:
+        """Fly the long part of a walk, when a remembered node lands near its end and a
+        flight master stands near its start (`jev.world.taxi.flight`). Anything short of
+        landing leaves the character to walk from wherever it is."""
+        here = self._position()
+        if here is None:
+            return False
+        at = map_to_world(*here, self.client.bounds)
+        plan = flight_plan(at, world[:2], load_nodes(self.taxi_memory),
+                           flightmasters(self.client.bounds.map_id, self._side))
+        if plan is None:
+            return False
+        master, node = plan
+        self._flying = True
+        try:
+            if not self._approach(master.world) or not self._open_flightmaster(master):
+                return False
+            desk = TaxiDesk(self.client.hid, self._read, self.client.origin, self.client.size)
+            try:
+                seconds = FLIGHT_BASE_S + math.dist(master.world[:2], node.world[:2]) / FLIGHT_YARDS_PER_S
+                flew = desk.fly(node.name_id, flight_s=seconds)
+                if desk.here is not None:
+                    save_node(self.taxi_memory, TaxiNode(desk.here, master.name, master.world))
+            finally:
+                desk.close()
+            self.say(f"  flight from {master.name} to {node.flightmaster}: {flew.value}"
+                     + (f" ({desk.detail})" if desk.detail else ""))
+            return flew.ok
+        finally:
+            self._flying = False
+
+    def _open_flightmaster(self, master) -> bool:
+        """Talk to a flight master until its map is open: by its gossip line, or directly."""
+        point = world_to_map(*master.world[:2], self.client.bounds)
+        opened = self.interact.open_on(master.name, node_world=master.world, node_map=point)
+        if opened is Interacted.TAXI:
+            return True
+        if opened is not Interacted.GOSSIP or not master.gossip or not self.chooser.run(master.gossip).ok:
+            values = self._read()
+            if values and values.get("ui.modal") is not True:
+                close_observed(self.client.hid, self._read, values=values)
+            return False
+        deadline = time.monotonic() + POPUP_S
+        while time.monotonic() < deadline:
+            values = self._read()
+            if values and values.get("ui.taxi") is True:
+                return True
+            time.sleep(0.1)
+        return False
+
+    def _undiscovered_master(self):
+        here = self._position()
+        if here is None:
+            return None
+        at = map_to_world(*here, self.client.bounds)
+        known = load_nodes(self.taxi_memory)
+        near = [(math.dist(m.world[:2], at), m)
+                for m in flightmasters(self.client.bounds.map_id, self._side)
+                if not visited(m.world, known)]
+        near = [(d, m) for d, m in near if d <= DISCOVER_YARDS]
+        return min(near, key=lambda pair: pair[0])[1] if near else None
+
+    def discoverable(self, state: State) -> bool:
+        """A flight master near the character whose node it has not visited."""
+        try:
+            faction = getattr(state.char, "faction", None)
+            self._side = getattr(faction, "value", faction) or self._side
+            return self._undiscovered_master() is not None
+        except Exception:
+            return False
+
+    def _discover(self, state) -> Result:
+        """Talk to the flight master: its map names the node here, which is remembered."""
+        master = self._undiscovered_master()
+        if master is None:
+            return Result(SkillOutcome.ABORTED, "no unvisited flight master near", "nothing")
+        if not self._open_flightmaster(master):
+            return Result(SkillOutcome.ABORTED, f"{master.name}: the map did not open", "no_map")
+        desk = TaxiDesk(self.client.hid, self._read, self.client.origin, self.client.size)
+        try:
+            desk.read_map()
+        finally:
+            desk.close()
+        if desk.here is None:
+            return Result(SkillOutcome.ABORTED, f"{master.name}: the map named no node here",
+                          "no_node")
+        save_node(self.taxi_memory, TaxiNode(desk.here, master.name, master.world))
+        return Result(SkillOutcome.SUCCEEDED, f"{master.name}'s node remembered", "done")
 
     def _note_wedged(self, arrived: bool) -> None:
         """Home by hearthstone after `WEDGED_WALKS` walks in a row found the character
@@ -735,6 +846,7 @@ class LiveBody:
         self._policy_context = context
         context.trainable = self.trainable
         context.bindable = self.bindable
+        context.discoverable = self.discoverable
 
     def _train(self, state) -> Result:
         trainer = self._trainer()

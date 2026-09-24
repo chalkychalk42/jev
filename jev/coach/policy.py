@@ -54,7 +54,7 @@ def reflex(rule: str) -> bool:
 # Services only a routine can do, never put to the tutor: training ends in drags from the
 # spellbook onto the bar, which the tutor has no control for, and binding the hearthstone
 # answers a confirmation the tutor has no row for either.
-ROUTINE_RULES = ("service.train", "service.bind")
+ROUTINE_RULES = ("service.train", "service.bind", "service.discover")
 
 
 def routine_only(rule: str) -> bool:
@@ -134,16 +134,28 @@ class Context:
     # Whether an inn stands near the guide's work while home is far or unknown
     # (`LiveBody.bindable`). Absent, the hearthstone is never bound.
     bindable: Callable[[State], bool] | None = None
-    bind_blocked_step: str | None = None
+    bind_blocked: tuple[str | None] | None = None      # (step,) once a bind failed there
 
     def bind_failed(self, step_id: str | None) -> None:
         # One try a step: the next step may be near another inn, or this one reachable.
-        self.bind_blocked_step = step_id
+        self.bind_blocked = (step_id,)
 
     def can_bind(self, state: State) -> bool:
-        if self.bindable is None or state.guide.step_id == self.bind_blocked_step:
+        if self.bindable is None or self.bind_blocked == (state.guide.step_id,):
             return False
         return self.bindable(state)
+
+    # Whether an unvisited flight master stands near the character (`LiveBody.discoverable`).
+    discoverable: Callable[[State], bool] | None = None
+    discover_blocked: tuple[str | None] | None = None  # (step,) once a visit failed there
+
+    def discover_failed(self, step_id: str | None) -> None:
+        self.discover_blocked = (step_id,)
+
+    def can_discover(self, state: State) -> bool:
+        if self.discoverable is None or self.discover_blocked == (state.guide.step_id,):
+            return False
+        return self.discoverable(state)
 
 
 def _d(intent: Intent, skill: str | None, why: str, confidence: float,
@@ -246,6 +258,11 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
     if context is not None and _recover(state) is None and context.can_bind(state):
         return Plan(_d(Intent.SERVICE, "BIND_HEARTH", "home is far from the guide's work",
                        0.55, ("dead", "combat"), service="bind"), True, "service.bind")
+
+    # A flight master passed is a node to fly back to later: only a visited node can be.
+    if context is not None and _recover(state) is None and context.can_discover(state):
+        return Plan(_d(Intent.SERVICE, "DISCOVER_FLIGHT", "an unvisited flight master is near",
+                       0.5, ("dead", "combat"), service="discover"), True, "service.discover")
 
     return None
 

@@ -687,6 +687,7 @@ FORBIDDEN = (
     "StrafeRightStart", "JumpOrAscendStart", "InteractUnit", "TargetUnit",
     "RunMacro", "RunMacroText", "PickupAction", "UseContainerItem", "UseInventoryItem",
     "PickupSpell", "PlaceAction", "ClearCursor", "BuyTrainerService", "CastSpellByID",
+    "TakeTaxiNode",
 )
 
 

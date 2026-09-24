@@ -49,6 +49,7 @@ class Result(StrEnum):
     VENDOR = "vendor"
     LOOT = "loot"
     TRAINER = "trainer"
+    TAXI = "taxi"                  # a flight master's map, opened with no gossip first
     NO_TARGET = "no_target"        # clicked every candidate; none of them was the one
     NOT_VISIBLE = "not_visible"    # no nameplate on screen at all
     NO_WINDOW = "no_window"        # clicked the unit and nothing opened
@@ -60,7 +61,8 @@ class Result(StrEnum):
 
     @property
     def opened(self) -> bool:
-        return self in (Result.GOSSIP, Result.QUEST, Result.VENDOR, Result.LOOT, Result.TRAINER)
+        return self in (Result.GOSSIP, Result.QUEST, Result.VENDOR, Result.LOOT, Result.TRAINER,
+                        Result.TAXI)
 
 
 @dataclass
@@ -228,7 +230,7 @@ class Interact:
             return Result.BLIND
         for key, result in (("ui.quest_frame", Result.QUEST), ("ui.gossip", Result.GOSSIP),
                             ("ui.vendor", Result.VENDOR), ("ui.loot", Result.LOOT),
-                            ("ui.trainer", Result.TRAINER)):
+                            ("ui.trainer", Result.TRAINER), ("ui.taxi", Result.TAXI)):
             if v.get(key) is True:
                 return result
         return None

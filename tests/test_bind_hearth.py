@@ -50,6 +50,10 @@ def test_the_policy_binds_as_a_routine_and_once_a_step(monkeypatch, tmp_path):
     assert plan.decision.skill == "BIND_HEARTH" and plan.rule == "service.bind"
     context.bind_failed("quest")
     assert decide(_state(), context=context).decision.skill != "BIND_HEARTH"
+    fresh = Context()
+    fresh.bindable = lambda state: True
+    assert decide(seen(), context=fresh).decision.skill == "BIND_HEARTH", \
+        "a state with no step yet is not a failed one"
 
 
 def test_binding_chooses_the_line_accepts_and_remembers(monkeypatch, tmp_path):

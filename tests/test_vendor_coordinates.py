@@ -22,11 +22,16 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
             CREATE TABLE world_quest_template (SrcItemId INT);
             INSERT INTO world_quest_template VALUES (0);
             CREATE TABLE world_creature_template (
-                Entry INT, Name TEXT, NpcFlags INT, VendorTemplateId INT, Faction INT);
-            INSERT INTO world_creature_template VALUES (465,'Fixture Merchant',128,0,12);
-            INSERT INTO world_creature_template VALUES (14845,'Stamp Thunderhorn',128,0,12);
-            INSERT INTO world_creature_template VALUES (295,'Fixture Innkeeper',65536,0,12);
-            INSERT INTO world_creature_template VALUES (296,'Hostile Innkeeper',65536,0,29);
+                Entry INT, Name TEXT, NpcFlags INT, VendorTemplateId INT, Faction INT,
+                GossipMenuId INT);
+            INSERT INTO world_creature_template VALUES (465,'Fixture Merchant',128,0,12,0);
+            INSERT INTO world_creature_template VALUES (14845,'Stamp Thunderhorn',128,0,12,0);
+            INSERT INTO world_creature_template VALUES (295,'Fixture Innkeeper',65536,0,12,0);
+            INSERT INTO world_creature_template VALUES (296,'Hostile Innkeeper',65536,0,29,0);
+            INSERT INTO world_creature_template VALUES (523,'Fixture Flier',8195,0,12,4106);
+            CREATE TABLE world_gossip_menu_option (menu_id INT, id INT, option_id INT,
+                option_text TEXT);
+            INSERT INTO world_gossip_menu_option VALUES (4106, 0, 4, 'I need a ride.');
             CREATE TABLE dbc_FactionTemplate (id INT, c3 INT, c4 INT, c5 INT);
             INSERT INTO dbc_FactionTemplate VALUES (12, 2, 0, 4);
             INSERT INTO dbc_FactionTemplate VALUES (29, 4, 0, 2);
@@ -36,6 +41,7 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
             INSERT INTO world_creature VALUES (12420,14845,0,'5','5','5');
             INSERT INTO world_creature VALUES (2,295,0,'10','20','30');
             INSERT INTO world_creature VALUES (3,296,0,'40','50','60');
+            INSERT INTO world_creature VALUES (4,523,0,'70','80','90');
             CREATE TABLE world_game_event_creature (guid INT, event INT);
             INSERT INTO world_game_event_creature VALUES (12420, 81);
             CREATE TABLE world_npc_vendor (entry INT,item INT,ExtendedCost INT,condition_id INT);
@@ -59,6 +65,9 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
     inn, = [vendor.Innkeeper(**{k: v for k, v in i.items() if k != "sides"})
             for i in result["innkeepers"] if "alliance" in i["sides"]]
     assert inn.name == "Fixture Innkeeper"
+    assert result["flightmasters"] == [{"entry": 523, "name": "Fixture Flier", "map_id": 0,
+                                        "sides": ["alliance"], "world": [70.0, 80.0, 90.0],
+                                        "gossip": "I need a ride."}]
 
 
 def test_loader_accepts_older_string_coordinates_as_numeric_yards(monkeypatch):

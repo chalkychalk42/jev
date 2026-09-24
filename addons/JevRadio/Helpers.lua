@@ -972,6 +972,40 @@ end
 local function BAR_CENSUS(key) return barSnapshot[key] end
 local function SPELL_CENSUS(key) return spellSnapshot[key] end
 
+-- --------------------------------------------------------------------- flight map
+--
+-- One node of the flight master's map per paint (fields.py, schema 16): its name hashed
+-- as names are, whether it is where the character stands or somewhere it can fly, and
+-- where its button is. Only stock reads: NumTaxiNodes, TaxiNodeName, TaxiNodeGetType and
+-- the stock buttons' own position. Taking a flight is a click the body makes.
+
+local TAXI_TYPES = { CURRENT = 1, REACHABLE = 2 }
+local taxiCursor = 0
+local taxiSnapshot = {}
+
+local function TAXI_OPEN()
+    return TaxiFrame ~= nil and TaxiFrame:IsVisible() and true or false
+end
+
+local function snapshotTaxi()
+    taxiSnapshot = {}
+    if not TAXI_OPEN() or not NumTaxiNodes then return end
+    local total = NumTaxiNodes() or 0
+    taxiSnapshot.total = clamp(total, 62)
+    if total < 1 then return end
+    taxiCursor = taxiCursor % total + 1
+    local i = taxiCursor
+    taxiSnapshot.index = clamp(i, 62)
+    taxiSnapshot.name_id = nameid(TaxiNodeName(i))
+    taxiSnapshot.type = TAXI_TYPES[TaxiNodeGetType(i)] or 0
+    local btn = _G["TaxiButton" .. i]
+    if btn and btn:IsVisible() then
+        taxiSnapshot.x, taxiSnapshot.y = point(btn, "x"), point(btn, "y")
+    end
+end
+
+local function TAXI_CENSUS(key) return taxiSnapshot[key] end
+
 -- --------------------------------------------------------------------- melee
 --
 -- Stock 2.4.3 ActionButton_UpdateFlash flashes the Attack button when
@@ -1203,6 +1237,9 @@ return {
     SPELLBOOK_OPEN = SPELLBOOK_OPEN,
     snapshotBar = snapshotBar,
     snapshotSpells = snapshotSpells,
+    TAXI_OPEN = TAXI_OPEN,
+    TAXI_CENSUS = TAXI_CENSUS,
+    snapshotTaxi = snapshotTaxi,
     GCD_FRAC = GCD_FRAC,
     CASTING = CASTING,
     ATTACKING = ATTACKING,

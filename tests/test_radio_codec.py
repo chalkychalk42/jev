@@ -68,11 +68,13 @@ def test_appended_fields_fit_the_existing_grid():
     """Schemas 10-12 appended 27, 2 and 4 bits without growing the strip. Schema 13's
     31-bit character key did not fit the 6 spare bits and added one row, deliberately;
     schema 14's 16-bit world object and 16-bit unit identity fit the row that left.
-    Schema 15's revision byte, bar census and spellbook census add one row more."""
+    Schema 15's revision byte, bar census and spellbook census add one row more; schema
+    16's flight map census fits the row that left."""
     lay = layout()
     assert (lay["cols"], lay["rows"]) == (12, 11)
-    assert lay["payload_bits"] == 1317
-    assert lay["field_count"] == 147
+    assert lay["payload_bits"] == 1371
+    assert lay["field_count"] == 154
+    assert sum(f.bits for f in SCHEMA_FIELDS[15]) == 1317, "schema 15 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[14]) == 1169, "schema 14 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[13]) == 1137, "schema 13 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[9]) == 1073, "schema 9 is a preserved prefix"
@@ -100,18 +102,28 @@ def test_every_field_round_trips_at_its_boundaries(field):
             assert got == value
 
 
-def test_schema_15_names_itself_in_the_revision_byte():
+def test_the_schema_names_itself_in_the_revision_byte():
     """The 4-bit header ran out at 14: from 15 it says EXTENDED and the number follows."""
-    bits = radio.pack_bits({"schema": 15, "seq": 7})
+    bits = radio.pack_bits({"schema": 16, "seq": 7})
     assert int(bits[:4], 2) == 0
-    assert int(bits[4:12], 2) == 15
+    assert int(bits[4:12], 2) == 16
     decoded = radio.unpack_bits(bits)
-    assert decoded["schema"] == 15 and decoded["schema_rev"] == 15 and decoded["seq"] == 7
+    assert decoded["schema"] == 16 and decoded["schema_rev"] == 16 and decoded["seq"] == 7
+
+
+def test_a_schema_15_strip_still_decodes_without_the_flight_map():
+    fields = SCHEMA_FIELDS[15]
+    values = {"schema": 0, "schema_rev": 15, "seq": 9, "char.level": 10}
+    bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
+                   for f in fields)
+    decoded = radio.unpack_bits(bits + format(checksum(bits), "016b"))
+    assert decoded["schema"] == 15 and decoded["char.level"] == 10
+    assert decoded.get("ui.taxi") is None
 
 
 def test_a_revision_this_decoder_does_not_know_is_a_schema_error():
-    fields = SCHEMA_FIELDS[15]
-    values = {"schema": 0, "schema_rev": 16, "seq": 1}
+    fields = SCHEMA_FIELDS[16]
+    values = {"schema": 0, "schema_rev": 17, "seq": 1}
     bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
                    for f in fields)
     with pytest.raises(radio.DecodeError) as err:

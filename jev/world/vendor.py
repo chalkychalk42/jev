@@ -61,6 +61,24 @@ def innkeepers(map_id: int, side: str | None) -> tuple[Innkeeper, ...]:
                  if i["map_id"] == map_id and (side is None or side in i.get("sides", ())))
 
 
+@dataclass(frozen=True)
+class FlightMaster:
+    entry: int
+    name: str
+    map_id: int
+    world: tuple[float, float, float]
+    gossip: str | None = None        # the line that opens the map; none opens it directly
+
+
+def flightmasters(map_id: int, side: str | None) -> tuple[FlightMaster, ...]:
+    """Flight masters on this world map who serve this side; caller ranks by distance."""
+    return tuple(FlightMaster(entry=f["entry"], name=f["name"], map_id=f["map_id"],
+                              world=tuple(float(v) for v in f["world"]),
+                              gossip=f.get("gossip"))
+                 for f in catalog().get("flightmasters") or ()
+                 if f["map_id"] == map_id and (side is None or side in f.get("sides", ())))
+
+
 def surplus_prices() -> dict[int, int]:
     """White and green gear, trade goods and recipes no quest needs, with their sell prices."""
     return {int(k): int(v) for k, v in (catalog().get("surplus_prices") or {}).items()}
