@@ -27,6 +27,11 @@ MARGIN_MS = 300
 QUIET_S = float(os.environ.get("JEV_OPERATOR_QUIET_S", "600"))
 # The file stamp is refreshed at most this often; the in-process one every injection.
 STAMP_EVERY_S = 0.5
+# A person is a second input that is not the bot's within this long of the first. One
+# alone can be the machine's: a lone input 391 ms after the bot's own, then nothing for
+# minutes with nobody at the desk, paused session 91 mid-fight and the character died
+# (24 September). A hand on a mouse or a keyboard makes many.
+CONFIRM_MS = 10_000
 WRAP = 1 << 32
 
 
@@ -38,8 +43,10 @@ def _stamp_path() -> Path:
 class Operator:
     def __init__(self, *, last_input_tick: Callable[[], int | None],
                  tick_now: Callable[[], int], stamp_path: Path | None = None,
-                 clock: Callable[[], float] = time.monotonic, quiet_s: float | None = None):
+                 clock: Callable[[], float] = time.monotonic, quiet_s: float | None = None,
+                 say: Callable[[str], None] | None = None):
         self._last_input_tick, self._tick_now = last_input_tick, tick_now
+        self._say = say
         self._path, self._clock = stamp_path, clock
         self.quiet_s = QUIET_S if quiet_s is None else quiet_s
         self._ours: int | None = self._read_stamp()
@@ -52,6 +59,7 @@ class Operator:
             # Nothing known of earlier input: what came before this process is not a person's.
             self._ours, self._slack_ms = tick_now(), 0
         self._human: int | None = None
+        self._odd: int | None = None     # the last input seen that was not the bot's
         self._written = -float("inf")
         self._unwritten = False
 
@@ -90,8 +98,17 @@ class Operator:
             return None
         ours = self._ours if self._ours is not None else last
         after = (last - ours) % WRAP
-        if MARGIN_MS + self._slack_ms < after < WRAP // 2:
-            self._human = last
+        if MARGIN_MS + self._slack_ms < after < WRAP // 2 and last != self._odd:
+            confirmed = (self._odd is not None
+                         and (last - self._odd) % WRAP <= CONFIRM_MS)
+            present = (self._human is not None
+                       and (self._tick_now() - self._human) % WRAP < self.quiet_s * 1000)
+            if self._say is not None and not present:
+                self._say(f"operator: input {after} ms after the bot's own; "
+                          + ("a person" if confirmed else "alone, not yet a person"))
+            if confirmed:
+                self._human = last
+            self._odd = last
         if self._human is None:
             return float("inf")
         return ((self._tick_now() - self._human) % WRAP) / 1000
@@ -114,7 +131,7 @@ def default() -> Operator | None:
         if not win32.available():
             return None
         _default = Operator(last_input_tick=win32.last_input_tick, tick_now=win32.tick_now,
-                            stamp_path=_stamp_path())
+                            stamp_path=_stamp_path(), say=print)
         atexit.register(_default.flush)
     return _default
 

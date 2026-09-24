@@ -24,7 +24,15 @@ class Desk:
 def watch(desk, tmp_path=None, **kw):
     path = None if tmp_path is None else tmp_path / "bot-input.tick"
     return Operator(last_input_tick=lambda: desk.last, tick_now=lambda: desk.now,
-                    stamp_path=path, quiet_s=kw.get("quiet_s", 600))
+                    stamp_path=path, quiet_s=kw.get("quiet_s", 600), say=kw.get("say"))
+
+
+def person(desk, op, dt):
+    """A hand at the desk: an input `dt` ms on, seen, and another 150 ms later."""
+    desk.input(dt)
+    op.active()
+    desk.input(150)
+    return op.active()
 
 
 def test_the_bots_own_input_is_not_a_person():
@@ -40,8 +48,7 @@ def test_input_newer_than_the_bots_is_a_person_until_the_desk_is_quiet():
     desk = Desk()
     op = watch(desk, quiet_s=30)
     op.stamp()
-    desk.input(MARGIN_MS + 200)                  # the mouse moved, and not by the bot
-    assert op.active()
+    assert person(desk, op, MARGIN_MS + 200)     # the mouse moved, and not by the bot
     desk.now += 29_000
     assert op.active(), "still within the quiet window"
     desk.now += 2_000
@@ -64,15 +71,18 @@ def test_a_new_session_reads_the_last_ones_stamp(tmp_path):
     desk.input(10_000)                           # a person, between the sessions
     desk.now += 1_000
     second = watch(desk, tmp_path)
-    assert second.active()
+    assert not second.active(), "one input alone is not yet a person"
+    desk.input(300)
+    assert second.active(), "a second is"
 
 
 def test_the_tick_wrapping_round_does_not_fool_it():
     desk = Desk(now=WRAP - 100)
     op = watch(desk)
     op.stamp()
-    desk.now = 900                               # the 32-bit tick wrapped
-    desk.last = 900
+    desk.now = desk.last = 900                   # the 32-bit tick wrapped
+    op.active()
+    desk.input(150)
     assert op.active(), "input 1,000 ms after the bot's, across the wrap"
 
 
@@ -131,16 +141,14 @@ def test_the_last_sessions_final_input_behind_its_stamp_is_still_the_bots(tmp_pa
     first.stamp()                                # too soon to write: the file lags by 400 ms
     second = watch(desk, tmp_path)
     assert not second.active(), "the previous session's own last key"
-    desk.input(5_000)
-    assert second.active(), "anything later is a person's"
+    assert person(desk, second, 5_000), "anything later is a person's"
 
 
 def test_a_stamp_from_before_a_restart_is_ignored(tmp_path):
     desk = Desk(now=50_000)
     (tmp_path / "bot-input.tick").write_text("900000000")   # ahead of a clock that restarted
     op = watch(desk, tmp_path)
-    desk.input(2_000)
-    assert op.active(), "a person after the restart is still seen"
+    assert person(desk, op, 2_000), "a person after the restart is still seen"
 
 
 def test_flush_writes_the_stamp_the_throttle_held_back(tmp_path):
@@ -169,3 +177,21 @@ def test_a_paused_session_is_not_a_stalled_one():
     for t in range(1300, 1300 + 610, 10):
         dog.observe(state, t)
     assert dog.failure is not None, "the window still runs once the person has gone"
+
+
+def test_one_stray_input_is_not_a_person():
+    """Session 91: one input 391 ms after the bot's own, then nothing for minutes, and
+    nobody at the desk. Paused mid-fight for it, the character died."""
+    desk = Desk()
+    said = []
+    op = watch(desk, say=said.append)
+    op.stamp()
+    desk.input(391)
+    assert not op.active()
+    desk.now += 20_000
+    op.stamp()                                   # the bot plays on
+    desk.input(400)                              # another stray, but long after the first
+    assert not op.active(), "two strays minutes apart are not a hand at the desk"
+    assert said and all("alone" in line for line in said)
+    desk.input(150)
+    assert op.active() and "a person" in said[-1]
