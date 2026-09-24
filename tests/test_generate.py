@@ -348,3 +348,20 @@ def test_a_grind_rib_stands_among_the_creature_it_is_named_for(human):
         assert nearest < 40, f"{rib.id} is {nearest:.0f} yards from any {rib.target_name}"
     three_five = next(n for n in human.nodes if n.id.endswith("grind_elwynn_3_5"))
     assert three_five.target_name != "Defias Thug", "a packed humanoid camp as a safety net"
+
+
+def test_an_elite_quest_taker_does_not_block_a_delivery(human):
+    """Gryan Stoutmantle takes Westfall's hand-ins at Sentinel Hill and is an elite; only a
+    fought elite (Hogger, whose claw Wanted: "Hogger" asks for) blocks its objective."""
+    from jev.guide.route import compile_route
+
+    skills = frozenset({"TRAVEL_TO", "ACCEPT_QUEST", "TURNIN_QUEST", "GRIND_UNTIL",
+                        "VENDOR_REPAIR", "COMBAT_PROFILE", "LOOT"})
+    westfall = {40: "Westfall", 44: "Redridge"}
+    g = generate(DB, graph_id="t", faction="alliance", zone_ids=tuple(westfall),
+                 zone_names=westfall, level_min=12, level_max=20)
+    reasons = [ex.reason for ex in compile_route(g, available_skills=skills).excluded]
+    assert not any("Gryan Stoutmantle is an elite" in r for r in reasons)
+    hogger = [ex.reason for ex in compile_route(human, available_skills=skills).excluded
+              if ex.quest_id == 176]
+    assert hogger and "elite" in hogger[0]

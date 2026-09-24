@@ -440,3 +440,15 @@ def test_a_short_rib_rejoins_when_its_time_is_up():
     assert tr.tick(_s(299.0)).event is not Event.ADVANCE
     verdict = tr.tick(_s(300.0))
     assert verdict.event is Event.ADVANCE and verdict.goto == "do"
+
+
+def test_a_finished_guide_is_remembered_for_that_guide_only(tmp_path):
+    from jev.guide import playhead
+
+    path = tmp_path / "p.json"
+    playhead.save("g", "last", {1, 2}, path, finished=True)
+    assert playhead.load("g", path).finished
+    other = playhead.load("next", path)
+    assert not other.finished and other.completed == {1, 2}, "the quests carry, the end does not"
+    playhead.save("g", "last", {1, 2}, path)
+    assert not playhead.load("g", path).finished

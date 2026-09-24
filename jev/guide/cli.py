@@ -1,6 +1,7 @@
 """Generate a GuideGraph and report what actually came out.
 
     python -m jev.guide.cli human --out content/tbc/ally_human_1_12.json
+    python -m jev.guide.cli human --min 12 --max 20 --out content/tbc/ally_human_12_20.json
 
 Zone names are supplied here rather than read from the database, because the DBC mirror
 keeps `AreaTable` as numeric columns only — the name strings live in the client's string
@@ -32,6 +33,14 @@ SPINES: dict[str, tuple[str, dict[int, str]]] = {
 }
 
 
+# Where a race goes after its starting spine, by level band: (race, min, max) -> zones.
+# The first zone is the guide's map frame; the client carries positions in the others
+# across to it through world coordinates (`jev.run.client.Client._navigation_values`).
+BANDS: dict[tuple[str, int, int], dict[int, str]] = {
+    ("human", 12, 20): {40: "Westfall", 44: "Redridge"},
+}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("race", choices=sorted(SPINES))
@@ -43,6 +52,7 @@ def main() -> int:
     args = ap.parse_args()
 
     faction, zones = SPINES[args.race]
+    zones = BANDS.get((args.race, args.min, args.max), zones)
     graph_id = f"{faction[:4]}_{args.race}_{args.min}_{args.max}"
 
     table: dict[str, list] = {}

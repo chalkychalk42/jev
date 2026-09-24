@@ -555,3 +555,34 @@ def test_a_strip_that_does_not_name_its_character_is_not_guessed_at(tmp_path, mo
     fake_live(monkeypatch, tmp_path, character=None)
     assert cli.main(["--graph", str(graph), "--run-for", "1"]) != 0
     assert "which character" in capsys.readouterr().out
+
+
+def test_a_finished_guide_hands_the_next_session_to_the_one_after_it(tmp_path, capsys):
+    """The human guide ends at Sentinel Hill at level 12; Westfall and Redridge follow,
+    the quests already done carried across."""
+    from jev.guide import playhead
+
+    path = tmp_path / "character.json"
+    playhead.save("alli_human_1_12.supported",
+                  "alli_human_1_12_109_report_to_gryan_stoutmantle_turnin", {54, 109}, path,
+                  finished=True)
+    args = SimpleNamespace(playhead=path, route_mode="supported",
+                           graph=cli.ROOT / "content/tbc/ally_human_1_12.json")
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None)
+    assert graph.graph_id == "alli_human_12_20.supported"
+    assert args.graph.name == "ally_human_12_20.json", "the hunt spawns follow the guide"
+    assert memory.completed == {54, 109} and memory.step_id is None and not memory.finished
+    assert "continuing with ally_human_12_20.json" in capsys.readouterr().out
+
+
+def test_an_unfinished_guide_stays(tmp_path):
+    from jev.guide import playhead
+
+    path = tmp_path / "character.json"
+    playhead.save("alli_human_1_12.supported", "alli_human_1_12_47_gold_dust_exchange_do",
+                  {54}, path)
+    args = SimpleNamespace(playhead=path, route_mode="supported",
+                           graph=cli.ROOT / "content/tbc/ally_human_1_12.json")
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None)
+    assert graph.graph_id == "alli_human_1_12.supported"
+    assert memory.step_id == "alli_human_1_12_47_gold_dust_exchange_do"

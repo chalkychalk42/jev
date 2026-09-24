@@ -454,9 +454,11 @@ class WorldDB:
                                       source_slot=slot, counter_index=None if blocked_counter else index,
                                       spawn=spawn, blocked_reason=blocked))
         # An elite is not a solo character's fight at the quest's level: Hogger, a level 11
-        # elite with his gnolls round him, is the claw Wanted: "Hogger" asks for.
+        # elite with his gnolls round him, is the claw Wanted: "Hogger" asks for. Only what
+        # is fought: a delivery's creature is the quest's taker, and Gryan Stoutmantle, who
+        # takes Westfall's hand-ins at Sentinel Hill, is an elite too.
         result = [r if r.blocked_reason or r.spawn is None or r.spawn.kind != "creature"
-                  or not self._elite(r.spawn.npc_id) else
+                  or r.kind not in ("kill", "loot") or not self._elite(r.spawn.npc_id) else
                   replace(r, blocked_reason=f"{r.spawn.name} is an elite; not a solo fight")
                   for r in result]
         if extra_event:

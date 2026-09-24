@@ -174,6 +174,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
 
+# The guide that follows each, by graph id. A character whose playhead says a guide is
+# finished starts the next session on the one after it; the quests it has done carry over.
+NEXT_GUIDE: dict[str, Path] = {
+    "alli_human_1_12": ROOT / "content/tbc/ally_human_12_20.json",
+}
+
+
 def remembered(args, graph, key: int | None):
     """This character's playhead and route: its own file, found by the key the strip
     paints, so each character keeps its own place in the guide (`playhead`)."""
@@ -185,13 +192,21 @@ def remembered(args, graph, key: int | None):
                          "--install and restart the client")
     else:
         path = playhead.for_character(key, ROOT / playhead.CHARACTERS)
-    memory = playhead.load(graph.graph_id, path)
-    route = compile_route(graph, available_skills=LiveBody.available,
-                          completed_quests=memory.completed)
-    if args.route_mode == "supported":
-        graph = route.graph
+    for _ in range(len(NEXT_GUIDE) + 1):
         memory = playhead.load(graph.graph_id, path)
-    return path, memory, route, graph
+        route = compile_route(graph, available_skills=LiveBody.available,
+                              completed_quests=memory.completed)
+        used = route.graph if args.route_mode == "supported" else graph
+        if used is not graph:
+            memory = playhead.load(used.graph_id, path)
+        following = NEXT_GUIDE.get(graph.graph_id)
+        if not memory.finished or following is None or not following.exists():
+            return path, memory, route, used
+        # This character finished the guide: the next one takes over, its quests carried.
+        print(f"guide {graph.graph_id} finished; continuing with {following.name}")
+        args.graph = following
+        graph = Graph.load(following)
+    return path, memory, route, used
 
 
 def _live(args, graph) -> int:
@@ -280,9 +295,10 @@ def _live(args, graph) -> int:
             start_rejoin=memory.rejoin_to, start_deaths=memory.deaths,
             start_retried=memory.retried, start_rib_until=memory.rib_until,
             completed=set(memory.completed),
-            on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None:
-            playhead.save(graph.graph_id, step, done, path, rejoin_to=rejoin, deaths=deaths,
-                          retried=retried, rib_until=until),
+            on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None,
+            finished=False: playhead.save(graph.graph_id, step, done, path, rejoin_to=rejoin,
+                                          deaths=deaths, retried=retried, rib_until=until,
+                                          finished=finished),
             character_key=character,
             available_skills=body.available,
             validate_action=body.validate,

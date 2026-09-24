@@ -198,13 +198,23 @@ def test_terminal_step_is_completed_and_persisted_once(tmp_path):
     saved = []
     rt = runtime(tmp_path, [seen(0, quests=(Quest(quest_id=1),)), seen(1), seen(2), seen(3)],
                  start_step="turnin",
-                 on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None: saved.append((step, done)))
+                 on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None, **_: saved.append((step, done)))
     rt.run(4, 0)
     assert rt.finished
     assert rt.completed == {1}
     assert rt.counters.advances == 1
     assert saved[-1] == ("turnin", {1})
     assert rt.armed.decision.intent is Intent.WAIT
+
+
+def test_a_finished_guide_is_saved_as_finished(tmp_path):
+    """So the next session can take the guide that follows it (`jev.run.cli.NEXT_GUIDE`)."""
+    saved = []
+    rt = runtime(tmp_path, [seen(0, quests=(Quest(quest_id=1),)), seen(1), seen(2), seen(3)],
+                 start_step="turnin",
+                 on_progress=lambda *args, finished=False: saved.append(finished))
+    rt.run(4, 0)
+    assert rt.finished and saved[-1] is True and saved[0] is False
 
 
 def test_a_saved_step_removed_by_regeneration_resumes_from_observed_predicates(tmp_path):
@@ -259,7 +269,7 @@ def test_a_step_that_failed_into_a_rib_is_retried_once_then_passed_over(tmp_path
     saved = []
     states = [held(0, 3), held(12, 3), held(13, 4), held(25, 4), held(26, 5)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
-                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None: saved.append((step, rejoin)))
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None, **_: saved.append((step, rejoin)))
     visited = []
     for _ in states:
         rt.tick(choose=False)
@@ -304,7 +314,7 @@ def test_deaths_on_a_step_outlive_the_session_that_counted_them(tmp_path):
     states = [held(0, 6), held(1, 6)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
                        start_step="rib", start_rejoin="turnin", start_deaths=2,
-                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None: saved.append((step, deaths)))
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None, **_: saved.append((step, deaths)))
     rt.tick(choose=False)
     assert rt.tracker.step_id == "turnin", "a rib that killed twice is left for its way back"
 
@@ -323,7 +333,7 @@ def test_a_step_retried_in_an_earlier_session_is_passed_over_on_its_next_failure
     states = [held(0, 3), held(12, 3)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
                        start_retried=frozenset({"turnin"}),
-                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None:
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None, **_:
                        saved.append((step, rejoin, retried)))
     for _ in states:
         rt.tick(choose=False)
@@ -347,7 +357,7 @@ def test_a_steps_own_skill_out_of_attempts_takes_the_steps_fail_edge(tmp_path):
     states = [held(0, 3)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
                        start_step="turnin",
-                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None:
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None, **_:
                        saved.append((step, rejoin, retried)))
     rt.tick(choose=False)
     assert rt.tracker.step_id == "turnin"
@@ -368,7 +378,7 @@ def test_only_a_step_that_killed_the_character_earns_a_whole_rib(tmp_path):
     saved = []
     states = [held(0, 3), held(12, 3)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
-                       on_progress=lambda *args: saved.append(args))
+                       on_progress=lambda *args, **_: saved.append(args))
     rt.tick(choose=False)
     rt.tick(choose=False)                            # the hand-in times out
     assert rt.tracker.step_id == "rib"
