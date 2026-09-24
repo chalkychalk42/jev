@@ -367,6 +367,10 @@ class Executor:
         # selections were aimed at one. A right click still needs the body: over a frame
         # it would open that frame's menu.
         focus = values.get("cursor.world")
+        if action.intent == "object":
+            # No unit under the pointer, and the tooltip names the object (V86).
+            return (focus is True and values.get("cursor.has") is False
+                    and values.get("cursor.object_id") == action.expected_target_id)
         where = focus is True or (action.intent == "select" and focus is False)
         return (values.get("cursor.has") is True and where
                 and values.get("cursor.name_id") == action.expected_target_id

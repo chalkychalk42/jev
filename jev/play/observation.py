@@ -109,6 +109,7 @@ def context_for(graph, arm, state, values) -> dict:
         "graph_id": graph.graph_id, "quest_id": node.quest_id if node else None,
         "coord_zone_id": graph.coord_zone_id,
         "target_name": name, "target_name_id": radio_frame.name_id(name) if name else None,
+        "target_kind": destination.target_kind if destination else None,
         "destination": list(point) if point else None,
         "arrival_radius": node.r if node else None,
         "until_level": arm.decision.params.get("until_level"),

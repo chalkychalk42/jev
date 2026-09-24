@@ -185,7 +185,12 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
             if _executable(controls, name) and (name != "attack_target" or living)
             and (name != "escape" or closable)]
     clicks = []
-    if context.get("target_name_id") is not None:
+    if context.get("target_name_id") is not None and context.get("target_kind") == "gameobject":
+        thing = context.get("target_name") or "objective object"
+        clicks.append(Choice("use_object", ("x", "y"), (),
+                             f"right-click the {thing} (a world object, not a unit) at x,y to "
+                             "use or take it"))
+    elif context.get("target_name_id") is not None:
         unit = context.get("target_name") or "objective unit"
         clicks.append(Choice("select_unit", ("x", "y"), (),
                              f"left-click a living {unit} at x,y to select it: on its "
@@ -327,6 +332,9 @@ def to_action(choice: TutorChoice, choices: list[Choice], observation: dict):
         return KeyAction(control=name, duration_s=0.0)
     if name.startswith("slot_"):
         return ActionSlotAction(slot=int(name.removeprefix("slot_")))
+    if name == "use_object":
+        return ClickAction(button="right", intent="object", x=choice.x, y=choice.y,
+                           expected_target_id=context.get("target_name_id"))
     if name in ("select_unit", "select_corpse"):
         return ClickAction(button="left", intent="select", x=choice.x, y=choice.y,
                            expected_target_id=context.get("target_name_id"),
@@ -369,7 +377,9 @@ def describe(action: dict) -> str:
     if kind == "click":
         if action.get("intent") == "ui":
             return str(action.get("ui_control"))
-        if action.get("intent") == "select":
+        if action.get("intent") == "object":
+            name = "use_object"
+        elif action.get("intent") == "select":
             name = "select_corpse" if action.get("expected_dead") else "select_unit"
         else:
             name = "loot_corpse" if action.get("expected_dead") else "interact_unit"
@@ -416,7 +426,8 @@ def render(observation: dict, *, choices: list[Choice], knowledge: dict | None =
             lines.append(f"- Quest log progress: {counts or 'no counters'}"
                          f"{' (complete)' if quest_row.get('complete') else ''}")
     if context.get("target_name"):
-        lines.append(f"- Unit to find: {context['target_name']}")
+        what = "Object" if context.get("target_kind") == "gameobject" else "Unit"
+        lines.append(f"- {what} to find: {context['target_name']}")
     if context.get("destination") and values.get("pos.mx") is not None:
         dx = values["pos.mx"] - context["destination"][0]
         dy = values["pos.my"] - context["destination"][1]

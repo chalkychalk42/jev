@@ -102,6 +102,9 @@ def expected_for(action: dict, requested: str | None, bucket: str) -> str:
     elif kind == "click":
         if action["intent"] == "select":
             allowed, default = {"selected"}, "selected"
+        elif action["intent"] == "object":
+            allowed = {"quest_progress", "loot_received", "ui_opened"}
+            default = "quest_progress"
         elif action["intent"] == "interact":
             allowed = {"ui_opened", "loot_received", "target_hp_decreased", "target_dead",
                        "attacking"}

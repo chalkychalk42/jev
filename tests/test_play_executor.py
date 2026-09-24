@@ -277,6 +277,22 @@ def test_a_selection_may_be_proved_over_the_units_nameplate():
     assert result.code == "wrong_target", "unknown focus proves nothing"
 
 
+def test_an_object_is_clicked_only_where_its_tooltip_names_it():
+    """A crate has no unit behind it: the strip's tooltip name is its only proof (V86)."""
+    crate = {"kind": "click", "button": "right", "intent": "object",
+             "expected_target_id": 77, "x": 0.5, "y": 0.6}
+    h = Harness()
+    h.values.update({"cursor.has": False, "cursor.name_id": None, "cursor.object_id": 77})
+    assert h.run(**crate).delivered
+    for change in ({"cursor.object_id": 78}, {"cursor.has": True}, {"cursor.world": False}):
+        h = Harness()
+        h.values.update({"cursor.has": False, "cursor.name_id": None, "cursor.object_id": 77,
+                         **change})
+        result = h.run(**crate)
+        assert result.code == "wrong_target", change
+        assert not any(call[0] == "click" for call in h.hid.calls)
+
+
 def test_selected_same_name_is_insufficient_without_unit_equality():
     h = Harness()
     h.values["cursor.is_target"] = False

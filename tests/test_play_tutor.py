@@ -61,6 +61,19 @@ def test_select_needs_an_objective_unit_and_ui_needs_painted_controls():
     assert "quest_advance" not in names({"ui.quest_frame": True})
 
 
+def test_an_objects_step_offers_a_right_click_on_the_object_not_a_selection():
+    crate = {"target_name_id": 777, "target_name": "Milly's Harvest", "target_kind": "gameobject"}
+    offered = names({"target.has": False}, context=crate)
+    assert "use_object" in offered
+    assert not {"select_unit", "select_corpse"} & set(offered)
+    seen = {"values": {**ALIVE, "target.has": False}, "context": crate}
+    choice = tutor.TutorChoice(observation_id="o", action="use_object", x=0.5, y=0.62)
+    action = tutor.to_action(choice, tutor.menu(seen, CONTROLS), seen)
+    assert (action.button, action.intent, action.expected_target_id) == ("right", "object", 777)
+    assert tutor.describe(action_dict(action)) == "use_object at (0.50, 0.62)"
+    assert expected_for(action_dict(action), None, "acquire") == "quest_progress"
+
+
 def test_escape_is_offered_only_when_there_is_something_to_close():
     """With nothing to close it opens the game menu (run 20260924T012829-382fd4)."""
     assert "escape" not in names({"target.has": False})

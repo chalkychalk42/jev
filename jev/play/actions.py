@@ -58,7 +58,7 @@ class PointerAction(Strict):
 class ClickAction(Strict):
     kind: Literal["click"] = "click"
     button: Literal["left", "right"]
-    intent: Literal["select", "interact", "ui"]
+    intent: Literal["select", "interact", "object", "ui"]
     x: float | None = Field(default=None, ge=0.0, le=1.0)
     y: float | None = Field(default=None, ge=0.0, le=1.0)
     expected_target_id: int | None = Field(default=None, ge=0, le=65534)
@@ -79,8 +79,10 @@ class ClickAction(Strict):
             if self.ui_control is not None or self.ui_name_id is not None:
                 raise ValueError("unit click cannot carry UI grounding")
             if ((self.intent == "select" and self.button != "left")
-                    or (self.intent == "interact" and self.button != "right")):
-                raise ValueError("select uses left; interact uses right")
+                    or (self.intent in ("interact", "object") and self.button != "right")):
+                raise ValueError("select uses left; interact and object use right")
+            if self.intent == "object" and (self.x is None or self.expected_dead):
+                raise ValueError("an object click needs a point, and objects are not dead")
         else:
             if self.ui_control is None or self.button != "left":
                 raise ValueError("UI click requires a painted ui_control and left button")
