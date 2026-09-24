@@ -417,15 +417,22 @@ class Fight:
             return Fought.TOO_HURT
 
         # Already engaged with something alive: that is the fight, and shopping for a
-        # better one just adds a second attacker.
+        # better one just adds a second attacker. Only if it is the one fighting us,
+        # though: the client selects units on its own, and a Defias Thug standing at full
+        # health, neither biting nor near, stayed selected for 40 s while another killed
+        # the character, every fight spent trying to prove the bystander's plate (run
+        # 20260924T064025-090aa8).
+        bystander = (v.get("target.attacking_me") is False and v.get("target.in_melee") is False)
         engaged = (in_combat and v.get("target.has") is True
-                   and v.get("target.hp") is not None and v["target.hp"] > DEAD_HP)
+                   and v.get("target.hp") is not None and v["target.hp"] > DEAD_HP
+                   and not bystander)
         # Already selected and alive, and the unit we came for: that is the fight. Whoever
         # selected it - the tutor, a previous look - re-acquiring could only swap it for
         # another of the same name, or for something else entirely.
         chosen = (not engaged and name_id is not None and v.get("target.has") is True
                   and v.get("target.name_id") == name_id
-                  and isinstance(v.get("target.hp"), (int, float)) and v["target.hp"] > DEAD_HP)
+                  and isinstance(v.get("target.hp"), (int, float)) and v["target.hp"] > DEAD_HP
+                  and not (in_combat and bystander))
         if chosen:
             engaged = True
         if not engaged:
@@ -670,10 +677,17 @@ class Fight:
                 return Fought.BLIND
 
     def _pick_plate(self, name_id: int | None, defend: bool) -> Fought | bool | None:
-        """Select a plate in the current view: `None` selected, `False` none acceptable."""
+        """Select a plate in the current view: `None` selected, `False` none acceptable.
+
+        Defending, whatever is attacking us is chosen before anything of the wanted name
+        that is not: a bystander of the quest's own kind is still a fight, but not while
+        something else is killing the character."""
         frame = self.read_frame()
-        if frame is not None:
-            for plate in self._candidates(frame):
+        if frame is None:
+            return False
+        candidates = self._candidates(frame)
+        for attackers_only in ((True, False) if defend else (False,)):
+            for plate in candidates:
                 point = (self.window_origin[0] + round(plate.cx),
                          self.window_origin[1] + round(plate.cy))
                 # Ask the client whose plate this is before selecting it. Clicking the
@@ -693,7 +707,7 @@ class Fight:
                             or after.get("cursor.name_id") != name_id):
                         continue
                 event("selection.request", data={"method": "plate", "wanted_name_id": name_id,
-                      "point": list(point)})
+                      "point": list(point), "attackers_only": attackers_only})
                 if not self.hid.click(*point):
                     self.detail = "selection input refused"
                     return Fought.REFUSED
@@ -701,7 +715,8 @@ class Fight:
                 if paint.code is not PaintCode.FRESH:
                     self.detail = paint.detail
                     return Fought.BLIND
-                if self._acceptable(name_id, defend=defend, values=paint.after) is True:
+                if self._acceptable(name_id, defend=defend, values=paint.after,
+                                    attackers_only=attackers_only) is True:
                     self.selected_plate = self.last_plate = plate
                     return None
         return False
@@ -734,11 +749,12 @@ class Fight:
         return plates[:MAX_CANDIDATES]
 
     def _acceptable(self, name_id: int | None, *, defend: bool = False,
-                    values: dict | None = None) -> bool | None:
+                    values: dict | None = None, attackers_only: bool = False) -> bool | None:
         """Is what we just selected worth fighting? `None` if nothing is readable."""
         v = values if values is not None else self.read()
         self._observe(v)
-        event("selection.expected", data={"wanted_name_id": name_id, "defend": defend})
+        event("selection.expected", data={"wanted_name_id": name_id, "defend": defend,
+                                          "attackers_only": attackers_only})
         if v is None:
             return None
         if v.get("target.has") is not True:
@@ -746,6 +762,8 @@ class Fight:
         hp = v.get("target.hp")
         if hp is not None and hp <= DEAD_HP:
             return False                       # a corpse is selectable and not a fight
+        if attackers_only and v.get("target.attacking_me") is not True:
+            return False
         if (name_id is None or v.get("target.name_id") == name_id
                 or (defend and v.get("target.attacking_me") is True)):
             self._selected_name_id = v.get("target.name_id")
@@ -785,6 +803,8 @@ class Fight:
             if (name_id is not None and v.get("target.name_id") != name_id
                     and not (defend and v.get("target.attacking_me") is True)):
                 continue
+            if defend and v.get("target.attacking_me") is not True:
+                continue                       # defending: what hits us, not a bystander
             self._selected_name_id = v.get("target.name_id")
             self._selected_guid = v.get("target.guid")
             self._damage_mark = v.get("target.hp")

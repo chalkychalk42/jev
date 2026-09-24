@@ -1652,3 +1652,58 @@ def test_the_second_draw_out_turns_round_and_runs_clear(combat_clock):
     first_back = moves.index(("s", DRAW_OUT_S))
     run = moves.index(("w", RUN_CLEAR_S))
     assert first_back < run and moves[run - 1][0] == "d", "turned round before running"
+
+
+def test_in_combat_a_selected_bystander_is_not_the_fight(combat_clock):
+    """A Defias Thug at full health, neither biting nor near, stayed selected for 40 s
+    while another killed the character (run 20260924T064025-090aa8)."""
+    bystander = {**ALIVE, "vitals.combat": True, "target.name_id": 1161,
+                 "target.attacking_me": False, "target.in_melee": False}
+    seen = []
+    f = _fight([bystander])
+    f.acquire = lambda name_id, **kw: seen.append((name_id, kw.get("defend"))) \
+        or Fought.NO_TARGET
+    assert f.run(1161, timeout_s=1) is Fought.NO_TARGET
+    assert seen == [(1161, True)], "fought the bystander instead of looking for the attacker"
+
+    biting = {**bystander, "target.attacking_me": True}
+    g = _fight([biting])
+    g.acquire = lambda name_id, **kw: pytest.fail("the unit biting us is the fight")
+    g.engage = lambda *_: True
+    g.run(1161, timeout_s=0.5)
+
+
+def test_defending_takes_what_is_attacking_before_a_bystander_of_the_wanted_name():
+    bystander = {**ALIVE, "target.name_id": 1161, "target.attacking_me": False,
+                 "vitals.combat": True}
+    attacker = {**bystander, "target.name_id": 999, "target.attacking_me": True}
+    f = _fight([bystander])
+    assert f._acceptable(1161, defend=True, values=bystander) is True, "still a fight"
+    assert f._acceptable(1161, defend=True, values=bystander, attackers_only=True) is False
+    assert f._acceptable(1161, defend=True, values=attacker, attackers_only=True) is True
+
+
+def test_defending_clicks_through_a_bystanders_plate_to_the_attackers():
+    """Attackers first, then the wanted name: the plate nearer the centre was a bystander
+    Defias Thug, the other the one biting (run 20260924T064025-090aa8)."""
+    import numpy as np
+
+    frame = np.zeros((900, 1600, 3), dtype=np.uint8)
+    frame[380:387, 727:874] = (230, 200, 10)          # centre plate: the bystander
+    frame[380:387, 1327:1474] = (230, 200, 10)        # right plate: the attacker
+    hid = _Hid()
+    base = {**ALIVE, "vitals.combat": True, "target.name_id": 1161}
+    bystander = {**base, "target.attacking_me": False, "target.in_melee": False}
+    attacker = {**base, "target.attacking_me": True, "target.in_melee": True}
+
+    def read():
+        if not hid.clicks:
+            return {**base, "target.has": False}
+        x = hid.clicks[-1][0] - 10                    # the fight's window origin
+        return attacker if x > 1100 else bystander
+
+    f = Fight(hid=hid, read=read, read_frame=lambda: frame, window_origin=(10, 38),
+              targeting=_Targeting(read, hid))
+    assert f._pick_plate(1161, defend=True) is None
+    assert f._selected_name_id == 1161 and read() is attacker
+    assert len(hid.clicks) == 2, "the bystander's plate, then the attacker's"
