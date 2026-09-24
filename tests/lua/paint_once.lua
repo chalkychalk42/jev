@@ -64,7 +64,11 @@ if STATE.spellFixture then
         if book[i] == nil then return nil end
         return "|cff71d5ff|Hspell:" .. book[i] .. "|h[spell]|h|r"
     end
-    function GetSpellTexture(i, kind) return book[i] and ("tex" .. book[i]) end
+    function GetSpellTexture(i, kind)
+        -- The live client raised here for the Attack entry (a read-only probe, 24 Sep).
+        if STATE.textureRaises == i then error("no texture") end
+        return book[i] and ("tex" .. book[i])
+    end
     function GetSpellInfo(id) return "spell", "Rank 1", "tex" .. id end
     function IsPassiveSpell(i, kind) return book[i] == 3127 end
     local bar = {[1] = 1, [2] = 2, [3] = 3}
@@ -74,9 +78,16 @@ if STATE.spellFixture then
         if bar[slot] then return "spell", bar[slot], "spell" end
         if items[slot] then return "item", 159 end
     end
+    function GetSpellName(i, kind) return book[i] and ("spell" .. book[i]), "Rank 1" end
+    -- A form that is on (a paladin's aura) shows its active icon on the bar and on the
+    -- stance bar, and is not the current action.
+    function GetNumShapeshiftForms() return STATE.formSlot and 1 or 0 end
+    function GetShapeshiftFormInfo(i) return "activeicon", STATE.formName, true, true end
     function GetActionTexture(slot)
         -- An aura that is on shows its active icon on the bar, not its spellbook one.
-        if bar[slot] and STATE.activeSlot == slot then return "activeicon" end
+        if bar[slot] and (STATE.activeSlot == slot or STATE.formSlot == slot) then
+            return "activeicon"
+        end
         if bar[slot] then return STATE.wrongIcon and "other" or ("tex" .. book[bar[slot]]) end
         if items[slot] then return "itemtex" end
     end

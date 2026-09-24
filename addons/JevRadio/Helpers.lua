@@ -859,15 +859,30 @@ end
 -- 2.4.3 and a spell id on later clients; whichever reading's icon is the button's own is
 -- the one believed, and neither matching is unknown rather than a guess.
 --
--- Except while the action is on: an aura or a stance that is active shows its active icon
--- on the bar (Spell.dbc's ActiveIconID), not its spellbook icon, and Devotion Aura read as
--- unknown from the moment it was first pressed. An active action's spellbook entry is
--- believed as it stands; the live client answered with spellbook indices throughout.
+-- Except for a form. A paladin's auras are shapeshift forms on 2.4.3, as a warrior's
+-- stances are, and a form that is on shows its active icon on the bar (Spell.dbc's
+-- ActiveIconID), not its spellbook one; the stock client does not call it the current
+-- action either. Devotion Aura read as unknown from the moment it was first pressed, and
+-- the bot put it on four more slots. A form's spellbook entry is believed as it stands:
+-- the live client answered GetActionInfo with spellbook indices throughout (a read-only
+-- probe of every bar slot, 24 September).
+local function isForm(name, icon)
+    if not GetNumShapeshiftForms or not GetShapeshiftFormInfo then return false end
+    for i = 1, GetNumShapeshiftForms() do
+        local texture, formName = GetShapeshiftFormInfo(i)
+        if (name ~= nil and formName == name) or (icon ~= nil and texture == icon) then
+            return true
+        end
+    end
+    return false
+end
+
 local function actionSpell(action)
     local kind, id, book = GetActionInfo(action)
     if kind ~= "spell" or id == nil then return nil end
     local icon = GetActionTexture(action)
-    local on = IsCurrentAction ~= nil and IsCurrentAction(action)
+    local on = (IsCurrentAction ~= nil and IsCurrentAction(action))
+        or isForm(GetSpellName(id, book or BOOK), icon)
     if icon == nil and not on then return nil end
     if on or GetSpellTexture(id, book or BOOK) == icon then
         local sid = spellLinkID(GetSpellLink(id, book or BOOK))
@@ -891,7 +906,10 @@ local function snapshotBar()
     if not HasAction(action) then
         row.spell = 0
     elseif GetActionInfo then
-        row.spell = actionSpell(action)
+        -- One slot the client cannot describe paints unknown; raising here would leave the
+        -- previous slot's row painted and this slot never, and no census would be whole.
+        local ok, spell = pcall(actionSpell, action)
+        row.spell = ok and spell or nil
     end
     row.x, row.y = point(btn, "x"), point(btn, "y")
     barSnapshot = row
@@ -915,8 +933,10 @@ local function snapshotSpells()
     spellCursor = spellCursor % total + 1
     local i = spellCursor
     spellSnapshot.index = i
-    spellSnapshot.id = spellLinkID(GetSpellLink(i, BOOK))
-    spellSnapshot.passive = tri(IsPassiveSpell(i, BOOK))
+    local ok, link = pcall(GetSpellLink, i, BOOK)
+    spellSnapshot.id = ok and spellLinkID(link) or nil
+    local known, passive = pcall(IsPassiveSpell, i, BOOK)
+    if known then spellSnapshot.passive = tri(passive) end
     if not SPELLBOOK_OPEN() then return end
     local tab
     for t = 1, #tabs do

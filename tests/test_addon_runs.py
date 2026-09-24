@@ -500,6 +500,13 @@ def test_the_bar_census_names_each_slot_s_spell_and_where_its_button_is():
     assert _painted(3, wrongIcon=True)["bars.slot_spell"] is None   # no match, no guess
     # An aura that is on shows its active icon: its spellbook entry is believed as it stands.
     assert _painted(3, activeSlot=3)["bars.slot_spell"] == 635
+    # A paladin's aura is a form, on and not the current action: found by the form's icon,
+    # or by the form's name when the icons differ.
+    assert _painted(3, formSlot=3)["bars.slot_spell"] == 635
+    assert _painted(2, formSlot=2)["bars.slot_spell"] == 20154
+    # A slot the client raises on paints as that slot, unknown, never as the previous one.
+    raised = _painted(2, textureRaises=2)
+    assert raised["bars.slot"] == 2 and raised["bars.slot_spell"] is None
 
 
 def test_the_spellbook_census_names_each_entry_and_shows_the_way_to_its_button():
