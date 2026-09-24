@@ -516,8 +516,9 @@ SCHEMA_FIELDS = {6: FIELDS[:75], 7: FIELDS[:112], 8: FIELDS[:117], 9: FIELDS[:12
                  10: FIELDS[:125], 11: FIELDS[:126], 12: FIELDS[:127], 13: FIELDS[:128],
                  14: FIELDS}
 # Schema 14 is the last the 4-bit header can name (15 is its not-available code). It was
-# redefined once, within the hour it was installed on one client, to add `target.guid`;
-# the next field needs a revision number in the header first.
+# redefined once, within the hour it was installed on one client, to add `target.guid`.
+# The next layout needs a revision number in the header first, or one of 0-5: no strip
+# with those values is decoded by this table, though old captures may carry them.
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
 assert sum(f.bits for f in SCHEMA_FIELDS[8]) == 1059
