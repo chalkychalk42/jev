@@ -74,6 +74,14 @@ def test_an_objects_step_offers_a_right_click_on_the_object_not_a_selection():
     assert expected_for(action_dict(action), None, "acquire") == "quest_progress"
 
 
+def test_tab_is_offered_where_any_enemy_will_do():
+    """It verified a selection in 3 of 22 presses on objective steps."""
+    worker = {"target_name_id": 2864, "target_name": "Kobold Worker"}
+    assert "target_next" not in names({"target.has": False}, context=worker)
+    assert "target_next" in names({"target.has": False, "vitals.combat": True}, context=worker)
+    assert "target_next" in names({"target.has": False})
+
+
 def test_escape_is_offered_only_when_there_is_something_to_close():
     """With nothing to close it opens the game menu (run 20260924T012829-382fd4)."""
     assert "escape" not in names({"target.has": False})

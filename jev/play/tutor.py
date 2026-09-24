@@ -181,9 +181,14 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
     # TimeManager has been blocked" popup instead, four times (run ...015205-5e57fc).
     closable = any(values.get(f"ui.{window}") is True for window in (
         "loot", "gossip", "vendor", "quest_frame", "trainer", "mail"))
+    # Tab picks the nearest enemy in front, not the kind a step wants: it verified a
+    # selection in 3 of 22 presses on objective steps, landing on Kobold Vermin while the
+    # step wanted Workers. Offered where any enemy will do: no objective unit, or a fight.
+    tabbing = (context.get("target_name_id") is None or values.get("vitals.combat") is True)
     taps = [Choice(name, (), (), meaning) for name, meaning in TAPS.items()
             if _executable(controls, name) and (name != "attack_target" or living)
-            and (name != "escape" or closable)]
+            and (name != "escape" or closable)
+            and (name not in ("target_next", "target_previous") or tabbing)]
     clicks = []
     if context.get("target_name_id") is not None and context.get("target_kind") == "gameobject":
         thing = context.get("target_name") or "objective object"
