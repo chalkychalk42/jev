@@ -845,7 +845,8 @@ def test_training_visits_the_trainer_once_a_level_and_puts_the_spells_on_the_bar
     bar = {1: 6603, 2: 20154, 3: 635, **{s: 0 for s in range(4, 11)}, 11: None, 12: None}
     b.client.spells = _census(bar, {6603, 20154, 635})
     values = {"char.level": 8, "char.class_id": 2, "char.race_id": 1, "bags.money_copper": 626,
-              "vitals.combat": False, "bars.revision": 1, "spells.revision": 1}
+              "vitals.combat": False, "vitals.dead": False, "vitals.ghost": False,
+              "bars.revision": 1, "spells.revision": 1}
     b.client.read = lambda: dict(values)
     here = (0.4789, 0.4115)
     b.client.position = lambda: here
@@ -897,3 +898,18 @@ def test_the_trainer_s_gossip_line_is_chosen_by_its_text():
     assert chosen == ["I would like to train further in the ways of the Light."]
     b.interact = SimpleNamespace(open_on=lambda *a, **kw: Interacted.TRAINER, detail="")
     assert b._open_trainer(sammuel) is True
+
+
+def test_a_skill_with_time_to_spare_first_puts_missing_spells_on_the_bar():
+    b = body(StepKind.QUEST_ACCEPT)
+    placed = []
+    b._place_spells = lambda **kw: placed.append(b.arm.decision.skill) or "placed"
+    b.interact = SimpleNamespace(open_on=lambda *a, **kw: Interacted.GOSSIP)
+    b.chooser = SimpleNamespace(run=lambda title: Chose.CHOSE)
+    b.advance = SimpleNamespace(run=lambda q, g: Advanced.DONE, detail="confirmed")
+    b.execute(b.arm, seen(), lambda: None)
+    assert placed == ["ACCEPT_QUEST"]
+    fight = b.arm.decision.model_copy(update={"skill": "COMBAT_PROFILE", "intent": Intent.SERVICE})
+    b.fight = SimpleNamespace(run=lambda name: Fought.LOST, detail="", profile=None)
+    b.execute(Armed(fight, ArmedBy.POLICY, 0, "fight.rotation", "d", "quest"), seen(), lambda: None)
+    assert placed == ["ACCEPT_QUEST"], "a fight stopped to put spells on the bar"

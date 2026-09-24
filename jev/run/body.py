@@ -100,6 +100,9 @@ MERCHANT_UNREACHABLE = frozenset({"not_visible", "no_target", "no_window", "appr
 # After buying spells, the spellbook census is rebuilt under its new revision (about 2.5 s
 # at ten paints a second) before anything is put on the bar from it.
 CENSUS_S = 8.0
+# Skills that start with no time for putting spells on the bar: a fight, a death, a wait.
+UNHURRIED_EXCEPT = frozenset({"COMBAT_PROFILE", "LOOT", "FACE_TARGET", "RELEASE_SPIRIT",
+                              "CORPSE_RUN", "ABORT_WAIT", "IDLE", "TRAIN_CLASS"})
 CLASS_IDS = {name: class_id for class_id, name in CLASS_BY_ID.items()}
 RACE_IDS = {name: race_id for race_id, name in RACE_BY_ID.items()}
 
@@ -237,7 +240,9 @@ class LiveBody:
         self.checkpoint()
         self.ready_camera(state)
         # Every fight a skill starts - a hunt's, a tutor's delegated one - uses what the bar
-        # holds now.
+        # holds now; and a skill with time to spare first puts on the bar what is missing.
+        if arm.decision.skill not in UNHURRIED_EXCEPT:
+            self._place_spells()
         self._bar_profile()
         return getattr(self, handler)(state)
 
@@ -726,8 +731,11 @@ class LiveBody:
         slot. Out of combat, and only when the bar or the spellbook changed since the last
         plan, unless `force`."""
         census = getattr(self.client, "spells", None)
+        if census is None:
+            return "no spells placed"
         values = self._read()
-        if census is None or values is None or values.get("vitals.combat") is not False:
+        if (values is None or values.get("vitals.combat") is not False
+                or values.get("vitals.dead") is not False or values.get("vitals.ghost") is not False):
             return "no spells placed"
         with self.client._capturing:
             bar, known = census.bar, census.known
