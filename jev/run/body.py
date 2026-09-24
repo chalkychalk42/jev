@@ -27,7 +27,7 @@ from jev.clients.vendor import Vendor
 from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
-from jev.guide.graph import Graph
+from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import progress, select_objective, target_progress
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.episode import SkillOutcome
@@ -56,6 +56,16 @@ HOVER_STEP_S = 0.35
 # The answer to a click - a popup, or the error - arrives after the server's reply, which
 # is later than the first fresh paint (run 20260923T183537-ee5ef3 read silence and stopped).
 HOVER_ANSWER_S = 1.2
+# An exploration objective is credited by the server once the character is inside its
+# trigger; the quest log shows it a paint or two later.
+EXPLORE_CREDIT_S = 5.0
+EXPLORE_POLL_S = 0.25
+# A merchant whose body cannot be clicked is passed over for the next nearest one that
+# sells what is wanted: Dermot Johns stands behind his wagon, every point between his ring
+# and his plate was wagon, and Godric Rothgar stood in plain view beside it (run
+# 20260924T011327-6e5f4b stopped on its first full bags).
+MERCHANT_TRIES = 3
+MERCHANT_UNREACHABLE = frozenset({"not_visible", "no_target", "no_window", "approach_failed"})
 
 
 class LiveBody:
@@ -338,6 +348,8 @@ class LiveBody:
                 return (1, 1) if value.complete is True and value.have is None else (value.have, value.need)
             def complete_reader():
                 return selected_progress().complete
+        if isinstance(destination, ObjectiveTarget) and destination.kind == "explore":
+            return self._explore(destination, complete_reader)
         if (destination.target_kind != "creature" or not destination.target_name
                 or destination.world is None or destination.map_id != self.client.bounds.map_id):
             return Result(SkillOutcome.ABORTED, "objective needs a supported creature target; objects need their own locator", "unsupported")
@@ -360,6 +372,25 @@ class LiveBody:
                            spawns=spawn_points(self.hunt_spawns, node.id,
                                                getattr(destination, "target_id", None)))
         return self._result(outcome, hunt.detail)
+
+    def _explore(self, target: ObjectiveTarget, complete: Callable[[], bool | None]) -> Result:
+        """Walk to an exploration trigger's point and wait for the quest's own credit.
+
+        The point is the trigger's centre, and the two on this route are spheres of ten and
+        thirty yards, so arriving within travel's few yards is inside. Only the quest's
+        positive complete flag is success: arriving is not exploring.
+        """
+        if target.world is None or target.map_id != self.client.bounds.map_id:
+            return Result(SkillOutcome.ABORTED, "exploration point is not on this map", "unsupported")
+        arrived = self._approach(target.world)
+        deadline = time.monotonic() + EXPLORE_CREDIT_S
+        while complete() is not True:
+            if time.monotonic() >= deadline:
+                if not arrived:
+                    return Result(SkillOutcome.ABORTED, "exploration point unreachable", "unreachable")
+                return Result(SkillOutcome.ABORTED, "at the exploration point with no credit", "nothing")
+            time.sleep(EXPLORE_POLL_S)
+        return Result(SkillOutcome.SUCCEEDED, "exploration credited", "done")
 
     def _service_needed(self) -> str | None:
         self.checkpoint()
@@ -441,17 +472,25 @@ class LiveBody:
         if not candidates:
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
         world = map_to_world(*here, self.client.bounds)
-        merchant = min(candidates, key=lambda m: math.dist(m.world[:2], world))
-        def visit():
-            return self._open_merchant(merchant.name, merchant.world,
-                                       world_to_map(*merchant.world[:2], self.client.bounds))
-        vendor = Vendor(self.client.hid, self._read, visit, self.client.origin, self.client.size)
-        outcome = vendor.run(expected_name=merchant.name,
-                             supplies=tuple(s for s in supplies if s.item_id in merchant.items),
-                             min_free=1 if supplies else 6,
-                             timeout_s=self.travel_timeout + 120)
-        return self._result(outcome, vendor.detail or
-                            f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
+        ranked = sorted(candidates, key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_TRIES]
+        for merchant in ranked:
+            def visit(merchant=merchant):
+                return self._open_merchant(merchant.name, merchant.world,
+                                           world_to_map(*merchant.world[:2], self.client.bounds))
+            vendor = Vendor(self.client.hid, self._read, visit, self.client.origin, self.client.size)
+            try:
+                outcome = vendor.run(expected_name=merchant.name,
+                                     supplies=tuple(s for s in supplies if s.item_id in merchant.items),
+                                     min_free=1 if supplies else 6,
+                                     timeout_s=self.travel_timeout + 120)
+            except BodyFailure as failure:
+                if merchant is ranked[-1] or failure.result.code not in MERCHANT_UNREACHABLE:
+                    raise
+                self.say(f"  {failure.result.detail}; trying the next merchant")
+                continue
+            return self._result(outcome, vendor.detail or
+                                f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
+        raise AssertionError("unreachable: the last merchant returns or raises")
 
     def _open_merchant(self, name, world, point) -> bool:
         opened = self.interact.open_on(name, node_world=world, node_map=point)

@@ -116,3 +116,38 @@ def test_tracker_cannot_complete_an_unpainted_fourth_requirement_when_flag_unrea
     assert tracker.tick(state).event is not Event.ADVANCE
     done = seen(1, quests=(visible.model_copy(update={"complete": True}),))
     assert tracker.tick(done).event is Event.ADVANCE
+
+
+def _explore_body(log):
+    b = body(StepKind.QUEST_OBJECTIVE, log=log)
+    target = ObjectiveTarget(kind="explore", required_id=88, world=(-9843.5, 127.5, 5.4),
+                             map_id=0, pos=(0.41, 0.82))
+    node = b.graph.nodes[0].model_copy(update={"objective_targets": (target,)})
+    b.graph = b.graph.model_copy(update={"nodes": (node,)})
+    return b, target
+
+
+def test_an_exploration_is_walked_into_and_credited_by_the_quest_flag(monkeypatch):
+    """The Fargodeep Mine: a ten-yard trigger round a point inside the mine's mouth."""
+    b, target = _explore_body((Quest(quest_id=1, complete=False),))
+    monkeypatch.setattr("jev.run.body.Hunt", lambda **kw: (_ for _ in ()).throw(
+        AssertionError("an exploration is not a hunt")))
+
+    def walked(world, **kw):
+        b.client.log.complete = (Quest(quest_id=1, complete=True),)
+        return True
+
+    b.client.approach.side_effect = walked
+    result = b._hunt(seen(quests=b.client.log.complete))
+    assert result.outcome is SkillOutcome.SUCCEEDED and result.code == "done"
+    assert b.client.approach.call_args.args[0] == target.world
+
+
+def test_arriving_without_the_credit_is_not_exploring(monkeypatch):
+    b, _ = _explore_body((Quest(quest_id=1, complete=False),))
+    monkeypatch.setattr("jev.run.body.EXPLORE_CREDIT_S", 0.0)
+    result = b._hunt(seen(quests=b.client.log.complete))
+    assert result.outcome is SkillOutcome.ABORTED and result.code == "nothing"
+    b.client.approach.return_value = False
+    result = b._hunt(seen(quests=b.client.log.complete))
+    assert result.outcome is SkillOutcome.ABORTED and result.code == "unreachable"

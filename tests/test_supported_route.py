@@ -26,7 +26,7 @@ def test_supported_route_preserves_geometry_and_excludes_objects_and_descendants
     excluded = {ex.quest_id: ex for ex in result.excluded if ex.quest_id}
     assert "gameobject" in excluded[3904].reason
     assert "prerequisite" in excluded[3905].reason
-    assert "explore" in excluded[62].reason
+    assert 62 not in excluded and 76 not in excluded, "an exploration is walked into"
     assert not any(n.quest_id in excluded for n in result.graph.nodes)
     assert all(n.kind is not StepKind.TRAIN for n in result.graph.nodes)
     assert any(n.quest_id == 52 for n in result.graph.nodes)

@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from test_live_body import body
 from test_runtime_records import seen
 
@@ -11,6 +13,7 @@ from jev.clients.vendor import Vended
 from jev.coach.schema import Decision, Intent
 from jev.guide.coords import ZoneBounds
 from jev.orch.runtime import Armed
+from jev.run.supervisor import BodyFailure
 from jev.world.state_v1 import ArmedBy, Bags
 from jev.world.vendor import Merchant
 
@@ -87,3 +90,52 @@ def test_outside_zone_shop_is_not_selected_even_if_world_distance_is_shorter(mon
     monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
     assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
     assert visit.call_args.args == ("Inside",)
+
+
+def test_a_merchant_whose_body_cannot_be_clicked_is_passed_over_for_the_next(monkeypatch):
+    """Dermot Johns stands behind his wagon; Godric Rothgar stood in plain view beside it
+    (run 20260924T011327-6e5f4b stopped on its first full bags)."""
+    b = body()
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+    vendors = (Merchant(1, "Behind The Wagon", 0, (50, 51, 0), frozenset()),
+               Merchant(2, "In Plain View", 0, (52, 52, 0), frozenset()),
+               Merchant(3, "Far Away", 0, (90, 90, 0), frozenset()))
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    answers = {"Behind The Wagon": Interacted.NOT_VISIBLE, "In Plain View": Interacted.VENDOR}
+    visit = Mock(side_effect=lambda name, **kw: answers[name])
+    b.interact = SimpleNamespace(open_on=visit, detail="hover: ground")
+    class FakeVendor:
+        detail = "observed service"
+        def __init__(self, hid, read, open_shop, origin, size):
+            self.open_shop = open_shop
+        def run(self, **kwargs):
+            assert self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
+    assert [c.args[0] for c in visit.call_args_list] == ["Behind The Wagon", "In Plain View"]
+
+
+def test_a_merchant_that_refuses_for_another_reason_is_not_passed_over(monkeypatch):
+    b = body()
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+    vendors = (Merchant(1, "Near", 0, (50, 51, 0), frozenset()),
+               Merchant(2, "Next", 0, (52, 52, 0), frozenset()))
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    visit = Mock(return_value=Interacted.INTERRUPTED)
+    b.interact = SimpleNamespace(open_on=visit, detail="combat")
+    class FakeVendor:
+        detail = ""
+        def __init__(self, hid, read, open_shop, origin, size):
+            self.open_shop = open_shop
+        def run(self, **kwargs):
+            self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    with pytest.raises(BodyFailure, match="Near: combat"):
+        b.execute(b.arm, seen(), lambda: None)
+    assert [c.args[0] for c in visit.call_args_list] == ["Near"]

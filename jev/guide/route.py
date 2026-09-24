@@ -52,6 +52,10 @@ def _gap(node: Node, available_skills: frozenset[str],
             return f"objective kind {target.kind} has no verified executor"
         if target.kind == "delivery":
             continue  # The accept frame supplies this item; positive complete flag advances it.
+        if target.kind == "explore":
+            if target.world is None or target.pos is None or target.map_id != node.map_id:
+                return "objective destination is outside the placed route"
+            continue  # Walked into; only the positive complete flag advances it.
         if target.counter_index is None or target.counter_index >= 3:
             return "objective cannot be joined to one of the three painted counters"
         if target.required_count is None or target.required_count > 126:
@@ -64,7 +68,8 @@ def _gap(node: Node, available_skills: frozenset[str],
 
 
 def compile_route(graph: Graph, *, available_skills: frozenset[str],
-                  supported_objectives: frozenset[str] = frozenset({"kill", "loot", "delivery"}),
+                  supported_objectives: frozenset[str] = frozenset({"kill", "loot", "delivery",
+                                                                    "explore"}),
                   completed_quests: frozenset[int] = frozenset()) -> RoutePlan:
     """Retain executable quest chains in source order and report every exclusion.
 
