@@ -181,9 +181,25 @@ def progressed(first: dict, current: dict) -> bool:
     effects, _ = measured_effects(first, current)
     if PROGRESS_EFFECTS & set(effects):
         return True
-    # A level objective is advanced by kills: experience is its counter.
+    # A level objective is advanced by kills: experience is its counter, and it is the
+    # counter itself that is read. `target_dead` also wants the corpse still selected, and
+    # the client clears the selection at the kill, or the fight's loot moves it on: kills
+    # inside grind teaching went uncounted, one episode ran 872 s through several of them
+    # and ended "stalled", and 16 of 50 grind episodes succeeded (runs 20260924T02-05).
     return (first.get("context", {}).get("until_level") is not None
-            and "target_dead" in effects)
+            and ("target_dead" in effects or _experienced(first["values"], current["values"])))
+
+
+def _experienced(before: dict, after: dict) -> bool:
+    """Experience gained between two readings: a level, or more of the same level."""
+    level_a, level_b = before.get("char.level"), after.get("char.level")
+    xp_a, xp_b = before.get("char.xp_pct"), after.get("char.xp_pct")
+    if not (isinstance(level_a, int) and isinstance(level_b, int)):
+        return False
+    if level_b != level_a:
+        return level_b > level_a
+    return (isinstance(xp_a, (int, float)) and isinstance(xp_b, (int, float))
+            and xp_b > xp_a)
 
 
 class PlayController:

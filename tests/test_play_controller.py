@@ -396,3 +396,23 @@ def test_an_episode_without_progress_still_ends_on_its_action_budget(tmp_path):
     env, _, _journal, controller = setup(tmp_path, [stride] * 3, max_actions=3, max_no_effect=10)
     result = controller.run(arm(), lambda: None)
     assert result.code == "teaching_stalled" and len(env.actions) == 3
+
+
+def test_experience_is_a_level_objectives_progress_whatever_is_selected():
+    """Kills inside grind teaching went uncounted when the client cleared the selection at
+    the kill: one episode ran 872 s through several and ended "stalled"."""
+    from jev.play.controller import progressed
+
+    first = {"context": {"until_level": 8}, "values": {"char.level": 7, "char.xp_pct": 0.10,
+                                                      "target.has": False}}
+    later = {"context": {"until_level": 8}, "values": {"char.level": 7, "char.xp_pct": 0.12,
+                                                      "target.has": False}}
+    assert progressed(first, later)
+    levelled = {**later, "values": {**later["values"], "char.level": 8, "char.xp_pct": 0.01}}
+    assert progressed(first, levelled)
+    assert not progressed(first, first)
+    unread = {**later, "values": {"char.level": None, "char.xp_pct": 0.5}}
+    assert not progressed(first, unread)
+    quest = {"context": {"until_level": None}, "values": later["values"]}
+    assert not progressed({**first, "context": {"until_level": None}}, quest), \
+        "a quest's counter is its own progress, not experience"
