@@ -400,6 +400,15 @@ def judge(before: dict, after: dict | None, *, expected_effect: str, delivered: 
             or not (progressed or sequence_progressed)):
         return {**base, "reason": detail or "outcome telemetry incomplete or unchanged"}
     effects, progress = measured_effects(before, after)
+    if ((action or {}).get("kind") == "skill" and (action or {}).get("name") == "COMBAT_PROFILE"
+            and "target_dead" not in effects
+            and (_increase(a, b, "char.xp_pct") or _increase(a, b, "char.level"))):
+        # A fight's experience is its kill. The client clears or moves the selection at
+        # the kill, so no corpse is left selected to prove it by: three Defias Thugs killed
+        # by the tutor's own fight were each judged "did not observe target_dead", and the
+        # episode stalled on "repeated COMBAT_PROFILE 3 times without effect" (run
+        # 20260924T054447-632295).
+        effects = sorted({*effects, "target_dead"})
     fatal = ((a.get("vitals.dead") is False and b.get("vitals.dead") is True)
              or (a.get("vitals.ghost") is False and b.get("vitals.ghost") is True
                  and (action or {}).get("name") != "RELEASE_SPIRIT"))

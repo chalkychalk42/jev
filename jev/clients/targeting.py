@@ -574,15 +574,25 @@ class Targeting:
             screen = (local[0] + self.window_origin[0], local[1] + self.window_origin[1])
             attempts += 1
             hover = self.probe(screen, require_target=selected)
-            if hover.code in terminal:
+            after = hover.after or {}
+            # With nothing selected there is no selection to protect, and the client can
+            # select the next attacker while the pointer rests on the corpse: a Defias Thug
+            # was chosen for us the moment the hover landed on its dead packmate, three
+            # corpses in a row went unlooted, and their bandanas with them (run
+            # 20260924T054447-632295). The pointer still proves the corpse.
+            chosen_for_us = (not selected and hover.code is HoverCode.TARGET_CHANGED
+                             and after.get("cursor.world") is True
+                             and after.get("cursor.has") is True
+                             and after.get("cursor.dead") is True
+                             and after.get("cursor.name_id") == wanted)
+            if hover.code in terminal and not chosen_for_us:
                 self._retain("corpse-rejected", view)
                 return ClickResult(terminal[hover.code], screen,
                                    f"hover: {hover.code}: {hover.detail}", attempts)
-            after = hover.after or {}
             if selected and hover.code is not HoverCode.MATCH:
                 continue
-            if not selected and (hover.code is not HoverCode.OTHER
-                                 or after.get("cursor.name_id") != wanted):
+            if not selected and not chosen_for_us and (hover.code is not HoverCode.OTHER
+                                                      or after.get("cursor.name_id") != wanted):
                 continue
             if after.get("cursor.dead") is not True:
                 last = ClickResult(ClickCode.WRONG_KIND, screen,

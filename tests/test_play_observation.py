@@ -389,3 +389,18 @@ def test_another_unit_of_the_same_name_and_health_is_a_new_selection():
     assert "selected" in measured_effects(before, after)[0]
     same = {"values": {**worker, "target.guid": 101}}
     assert "selected" not in measured_effects(before, same)[0]
+
+
+def test_a_delegated_fights_experience_is_its_kill_whatever_is_selected_after():
+    """Three Defias Thugs killed by the tutor's own fight, each judged "did not observe
+    target_dead": the client had selected the next packmate (run 20260924T054447-632295)."""
+    fight = {"kind": "skill", "name": "COMBAT_PROFILE", "params": {}}
+    before = view(values={"char.xp_pct": 0.20}, quests=[quest(0)])
+    packmate = view(11, values={"target.hp": 1.0, "char.xp_pct": 0.22}, quests=[quest(0)])
+    assert outcome(before, packmate, "target_dead", action=fight)["success"]
+    levelled = view(12, values={"target.has": False, "target.hp": None, "target.name_id": None,
+                                "char.xp_pct": 0.01, "char.level": 8}, quests=[quest(0)])
+    assert outcome(view(values={"char.xp_pct": 0.98, "char.level": 7}, quests=[quest(0)]),
+                   levelled, "target_dead", action=fight)["success"]
+    nothing = view(13, values={"target.hp": 1.0, "char.xp_pct": 0.20}, quests=[quest(0)])
+    assert not outcome(before, nothing, "target_dead", action=fight)["success"]

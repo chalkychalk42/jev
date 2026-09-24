@@ -497,3 +497,22 @@ def test_a_point_on_the_plate_itself_is_never_a_body_point():
     assert units.revalidate_body(frame, (round(first.plate.cx), bottom + 5)) is None
     assert units.revalidate_body(frame, (right + 30, bottom + 40)) is None
     assert units.revalidate_body(frame, first.torso) is not None
+
+
+def test_a_corpse_is_still_looted_when_the_client_selects_the_next_attacker_meanwhile(harness):
+    """A Defias Thug was chosen for us the moment the hover landed on its dead packmate;
+    three corpses in a row went unlooted (run 20260924T054447-632295)."""
+    packmate = {"target.has": True, "target.name_id": 2864, "target.hp": 1.0}
+    result = _deselected_corpse_harness(harness, **packmate).targeting.click_corpse(
+        expected_name_id=2864)
+    assert result.code is ClickCode.CLICKED
+    assert harness.hid.buttons == [((), {"right": True})]
+
+
+@pytest.mark.parametrize("hovered", [{"cursor.dead": False}, {"cursor.name_id": 1648}])
+def test_a_retarget_mid_hover_still_needs_the_dead_unit_of_the_name(harness, hovered):
+    packmate = {"target.has": True, "target.name_id": 2864, "target.hp": 1.0}
+    result = _deselected_corpse_harness(harness, **packmate, **hovered).targeting.click_corpse(
+        expected_name_id=2864)
+    assert result.code is not ClickCode.CLICKED
+    assert harness.hid.buttons == []
