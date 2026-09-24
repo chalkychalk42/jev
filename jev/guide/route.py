@@ -39,7 +39,7 @@ def _gap(node: Node, available_skills: frozenset[str],
     if node.world is None or node.pos is None or node.map_id is None:
         return "destination is outside the placed route"
     if (node.kind in (StepKind.QUEST_ACCEPT, StepKind.QUEST_TURNIN)
-            and (node.target_kind != "creature" or not node.target_name)):
+            and (node.target_kind not in ("creature", "gameobject") or not node.target_name)):
         return "quest interaction needs a measured gameobject locator or creature identity"
     if node.kind is not StepKind.QUEST_OBJECTIVE:
         return None

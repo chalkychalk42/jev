@@ -12,7 +12,7 @@ def human():
     return Graph.load("content/tbc/ally_human_1_12.json")
 
 
-def test_supported_route_preserves_geometry_and_excludes_object_interactions():
+def test_supported_route_preserves_geometry_and_excludes_elites():
     original = human()
     unchanged = original.model_dump_json()
     result = compile_route(original, available_skills=SKILLS)
@@ -25,8 +25,8 @@ def test_supported_route_preserves_geometry_and_excludes_object_interactions():
             old.world, old.pos, old.map_id, old.objective_targets, old.hunt_yards)
     excluded = {ex.quest_id: ex for ex in result.excluded if ex.quest_id}
     assert 3904 not in excluded and 3905 not in excluded, "crates are gathered"
-    assert "gameobject" in excluded[176].reason, "a quest from a poster is still out"
-    assert "gameobject" in excluded[37].reason, "a hand-in at a body is still out"
+    assert not {37, 45, 71, 39, 59} & set(excluded), "bodies are opened by their tooltip"
+    assert "elite" in excluded[176].reason, "Hogger and his gnolls are not a solo fight"
     assert 62 not in excluded and 76 not in excluded, "an exploration is walked into"
     assert not any(n.quest_id in excluded for n in result.graph.nodes)
     assert all(n.kind is not StepKind.TRAIN for n in result.graph.nodes)
@@ -66,6 +66,6 @@ def test_alternative_prerequisite_and_explicit_rewarded_predecessor_are_honoured
     graph = source.model_copy(update={"nodes": nodes})
     result = compile_route(graph, available_skills=SKILLS)
     assert any(n.quest_id == 33 for n in result.graph.nodes)
-    assert not any(n.quest_id == 39 for n in result.graph.nodes)
-    continued = compile_route(graph, available_skills=SKILLS, completed_quests=frozenset({71}))
-    assert any(n.quest_id == 39 for n in continued.graph.nodes)
+    assert not any(n.quest_id == 147 for n in result.graph.nodes)
+    continued = compile_route(graph, available_skills=SKILLS, completed_quests=frozenset({123}))
+    assert any(n.quest_id == 147 for n in continued.graph.nodes)

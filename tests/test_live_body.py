@@ -20,6 +20,7 @@ from jev.guide.objectives import progress
 from jev.guide.tracker import Event, Tracker
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
+from jev.perceive.radio_frame import name_id
 from jev.run.body import LiveBody
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world.state_v1 import ArmedBy, Objective, Quest, StepKind
@@ -126,10 +127,12 @@ def test_gameobjects_never_enter_the_creature_locator(kind):
     node = b.graph.nodes[0].model_copy(update={"target_kind": "gameobject"})
     b.graph = b.graph.model_copy(update={"nodes": (node,)})
     b.interact = SimpleNamespace(open_on=Mock())
+    b.gather = SimpleNamespace(open=lambda wanted: False, detail="no hover named the object")
     result = b._quest(seen()) if kind is StepKind.QUEST_ACCEPT else b._hunt(seen())
-    assert result.code == "unsupported"
+    # A quest at an object looks for it by its tooltip; an objective without structured
+    # targets still has no object to look for.
+    assert result.code == ("not_visible" if kind is StepKind.QUEST_ACCEPT else "unsupported")
     b.interact.open_on.assert_not_called()
-    b.client.approach.assert_not_called()
 
 
 def test_an_arm_cannot_silently_target_a_different_quest():
@@ -529,3 +532,24 @@ def test_the_spirit_healer_is_asked_again_when_the_first_click_opens_nothing(mon
     recovery._press = lambda values: True
     assert recovery.run_spirit_healer() is Recovered.ALIVE
     assert talked == ["Spirit Healer", "Spirit Healer"], "asked again after a silent click"
+
+
+def test_a_quest_at_a_body_is_opened_by_its_tooltip_then_advanced_as_ever():
+    """Find the Lost Guards is handed in at A half-eaten body; Discover Rolf's Fate is
+    taken from it."""
+    b = body(StepKind.QUEST_TURNIN)
+    node = b.graph.nodes[0].model_copy(update={"target_kind": "gameobject",
+                                               "target_name": "A half-eaten body"})
+    b.graph = b.graph.model_copy(update={"nodes": (node,)})
+    events = []
+    b.interact = SimpleNamespace(open_on=lambda *a, **kw: pytest.fail("a body is not a unit"))
+    b.gather = SimpleNamespace(open=lambda wanted: events.append(("open", wanted)) or True,
+                               detail="")
+    b.client.reading = lambda: SimpleNamespace(values={"ui.quest_frame": True,
+                                                       "ui.advance_x": 0.4})
+    b.advance = SimpleNamespace(run=lambda q, g: events.append(("advance", q, g)) or Advanced.DONE,
+                                detail="confirmed")
+    result = b.execute(b.arm, seen(), lambda: None)
+    assert result.outcome.value == "succeeded"
+    assert events == [("open", name_id("A half-eaten body")), ("advance", 1, Goal.CLEARED)]
+    b.client.approach.assert_called_once()

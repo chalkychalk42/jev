@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 import sqlite3
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from jev.guide.coords import ZoneBounds, _as_float, load_bounds, on_map, world_to_map
 from jev.guide.graph import FailEdge, FailWhen, Graph, Node, ObjectiveTarget, rib_for
@@ -453,6 +453,12 @@ class WorldDB:
             result.append(Requirement(kind=kind, required_id=item_id, required_count=count,
                                       source_slot=slot, counter_index=None if blocked_counter else index,
                                       spawn=spawn, blocked_reason=blocked))
+        # An elite is not a solo character's fight at the quest's level: Hogger, a level 11
+        # elite with his gnolls round him, is the claw Wanted: "Hogger" asks for.
+        result = [r if r.blocked_reason or r.spawn is None or r.spawn.kind != "creature"
+                  or not self._elite(r.spawn.npc_id) else
+                  replace(r, blocked_reason=f"{r.spawn.name} is an elite; not a solo fight")
+                  for r in result]
         if extra_event:
             # These DBC columns are raw float bits, exactly like WorldMapArea. Their
             # layout is AreaTriggerEntry in this server's DBCStructure.h.
@@ -469,6 +475,11 @@ class WorldDB:
                 result.append(Requirement("event", blocked_reason=
                                           "quest event requires a measured interaction or route"))
         return tuple(result)
+
+    def _elite(self, entry: int) -> bool:
+        row = self.con.execute("select Rank from world_creature_template where Entry = ?",
+                               (entry,)).fetchone()
+        return bool(row and row["Rank"] in (1, 2, 3))
 
     def _creature_cluster(self, entry: int) -> Spawn | None:
         rows = self.con.execute(

@@ -99,3 +99,21 @@ def test_full_bags_or_a_fight_reach_for_nothing():
     world.values.update({"bags.free": 5, "vitals.combat": True})
     assert picker(world).pick(CRATE, world.progress) is Gathered.INTERRUPTED
     assert world.hovered == [] and world.clicks == []
+
+
+def test_a_body_that_gives_a_quest_is_opened_by_the_name_its_tooltip_gives():
+    body = World(name=name_id("A half-eaten body"))
+    original = body.click
+
+    def click(x, y, right=False):
+        original(x, y, right)
+        if right and body._here((x, y)):
+            body.values["ui.quest_frame"] = True
+        return True
+
+    body.click = click
+    assert picker(body).open(name_id("A half-eaten body")) is True
+    assert body.clicks == [(880, 585, True)]
+    elsewhere = World(name=name_id("Rolf's corpse"))
+    assert picker(elsewhere).open(name_id("A half-eaten body")) is False
+    assert elsewhere.clicks == []

@@ -33,6 +33,8 @@ SEARCH_RINGS = 3
 # An opening can be a cast of a few seconds before the loot, and auto loot then takes it.
 OPEN_S = 8.0
 OPEN_LOOK_S = 0.25
+# A poster or a body answers a click with its quest window at once.
+OPEN_WINDOW_S = 3.0
 
 
 def search_points(origin: tuple[float, float] = SEARCH_ORIGIN,
@@ -110,6 +112,38 @@ class Gather:
             return self._observe(values, counter, progress)
         self.detail = "no hover named the object near this spawn point"
         return Gathered.NOT_HERE
+
+    @traced("gather.open")
+    def open(self, name_id: int, *, wait_s: float = OPEN_WINDOW_S) -> bool:
+        """Right-click the object named `name_id` near the character - a wanted poster, a
+        half-eaten body - and say whether a quest or gossip window is observed open."""
+        self.clicked, self.detail = None, ""
+        (ox, oy), (w, h) = self.window_origin, self.window_size
+        for fx, fy in search_points():
+            point = (ox + round(fx * w), oy + round(fy * h))
+            hover = self.targeting.probe(point, require_target=False)
+            if hover.code in (HoverCode.REFUSED, HoverCode.BLIND):
+                self.detail = hover.detail or "pointer input refused"
+                return False
+            after = hover.after or {}
+            if (after.get("cursor.object_id") != name_id or after.get("cursor.has") is not False
+                    or after.get("cursor.world") is not True):
+                continue
+            event("gather.open", data={"point": list(hover.point), "name_id": name_id})
+            if not self.hid.click(*hover.point, right=True):
+                self.detail = "object click refused"
+                return False
+            self.clicked = hover.point
+            deadline = time.monotonic() + wait_s
+            while time.monotonic() < deadline:
+                time.sleep(OPEN_LOOK_S)
+                values = self.read() or {}
+                if values.get("ui.quest_frame") is True or values.get("ui.gossip") is True:
+                    return True
+            self.detail = "the object was clicked and no quest or gossip window opened"
+            return False
+        self.detail = "no hover named the object near its placed point"
+        return False
 
     def _observe(self, before: dict, counter, progress) -> Gathered:
         deadline = time.monotonic() + OPEN_S

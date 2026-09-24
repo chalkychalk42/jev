@@ -299,9 +299,20 @@ class LiveBody:
         node = self._node()
         if node is None or node.quest_id is None or node.npc_id is None or node.world is None:
             return Result(SkillOutcome.ABORTED, "quest has no placed NPC", "unsupported")
-        if node.target_kind != "creature" or not node.target_name:
-            return Result(SkillOutcome.ABORTED, "quest target needs a supported creature identity", "unsupported")
-        opened = self.interact.open_on(node.target_name, node_world=node.world, node_map=node.pos)
+        if node.target_kind not in ("creature", "gameobject") or not node.target_name:
+            return Result(SkillOutcome.ABORTED, "quest target needs a supported identity", "unsupported")
+        if node.target_kind == "gameobject":
+            # A wanted poster or a body: stood at, found by the name its tooltip gives.
+            self._approach(node.world)
+            if not self.gather.open(name_id(node.target_name)):
+                return Result(SkillOutcome.ABORTED, f"{node.target_name}: {self.gather.detail}",
+                              "not_visible")
+            reading = self._reading()
+            values = reading.values if reading is not None and reading.values else {}
+            opened = Interacted.QUEST if values.get("ui.quest_frame") is True else Interacted.GOSSIP
+        else:
+            opened = self.interact.open_on(node.target_name, node_world=node.world,
+                                           node_map=node.pos)
         if not opened.opened:
             return self._result(opened, self.interact.detail)
         reading = self._reading()
