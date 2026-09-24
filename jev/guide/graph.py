@@ -260,8 +260,13 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
     if level is None:
         return preferred or ribs[0]
     if near is not None:
-        close = [r for r in ribs if r.pos is not None
-                 and level - RIB_LEVELS_BELOW <= r.level[0] <= level]
+        # Mobs never above the character first: a level 6 paladin failed into the level 5-7
+        # wolves and died there ten times in three sessions (runs 20260924T035309 to
+        # ...042040); the level 3-5 kobolds were beside the abbey it had left.
+        safe = [r for r in ribs if r.pos is not None and r.level[1] <= level
+                and r.level[0] >= level - RIB_LEVELS_BELOW - 1]
+        close = safe or [r for r in ribs if r.pos is not None
+                         and level - RIB_LEVELS_BELOW <= r.level[0] <= level]
         if close:
             return min(close, key=lambda r: (math.dist(r.pos, near), -r.level[0]))
     fitting = [r for r in ribs if r.level[0] <= level]

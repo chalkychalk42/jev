@@ -300,8 +300,9 @@ def test_a_character_fails_into_the_nearest_rib_that_still_suits_it():
     at_the_mine = (0.48, 0.32)
     assert rib_for(ribs, 5) is boars
     assert rib_for(ribs, 5, near=at_the_mine) is kobolds
-    assert rib_for(ribs, 5, near=(0.42, 0.79)) is boars
-    assert rib_for(ribs, 6, near=at_the_mine) is boars, "never more than two levels below"
+    assert rib_for(ribs, 6, near=(0.42, 0.79)) is kobolds, "mobs never above the character"
+    assert rib_for(ribs, 7, near=at_the_mine) is boars, "at its level a window is safe again"
+    assert rib_for(ribs, 9, near=at_the_mine) is boars, "never far below the character"
     assert rib_for(ribs, 2, near=(0.42, 0.79)) is wolves, "never a window above the level"
 
 
