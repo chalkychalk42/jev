@@ -2285,3 +2285,10 @@ failed hand-in stopped each session and the next retried it with its clock at ze
 whose own skill runs out of attempts now takes its own fail edge (V112, verified live).
 3905, retried once already, was passed over: the wolf rib now leads on to quest 6
 (Garrick Padfoot). Brother Neals keeps quest 3905 in the log for a later, height-aware try.
+
+08:27: **the learner trained its first model** - acquire, 42 training examples against 20
+held out (`motor-ea208cc90a916cda5e0ceacb`). The held-out gate refused it, rightly: it
+covered **0 of 20** held-out examples, every held-out state farther than its radius from
+anything it had trained on, so it stays in shadow and the tutor continues. The pipeline is
+proven end to end; whether the learner generalises is the question now - its features or
+its radius, more varied runs, or a different learner. Rest is next (35 of 40 training).
