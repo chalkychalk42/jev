@@ -362,7 +362,13 @@ class Executor:
 
     @staticmethod
     def _world_match(action: ClickAction, values: dict) -> bool:
-        return (values.get("cursor.has") is True and values.get("cursor.world") is True
+        # A left click selects the unit the pointer proves, over its body or its nameplate:
+        # a plate is a frame of its own, not the world, and 27 of the tutor's 40 refused
+        # selections were aimed at one. A right click still needs the body: over a frame
+        # it would open that frame's menu.
+        focus = values.get("cursor.world")
+        where = focus is True or (action.intent == "select" and focus is False)
+        return (values.get("cursor.has") is True and where
                 and values.get("cursor.name_id") == action.expected_target_id
                 and values.get("cursor.dead") is action.expected_dead)
 

@@ -265,6 +265,18 @@ def test_wrong_hover_cannot_authorize_button(mutation):
     assert not any(call[0] == "click" for call in h.hid.calls)
 
 
+def test_a_selection_may_be_proved_over_the_units_nameplate():
+    """27 of the tutor's 40 refused selections were aimed at a nameplate, a frame of its
+    own; the fight's own selections click plates."""
+    h = Harness()
+    h.values["cursor.world"] = False
+    assert h.run(**{**interact(), "button": "left", "intent": "select"}).delivered
+    h = Harness()
+    h.values["cursor.world"] = None
+    result = h.run(**{**interact(), "button": "left", "intent": "select"})
+    assert result.code == "wrong_target", "unknown focus proves nothing"
+
+
 def test_selected_same_name_is_insufficient_without_unit_equality():
     h = Harness()
     h.values["cursor.is_target"] = False

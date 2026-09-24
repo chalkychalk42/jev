@@ -186,8 +186,8 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
     if context.get("target_name_id") is not None:
         unit = context.get("target_name") or "objective unit"
         clicks.append(Choice("select_unit", ("x", "y"), (),
-                             f"left-click a living {unit} at x,y to select it; the pointer "
-                             "must be over that unit"))
+                             f"left-click a living {unit} at x,y to select it: on its "
+                             "nameplate or its body"))
         # A corpse lying there unselected was only reachable through `select_unit`, which
         # proves a living unit, so each try was refused: two decisions spent on one corpse
         # (run 20260924T005824-740147). Not offered over one of its own kind already

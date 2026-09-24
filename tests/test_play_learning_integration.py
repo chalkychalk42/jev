@@ -38,8 +38,9 @@ class MeasuredTutor(Tutor):
         # fake teacher is faster than reading/evaluating a real student, correctly
         # failing the maintained-throughput gate rather than fabricating improvement.
         # 20 ms sat inside scheduling jitter on a loaded full-suite run, and the student
-        # sometimes measured slower and stayed in canary; real tutor calls take seconds.
-        await asyncio.sleep(0.2)
+        # sometimes measured slower and stayed in canary; 200 ms still did beside a live
+        # session (24 September). Real tutor calls take seconds.
+        await asyncio.sleep(0.6)
         return await super().decide(*args, **kwargs)
 
 
