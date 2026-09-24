@@ -116,8 +116,9 @@ class ClientRuntime:
     completed: set[int] = field(default_factory=set)
     start_step: str | None = None
     start_rejoin: str | None = None
+    start_deaths: int = 0
     # (step, completed quests, where the step leads back to when that is not its next)
-    on_progress: Callable[[str, set[int], str | None], None] | None = None
+    on_progress: Callable[[str, set[int], str | None, int], None] | None = None
     # The character whose playhead this run keeps (`char.key`). Another character's state
     # is not tracked, recorded or saved: it sets `foreign`, and the run stops.
     character_key: int | None = None
@@ -186,10 +187,13 @@ class ClientRuntime:
             self.tracker = Tracker.resume(self.graph, state, start=start,
                                           completed=frozenset(self.completed),
                                           rejoin_to=self.start_rejoin)
+            if start is not None and self.tracker.step_id == start:
+                self.tracker.memory.deaths = self.start_deaths
             self._entered = True
 
         before = self.tracker.step_id
         completed_before = set(self.completed)
+        deaths_before = self.tracker.memory.deaths
         verdict = TrackVerdict(Event.NONE) if self.finished else self.tracker.tick(state)
         self._tracker_event, self._tracker_from = verdict.event.value, before
         if verdict.event is Event.ADVANCE and not verdict.completed:
@@ -200,9 +204,11 @@ class ClientRuntime:
         record = record or verdict.event in (Event.ADVANCE, Event.FAIL, Event.DEATH)
         # Persist only tracker-witnessed progress, never a caller's guessed completion.
         if self.on_progress is not None and (before != self.tracker.step_id
-                                            or completed_before != self.completed or self.last_state is None):
+                                            or completed_before != self.completed
+                                            or deaths_before != self.tracker.memory.deaths
+                                            or self.last_state is None):
             self.on_progress(self.tracker.step_id, set(self.completed),
-                             self.tracker.memory.rejoin_to)
+                             self.tracker.memory.rejoin_to, self.tracker.memory.deaths)
 
         if choose:
             plan, by, rule, decision_id = self._choose(state, node)

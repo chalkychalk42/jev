@@ -272,9 +272,10 @@ def _live(args, graph) -> int:
         runtime = ClientRuntime(
             client_id=args.client_id, graph=graph, source=ClientSource(client), recorder=recorder,
             keys_down=client.hid.keys_down, start_step=memory.step_id,
-            start_rejoin=memory.rejoin_to, completed=set(memory.completed),
-            on_progress=lambda step, done, rejoin: playhead.save(
-                graph.graph_id, step, done, path, rejoin_to=rejoin),
+            start_rejoin=memory.rejoin_to, start_deaths=memory.deaths,
+            completed=set(memory.completed),
+            on_progress=lambda step, done, rejoin, deaths: playhead.save(
+                graph.graph_id, step, done, path, rejoin_to=rejoin, deaths=deaths),
             character_key=character,
             available_skills=body.available,
             validate_action=body.validate,

@@ -510,7 +510,7 @@ def test_each_character_keeps_its_own_playhead(tmp_path, monkeypatch, capsys):
     client.character = 0x1234                     # a fresh character: nothing remembered
     assert cli.main(["--graph", str(graph), "--run-for", "1"]) == 0
     assert client.runtime.completed == set() and client.runtime.character_key == 0x1234
-    client.runtime.on_progress("step", {21}, None)
+    client.runtime.on_progress("step", {21}, None, 0)
     assert playhead.load(Graph.load(graph).graph_id, veteran).completed == {7, 33}, \
         "one character's progress was written into another's"
     fresh = playhead.for_character(0x1234, tmp_path / playhead.CHARACTERS)

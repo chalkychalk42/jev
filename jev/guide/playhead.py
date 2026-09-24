@@ -71,6 +71,9 @@ class Remembered:
     completed: frozenset[int] = frozenset()
     # Where `step_id` leads when it is done, when that is not its own next step.
     rejoin_to: str | None = None
+    # Deaths on `step_id` so far. Counted in memory alone, a death edge needed all its deaths
+    # inside one fifteen-minute session, and a rib's four in two sessions never counted.
+    deaths: int = 0
 
 
 def load(graph_id: str, path: pathlib.Path = DEFAULT_PATH) -> Remembered:
@@ -99,20 +102,26 @@ def load(graph_id: str, path: pathlib.Path = DEFAULT_PATH) -> Remembered:
     rejoin = data.get("rejoin_to")
     if step is None or not isinstance(rejoin, str) or not rejoin:
         rejoin = None
-    return Remembered(graph_id=graph_id, step_id=step, completed=completed, rejoin_to=rejoin)
+    deaths = data.get("deaths")
+    if step is None or not isinstance(deaths, int) or isinstance(deaths, bool) or deaths < 0:
+        deaths = 0
+    return Remembered(graph_id=graph_id, step_id=step, completed=completed, rejoin_to=rejoin,
+                      deaths=deaths)
 
 
 def save(graph_id: str, step_id: str | None = None,
          completed: frozenset[int] | set[int] = frozenset(),
-         path: pathlib.Path = DEFAULT_PATH, rejoin_to: str | None = None) -> None:
+         path: pathlib.Path = DEFAULT_PATH, rejoin_to: str | None = None,
+         deaths: int = 0) -> None:
     """Write the position. Best effort: failing to remember must not fail the run."""
     with suppress(OSError):
         atomic_json(path, {"graph_id": graph_id, "step_id": step_id,
-                           "completed": sorted(completed), "rejoin_to": rejoin_to})
+                           "completed": sorted(completed), "rejoin_to": rejoin_to,
+                           "deaths": deaths})
 
 
 def with_completed(remembered: Remembered, quest_id: int) -> Remembered:
     """A record with one more quest finished."""
     return Remembered(graph_id=remembered.graph_id, step_id=remembered.step_id,
                       completed=remembered.completed | {quest_id},
-                      rejoin_to=remembered.rejoin_to)
+                      rejoin_to=remembered.rejoin_to, deaths=remembered.deaths)
