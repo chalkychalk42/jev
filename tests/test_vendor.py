@@ -323,3 +323,33 @@ def test_placeholder_vendors_are_not_merchants():
     Druid" was walked to on a sale."""
     assert not any(m.name.startswith("[") for m in merchants(0))
     assert not any(v["name"].startswith("[") for v in catalog()["vendors"])
+
+
+def test_a_bag_lying_in_the_bags_is_put_on_with_no_shop_open():
+    """A Small Green Pouch rode in the backpack all night while full bags sent the character
+    to a merchant again and again."""
+    shop = Shop()
+    shop.v.update({"inventory.item_id": 5572, "inventory.count": 1, "inventory.quality": 1,
+                   "inventory.total": 16, "ui.vendor": False})
+    original = shop.click
+
+    def click(x, y, right=False):
+        shop.clicks.append((x, y, right))
+        if right:
+            shop.v.update({"inventory.total": 22, "inventory.item_id": 0, "bags.free": 6,
+                           "inventory.revision": 1})
+        return True
+
+    shop.click = click
+    body = Vendor(shop, shop.read, shop.visit, clock=lambda: shop.now, sleep=shop.sleep)
+    assert body.equip_bags({5572: 6}) == 1
+    assert shop.clicks == [(1280, 450, True)]
+    assert original is not None
+
+
+def test_no_bag_is_right_clicked_while_a_shop_is_open():
+    shop = Shop()
+    shop.v.update({"inventory.item_id": 5572, "inventory.total": 16, "ui.vendor": True})
+    body = Vendor(shop, shop.read, shop.visit, clock=lambda: shop.now, sleep=shop.sleep)
+    assert body.equip_bags({5572: 6}) == 0
+    assert shop.clicks == []

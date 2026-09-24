@@ -39,7 +39,7 @@ from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role
 from jev.world.state_v1 import PowerType, State, StepKind
-from jev.world.vendor import merchants, supplies_for
+from jev.world.vendor import bag_slots, merchants, supplies_for
 
 # Dying again this soon after getting up at the body means the body lies where something
 # this character cannot beat still stands: the next recovery gets up at the graveyard's
@@ -562,6 +562,14 @@ class LiveBody:
                              and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id)
             if not supplies:
                 return Result(SkillOutcome.ABORTED, "no confirmed empty supported food/drink slot", "unsupported")
+        if self.arm.decision.skill == "BAG_MAKE_SPACE":
+            # A bag lying in the bags is the cheapest room there is: no merchant needed.
+            equipper = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
+                              self.client.size)
+            if equipper.equip_bags(bag_slots()):
+                after = self._read()
+                if after and (after.get("bags.free") or 0) > 0:
+                    return Result(SkillOutcome.SUCCEEDED, "equipped a bag from the bags", "done")
         wanted = {s.item_id for s in supplies}
         candidates = [m for m in merchants(self.client.bounds.map_id)
                       if (not wanted or wanted & m.items)

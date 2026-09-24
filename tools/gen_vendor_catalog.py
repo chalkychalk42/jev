@@ -62,8 +62,12 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
                         "world": [float(x), float(y), float(z)], "items": sorted(sold)})
     prices = {str(row[0]): int(row[1]) for row in db.execute(
         "select entry,SellPrice from world_item_template") if row[0] in set(junk)}
+    # General bags (any item fits) and their slots: one found in the bags goes on the belt.
+    bags = {str(row[0]): int(row[1]) for row in db.execute(
+        "select entry,ContainerSlots from world_item_template where class=1 and subclass=0 "
+        "and InventoryType=18 and ContainerSlots>0 and BagFamily=0 order by entry")}
     return {"schema": 1, "junk": sorted(set(junk)), "junk_prices": prices, "supplies": supplies,
-            "vendors": vendors}
+            "vendors": vendors, "bags": bags}
 
 
 def main() -> int:

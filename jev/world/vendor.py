@@ -44,6 +44,11 @@ def junk_prices() -> dict[int, int]:
     return {int(k): int(v) for k, v in catalog()["junk_prices"].items()}
 
 
+def bag_slots() -> dict[int, int]:
+    """General bags, any item fits, and how many slots each adds."""
+    return {int(k): int(v) for k, v in (catalog().get("bags") or {}).items()}
+
+
 def supplies_for(class_id: int | None, race_id: int | None) -> tuple[Supply, ...]:
     """Exact profile only; another race's food would leave the current bar empty."""
     roles = catalog()["supplies"].get(f"{race_id}:{class_id}", {})

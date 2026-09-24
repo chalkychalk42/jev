@@ -15,8 +15,10 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
     with sqlite3.connect(":memory:") as db:
         db.executescript("""
             CREATE TABLE world_item_template (
-                entry INT, class INT, Quality INT, SellPrice INT, InventoryType INT, startquest INT);
-            INSERT INTO world_item_template VALUES (7073,15,0,6,0,0);
+                entry INT, class INT, Quality INT, SellPrice INT, InventoryType INT, startquest INT,
+                subclass INT, ContainerSlots INT, BagFamily INT);
+            INSERT INTO world_item_template VALUES (7073,15,0,6,0,0,0,0,0);
+            INSERT INTO world_item_template VALUES (5572,1,1,250,18,0,0,6,0);
             CREATE TABLE world_quest_template (SrcItemId INT);
             INSERT INTO world_quest_template VALUES (0);
             CREATE TABLE world_creature_template (
@@ -36,6 +38,7 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
     assert all(type(value) is float for value in merchant["world"])
     assert json.loads(json.dumps(result))["vendors"][0]["world"] == [-1.25, 2.5, 0.03]
     assert merchant["entry"] == 465 and merchant["items"] == [159]
+    assert result["bags"] == {"5572": 6}
 
 
 def test_loader_accepts_older_string_coordinates_as_numeric_yards(monkeypatch):

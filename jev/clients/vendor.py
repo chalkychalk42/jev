@@ -162,6 +162,49 @@ class Vendor:
         if self.hid.click(ox + round(x * w), oy + round(y * h), right=right) is False:
             raise _Stop(Vended.REFUSED, "input device refused merchant click")
 
+    @traced("vendor.equip_bags")
+    def equip_bags(self, bags: Mapping[int, int], *, timeout_s: float = 20.0) -> int:
+        """Put any general bag lying in the bags into a free bag slot; how many went on.
+
+        A right-click on a bag in the inventory equips it - but only with no shop open,
+        where the same click sells it. A new character's backpack has sixteen slots and a
+        loot table's Small Green Pouch rode in it all night, six slots unused, while full
+        bags sent the character to a merchant again and again.
+        """
+        self.detail = ""
+        self._deadline = self.clock() + timeout_s
+        equipped = 0
+        seen: set[int] = set()
+        try:
+            while True:
+                values = self._read(merchant=False)
+                if values.get("ui.vendor") is not False:
+                    return equipped                      # a shop open: a click would sell
+                total, ordinal = values.get("inventory.total"), values.get("inventory.ordinal")
+                if total is None or ordinal is None:
+                    raise _Stop(Vended.BLIND, "bag slot census unreadable")
+                seen.add(ordinal)
+                if (values.get("inventory.item_id") in bags
+                        and values.get("inventory.locked") is False):
+                    if values.get("inventory.x") is None:
+                        self._click(values, "inventory.open_")
+                        bag = values.get("inventory.bag")
+                        self._await(lambda r, bag=bag: r.get("inventory.bag") == bag
+                                    and r.get("inventory.x") is not None, 4.0, merchant=False)
+                        continue
+                    self._click(values, "inventory.", right=True)
+                    self._await(lambda r, before=total: (r.get("inventory.total") or 0) > before,
+                                4.0, merchant=False)
+                    equipped += 1
+                    seen.clear()
+                    continue
+                if len(seen) >= total:
+                    return equipped
+                self.sleep(0.05)
+        except _Stop as stop:
+            self.detail = stop.detail
+            return equipped
+
     @staticmethod
     def _slot(values: dict) -> tuple:
         return tuple(values.get("inventory." + k)

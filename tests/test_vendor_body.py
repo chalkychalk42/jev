@@ -33,6 +33,8 @@ def test_body_buys_exact_empty_profile_supplies_at_nearest_matching_generated_sh
     calls = []
     class FakeVendor:
         detail = "observed service"
+        def equip_bags(self, bags, **kw):
+            return 0
         def __init__(self, hid, read, open_shop, origin, size):
             self.open_shop = open_shop
             assert hid is b.client.hid and size == (1600, 900)
@@ -80,6 +82,8 @@ def test_outside_zone_shop_is_not_selected_even_if_world_distance_is_shorter(mon
     b.interact = SimpleNamespace(open_on=visit)
     class FakeVendor:
         detail = "observed service"
+        def equip_bags(self, bags, **kw):
+            return 0
         def __init__(self, hid, read, open_shop, origin, size):
             self.open_shop = open_shop
         def run(self, **kwargs):
@@ -107,6 +111,8 @@ def test_a_merchant_whose_body_cannot_be_clicked_is_passed_over_for_the_next(mon
     b.interact = SimpleNamespace(open_on=visit, detail="hover: ground")
     class FakeVendor:
         detail = "observed service"
+        def equip_bags(self, bags, **kw):
+            return 0
         def __init__(self, hid, read, open_shop, origin, size):
             self.open_shop = open_shop
         def run(self, **kwargs):
@@ -129,6 +135,8 @@ def test_a_merchant_that_refuses_for_another_reason_is_not_passed_over(monkeypat
     b.interact = SimpleNamespace(open_on=visit, detail="combat")
     class FakeVendor:
         detail = ""
+        def equip_bags(self, bags, **kw):
+            return 0
         def __init__(self, hid, read, open_shop, origin, size):
             self.open_shop = open_shop
         def run(self, **kwargs):
@@ -138,3 +146,23 @@ def test_a_merchant_that_refuses_for_another_reason_is_not_passed_over(monkeypat
     with pytest.raises(BodyFailure, match="Near: combat"):
         b.execute(b.arm, seen(), lambda: None)
     assert [c.args[0] for c in visit.call_args_list] == ["Near"]
+
+
+def test_full_bags_put_on_a_bag_from_the_bags_before_any_merchant(monkeypatch):
+    b = body()
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+    b.client.read = lambda: {"vitals.hp": 1, "bags.free": 6}
+    visit = Mock(side_effect=AssertionError("walked to a merchant"))
+    b.interact = SimpleNamespace(open_on=visit)
+    class Equipper:
+        detail = ""
+        def __init__(self, *a, **kw):
+            pass
+        def equip_bags(self, bags, **kw):
+            assert 5572 in bags
+            return 1
+    monkeypatch.setattr("jev.run.body.Vendor", Equipper)
+    result = b.execute(b.arm, seen(), lambda: None)
+    assert result.outcome.value == "succeeded" and "equipped a bag" in result.detail
