@@ -63,6 +63,10 @@ every item follows ROADMAP.md's design gate (shared mechanisms, no identity bran
 4. Decisions needed from the operator (before the session)
 ----------------------------------------------------------
 
+**Decided 24 September 2026:** D1 (a) A/B then adopt the winner by 6.3; D2 keep
+claude-opus-4-7 at medium; D3 bounded canary allowed for a capability that passes the
+held-out gates; D4 no new character - all nine hours on Testvvi.
+
 - **D1 Tutor strategy.** (a) A/B for the first ~3 h, then adopt the winner automatically
   by the rule in 6.3 - *recommended*; (b) keep full teach mode (the V51 status quo);
   (c) hybrid from the start (scripted routines drive; the tutor takes failures, novel
