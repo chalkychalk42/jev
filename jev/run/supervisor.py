@@ -317,8 +317,14 @@ class Supervisor:
                 self._housekeeping_failed = True
         # Give the tracker's on_fail edge first refusal; stop only if it cannot rejoin.
         if exhausted and self.runtime.tracker.step_id == exhausted[0][0]:
-            self.failure = f"{exhausted[0]}: {self.max_failures} failed attempts; {exhausted[1]}"
-            self.stopped.set()
+            fail_over = getattr(self.runtime, "fail_over", None)
+            if fail_over is not None and fail_over(exhausted[0][1], exhausted[1] or ""):
+                self.say(f"{exhausted[0][1]} out of attempts on {exhausted[0][0]}; "
+                         f"failed over to {self.runtime.tracker.step_id}")
+                self.failures.pop(exhausted[0], None)
+            else:
+                self.failure = f"{exhausted[0]}: {self.max_failures} failed attempts; {exhausted[1]}"
+                self.stopped.set()
         if choose and self.runtime.armed and self.runtime.armed.rule == "unavailable":
             self.failure = self.runtime.armed.decision.why
             self.stopped.set()

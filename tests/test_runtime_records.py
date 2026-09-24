@@ -337,3 +337,26 @@ def test_a_step_retried_in_an_earlier_session_is_passed_over_on_its_next_failure
     assert playhead.load("other", path).retried == frozenset(), "another guide's steps"
     playhead.save("g", "rib", {1}, path)
     assert playhead.load("g", path).retried == frozenset()
+
+
+def test_a_steps_own_skill_out_of_attempts_takes_the_steps_fail_edge(tmp_path):
+    """With one attempt a session, a hand-in the Abbey's stair defeats stopped every
+    session, and each new one tried the step afresh with its timeout never reached (run
+    20260924T081531-4249a4)."""
+    saved = []
+    states = [held(0, 3)]
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       start_step="turnin",
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset():
+                       saved.append((step, rejoin, retried)))
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "turnin"
+    assert rt.fail_over("VENDOR_REPAIR", "no merchant") is False, "not the step failing"
+    assert rt.fail_over("TURNIN_QUEST", "no observed nameplate") is True
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "turnin")
+    assert saved[-1] == ("rib", "turnin", frozenset({"turnin"}))
+
+    rt.tracker.enter("turnin", states[0])            # back from the rib
+    assert rt.fail_over("TURNIN_QUEST", "no observed nameplate") is True
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "after"), \
+        "retried once, then passed over"

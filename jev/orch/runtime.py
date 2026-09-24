@@ -273,6 +273,29 @@ class ClientRuntime:
 
     # -- internals -----------------------------------------------------------
 
+    def fail_over(self, skill: str, reason: str) -> bool:
+        """Take the current step's own fail edge after its skill ran out of attempts.
+
+        With one attempt a session, a hand-in the Abbey's stair defeats stopped every
+        session a few minutes in, and each new session tried the same step afresh, its
+        timeout never reached: the step's rib, and the pass-over after it, never came (run
+        20260924T081531-4249a4). Only for the step's own skills - a merchant that failed
+        on the way is not the step failing. `False` when there is no edge to take.
+        """
+        node = self.graph.get(self.tracker.step_id)
+        state = self.last_state
+        if (node is None or state is None or not node.on_fail or self.finished
+                or skill not in (node.skills or ())):
+            return False
+        before = self.tracker.step_id
+        self._apply(TrackVerdict(Event.FAIL, goto=node.on_fail[0].goto,
+                                 reason=f"{skill} out of attempts: {reason}"), state)
+        if self.on_progress is not None:
+            self.on_progress(self.tracker.step_id, set(self.completed),
+                             self.tracker.memory.rejoin_to, self.tracker.memory.deaths,
+                             frozenset(self._retried))
+        return self.tracker.step_id != before
+
     def _apply(self, verdict, state: State) -> None:
         match verdict.event:
             case Event.ADVANCE:
