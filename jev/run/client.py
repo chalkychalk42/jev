@@ -73,6 +73,19 @@ STALE_AFTER_S = 4.0
 START_HEIGHTS = (0.0, -3.0, 3.0, -6.0, 6.0, -10.0,
                  *(sign * dz for dz in range(12, 61, 4) for sign in (1, -1)))
 GROUND_MEMORY_YARDS = 15.0
+# The height is tracked along the navmesh as the character moves, the radio painting none.
+# In a building with floors one x and y is two places: the Lion's Pride Inn's hall and the
+# room over it. A plan started on the wrong one walked a character round the upper floor
+# for four minutes above William Pestle, the NPC it wanted, and then five more failing to
+# walk out to Marshal Dughan, and both hand-ins were passed over (session 95). Floors are
+# yards apart and stairs are continuous, so the surface under each new position nearest
+# the last height is the floor the character is on. A surface found beside the position
+# rather than under it is an edge the character has left - a balcony it fell from - and
+# the floor is looked for below. (Stairs over a walkable floor stay ambiguous: the lower
+# floor is nearer, as the inn's landing over its hall is.)
+TRACK_EVERY_S = 0.5
+UNDER_YARDS = 1.0
+LOWER_STEPS = (3.0, 6.0, 9.0, 12.0)
 # A walk's limit grows with the route planned for it: twice the time at running pace, up to
 # just under TRAVEL_TO's own 600 s. A flat 180 s was about the clean time for the 1,038
 # yards between Northshire and Gerard Tiller, so one stuck corner failed the step.
@@ -111,8 +124,9 @@ class Client:
     coordinate_zones: dict[int, ZoneBounds] = field(default_factory=dict, init=False)
     coordinate_names: dict[int, str] = field(default_factory=dict, init=False)
     on_path: Callable[[str], None] | None = field(default=None, init=False)
-    # Where the last walk ended, with the height of the route that got it there.
+    # Where the character is, with its height as last tracked (`TRACK_EVERY_S`).
     _ground: tuple[float, float, float] | None = field(default=None, init=False)
+    _tracked_at: float = field(default=-math.inf, init=False)
     # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
     # context and bitmap once and reuses them, so two threads grabbing at the same time
     # tear each other's frame in half. The heartbeat samples on its own thread, so every
@@ -196,7 +210,36 @@ class Client:
         v = self.read()
         if v is None or v.get("pos.mx") is None or v.get("pos.my") is None:
             return None
+        self._track_height(v)
         return (v["pos.mx"], v["pos.my"])
+
+    def _track_height(self, values: dict) -> None:
+        """Keep `_ground` on the floor the character is on (`TRACK_EVERY_S`)."""
+        if (values.get("flags.falling") is True or self.query is None or self.bounds is None
+                or self._ground is None):
+            return
+        now = time.monotonic()
+        if now - self._tracked_at < TRACK_EVERY_S:
+            return
+        self._tracked_at = now
+        x, y = map_to_world(values["pos.mx"], values["pos.my"], self.bounds)
+        if math.dist(self._ground[:2], (x, y)) > GROUND_MEMORY_YARDS:
+            self._ground = None          # a hearth, a death or a gap: the height is unknown
+            return
+        for drop in (0.0, *LOWER_STEPS):
+            z = self._ground[2] - drop
+            snapped = self.query.path(self.bounds.map_id, (x, y, z), (x, y, z))
+            # One point, the surface nearest: not a walkable route (`Path.usable`).
+            if (snapped.status in (PathStatus.COMPLETE, PathStatus.PARTIAL) and snapped.points
+                    and math.dist(snapped.points[0][:2], (x, y)) <= UNDER_YARDS):
+                self._ground = (x, y, snapped.points[0][2])
+                return
+
+    def _height_near(self, w: tuple[float, float]) -> float | None:
+        """The tracked height, when it was tracked near `w`."""
+        if self._ground is not None and math.dist(self._ground[:2], w[:2]) <= GROUND_MEMORY_YARDS:
+            return self._ground[2]
+        return None
 
     def quest_ids(self, tries: int = 40) -> tuple[int, ...] | None:
         """The assembled log, or `None` while the cycle is still partial.
@@ -263,6 +306,8 @@ class Client:
                   f"{path.length_yards():.1f} yards")
         if not path.usable:
             return False
+        if self._height_near(hw) is None:
+            self._ground = (hw[0], hw[1], path.points[0][2])   # the plan's floor, tracked on
         timeout_s = max(timeout_s, min(MAX_WALK_S,
                                        path.length_yards() / RUN_YARDS_PER_S * WALK_SLACK))
 
@@ -276,7 +321,9 @@ class Client:
             # yards from Marshal McBride. The route being followed got the character
             # there, so its nearest point's height is the side of the wall it is on.
             w = map_to_world(here_map[0], here_map[1], self.bounds)
-            z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
+            z = self._height_near(w)
+            if z is None:
+                z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
             planned = self.query.path(self.bounds.map_id, (w[0], w[1], z), world)
             if planned.usable:
                 followed.append(planned)
@@ -298,7 +345,9 @@ class Client:
         ended = self.travel.position()
         if ended is not None:
             w = map_to_world(ended[0], ended[1], self.bounds)
-            z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
+            z = self._height_near(w)
+            if z is None:
+                z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
             self._ground = (w[0], w[1], z)
         remaining = ("unknown" if result.remaining_yards is None
                      else f"{result.remaining_yards:.1f} yards")

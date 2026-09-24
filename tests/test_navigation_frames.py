@@ -1,5 +1,6 @@
 """The radio may change maps mid-leg; the measured follower keeps one coordinate frame."""
 
+import math
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -235,3 +236,82 @@ def test_a_walks_limit_grows_with_its_route(yards, limit):
         outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0, stuck_events=0, detail="")
     client.approach(end, timeout_s=180.0)
     assert given == [pytest.approx(limit)]
+
+
+def inn(here):
+    """A hall with a floor above it and a staircase between, as the Lion's Pride Inn has:
+    stairs rising 0.7 a yard over ten yards (solid underneath), the hall at 57 west of them
+    and on under the floor above at 64 east of them. A point query answers the surface
+    nearest its height."""
+    from jev.guide.path import Path, PathStatus
+
+    x0 = here[0]
+
+    def surfaces(x):
+        if x < x0 + 1.0:
+            return [57.0]
+        if x < x0 + 10.0:
+            return [57.0 + 0.7 * (x - x0)]
+        if x <= x0 + 15.0:
+            return [57.0, 64.0]
+        return [57.0]                                # past the balcony: the hall only
+
+    def path(map_id, start, end):
+        if start[:2] != end[:2]:
+            return Path(PathStatus.COMPLETE, ((start[0], start[1], 57.0), end))
+        here_x = start[0]
+        # The floor above ends at the balcony: beyond it, its nearest point is its edge.
+        candidates = [(here_x, z) for z in surfaces(here_x)]
+        if here_x > x0 + 15.0:
+            candidates.append((x0 + 15.0, 64.0))
+        x, z = min(candidates, key=lambda c: math.dist((c[0], c[1]), (here_x, start[2])))
+        return Path(PathStatus.COMPLETE, ((x, start[1], z),))
+    return path
+
+
+def test_the_height_follows_the_stairs_and_stays_on_the_floor_above():
+    """One x and y inside the Lion's Pride Inn is two places. A plan started in the hall
+    walked a character round the floor above William Pestle for four minutes (session 95)."""
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    client.query.path = inn(here)
+    client._ground = (here[0], here[1], 57.0)
+    heights = []
+    for dx in (0.0, 3.0, 6.0, 9.0, 12.0, 14.0):     # up the stairs, onto the floor above
+        values["pos.mx"], values["pos.my"] = world_to_map(here[0] + dx, here[1], ELWYNN)
+        client._tracked_at = -math.inf
+        client.position()
+        heights.append(round(client._ground[2], 1))
+    assert heights == [57.0, 59.1, 61.2, 63.3, 64.0, 64.0]
+    values["flags.falling"] = True                  # a jump where it stands
+    client._tracked_at = -math.inf
+    client.position()
+    values["flags.falling"] = False
+    client._tracked_at = -math.inf
+    client.position()
+    assert client._ground[2] == 64.0, "a jump is not a fall to the floor below"
+    values["pos.mx"], values["pos.my"] = world_to_map(here[0] + 17.0, here[1], ELWYNN)
+    client._tracked_at = -math.inf                  # off the balcony, into the hall
+    client.position()
+    assert client._ground[2] == 57.0, "beyond the floor's edge the floor is looked for below"
+
+
+def test_a_plan_starts_on_the_floor_the_character_was_tracked_to():
+    from jev.clients.travel import Outcome
+
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    upstairs = inn(here)
+    asked = []
+
+    def path(map_id, start, end):
+        asked.append(round(start[2], 1))
+        return upstairs(map_id, start, end)
+
+    client.query.path = path
+    client._ground = (here[0], here[1], 64.0)
+    client.travel.position = lambda: (0.49, 0.42)
+    client.travel.follow = lambda route, **kw: SimpleNamespace(
+        outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0, stuck_events=0, detail="")
+    client.approach((here[0] + 30.0, here[1], 57.0))
+    assert asked[0] == 64.0, "the plan started in the hall below"
