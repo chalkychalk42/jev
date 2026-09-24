@@ -252,9 +252,16 @@ class PlayingBody:
                                         "reason": result.detail})
         current = self.observer.observe(arm)
         self.journal.observation(current.data)
+        state = State.model_validate(current.data["state"])
+        if state.ui.modal is True:
+            # The tutor's last Escape can open the game menu on its way out, and every
+            # routine refuses to act behind a modal: the scripted sale after it failed and
+            # the run stopped (run 20260924T012032-0c0c24). Handed back, the policy's own
+            # ABORT_WAIT clears it first, as the next session's did.
+            return Result(SkillOutcome.PREEMPTED,
+                          "a blocking dialog is up; the policy clears it first", "interrupted")
         self.routine_clock = time.monotonic()
-        return self.spine.execute(arm, State.model_validate(current.data["state"]),
-                                  focused_checkpoint)
+        return self.spine.execute(arm, state, focused_checkpoint)
 
     def delegable(self, arm) -> tuple[str, ...]:
         return () if arm is None else delegable_skills(arm.decision.skill, self.available)

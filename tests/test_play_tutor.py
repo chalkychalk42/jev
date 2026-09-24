@@ -61,6 +61,13 @@ def test_select_needs_an_objective_unit_and_ui_needs_painted_controls():
     assert "quest_advance" not in names({"ui.quest_frame": True})
 
 
+def test_escape_is_offered_only_when_there_is_something_to_close():
+    """With nothing to close it opens the game menu (run 20260924T012829-382fd4)."""
+    assert "escape" not in names({"target.has": False})
+    assert "escape" in names({"target.has": True, "target.hp": 1.0})
+    assert "escape" in names({"target.has": False, "ui.vendor": True})
+
+
 def test_an_unselected_corpse_of_the_objective_can_be_selected_for_looting():
     wolf = {"target_name_id": 2864, "target_name": "Young Wolf"}
     assert "select_corpse" in names({"target.has": False}, context=wolf)

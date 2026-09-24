@@ -485,6 +485,26 @@ def test_a_stalled_tutor_also_hands_the_objective_to_the_scripted_routine(tmp_pa
     assert result.code == "arrived" and scripted == [env.arm]
 
 
+def test_a_dialog_the_tutor_left_open_is_handed_back_before_the_routine(tmp_path):
+    """The tutor's last Escape opened the game menu; the scripted sale behind it failed and
+    the run stopped (run 20260924T012032-0c0c24)."""
+    env = composition(tmp_path)
+
+    def stalled(arm, checkpoint):
+        env.cap.values["ui.modal"] = True
+        return Result(SkillOutcome.ABORTED, "the tutor repeated escape 3 times without effect",
+                      "teaching_stalled")
+
+    env.playing.controller.run = stalled
+    env.spine.execute = Mock(side_effect=AssertionError("a routine ran behind a modal"))
+    try:
+        result = env.playing.execute(env.arm, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert result.outcome is SkillOutcome.PREEMPTED and result.code == "interrupted"
+
+
 def test_the_hunt_loop_is_not_a_step_of_itself_but_its_steps_are_offered():
     """Delegating GRIND_UNTIL from inside the hunt handed every decision back to the
     scripted loop; Jev composes the hunt from its steps instead."""

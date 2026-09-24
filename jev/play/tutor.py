@@ -66,6 +66,9 @@ How the controls behave (measured on this client):
   skill:TRAVEL_TO walks to the objective area, skill:EAT_DRINK recovers health and mana.
   Prefer a routine for a routine task; use single actions to set one up or to recover
   when it failed.
+- Trading is routine-only: skill:BAG_MAKE_SPACE sells, skill:VENDOR_REPAIR repairs and
+  skill:BUY_AMMO_REAGENT_FOOD buys. Items in a shop window cannot be clicked, so opening
+  a shop yourself achieves nothing.
 - A blocking dialog must be closed with escape before anything else works.
 
 Rules: use only the listed actions and parameters. x and y are fractions of the image
@@ -86,7 +89,8 @@ HOLDS = {
 }
 TAPS = {
     "jump": "jump once",
-    "target_next": "Tab: select the nearest enemy, possibly one not on screen",
+    "target_next": "Tab: select an enemy in front of the character, possibly far off or "
+                   "hidden; it never reaches one behind, and cannot pick a chosen kind",
     "target_previous": "Shift-Tab: select the previous enemy",
     "escape": "Esc: close the top window or dialog, else clear the target",
     "attack_target": "T: toggle melee auto-attack on the selected target; it is a "
@@ -171,8 +175,13 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
     hp = values.get("target.hp")
     living = has and isinstance(hp, (int, float)) and hp > 0
     corpse = has and hp == 0
+    # Escape with nothing to close opens the game menu, and the next one closes it: the
+    # tutor alternated the two for a whole episode at a merchant (run ...012829-382fd4).
+    closable = has or any(values.get(f"ui.{window}") is True for window in (
+        "loot", "gossip", "vendor", "quest_frame", "trainer", "mail"))
     taps = [Choice(name, (), (), meaning) for name, meaning in TAPS.items()
-            if _executable(controls, name) and (name != "attack_target" or living)]
+            if _executable(controls, name) and (name != "attack_target" or living)
+            and (name != "escape" or closable)]
     clicks = []
     if context.get("target_name_id") is not None:
         unit = context.get("target_name") or "objective unit"
