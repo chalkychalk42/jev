@@ -88,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--teacher-calls-per-hour", type=int, default=12)
     parser.add_argument("--play-mode", choices=("off", "teach", "adaptive"), default="off",
                         help="visual Jev actions inside guide skills; adaptive enables evaluated motor handover")
+    parser.add_argument("--play-dispatch", choices=("tutor", "hybrid"), default="tutor",
+                        help="hybrid: the guide's routine first, the tutor on its failures "
+                             "and a fixed sample of objectives")
     parser.add_argument("--play-teacher-calls-per-hour", type=int, default=240,
                         help="separate motor tutor budget, counting each actual request/lookup")
     parser.add_argument("--play-decision-timeout", type=float, default=30,
@@ -283,7 +286,8 @@ def _live(args, graph) -> int:
                 teacher_effort=args.teacher_effort,
                 teacher_calls_per_hour=args.play_teacher_calls_per_hour,
                 binding_paths=args.bindings, world_db=args.world_db,
-                config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout))
+                config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout),
+                dispatch=args.play_dispatch)
             body = playing
         atomic_json(recorder.dir / "route.json", {
             "mode": args.route_mode, "source": route.source_graph_id, "graph": graph.graph_id,

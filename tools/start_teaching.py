@@ -100,6 +100,8 @@ def main(argv=None):
     parser.add_argument("--config", type=Path, default=ROOT / "var/teaching-launch.json")
     parser.add_argument("--run", action="store_true", help="attach the game and begin the supervised test")
     parser.add_argument("--mode", choices=("teach", "adaptive"))
+    parser.add_argument("--dispatch", choices=("tutor", "hybrid"),
+                        help="who takes an objective first (docs/plans/nine-hour-session.md)")
     parser.add_argument("--sessions", type=int, default=1, help="clean collection sessions; 0 repeats until stop/failure/route end")
     parser.add_argument("--session-seconds", type=float)
     args = parser.parse_args(argv)
@@ -110,6 +112,8 @@ def main(argv=None):
     command = document["args"]
     if args.mode:
         command = replace_option(command, "--play-mode", args.mode)
+    if args.dispatch:
+        command = replace_option(command, "--play-dispatch", args.dispatch)
     if args.session_seconds:
         command = replace_option(command, "--run-for", args.session_seconds)
     if not args.run:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import threading
 import time
@@ -32,6 +33,13 @@ from jev.world.state_v1 import State
 # the decision-making Jev is there to do and the student is there to learn. It remains
 # the scripted fallback when the tutor cannot answer or stalls.
 OBJECTIVE_LOOPS = frozenset({"GRIND_UNTIL"})
+# Who takes an ordinary objective first: the tutor, or the guide's own routine (`hybrid`),
+# with the tutor on the routine's failures and on one objective in `HYBRID_SAMPLE`.
+DISPATCHES = frozenset({"tutor", "hybrid"})
+HYBRID_SAMPLE = 4
+# Routine results that are not the routine failing its objective: nothing sellable, too
+# poor, or the objective already done.
+ROUTINE_NOT_FAILED = frozenset({"no_junk", "too_poor", "nothing", "done"})
 
 
 def delegable_skills(current: str, available) -> tuple[str, ...]:
@@ -120,9 +128,16 @@ class PlayingBody:
                  teacher_effort: str | None = None,
                  teacher_calls_per_hour: int = 240, binding_paths=(),
                  config: PlayConfig | None = None, teacher=None, learner=None,
-                 start_learning: bool = True, world_db: Path | None = DEFAULT_WORLD_DB):
+                 start_learning: bool = True, world_db: Path | None = DEFAULT_WORLD_DB,
+                 dispatch: str = "tutor"):
         if config is not None and mode != config.mode:
             raise ValueError("playing mode and configuration disagree")
+        if dispatch not in DISPATCHES:
+            raise ValueError(f"dispatch must be one of {sorted(DISPATCHES)}")
+        # Who takes an ordinary objective first (`_ask_tutor`): the tutor always, or the
+        # guide's own routine with the tutor on its failures and a fixed sample.
+        self.dispatch = dispatch
+        self._routine_failed: set[tuple[str | None, str | None]] = set()
         teacher_model = model_for(teacher_provider, teacher_model)
         self.spine, self.client, self.graph = spine, spine.client, spine.graph
         self.available = spine.available
@@ -168,6 +183,7 @@ class PlayingBody:
             "mode": mode, "config": asdict(self.controller.config),
             "controls": self.manifest.to_dict(), "controls_fingerprint": self.controls_fingerprint,
             "knowledge_fingerprint": self.knowledge.fingerprint,
+            "dispatch": dispatch,
             "teacher_requested": teacher_model, "teacher_calls_per_hour": teacher_calls_per_hour,
             "teacher_provider": teacher_provider,
             "learning_store": str(self.learner.directory), "live_validated": False,
@@ -244,6 +260,16 @@ class PlayingBody:
                 state = State.model_validate(self.observer.observe(arm).data["state"])
             self.routine_clock = time.monotonic()
             return self.spine.execute(arm, state, focused_checkpoint)
+        if self.dispatch == "hybrid" and not self._ask_tutor(arm):
+            self.journal.append("actions", {"event": "hybrid_routine", "t": time.time(),
+                                            "arm_id": arm.arm_id, "skill": arm.decision.skill,
+                                            "step_id": arm.step_id})
+            if state is None:
+                state = State.model_validate(self.observer.observe(arm).data["state"])
+            self.routine_clock = time.monotonic()
+            result = self.spine.execute(arm, state, focused_checkpoint)
+            self._note_routine(arm, result)
+            return result
         result = self.controller.run(arm, focused_checkpoint)
         if (result.code not in {"teacher_unavailable", "teaching_stalled"}
                 or arm.decision.skill in {"ABORT_WAIT", "IDLE"}):
@@ -272,6 +298,29 @@ class PlayingBody:
                           "a blocking dialog is up; the policy clears it first", "interrupted")
         self.routine_clock = time.monotonic()
         return self.spine.execute(arm, state, focused_checkpoint)
+
+    def _ask_tutor(self, arm) -> bool:
+        """Hybrid dispatch: does the tutor take this objective, or the guide's routine?
+
+        The routine first, measured: teach mode cost about a fifth of play time on tutor
+        decisions, and runs without the tutor levelled 1.6 to 5.5 times faster at levels 2
+        and 3 (docs/plans/nine-hour-session.md). The tutor is still asked where it earns
+        its time - an objective whose routine has just failed - and on a fixed share of
+        ordinary objectives, so its data keeps coming from everything the bot does.
+        """
+        key = (arm.step_id, arm.decision.skill)
+        if key in self._routine_failed:
+            self._routine_failed.discard(key)
+            return True
+        digest = hashlib.sha1(str(arm.arm_id).encode()).hexdigest()
+        return int(digest, 16) % HYBRID_SAMPLE == 0
+
+    def _note_routine(self, arm, result) -> None:
+        """A routine that could not do its objective hands the next attempt to the tutor.
+        Being interrupted (a fight, a stop) is not failing."""
+        if result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT) \
+                and result.code not in ROUTINE_NOT_FAILED:
+            self._routine_failed.add((arm.step_id, arm.decision.skill))
 
     def delegable(self, arm) -> tuple[str, ...]:
         return () if arm is None else delegable_skills(arm.decision.skill, self.available)

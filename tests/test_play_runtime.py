@@ -602,3 +602,47 @@ def test_background_leaves_the_run_in_progress_to_its_own_controller(tmp_path):
     finally:
         service.close()
     assert ingested == ["earlier"]
+
+
+def test_hybrid_dispatch_runs_the_routine_first_and_the_tutor_on_its_failure(tmp_path):
+    """docs/plans/nine-hour-session.md: the tutor cost a fifth of play time. In hybrid the
+    guide's routine takes an ordinary objective, and the tutor the one it just failed."""
+    env = composition(tmp_path)
+    env.playing.dispatch = "hybrid"
+    asked = []
+    env.playing.controller.run = lambda arm, checkpoint: asked.append(arm) or Result(
+        SkillOutcome.SUCCEEDED, "tutor played", "done")
+    outcomes = iter([Result(SkillOutcome.ABORTED, "could not", "unreachable"),
+                     Result(SkillOutcome.SUCCEEDED, "routine ran", "ok")])
+    scripted = []
+    env.spine.execute = lambda arm, state, checkpoint: scripted.append(arm) or next(outcomes)
+    unsampled = next(replace(env.arm, arm_id=f"arm{i}") for i in range(100)
+                     if int(hashlib.sha1(f"arm{i}".encode()).hexdigest(), 16) % 4 != 0)
+    try:
+        first = env.playing.execute(unsampled, None, lambda: None)
+        second = env.playing.execute(unsampled, None, lambda: None)
+        third = env.playing.execute(unsampled, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert (first.code, second.code, third.code) == ("unreachable", "done", "ok")
+    assert scripted == [unsampled, unsampled], "the routine first, and again after the tutor"
+    assert asked == [unsampled], "only its failure went to the tutor"
+    config = json.loads((env.recorder.dir / "play-config.json").read_text())
+    assert config["dispatch"] == "tutor", "recorded as built; the fixture switched it after"
+
+
+def test_hybrid_dispatch_samples_one_objective_in_four_for_the_tutor(tmp_path):
+    env = composition(tmp_path)
+    env.playing.dispatch = "hybrid"
+    try:
+        picks = [env.playing._ask_tutor(replace(env.arm, arm_id=f"arm{i}")) for i in range(400)]
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert 60 <= sum(picks) <= 140, "about a quarter"
+
+
+def test_an_unknown_dispatch_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="dispatch"):
+        PlayingBody(None, recorder=None, store=tmp_path, screenshots=None, dispatch="sometimes")
