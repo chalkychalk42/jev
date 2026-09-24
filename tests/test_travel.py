@@ -308,3 +308,76 @@ def test_a_blocked_leg_no_detour_gets_past_is_remembered_and_routed_round(monkey
     assert math.dist(here[0], goal) < 1e-6
     assert math.dist(walked[-1], goal) < 1e-6
     assert math.dist(walked[-2], crossing) > 1e-4, "the way round went by the crossing again"
+
+
+def test_walking_up_a_slope_and_sliding_back_is_stuck_too():
+    """147 s below a hillside on the way to Northshire: always moving, never closer, so
+    the stand-still test never fired (run 20260924T052148-85c63f)."""
+    class _Hid:
+        refused = 0
+        hwnd = 1
+        STRAFE_LEFT, STRAFE_RIGHT = "q", "e"
+
+        def key_down(self, _k):
+            return True
+
+        def key_up(self, _k):
+            return True
+
+        def release_all(self):
+            pass
+
+        def hold(self, *_a, **_k):
+            return True
+
+        def tap(self, *_a, **_k):
+            return True
+
+    ticks = [0]
+
+    def slide():
+        ticks[0] += 1
+        # Four yards up the slope and back down again, over and over, 60 yards short.
+        phase = ticks[0] % 20
+        up = phase if phase < 10 else 20 - phase
+        return (0.5, 0.5 - up * 0.00012)
+
+    t = Travel(hid=_Hid(), bounds=ELWYNN, read_pos=slide, arrival_yards=1.0,
+               no_progress_s=0.6)
+    result = t.to((0.5, 0.48), timeout_s=20.0, allow_detour=False)
+    # Either way the caller re-plans from here, and blocks the spot if nothing gets past.
+    assert result.outcome is Outcome.STUCK and t.stuck_events == 1
+    assert result.elapsed_s < 15.0, "the unstick attempts, not the slope, took the time"
+
+
+def test_a_long_leg_that_keeps_closing_is_not_stuck():
+    class _Hid:
+        refused = 0
+        hwnd = 1
+        STRAFE_LEFT, STRAFE_RIGHT = "q", "e"
+
+        def key_down(self, _k):
+            return True
+
+        def key_up(self, _k):
+            return True
+
+        def release_all(self):
+            pass
+
+        def hold(self, *_a, **_k):
+            return True
+
+        def tap(self, *_a, **_k):
+            return True
+
+    ticks = [0]
+
+    def walk():
+        ticks[0] += 1
+        return (0.5, 0.5 - min(ticks[0] * 0.00008, 0.02))
+
+    t = Travel(hid=_Hid(), bounds=ELWYNN, read_pos=walk, arrival_yards=2.0,
+               no_progress_s=0.6)
+    result = t.to((0.5, 0.48), timeout_s=20.0, allow_detour=False)
+    assert result.outcome is Outcome.ARRIVED

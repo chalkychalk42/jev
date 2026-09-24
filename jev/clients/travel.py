@@ -120,6 +120,13 @@ class Travel:
     # two minutes without a single stuck event; drawn timing made the angle common.
     stuck_after_s: float = 1.5
     stuck_step_yards: float = MIN_TRAVEL_FOR_HEADING
+    # Moving is not getting anywhere. A slope too steep to climb lets the character walk
+    # up it and slide back for as long as forward is held: 147 s below a hillside on the
+    # way to Northshire, never still long enough for the test above, until the step's
+    # clock failed it (run 20260924T052148-85c63f). A leg whose end has come no closer by
+    # `no_progress_yards` in `no_progress_s` is stuck as well.
+    no_progress_s: float = 12.0
+    no_progress_yards: float = 2.0
     # How many headings to try the recovery from, and how far to turn between them. Eight
     # would be a full circle; four covers a corner, and each one costs five attempts.
     unstick_headings: int = 4
@@ -256,6 +263,7 @@ class Travel:
         pulse_started_heading: float | None = None
         pulse_len = 0.0
 
+        best, best_at = None, t0
         self.hid.key_down("w")
         try:
             while True:
@@ -298,9 +306,12 @@ class Travel:
                     self.closest_yards = remaining
                 if remaining <= self.arrival_yards:
                     return self._result(Outcome.ARRIVED, start, here, target, elapsed, "")
+                if best is None or remaining < best - self.no_progress_yards:
+                    best, best_at = remaining, now
 
                 moved = self._moved_since(self.stuck_after_s)
-                if moved is not None and moved < self.stuck_step_yards:
+                if (now - best_at > self.no_progress_s
+                        or (moved is not None and moved < self.stuck_step_yards)):
                     # Not moving and not pressing are different problems with the same
                     # symptom. `Hid` refuses whenever the game window is not focused, so
                     # a character that was never sent a keystroke looks exactly like one
@@ -348,6 +359,7 @@ class Travel:
                         self._trace = []        # only the attempt that works is learned
                     self._detour(here)
                     self._track.clear()
+                    best, best_at = None, time.perf_counter()   # the detour starts afresh
                     self.hid.key_down("w")
                     time.sleep(pace(self.hid, self.sample_s))
                     continue
