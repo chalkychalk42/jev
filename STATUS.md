@@ -2265,3 +2265,7 @@ stair has waypoints on different floors at the same x/y. A 2D follower can take 
 floor's waypoint as reached from below. Brother Neals (and any upstairs NPC) needs height:
 a strip field for it, or a follower that walks stair legs by time. The step now fails into
 the level 5-7 wolves until level 8, then comes back to him.
+
+Operator action, 08:00: the loop was stopped between sessions and the playhead given
+`retried: [3905_grape_manifest_turnin]` (V110): its first failure, in session 43, was only
+in that session's memory. The previous file is at `/tmp/playhead-before-0800.json`.
