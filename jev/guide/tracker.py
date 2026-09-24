@@ -28,6 +28,11 @@ from jev.world.state_v1 import State, StepKind
 PROGRESS_STEP = 0.001
 # Deaths on a grind rib before it is left for the step it came from.
 RIB_DEATHS = 2
+# How long a rib lasts when the step that failed into it did not fail by dying. A level is
+# the cure for a step that kills the character; for a quest giver out of reach, a named mob
+# not up yet or a hand-in behind a stair it cures nothing, and a whole level of wolves at
+# level 8 is an hour. Five minutes gives a respawn its time; then the step again.
+SHORT_RIB_S = 300.0
 PROGRESS_WINDOW_S = 2.0
 
 
@@ -76,6 +81,9 @@ class StepMemory:
     closest_to: tuple[float, float] | None = None
     # The step's quest counters as last seen: a kill or a pickup starts its clock again.
     counters: int | None = None
+    # A rib entered for a failure the character's level cannot cure rejoins at this wall
+    # time (`SHORT_RIB_S`), whatever else it has or has not done.
+    until: float | None = None
 
 
 @dataclass(frozen=True)
@@ -226,6 +234,10 @@ class Tracker:
                 and _predicate(state, back, StepMemory(back.id, state.t))):
             return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
                            reason="the rib's way back is already done", off_route_s=off_route_s)
+        if (node.kind is StepKind.GRIND and self.memory.rejoin_to
+                and self.memory.until is not None and state.t >= self.memory.until):
+            return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
+                           reason="a short rib's time is up", off_route_s=off_route_s)
         # A rib that has run its course rejoins even without having levelled. It is a
         # detour, not a destination, and the step that sent us here may well be passable
         # now that the character is better fed and better geared.

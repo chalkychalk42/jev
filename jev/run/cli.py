@@ -277,11 +277,11 @@ def _live(args, graph) -> int:
             client_id=args.client_id, graph=graph, source=ClientSource(client), recorder=recorder,
             keys_down=client.hid.keys_down, start_step=memory.step_id,
             start_rejoin=memory.rejoin_to, start_deaths=memory.deaths,
-            start_retried=memory.retried,
+            start_retried=memory.retried, start_rib_until=memory.rib_until,
             completed=set(memory.completed),
-            on_progress=lambda step, done, rejoin, deaths, retried=frozenset(): playhead.save(
-                graph.graph_id, step, done, path, rejoin_to=rejoin, deaths=deaths,
-                retried=retried),
+            on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None:
+            playhead.save(graph.graph_id, step, done, path, rejoin_to=rejoin, deaths=deaths,
+                          retried=retried, rib_until=until),
             character_key=character,
             available_skills=body.available,
             validate_action=body.validate,

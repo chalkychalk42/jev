@@ -78,6 +78,8 @@ class Remembered:
     # Kept in memory alone, every fifteen-minute session gave quest 3905's hand-in its
     # first failure afresh, and it cycled between Brother Neals' stair and the wolves.
     retried: frozenset[str] = frozenset()
+    # When a short rib on `step_id` rejoins its way back, as wall time (`SHORT_RIB_S`).
+    rib_until: float | None = None
 
 
 def load(graph_id: str, path: pathlib.Path = DEFAULT_PATH) -> Remembered:
@@ -112,19 +114,24 @@ def load(graph_id: str, path: pathlib.Path = DEFAULT_PATH) -> Remembered:
     tried = data.get("retried")
     retried = (frozenset(s for s in tried if isinstance(s, str) and s)
                if isinstance(tried, list) and data.get("graph_id") == graph_id else frozenset())
+    until = data.get("rib_until")
+    if step is None or isinstance(until, bool) or not isinstance(until, (int, float)):
+        until = None
     return Remembered(graph_id=graph_id, step_id=step, completed=completed, rejoin_to=rejoin,
-                      deaths=deaths, retried=retried)
+                      deaths=deaths, retried=retried, rib_until=until)
 
 
 def save(graph_id: str, step_id: str | None = None,
          completed: frozenset[int] | set[int] = frozenset(),
          path: pathlib.Path = DEFAULT_PATH, rejoin_to: str | None = None,
-         deaths: int = 0, retried: frozenset[str] | set[str] = frozenset()) -> None:
+         deaths: int = 0, retried: frozenset[str] | set[str] = frozenset(),
+         rib_until: float | None = None) -> None:
     """Write the position. Best effort: failing to remember must not fail the run."""
     with suppress(OSError):
         atomic_json(path, {"graph_id": graph_id, "step_id": step_id,
                            "completed": sorted(completed), "rejoin_to": rejoin_to,
-                           "deaths": deaths, "retried": sorted(retried)})
+                           "deaths": deaths, "retried": sorted(retried),
+                           "rib_until": rib_until})
 
 
 def with_completed(remembered: Remembered, quest_id: int) -> Remembered:
@@ -132,4 +139,4 @@ def with_completed(remembered: Remembered, quest_id: int) -> Remembered:
     return Remembered(graph_id=remembered.graph_id, step_id=remembered.step_id,
                       completed=remembered.completed | {quest_id},
                       rejoin_to=remembered.rejoin_to, deaths=remembered.deaths,
-                      retried=remembered.retried)
+                      retried=remembered.retried, rib_until=remembered.rib_until)

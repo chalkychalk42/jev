@@ -198,7 +198,7 @@ def test_terminal_step_is_completed_and_persisted_once(tmp_path):
     saved = []
     rt = runtime(tmp_path, [seen(0, quests=(Quest(quest_id=1),)), seen(1), seen(2), seen(3)],
                  start_step="turnin",
-                 on_progress=lambda step, done, rejoin, deaths, retried=frozenset(): saved.append((step, done)))
+                 on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None: saved.append((step, done)))
     rt.run(4, 0)
     assert rt.finished
     assert rt.completed == {1}
@@ -259,7 +259,7 @@ def test_a_step_that_failed_into_a_rib_is_retried_once_then_passed_over(tmp_path
     saved = []
     states = [held(0, 3), held(12, 3), held(13, 4), held(25, 4), held(26, 5)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
-                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(): saved.append((step, rejoin)))
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None: saved.append((step, rejoin)))
     visited = []
     for _ in states:
         rt.tick(choose=False)
@@ -304,7 +304,7 @@ def test_deaths_on_a_step_outlive_the_session_that_counted_them(tmp_path):
     states = [held(0, 6), held(1, 6)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
                        start_step="rib", start_rejoin="turnin", start_deaths=2,
-                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(): saved.append((step, deaths)))
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None: saved.append((step, deaths)))
     rt.tick(choose=False)
     assert rt.tracker.step_id == "turnin", "a rib that killed twice is left for its way back"
 
@@ -323,7 +323,7 @@ def test_a_step_retried_in_an_earlier_session_is_passed_over_on_its_next_failure
     states = [held(0, 3), held(12, 3)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
                        start_retried=frozenset({"turnin"}),
-                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset():
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None:
                        saved.append((step, rejoin, retried)))
     for _ in states:
         rt.tick(choose=False)
@@ -347,7 +347,7 @@ def test_a_steps_own_skill_out_of_attempts_takes_the_steps_fail_edge(tmp_path):
     states = [held(0, 3)]
     rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
                        start_step="turnin",
-                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset():
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None:
                        saved.append((step, rejoin, retried)))
     rt.tick(choose=False)
     assert rt.tracker.step_id == "turnin"
@@ -360,3 +360,38 @@ def test_a_steps_own_skill_out_of_attempts_takes_the_steps_fail_edge(tmp_path):
     assert rt.fail_over("TURNIN_QUEST", "no observed nameplate") is True
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "after"), \
         "retried once, then passed over"
+
+
+def test_only_a_step_that_killed_the_character_earns_a_whole_rib(tmp_path):
+    from jev.guide.tracker import SHORT_RIB_S
+
+    saved = []
+    states = [held(0, 3), held(12, 3)]
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       on_progress=lambda *args: saved.append(args))
+    rt.tick(choose=False)
+    rt.tick(choose=False)                            # the hand-in times out
+    assert rt.tracker.step_id == "rib"
+    assert rt.tracker.memory.until == pytest.approx(12 + SHORT_RIB_S)
+    assert saved[-1][5] == pytest.approx(12 + SHORT_RIB_S), "the rib's end is saved"
+
+    from jev.guide.tracker import Event
+    from jev.guide.tracker import Verdict as TrackVerdict
+
+    rt2 = ClientRuntime("c", rib_graph(), ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                        start_step="turnin")
+    rt2.tick(choose=False)
+    rt2._apply(TrackVerdict(Event.FAIL, goto="rib", reason="deaths_on_step=3.0"), held(1, 3))
+    assert rt2.tracker.step_id == "rib" and rt2.tracker.memory.until is None
+
+
+def test_a_short_ribs_end_outlives_the_session(tmp_path):
+    from jev.guide import playhead
+
+    path = tmp_path / "character.json"
+    playhead.save("g", "rib", {1}, path, rejoin_to="turnin", rib_until=1234.5)
+    assert playhead.load("g", path).rib_until == 1234.5
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                       start_step="rib", start_rejoin="turnin", start_rib_until=1234.5)
+    rt.tick(choose=False)
+    assert rt.tracker.memory.until == 1234.5

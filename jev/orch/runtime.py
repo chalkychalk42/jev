@@ -36,7 +36,7 @@ from jev.coach.situation import with_key
 from jev.coach.verifier import verify
 from jev.guide.graph import Graph, Node
 from jev.guide.objectives import progress
-from jev.guide.tracker import Event, Tracker
+from jev.guide.tracker import SHORT_RIB_S, Event, Tracker
 from jev.guide.tracker import Verdict as TrackVerdict
 from jev.learn.episode import (
     DecisionRow,
@@ -125,9 +125,11 @@ class ClientRuntime:
     start_deaths: int = 0
     # Steps already failed into a rib once, in earlier sessions (`playhead.Remembered`).
     start_retried: frozenset[str] = frozenset()
+    # When a short rib the run resumes on rejoins, as wall time (`playhead.Remembered`).
+    start_rib_until: float | None = None
     # (step, completed quests, where the step leads back to when that is not its next,
-    # deaths on the step, steps already retried)
-    on_progress: Callable[[str, set[int], str | None, int, frozenset[str]], None] | None = None
+    # deaths on the step, steps already retried, when a short rib rejoins)
+    on_progress: Callable[..., None] | None = None
     # The character whose playhead this run keeps (`char.key`). Another character's state
     # is not tracked, recorded or saved: it sets `foreign`, and the run stops.
     character_key: int | None = None
@@ -198,6 +200,7 @@ class ClientRuntime:
                                           rejoin_to=self.start_rejoin)
             if start is not None and self.tracker.step_id == start:
                 self.tracker.memory.deaths = self.start_deaths
+                self.tracker.memory.until = self.start_rib_until
             self._retried |= set(self.start_retried)
             self._entered = True
 
@@ -205,6 +208,7 @@ class ClientRuntime:
         completed_before = set(self.completed)
         deaths_before = self.tracker.memory.deaths
         retried_before = set(self._retried)
+        until_before = self.tracker.memory.until
         self.tracker.serving = (self.armed is not None
                                 and self.armed.decision.skill in SERVICING_SKILLS)
         verdict = TrackVerdict(Event.NONE) if self.finished else self.tracker.tick(state)
@@ -220,10 +224,9 @@ class ClientRuntime:
                                             or completed_before != self.completed
                                             or deaths_before != self.tracker.memory.deaths
                                             or retried_before != self._retried
+                                            or until_before != self.tracker.memory.until
                                             or self.last_state is None):
-            self.on_progress(self.tracker.step_id, set(self.completed),
-                             self.tracker.memory.rejoin_to, self.tracker.memory.deaths,
-                             frozenset(self._retried))
+            self._progress()
 
         if choose:
             plan, by, rule, decision_id = self._choose(state, node)
@@ -291,10 +294,14 @@ class ClientRuntime:
         self._apply(TrackVerdict(Event.FAIL, goto=node.on_fail[0].goto,
                                  reason=f"{skill} out of attempts: {reason}"), state)
         if self.on_progress is not None:
-            self.on_progress(self.tracker.step_id, set(self.completed),
-                             self.tracker.memory.rejoin_to, self.tracker.memory.deaths,
-                             frozenset(self._retried))
+            self._progress()
         return self.tracker.step_id != before
+
+    def _progress(self) -> None:
+        """Hand the playhead to whoever keeps it."""
+        self.on_progress(self.tracker.step_id, set(self.completed),
+                         self.tracker.memory.rejoin_to, self.tracker.memory.deaths,
+                         frozenset(self._retried), self.tracker.memory.until)
 
     def _apply(self, verdict, state: State) -> None:
         match verdict.event:
@@ -343,6 +350,11 @@ class ClientRuntime:
                             self._retried.add(failed)
                             rejoin = failed
                     self.tracker.enter(goto, state, rejoin_to=rejoin)
+                    if (target is not None and target.kind is StepKind.GRIND
+                            and "deaths" not in (verdict.reason or "")):
+                        # A level cures a step that kills the character, not one that
+                        # could not find its NPC or its mob (`SHORT_RIB_S`).
+                        self.tracker.memory.until = state.t + SHORT_RIB_S
             case Event.DEATH:
                 if not self._was_dead:
                     self.counters.deaths += 1

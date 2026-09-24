@@ -429,3 +429,14 @@ def test_a_rib_back_to_a_hand_in_is_not_ended_by_an_empty_log():
     tr = Tracker(_graph(), "rib")
     tr.enter("rib", _s(0.0), rejoin_to="turnin")
     assert tr.tick(_s(1.0)).event is not Event.ADVANCE
+
+
+def test_a_short_rib_rejoins_when_its_time_is_up():
+    """A level cures a step that kills the character, not one that could not find its NPC:
+    a whole level of wolves at level 8 is an hour."""
+    tr = Tracker(_graph(), "rib")
+    tr.enter("rib", _s(0.0), rejoin_to="do")
+    tr.memory.until = 300.0
+    assert tr.tick(_s(299.0)).event is not Event.ADVANCE
+    verdict = tr.tick(_s(300.0))
+    assert verdict.event is Event.ADVANCE and verdict.goto == "do"
