@@ -2365,3 +2365,32 @@ addon run under the client stub; not yet live, because the client needs the new 
 Open risks, for the live run to settle: the drag from spellbook to bar (the mouse held and
 moved off the spell button; a release anywhere but a bar button places nothing and casts
 nothing), and the click on open world that drops the rank-1 Holy Light a swap hands back.
+
+## 2026-09-24 11:35 — the trainer, live (sessions 55-61)
+
+Verified live (V119):
+- `TRAIN_CLASS` chose Brother Wilhelm (Goldshire) from Northshire and walked there through
+  a fight and a fall: **7 spells bought for 579 copper** (list price 610; Stormwind's
+  reputation discount) - Devotion Aura, Blessing of Might, Divine Protection, Hammer of
+  Justice, Holy Light rank 2, Purify and Parry. Judgement and Seal of the Crusader waited on
+  the purse (48 copper left) and come at level 9.
+- Holy Light rank 2 replaced rank 1 on slot 3 by itself (the client's doing).
+- **Spells dragged from the spellbook onto the bar**: Devotion Aura 4, Blessing of Might 5,
+  Hammer of Justice 6, Divine Protection 10. The fights press the aura and the blessing.
+
+What the first live runs found, each fixed the same morning:
+- an empty bar button is hidden until something is dragged: the spell is now picked up
+  first and the slot found while it is held;
+- a census read as it came stayed partial for minutes: a missing one is read at every
+  paint until whole, and waits for an entry end once every entry has been seen;
+- **a paladin's auras are shapeshift forms on 2.4.3**, and a form that is on shows its
+  active icon on the bar: Devotion Aura read as unknown and was placed on four more slots.
+  A read-only probe addon (removed after) confirmed GetActionInfo answers with spellbook
+  indices; a form's entry is now believed as it stands, and a second copy of a spell counts
+  as a free slot (Hammer of Justice went over one);
+- the stock spellbook numbers its buttons down the columns (SpellButton2 has ID 7): only a
+  page's first entry was ever found. The test client now numbers them as the stock one.
+
+Operator note: two deaths today happened with the loop stopped for these fixes, the
+character standing idle in the world; and a revived old loop ran a duplicate session 61
+for two seconds (the input lock refused it). `/tmp/session_loop2.sh` holds an flock.
