@@ -305,8 +305,15 @@ def _failed(row: Mapping[str, Any]) -> bool:
             and (outcome.get("success") is False or outcome.get("fatal") is True))
 
 
-def _grouped_split(rows: list[dict[str, Any]], holdout_runs: int) -> tuple[list, list]:
-    """Keep entire runs together and union runs linked by explicit encounter IDs."""
+def _grouped_split(rows: list[dict[str, Any]], holdout_runs: int,
+                   holdout_examples: int = 0) -> tuple[list, list]:
+    """Keep entire runs together and union runs linked by explicit encounter IDs.
+
+    Held out: at least `holdout_runs` groups *and* at least `holdout_examples` rows. Exactly
+    two runs of about five qualified examples each could never reach the twenty held-out
+    examples the gate asks for, so acquire sat at 55 of 60 behind "insufficient disjoint
+    training and held-out examples" however many runs it earned (24 September).
+    """
     runs = {str(row["run_id"]) for row in rows}
     parent = {run: run for run in runs}
 
@@ -330,9 +337,11 @@ def _grouped_split(rows: list[dict[str, Any]], holdout_runs: int) -> tuple[list,
         groups[find(run)].add(run)
     # Stable independent of directory order and timestamps. No example-level random split.
     ordered = sorted(groups.values(), key=lambda group: _digest(sorted(group)))
+    per_run = Counter(str(row["run_id"]) for row in rows)
     selected: set[str] = set()
     for group in ordered:
-        if len(selected) >= holdout_runs:
+        if (len(selected) >= holdout_runs
+                and sum(per_run[run] for run in selected) >= holdout_examples):
             break
         selected.update(group)
     return ([r for r in rows if str(r["run_id"]) not in selected],
@@ -438,7 +447,8 @@ def _fit(rows: list[dict[str, Any]], config: LearningConfig, *,
     total_runs = {row["run_id"] for row in qualified}
     if len(total_runs) < config.min_train_runs + config.min_holdout_runs:
         return None, "more independent successful runs needed"
-    train, holdout = _grouped_split(qualified, config.min_holdout_runs)
+    train, holdout = _grouped_split(qualified, config.min_holdout_runs,
+                                    config.min_holdout_examples)
     if (len(train) < config.min_train_examples or len(holdout) < config.min_holdout_examples
             or len({r["run_id"] for r in train}) < config.min_train_runs):
         return None, "insufficient disjoint training and held-out examples"

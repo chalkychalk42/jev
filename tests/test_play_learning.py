@@ -249,6 +249,18 @@ def test_linked_encounters_cannot_cross_holdout_runs():
                 and {"a", "b"} & {r["run_id"] for r in test})
 
 
+def test_the_held_out_runs_grow_until_they_hold_enough_examples():
+    """About five qualified examples a run: two held-out runs never held twenty, and acquire
+    sat at 55 of 60 behind the split however many runs it earned."""
+    rows = [record(f"run-{r}", i) for r in range(12) for i in range(5)]
+    train, test = _grouped_split(rows, 2, 20)
+    held = {row["run_id"] for row in test}
+    assert len(test) >= 20 and len(held) >= 2
+    assert len(test) < 25, "no more runs than the minimums need"
+    assert not held & {row["run_id"] for row in train}
+    assert _grouped_split(rows, 2) == _grouped_split(rows, 2, 0), "the examples bound is optional"
+
+
 def test_duplicate_conflict_and_episode_idempotence(tmp_path):
     learner = MotorLearner(tmp_path, config=config())
     row = record("a", 1)
