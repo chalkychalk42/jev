@@ -63,4 +63,5 @@ def merchants(map_id: int, *, items: frozenset[int] = frozenset()) -> tuple[Merc
                           world=tuple(float(value) for value in v["world"]),
                           items=frozenset(v["items"]))
                  for v in catalog()["vendors"]
-                 if v["map_id"] == map_id and items <= set(v["items"]))
+                 if v["map_id"] == map_id and items <= set(v["items"])
+                 and not str(v["name"]).startswith("["))       # "[DND]" placeholders

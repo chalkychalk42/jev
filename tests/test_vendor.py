@@ -316,3 +316,10 @@ def test_catalog_and_lua_supply_identities_regenerate_exactly(tmp_path):
                     "--lua", str(lua)], check=True, capture_output=True)
     assert generated.read_bytes() == Path("content/tbc/vendor-catalog.json").read_bytes()
     assert lua.read_bytes() == Path("addons/JevRadio/Supplies.lua").read_bytes()
+
+
+def test_placeholder_vendors_are_not_merchants():
+    """Developer placeholders the server flags as vendors - "[DND] TAR Pedestal - Trainer,
+    Druid" was walked to on a sale."""
+    assert not any(m.name.startswith("[") for m in merchants(0))
+    assert not any(v["name"].startswith("[") for v in catalog()["vendors"])

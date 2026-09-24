@@ -47,6 +47,10 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
         "from world_creature_template t join world_creature c on c.id=t.Entry "
         "where (t.NpcFlags & 128)!=0 order by t.Entry,c.map,c.position_x,c.position_y"):
         entry, name, map_id, x, y, z = row
+        if not name or name.startswith("["):
+            # "[DND] TAR Pedestal - Trainer, Druid" and 779 others: developer placeholders the
+            # server flags as vendors. The nearest one was walked to on a sale.
+            continue
         sold = {int(r[0]) for r in db.execute(
             "select item from world_npc_vendor where entry=? and ExtendedCost=0 "
             "and condition_id=0 union select v.item from world_npc_vendor_template v "
