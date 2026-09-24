@@ -437,3 +437,90 @@ def test_arriving_again_where_it_already_arrived_is_not_useful(tmp_path):
     result = controller.run(grind, lambda: None)
     assert result.code == "teaching_stalled"
     assert len(env.actions) == 4, "one arrival, then three that went nowhere"
+
+
+def _held_setup(tmp_path):
+    """A grind the tutor starts by selecting a unit, cut short by combat, with a quest
+    counter the fight can move."""
+    select = ({"kind": "key", "control": "target_next"}, "selected")
+    env, _, journal, controller = setup(tmp_path, [select] * 4, max_no_effect=10)
+    env.values.update({"target.has": False, "target.name_id": None})
+    quests = {"count": 0}
+    original_observe, original_execute = env.observe, env.execute
+
+    def observe(arm_, *, retain=True):
+        observation = original_observe(arm_, retain=retain)
+        observation.data["state"]["quests"] = [{
+            "quest_id": 33, "complete": False,
+            "objectives": [{"counter_index": 0, "have": quests["count"], "need": 8}]}]
+        observation.data["context"]["quest_id"] = 33
+        return observation
+
+    def execute(action, expected=None):
+        env.values.update({"target.has": True, "target.name_id": 42})
+        return original_execute(action, expected)
+
+    env.observe, env.execute = observe, execute
+    grind = replace(arm(), decision=arm().decision.model_copy(update={"skill": "GRIND_UNTIL"}))
+    return env, journal, controller, grind, quests
+
+
+def _combat_after(n):
+    from jev.run.supervisor import Cancelled
+
+    calls = {"n": 0}
+
+    def checkpoint():
+        calls["n"] += 1
+        if calls["n"] > n:
+            raise Cancelled("combat interrupted the leg or service")
+    return checkpoint
+
+
+def _episodes(journal):
+    path = journal.directory / "play-episodes.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def test_an_episode_combat_cuts_short_is_credited_with_the_kill_it_set_up(tmp_path):
+    """Grind teaching succeeded 3 times in 42 once combat took the floor from the tutor:
+    the kill its selection set up landed outside its episode."""
+    from jev.run.supervisor import Cancelled
+
+    env, journal, controller, grind, quests = _held_setup(tmp_path)
+    with pytest.raises(Cancelled):
+        controller.run(grind, _combat_after(6))
+    assert _episodes(journal) == [], "held for the fight's verdict, not written as lost"
+    quests["count"] = 1                                  # the reflex fight's kill counted
+    env.values["target.has"] = False
+    with pytest.raises(Cancelled):
+        controller.run(grind, _combat_after(1))
+    first = _episodes(journal)[0]
+    assert first["episode_id"] == "episode" and first["success"] and first["verified"]
+    assert first["code"] == "progress"
+
+
+def test_a_held_episode_whose_fight_moved_nothing_is_interrupted(tmp_path):
+    from jev.run.supervisor import Cancelled
+
+    _env, journal, controller, grind, _quests = _held_setup(tmp_path)
+    with pytest.raises(Cancelled):
+        controller.run(grind, _combat_after(6))
+    controller.settle(None)
+    first = _episodes(journal)[0]
+    assert first["code"] == "preempted" and not first["success"]
+
+
+def test_an_episode_cut_short_by_anything_but_combat_is_closed_at_once(tmp_path):
+    from jev.run.supervisor import FocusLost
+
+    _env, journal, controller, grind, _quests = _held_setup(tmp_path)
+    calls = {"n": 0}
+
+    def checkpoint():
+        calls["n"] += 1
+        if calls["n"] > 6:
+            raise FocusLost("client lost focus during teaching")
+    with pytest.raises(FocusLost):
+        controller.run(grind, checkpoint)
+    assert [e["code"] for e in _episodes(journal)] == ["preempted"]

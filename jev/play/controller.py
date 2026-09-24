@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass
 from jev.learn.episode import SkillOutcome
 from jev.play.actions import action_dict, parse_action
 from jev.play.observation import capability, judge, measured_effects
-from jev.run.supervisor import Result
+from jev.run.supervisor import Cancelled, Result
 
 
 @dataclass(frozen=True)
@@ -176,6 +176,11 @@ def finished(first: dict, current: dict, *, observed_effects=()) -> bool:
 PROGRESS_EFFECTS = frozenset({"quest_progress", "quest_accepted", "quest_cleared"})
 
 
+# How long a teaching episode cut short by combat waits for that fight's verdict: the fight,
+# its loot and a meal, then the next teaching episode settles it.
+COMBAT_VERDICT_S = 180.0
+
+
 def progressed(first: dict, current: dict) -> bool:
     """A durable, measured step toward the objective since this episode began."""
     effects, _ = measured_effects(first, current)
@@ -215,6 +220,9 @@ class PlayController:
         self.skills_for = skills_for or (lambda arm: ())
         self.recent = deque(maxlen=12)
         self.learning_error = None
+        # A teaching episode combat cut short after it had engaged something, waiting for
+        # the fight's verdict: (episode id, first, last observation, actions, started, held).
+        self._held: tuple | None = None
 
     def _observe(self, arm, checkpoint, *, retain=True):
         checkpoint()
@@ -271,6 +279,33 @@ class PlayController:
             except Exception as exc:
                 self.learning_error = f"{type(exc).__name__}: {exc}"
 
+    def settle(self, observation=None) -> None:
+        """Finish an episode combat cut short, now that its fight has had its say.
+
+        Combat takes the floor from the tutor (V105), and the kill its selection set up then
+        landed outside its episode: grind teaching succeeded 3 times in 42 since, against 17
+        in 63 before, and every selection it made went unqualified. So an episode that had
+        engaged something waits; the next observation says whether the objective moved - a
+        kill's experience, a quest count - with the character alive and soon enough.
+        """
+        if self._held is None:
+            return
+        episode_id, first, current, count, started, held_at = self._held
+        self._held = None
+        values = observation.data["values"] if observation is not None else None
+        alive = (values is not None and values.get("vitals.dead") is False
+                 and values.get("vitals.ghost") is False)
+        if (alive and time.time() - held_at <= COMBAT_VERDICT_S
+                and progressed(first.data, observation.data)):
+            self._close(episode_id, first, observation,
+                        Result(SkillOutcome.SUCCEEDED,
+                               "verified objective progress from the fight it began", "progress"),
+                        count=count, started=started, verified=True)
+            return
+        self._close(episode_id, first, current,
+                    Result(SkillOutcome.PREEMPTED, "teaching episode interrupted", "preempted"),
+                    count=count, started=started, verified=False)
+
     def run(self, arm, checkpoint) -> Result:
         first = current = None
         result = Result(SkillOutcome.PREEMPTED, "teaching episode interrupted", "preempted")
@@ -280,8 +315,10 @@ class PlayController:
         goal_verified = False
         observed_effects = set()
         started = time.time()
+        cancelled = ""
         try:
             first = current = self._observe(arm, checkpoint)
+            self.settle(first)
             no_effect = repeats = 0
             last_futile = None
             while count < self.config.max_actions:
@@ -456,6 +493,15 @@ class PlayController:
                     return result
             result = Result(SkillOutcome.TIMED_OUT, "teaching action budget exhausted", "teaching_stalled")
             return result
+        except Cancelled as exc:
+            cancelled = str(exc)
+            raise
         finally:
-            self._close(episode_id, first, current, result, count=count, started=started,
-                        verified=goal_verified)
+            if (cancelled.startswith("combat") and first is not None and current is not None
+                    and result.code == "preempted"
+                    and observed_effects & {"selected", "attacking"}):
+                self.settle(None)                # one held at a time; an older one is done
+                self._held = (episode_id, first, current, count, started, time.time())
+            else:
+                self._close(episode_id, first, current, result, count=count, started=started,
+                            verified=goal_verified)

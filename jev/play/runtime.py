@@ -333,6 +333,7 @@ class PlayingBody:
             return
         self._closed = True
         try:
+            self.controller.settle(None)          # nothing left to judge a held episode by
             if self.learning_service:
                 self.learning_service.close()
         finally:
