@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 from test_fight import _Hid, _Targeting
 
-from jev.clients.interact import MAX_CANDIDATES, Interact, Result
+from jev.clients.interact import INTERACT_LOOKS, MAX_CANDIDATES, Interact, Result
 from jev.clients.targeting import ClickCode, ClickResult, PaintCode, PaintResult
 from jev.guide.coords import ZoneBounds
 from jev.perceive.radio_frame import name_id
@@ -48,11 +48,13 @@ def test_one_observed_candidate_set_and_bounded_selections(monkeypatch):
     captured = []
     inter.read_frame = lambda: captured.append(True) or object()
     assert inter.open_on("Supplier") is Result.NO_TARGET
-    assert len(captured) == 1
-    assert len(inter.hid.clicks) == MAX_CANDIDATES <= 3
+    # One candidate set per look: ahead, then after each of three quarter turns.
+    assert len(captured) == INTERACT_LOOKS
+    assert len(inter.hid.clicks) == MAX_CANDIDATES * INTERACT_LOOKS
+    assert MAX_CANDIDATES <= 3 and INTERACT_LOOKS <= 4
     assert all(not right for _, _, right in inter.hid.clicks)
     assert inter.targeting.requests == []
-    assert inter.hid.holds == []
+    assert len(inter.hid.holds) == INTERACT_LOOKS - 1
 
 
 def test_navigation_is_injected_and_failed_approach_prevents_selection():
@@ -74,6 +76,25 @@ def test_missing_visual_evidence_never_authorizes_a_spawn_centre_click(near):
     assert inter.clicked is None
     assert inter.hid.clicks == []
     assert inter.targeting.requests == []
+
+
+def test_a_unit_behind_the_character_is_found_by_looking_round(monkeypatch):
+    """Beside Marshal McBride the character faced a wall with him out of view."""
+    looks = []
+    monkeypatch.setattr("jev.clients.interact.find_plates",
+                        lambda _: [PLATE] if len(looks) >= 2 else [])
+    inter = _interact(values=SELECTED, frame=object())
+    original = inter.hid.hold
+
+    def hold(key, seconds, **kw):
+        looks.append(key)
+        return original(key, seconds, **kw)
+
+    inter.hid.hold = hold
+    inter.targeting.click_selected = lambda **kw: ClickResult(ClickCode.CLICKED, (996, 470), "")
+    inter._window_open = lambda: Result.QUEST
+    assert inter.open_on("Supplier") is Result.QUEST
+    assert len(looks) == 2, "two quarter turns found him"
 
 
 def test_wrong_selected_identity_costs_only_the_selection():
@@ -196,4 +217,4 @@ def test_confirmed_closure_allows_the_requested_interaction_to_proceed():
     inter._candidates = Mock(return_value=[])
     assert inter.open_on("Supplier") is Result.NOT_VISIBLE
     assert inter.hid.taps == ["esc"]
-    inter._candidates.assert_called_once()
+    assert inter._candidates.call_count == INTERACT_LOOKS, "every look asks for candidates"

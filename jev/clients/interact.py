@@ -7,6 +7,7 @@ drop or spawn-point centre click supplies missing visual evidence.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -14,6 +15,7 @@ from enum import StrEnum
 
 from jev.clients.hid import Hid
 from jev.clients.targeting import ClickCode, PaintCode, Targeting
+from jev.clients.travel import TURN_RATE_SEED
 from jev.clients.windows import CloseCode, close_observed
 from jev.guide.coords import ZoneBounds
 from jev.perceive.radio_frame import name_id
@@ -24,6 +26,11 @@ from jev.run.evidence import event, operation, traced
 # point, so the one we want is among the nearest few to the middle of the screen. Trying
 # every plate on screen would be the sweep this file was rewritten to delete.
 MAX_CANDIDATES = 3
+# Looks at the candidates before giving up: straight ahead, then after each of three quarter
+# turns. Stood beside Marshal McBride the character faced the Main Hall's wall with him out
+# of view, selected and plateless, and the hand-in failed twice (run 20260924T033806-a3254d).
+INTERACT_LOOKS = 4
+QUARTER_TURN_S = math.radians(90.0) / TURN_RATE_SEED
 
 # How close the character has to be for an NPC to talk, and therefore what "arrived" means
 # for a node holding a unit.
@@ -109,10 +116,19 @@ class Interact:
             return Result.APPROACH_FAILED
 
         wanted = name_id(name)
-        for plate in self._candidates():
-            opened = self._try(plate, wanted)
-            if opened is not None:
-                return opened
+        for look in range(INTERACT_LOOKS):
+            if look:
+                event("interact.look", data={"look": look, "seconds": round(QUARTER_TURN_S, 3)})
+                if not self.hid.hold(getattr(self.hid, "TURN_RIGHT", "d"), QUARTER_TURN_S):
+                    self.detail = "look-round turn refused"
+                    return Result.REFUSED
+                if self._targeting().wait_for_paint().code is PaintCode.BLIND:
+                    self.detail = "radio lost while looking round"
+                    return Result.BLIND
+            for plate in self._candidates():
+                opened = self._try(plate, wanted)
+                if opened is not None:
+                    return opened
         if not self.tried:
             self.detail = "no observed nameplate for selection"
             return Result.NOT_VISIBLE
