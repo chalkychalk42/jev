@@ -88,6 +88,9 @@ from jev.world.combat import (
 
 # The radio fraction preserves zero exactly. Low health is still a living target.
 DEAD_HP = 0.0
+# A selection whose health rises this far between two readings is another unit of the same
+# name: nothing in a fight heals a mob that fast.
+REPLACED_HP_RISE = 0.4
 
 # Nameplates to try before falling back to Tab. Small, and ordered by how central they
 # are: the character is standing in the camp facing it, so the nearest plate to the middle
@@ -447,19 +450,23 @@ class Fight:
                 continue                       # its click would have cast, not selected
             if v.get("target.has") is not True:
                 return self._settle(v)
-            if (self._selected_name_id is not None
-                    and v.get("target.name_id") != self._selected_name_id):
-                # The client can move the selection on at the kill itself: a Timber Wolf
-                # at 20% gave way to another unit at full health on the tick its
-                # experience arrived, the kill went unlooted, and the quest's meat with
-                # it (run 20260923T233909-8b1484). Nothing but a kill grants experience
-                # in a fight.
+            hp = v.get("target.hp")
+            # The client can move the selection on at the kill itself: a Timber Wolf at 20%
+            # gave way to another unit at full health on the tick its experience arrived,
+            # the kill went unlooted, and the quest's meat with it (run
+            # 20260923T233909-8b1484). Nothing but a kill grants experience in a fight. The
+            # next unit can share the name: a Kobold Worker at 19% became another at full
+            # health far off, and the fight chased that one until its plate was lost (run
+            # 20260924T013702-7f5692).
+            risen = (isinstance(hp, (int, float)) and isinstance(self.last_hp, (int, float))
+                     and hp - self.last_hp >= REPLACED_HP_RISE)
+            if risen or (self._selected_name_id is not None
+                         and v.get("target.name_id") != self._selected_name_id):
                 if self._gained(v) or self._experience_follows():
                     self.killed_name_id = self._selected_name_id
                     return Fought.KILLED
                 self.detail = "selected target changed during fight"
                 return Fought.LOST
-            hp = v.get("target.hp")
             if hp is not None:
                 self.last_hp = hp
             if hp == DEAD_HP:

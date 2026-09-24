@@ -1937,3 +1937,43 @@ Found and fixed tonight, all general:
 
 NEXT: keep the loop running; the class trainer (a fresh paladin has no Devotion Aura and
 never learns a rank) as the background project.
+
+## 2026-09-24 02:00 — overnight debrief 2: the merchant wall, and six general fixes
+
+Sessions 8-15 (~1h). Testvvi: level 4 at 76%, quest 21 at 7/12, grinding the level 3-5
+kobold rib after the quest step timed out (below). Learner: acquire 31/60 (6 runs),
+approach 21/60 (5 runs), interact 21/60 (11 runs); the run gates are passed for all three
+and they now wait on examples alone.
+
+Sessions 9-14 all stopped at the Northshire merchants within two minutes: the first full
+backpack. Four separate faults, each general, each fixed:
+- Dermot Johns stands behind his wagon, so his body can never be clicked: the next nearest
+  merchant is tried (V78);
+- 2.4.3's container gives no quality for grey trade junk, and grey armour was never on the
+  sell list: eight grey slots and nothing sellable. The addon now asks the item record
+  (installed; the client restarted and logged in), grey weapons and armour sell, a partial
+  sale counts, and bags with nothing sellable no longer stop a run (V80). Live: six stacks
+  sold, 0 -> 6 free slots;
+- the tutor, unable to click a shop's items, pressed Escape into the game menu and out of
+  it; Escape is offered only when something can close, trading is routine-only in its
+  prompt, and a dialog it leaves open goes back to the policy first (V79, V81);
+- from beside the wagons the planner's start snapped onto a wagon (the radio paints no
+  height) and five yards of partial path were called arrival: the start height is now the
+  ground the last walk ended on, then the destination's, then either side (d0d18ed).
+
+Also general, from the logs: a quest step's clock ran through kills, so quest 21 failed over
+at 7/12 while still killing (V75); the tutor could not select a corpse to loot it (V76);
+exploration quests are walked into instead of excluded, which returns The Fargodeep Mine,
+The Jasperlode Mine and Westbrook Garrison to the route (V77); a kill whose selection moves
+on to another unit of the same name was chased as a living target and never looted (in
+test).
+
+Checked and not a bug: loot never qualified as a learner example because every loot the
+tutor tried was on a corpse the scripted fight had already looted; the effect judge was
+right.
+
+Operational: the client came back from its restart on the first-time realm wizard (tick
+"Development", Suggest Realm, Accept, then the realm list); `tools/login.py` has no stage
+for it yet.
+
+NEXT: keep the loop running; watch quest 21's rejoin and the walk to Goldshire (quest 54).

@@ -1365,6 +1365,30 @@ def test_experience_a_paint_behind_the_new_selection_still_proves_the_kill(comba
     assert f.run(1161) is Fought.KILLED
 
 
+def test_a_kill_whose_selection_moves_on_to_one_of_the_same_name_is_a_kill(combat_clock):
+    """Run 20260924T013702-7f5692: a Kobold Worker at 19% became another Kobold Worker at
+    full health far off; the fight chased it until its plate was lost, the kill unlooted."""
+    fighting = {**ALIVE, "vitals.combat": True, "target.melee_range": True, "target.hp": 0.19,
+                "char.level": 4, "char.xp_pct": 0.68}
+    moved_on = {**fighting, "target.hp": 1.0, "target.in_melee": False,
+                "target.attacking_me": False, "char.xp_pct": 0.72}
+    f = _fight([fighting, fighting, moved_on])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+    assert f.killed_name_id == 1161
+
+
+def test_a_small_rise_in_the_selections_health_is_not_another_unit(combat_clock):
+    fighting = {**ALIVE, "vitals.combat": True, "target.melee_range": True, "target.hp": 0.5}
+    healed = {**fighting, "target.hp": 0.6}
+    dead = {**fighting, "target.hp": 0.0}
+    f = _fight([fighting, healed, dead])
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+
+
 def test_a_selection_that_moves_on_without_experience_is_lost(combat_clock):
     fighting = {**ALIVE, "vitals.combat": True, "target.melee_range": True, "target.hp": 0.2,
                 "char.level": 2, "char.xp_pct": 0.449}
