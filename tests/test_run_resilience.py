@@ -71,6 +71,23 @@ def test_a_new_steps_first_distance_is_not_progress():
     assert watch.escalate, "each step's start is a baseline, not an approach"
 
 
+def test_time_dead_or_a_ghost_is_not_a_stall():
+    """The window ran while the character died and ran back, and failed a hand-in over into
+    the wolves that had killed it (run 20260924T041014-a9781c)."""
+    from jev.world.state_v1 import Vitals
+
+    watch = Watchdog(no_progress_s=10)
+    alive = seen(char=Char(level=6, xp_pct=0.5), guide=GuidePos(step_id="turnin"))
+    ghost = alive.model_copy(update={"vitals": Vitals(hp=0.0, dead=False, ghost=True)})
+    watch.observe(alive, 0)
+    for now in range(1, 30):
+        watch.observe(ghost, now)
+    assert not watch.escalate
+    for now in range(30, 45):
+        watch.observe(alive, now)
+    assert watch.escalate, "alive and idle, the window runs again"
+
+
 def test_last_reconnect_is_allowed_to_finish_before_budget_exhaustion(tmp_path):
     blind = seen(sense=Sense(addon_ok=False))
     rt = runtime(tmp_path, [blind, blind, blind, blind])

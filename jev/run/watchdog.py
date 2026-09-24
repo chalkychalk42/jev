@@ -70,8 +70,13 @@ class Watchdog:
                 self._walk = (step, closest)       # a new step's start is not progress
             elif closest <= best - self.walk_step:
                 self._walk, walked = (step, closest), True
+        # Dead or a ghost, the step is not stalling: the window paused while the character
+        # died and ran back, and failed the Marshal McBride hand-in over into the wolves
+        # that had killed it (run 20260924T041014-a9781c). A spiral of deaths is the death
+        # edges' and the rib's own rule to end, as the step's clock already assumes.
+        recovering = state.vitals.dead is True or state.vitals.ghost is True
         facts = (self._level, self._xp, self._quests)
-        if facts != self._facts or self.progress_at is None or walked:
+        if facts != self._facts or self.progress_at is None or walked or recovering:
             self._facts, self.progress_at = facts, now
             self.escalated = False
         elif now - self.progress_at >= self.no_progress_s:
