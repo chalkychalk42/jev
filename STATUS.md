@@ -2248,3 +2248,20 @@ at 2/8 crates. Two more general fixes from live evidence:
 - a selected bystander in combat is not the fight: a Defias Thug at full health, neither
   biting nor near, stayed selected for 40 s while another killed the character. Defending
   now picks what is attacking first (V107).
+
+## 2026-09-24 07:55 — debrief 9: Milly's Harvest gathered; the Abbey's stairs
+
+Quests 3904 (Milly's Harvest: eight crates, the first object-gathering quest done live) and
+3905's accept since debrief 8. Testvvi is level 7 at 85%.
+
+- a tutor looped "arrived" at the objective's point for ten minutes; a repeated arrival
+  now counts toward the stall (V108), and the scripted gather finished the crates;
+- 3905's hand-in failed on the Abbey's spiral stair to Brother Neals: 16 of 23 legs,
+  then out of time and wedged against a barrel. Two wedged walks running now go home by
+  hearthstone (V109; verified live, out of the Abbey).
+
+Found and **not** fixed, for your view: the strip paints map x/y only, and the Abbey's
+stair has waypoints on different floors at the same x/y. A 2D follower can take an upper
+floor's waypoint as reached from below. Brother Neals (and any upstairs NPC) needs height:
+a strip field for it, or a follower that walks stair legs by time. The step now fails into
+the level 5-7 wolves until level 8, then comes back to him.
