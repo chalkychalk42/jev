@@ -117,3 +117,64 @@ def test_a_body_that_gives_a_quest_is_opened_by_the_name_its_tooltip_gives():
     elsewhere = World(name=name_id("Rolf's corpse"))
     assert picker(elsewhere).open(name_id("A half-eaten body")) is False
     assert elsewhere.clicks == []
+
+
+class FarWorld(World):
+    """The crate answers only once the character has stepped in `reach` times."""
+
+    def __init__(self, reach=1, **kw):
+        super().__init__(**kw)
+        self.reach, self.steps, self.turns = reach, [], []
+
+    def click(self, x, y, right=False):
+        self.clicks.append((x, y, right))
+        if right and self._here((x, y)) and len(self.steps) >= self.reach:
+            self.have += 1
+        return True
+
+    def turn_toward(self, offset):
+        self.turns.append(round(offset, 3))
+        return True
+
+    def hold(self, key, seconds, **_):
+        self.steps.append(key)
+        return True
+
+
+@pytest.fixture
+def answer_fast(monkeypatch):
+    monkeypatch.setattr(module, "OPEN_S", 0.2)
+    monkeypatch.setattr(module, "OPEN_ANSWER_S", 0.03)
+
+
+def test_a_click_nothing_answers_steps_in_toward_the_object_and_clicks_again(answer_fast):
+    """The first live crate of Milly's Harvest answered nothing for 8 s: out of reach
+    (run 20260924T062715-7433c3)."""
+    world = FarWorld(reach=1)
+    g = picker(world)
+    assert g.pick(CRATE, world.progress) is Gathered.TOOK
+    assert len(world.clicks) == 2 and world.steps == ["w"]
+    assert world.turns == [0.05], "turned toward the crate right of centre"
+
+
+def test_an_object_that_never_answers_is_nothing_after_the_steps(answer_fast):
+    world = FarWorld(reach=99)
+    g = picker(world)
+    assert g.pick(CRATE, world.progress) is Gathered.NOTHING
+    assert len(world.clicks) == module.REACH_STEPS + 1
+    assert world.steps == ["w"] * (module.REACH_STEPS + 1)
+    assert "answered none" in g.detail
+
+
+def test_a_click_that_is_answered_is_waited_on_not_stepped_from(answer_fast):
+    world = FarWorld(reach=99)
+    original = world.click
+
+    def click(x, y, right=False):
+        original(x, y, right)
+        world.values["bars.casting"] = True      # an opening cast: the server answered
+        return True
+
+    world.click = click
+    assert picker(world).pick(CRATE, world.progress) is Gathered.NOTHING
+    assert world.steps == [] and len(world.clicks) == 1

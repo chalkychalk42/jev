@@ -195,7 +195,8 @@ def menu(observation: dict, controls: dict, *, skills=(), lookup: bool = False) 
         thing = context.get("target_name") or "objective object"
         clicks.append(Choice("use_object", ("x", "y"), (),
                              f"right-click the {thing} (a world object, not a unit) at x,y to "
-                             "use or take it"))
+                             "use or take it; it answers only within about five yards, so "
+                             "walk up to it first"))
     elif context.get("target_name_id") is not None:
         unit = context.get("target_name") or "objective unit"
         clicks.append(Choice("select_unit", ("x", "y"), (),

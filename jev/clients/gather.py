@@ -35,6 +35,15 @@ OPEN_S = 8.0
 OPEN_LOOK_S = 0.25
 # A poster or a body answers a click with its quest window at once.
 OPEN_WINDOW_S = 3.0
+# A click the server answers - a cast, a loot window, the counter - answers within this.
+# Silence is out of reach: the server drops a use from beyond its interaction distance
+# without a word, as it does a right-click on the Spirit Healer (V94). The first live
+# crate of Milly's Harvest, hover-proved a few yards ahead, answered nothing for 8 s
+# (run 20260924T062715-7433c3). So the character turns toward it, steps in, and clicks
+# again.
+OPEN_ANSWER_S = 1.5
+REACH_STEPS = 4
+REACH_STEP_S = 0.35
 
 
 def search_points(origin: tuple[float, float] = SEARCH_ORIGIN,
@@ -91,27 +100,44 @@ class Gather:
             return Gathered.INTERRUPTED
         counter = tuple(progress()) if progress is not None else (None, None)
         (ox, oy), (w, h) = self.window_origin, self.window_size
-        for fx, fy in search_points():
-            point = (ox + round(fx * w), oy + round(fy * h))
-            hover = self.targeting.probe(point, require_target=False)
-            if hover.code is HoverCode.REFUSED:
-                self.detail = "pointer input refused"
-                return Gathered.REFUSED
-            if hover.code is HoverCode.BLIND:
-                self.detail = hover.detail
-                return Gathered.BLIND
-            after = hover.after or {}
-            if (after.get("cursor.object_id") != name_id or after.get("cursor.has") is not False
-                    or after.get("cursor.world") is not True):
-                continue
-            event("gather.request", data={"point": list(hover.point), "name_id": name_id})
-            if not self.hid.click(*hover.point, right=True):
+        for step in range(REACH_STEPS + 1):
+            point = None
+            for fx, fy in search_points():
+                candidate = (ox + round(fx * w), oy + round(fy * h))
+                hover = self.targeting.probe(candidate, require_target=False)
+                if hover.code is HoverCode.REFUSED:
+                    self.detail = "pointer input refused"
+                    return Gathered.REFUSED
+                if hover.code is HoverCode.BLIND:
+                    self.detail = hover.detail
+                    return Gathered.BLIND
+                after = hover.after or {}
+                if (after.get("cursor.object_id") == name_id and after.get("cursor.has") is False
+                        and after.get("cursor.world") is True):
+                    point = hover.point
+                    break
+            if point is None:
+                self.detail = ("no hover named the object near this spawn point" if step == 0
+                               else f"lost sight of the object after {step} step(s) toward it")
+                return Gathered.NOT_HERE if step == 0 else Gathered.NOTHING
+            event("gather.request", data={"point": list(point), "name_id": name_id,
+                                          "step": step})
+            if not self.hid.click(*point, right=True):
                 self.detail = "object click refused"
                 return Gathered.REFUSED
-            self.clicked = hover.point
-            return self._observe(values, counter, progress)
-        self.detail = "no hover named the object near this spawn point"
-        return Gathered.NOT_HERE
+            self.clicked = point
+            outcome = self._observe(values, counter, progress)
+            if outcome is not None:
+                return outcome
+            # Silence: out of reach. Face it and step in.
+            offset = (point[0] - ox) / w - 0.5
+            event("gather.step_in", data={"offset": round(offset, 4), "step": step + 1})
+            if not self.targeting.turn_toward(offset) or not self.hid.hold("w", REACH_STEP_S):
+                self.detail = "turn or step input refused"
+                return Gathered.REFUSED
+        self.detail = (f"the object answered none of {REACH_STEPS + 1} clicks, "
+                       f"stepping closer after each")
+        return Gathered.NOTHING
 
     @traced("gather.open")
     def open(self, name_id: int, *, wait_s: float = OPEN_WINDOW_S) -> bool:
@@ -145,8 +171,11 @@ class Gather:
         self.detail = "no hover named the object near its placed point"
         return False
 
-    def _observe(self, before: dict, counter, progress) -> Gathered:
-        deadline = time.monotonic() + OPEN_S
+    def _observe(self, before: dict, counter, progress) -> Gathered | None:
+        """What the click did; `None` when nothing at all answered it (`OPEN_ANSWER_S`)."""
+        started = time.monotonic()
+        deadline = started + OPEN_S
+        answered = False
         after = before
         while time.monotonic() < deadline:
             time.sleep(OPEN_LOOK_S)
@@ -163,6 +192,10 @@ class Gather:
             if after.get("vitals.combat") is True:
                 self.detail = "combat interrupted the opening"
                 return self._close(after) or Gathered.INTERRUPTED
+            answered = answered or (after.get("bars.casting") is True
+                                    or after.get("ui.loot") is True)
+            if not answered and time.monotonic() - started >= OPEN_ANSWER_S:
+                return None
         self.detail = "no observed objective or bag-slot change after the object click"
         return self._close(after) or Gathered.NOTHING
 
