@@ -1444,6 +1444,26 @@ def test_facing_the_wrong_way_with_the_plate_on_the_centre_line_turns_round(comb
     assert len(turns) == 1, "did not turn round on 'facing the wrong way'"
 
 
+def test_wrong_way_with_a_centred_plate_first_faces_the_camera_then_turns_round(combat_clock):
+    """Turned round by the keys, a camera that no longer looks where the character faces
+    keeps the wolf "centred, wrong way": 16 s without a hit (run 20260924T043610)."""
+    hit = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": True,
+           "target.hp": 0.4, "ui.error_count": 3, "ui.error_last": 0, "bars.attacking": True}
+    behind = {**hit, "ui.error_count": 4, "ui.error_last": 3}
+    again = {**hit, "ui.error_count": 5, "ui.error_last": 3}
+    still = {**hit, "ui.error_count": 6, "ui.error_last": 3}
+    dead = {**still, "target.hp": 0.0}
+    f = _fight([hit, hit, behind, behind, again, again, again, still, still, still, still,
+                dead])
+    f.targeting.face = FACED
+    realigned = []
+    f.realign = lambda: realigned.append(True) or True
+    assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
+    assert realigned == [True], "faced the camera first"
+    turns = [h for h in f.hid.holds if h[0] == "d" and h[1] > 1.0]
+    assert len(turns) == 1, "then, still the wrong way, turned round"
+
+
 def test_an_unproved_plate_is_still_not_fought_blind_out_of_melee():
     far = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": False}
     f = _fight([far])

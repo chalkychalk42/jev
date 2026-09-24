@@ -253,6 +253,10 @@ class Fight:
     # where the camera points is neither. `None` means whoever wired it up is confident
     # the camera is already level, which nothing was, for an evening.
     level: Callable[[], object] | None = None
+    # A forced right-button levelling drag: mouse-look turns the character to face where the
+    # camera looks (`Camera.level`), which a turn by the keys cannot, since the camera turns
+    # with it.
+    realign: Callable[[], object] | None = None
     targeting: Targeting | None = None
     # The zone's map box, to measure the approach in yards; without it, blocked walks are
     # not noticed.
@@ -281,6 +285,7 @@ class Fight:
     _selected_name_id: int | None = field(default=None, init=False)
     # The selected unit's own identity, where the strip paints it (schema 14).
     _selected_guid: int | None = field(default=None, init=False)
+    _realigned: bool = field(default=False, init=False)
     _aim_code: FaceCode | None = field(default=None, init=False)
     # The selected unit's plate at the last facing look: where a corpse will lie.
     last_plate: Plate | None = field(default=None, init=False)
@@ -333,6 +338,7 @@ class Fight:
         self._strides = 0
         self._approach_s = 0.0
         self.sidesteps = self._still_steps = 0
+        self._realigned = False
         self._sidestep_s = SIDESTEP_S
         h = humaniser(self.hid)
         self._side = -1 if h is not None and h.rng.random() < 0.5 else 1
@@ -509,12 +515,25 @@ class Fight:
             wrong_way = self._new_error(v) == "not_facing"
             if wrong_way and not self._blind_melee and self._aim_code is FaceCode.FACED:
                 # "Facing the wrong way" is the client saying the unit is in reach and
-                # behind, while its plate stands on the centre line: a unit directly behind
-                # the character projects there as surely as one ahead. Trusting the plate,
-                # the fight walked away from a Mangy Wolf, closing, until it killed the
-                # character (run 20260924T035309-97796e).
-                if not self._turn_round():
+                # behind, while its plate stands on the centre line. Two causes: a unit
+                # directly behind the character projects there as surely as one ahead -
+                # trusting the plate, the fight walked away from a Mangy Wolf until it killed
+                # the character (run 20260924T035309-97796e) - or the camera no longer looks
+                # where the character faces, so turning round by the keys flips the wolf from
+                # one "centred, wrong way" to the next, 16 s without a hit (run ...0436).
+                # First make the character face where the camera looks; if the client still
+                # says "wrong way", the unit is behind, and it turns round.
+                if self.realign is not None and not self._realigned:
+                    self._realigned = True
+                    event("engage.realign")
+                    if self.realign() is False:
+                        self._input_refused = True
+                        self.detail = "camera realign refused"
+                        return Fought.REFUSED
+                elif not self._turn_round():
                     return Fought.REFUSED
+                else:
+                    self._realigned = False
                 self._reach_at = time.monotonic()
                 self._aim_code = None              # the next aim proves the plate afresh
                 wrong_way = False
