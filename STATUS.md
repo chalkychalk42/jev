@@ -2014,3 +2014,36 @@ failed; acquire would pass its gate with them, but 28 are the tutor's futile sho
 open/close cycles. The episode gate is a quality filter; worth the operator's view.
 
 NEXT: the loop; quest 21's rejoin, then Goldshire; the first live gather at 3904.
+
+## 2026-09-24 03:55 — overnight debrief 4: quest 21 done, tutor sharpened
+
+Sessions 19-23. Testvvi: level 6. Quest 21's twelve Kobold Laborers are done; its hand-in
+timed out beside Marshal McBride (below) and failed into the level 5-7 wolves, with the
+hand-in as its way back. Learner: acquire 55/60 (11 runs), approach 41/60 (10 runs),
+interact 22/60 - acquire is five examples from its first trained model.
+
+Fixed, all general:
+- quests taken or handed in at objects (a wanted poster, a body) are opened by the name
+  their tooltip gives, and a quest whose target is an elite is left out of the route:
+  Find the Lost Guards and its chain are back, Wanted: "Hogger" is not (V87);
+- the tutor has a right-click for quest objects (`use_object`), proved by the tooltip name;
+- the strip paints the selected unit's GUID (`target.guid`, schema 14 redefined within the
+  hour it existed): a new Kobold Worker is a new selection even at the same name and health,
+  to the tutor's judge and to the fight (V88; verified live, three Workers, three GUIDs);
+- the tutor's image carries a scale along its edges: it had described a plate at 0.65 and
+  sent 0.98, twice (V89);
+- Tab is offered only where any enemy will do (3 of 22 presses worked on objective steps);
+  a fight says its corpse was looted, so the tutor stops clicking emptied corpses;
+- the Escape that closes a merchant with the merchant selected raises 2.4.3's
+  "Blizzard_TimeManager has been blocked" popup; one more Escape now dismisses it;
+- an NPC interaction looks round in quarter turns before giving up on the nameplate:
+  McBride stood out of view while the character faced the Main Hall's wall.
+
+Client restarts: two tonight, each needing a second restart - the client asked for its
+character list while the server was still logging the old session out (about 30 s in
+combat). Wait for the Logout line in Char.log before relaunching (saved to memory).
+
+The strip's 4-bit schema header is now used up (14 is its last value): the next field
+needs a revision number in the header first.
+
+NEXT: the hand-in after the wolves, then Goldshire (54); the first live gather at 3904.
