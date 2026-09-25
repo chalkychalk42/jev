@@ -802,7 +802,11 @@ def test_walks_that_get_nowhere_are_wedged_too():
     b.client.approach = lambda world, timeout_s=0: False
     b.client.last_travel = SimpleNamespace(outcome=Outcome.TIMEOUT,
                                            detail="leg 3 of 12: ran out of time")
-    b.client.last_headway = 4.0
+    b.client.last_headway, b.client.last_distance = 4.0, 12.0
+    for _ in range(WEDGED_WALKS + 1):
+        b._approach((1.0, 2.0, 3.0))
+    assert homes == [], "a short walk's failure is never much headway"
+    b.client.last_distance = 480.0
     for _ in range(WEDGED_WALKS):
         b._approach((1.0, 2.0, 3.0))
     assert homes == [1]

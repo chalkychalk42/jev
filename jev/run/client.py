@@ -146,8 +146,10 @@ class Client:
     route_memory: object | None = field(default=None, init=False)
     # How the last `approach` walk ended, for a caller that needs more than arrived or not.
     last_travel: object | None = field(default=None, init=False)
-    # Yards the last walk brought the character nearer its destination, in a straight line.
+    # Yards the last walk brought the character nearer its destination, in a straight line,
+    # and how far from it the walk began.
     last_headway: float | None = field(default=None, init=False)
+    last_distance: float | None = field(default=None, init=False)
     bounds: ZoneBounds | None = field(default=None, init=False)
     coordinate_zones: dict[int, ZoneBounds] = field(default_factory=dict, init=False)
     coordinate_names: dict[int, str] = field(default_factory=dict, init=False)
@@ -395,6 +397,7 @@ class Client:
         self._following = ()
         arrived = result.outcome.value == "arrived"
         self.last_headway = None
+        self.last_distance = math.dist(hw[:2], world[:2])
         if ended is not None:
             w = map_to_world(ended[0], ended[1], self.bounds)
             z = self._height_near(w)

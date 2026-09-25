@@ -137,7 +137,9 @@ GATHER_LAPS = 2
 # Walks in a row that ended with the character wedged before it goes home by hearthstone.
 WEDGED_WALKS = 2
 # A walk that failed and brought the character less than this much nearer counts as wedged
-# too: somewhere it can move about but not leave.
+# too: somewhere it can move about but not leave. Only a walk meant to go twice as far: a
+# short one's failure is never much headway, and two at a merchant's counter are no reason
+# to be sent home.
 NO_HEADWAY_YARDS = 10.0
 # Where to eat: this far from every spawn point of the step's own creatures, found on rings
 # round the character. A level 6 paladin eating in the middle of the wolf camp was bitten at
@@ -513,11 +515,14 @@ class LiveBody:
         (sessions 110 and 111). Not a walk the caller or the desk cut short."""
         last = getattr(self.client, "last_travel", None)
         headway = getattr(self.client, "last_headway", None)
+        distance = getattr(self.client, "last_distance", None)
         outcome = getattr(getattr(last, "outcome", None), "value", None)
         wedged = (not arrived and last is not None
                   and ("could not free the character" in (getattr(last, "detail", "") or "")
                        or (outcome not in ("aborted", "refused", "lost")
-                           and isinstance(headway, float) and headway < NO_HEADWAY_YARDS)))
+                           and isinstance(headway, float) and headway < NO_HEADWAY_YARDS
+                           and isinstance(distance, float)
+                           and distance >= 2 * NO_HEADWAY_YARDS)))
         self._wedged = self._wedged + 1 if wedged else 0
         if self._wedged >= WEDGED_WALKS:
             self._wedged = 0
