@@ -20,6 +20,7 @@ from jev.perceive.units import (
     Ring,
     RingColour,
     _find_ring,
+    body_candidates,
     candidates,
     corpse_candidates,
     corpse_probe_points,
@@ -314,6 +315,23 @@ def test_proposals_preserve_measured_ring_and_bar_bounds():
     assert not sighting.admits((800, 349))
     assert not sighting.admits((800, 540))
     assert not sighting.admits((873, 445))
+
+
+def test_a_plate_the_view_moved_off_its_anchor_is_found_again_when_it_is_the_only_one():
+    """At Marshal McBride the selection click's frame and the next, 0.4 s apart, put his
+    plate 76 px apart, past half its width: with no plate left the hand-in failed "no
+    eligible target geometry" (session 136). The only plate of its colour is still his to
+    propose; a hover proves identity before any click."""
+    frame = _scene()
+    [plate] = [s.plate for s in candidates(frame)]
+    moved = Plate(cx=plate.cx - 76, cy=plate.cy - 65, w=plate.w, colour=plate.colour)
+    [sighting] = candidates(frame, plate=moved)
+    assert sighting.torso == (800, 445)
+    assert body_candidates(frame, plate=moved)
+    # Two plates of that colour and neither near the anchor: not the view's to choose.
+    frame[200:205, 100:245] = (130, 117, 3)
+    assert candidates(frame, plate=moved) == ()
+    assert body_candidates(frame, plate=moved) == ()
 
 
 def test_multiple_proposals_do_not_promote_the_largest_component_to_identity():

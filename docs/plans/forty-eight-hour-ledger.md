@@ -54,7 +54,7 @@ Now
       V178 stops taking passages.
     - The second attempt selected McBride by his plate, but the view moved 76 px before
       the click frame, past the anchor's half-plate width: "no eligible target geometry".
-      On that frame the ring bracket finds his chest. That fix comes after V179.
+      On that frame the ring bracket finds his chest: V180.
   - Session 140 (905 s): bound at Sentinel Hill, Thor's flight node, Patrolling Westfall
     accepted; then two deaths at its objective, the level 17-18 Riverpaw Taskmasters, for a
     level 14 quest. The generator had placed the Gnoll Paws among the densest droppers,
@@ -204,6 +204,7 @@ Trials
 |---|---|---|---|---|---|
 | V178 walks no longer go by learned passages | next boundary after session 141 | stuck events a walk (7.0 over 215 walks, sessions 88-140) and walks not arrived (15 of 215) fall or hold; guards XP/h and deaths | `route memory: N blocked spots kept clear of; 151 old passages not taken` | | |
 | V179 item droppers within two levels of the quest; 12-20 regenerated | with V178 | deaths/h on 12-20 objectives fall; Patrolling Westfall done with no death | the hunt's target is Riverpaw Mongrel (`hunt.request` wanted_name_id) | | |
+| V180 a moved plate is found again when it is the only one of its colour | with V178 | `target-no-proposal` frames (7 in the last 80 runs) and "no eligible target geometry" failures fall | a `target.proposal` after a selection whose plate moved | | |
 
 Issues
 ------

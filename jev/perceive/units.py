@@ -589,14 +589,25 @@ def _observations(frame: np.ndarray, colours: tuple[RingColour, ...]
     return rings, selected, excluded
 
 
+# The plate a unit was selected by, found again in a later frame: its colour, its centre
+# within half a width of where it was. The view can move between the two: at Marshal
+# McBride the selection click's frame and the next, 0.4 s apart, put his plate 76 px apart,
+# and with no plate left the hand-in failed "no eligible target geometry" (session 136).
+# The only plate of its colour is still proposed then; a hover proves identity before any
+# click, as ever. `find`, which has no hover behind it, keeps the strict column.
+def _anchored(plates: list[Plate], plate: Plate) -> list[Plate]:
+    same = [p for p in plates if p.colour == plate.colour]
+    near = [p for p in same if abs(p.cx - plate.cx) <= min(p.w, plate.w) / 2]
+    return near if near or len(same) != 1 else same
+
+
 def _living_brackets(frame: np.ndarray, colours: tuple[RingColour, ...],
                      plate: Plate | None) -> tuple[list[Sighting], list[Plate]]:
     # Faded neighbouring bars still cover the world. They exclude a point even though
     # the selected target's bar uses the stricter mask when proposing its bracket.
     rings, plates, excluded = _observations(frame, colours)
     if plate is not None:
-        plates = [p for p in plates if p.colour == plate.colour
-                  and abs(p.cx - plate.cx) <= min(p.w, plate.w) / 2]
+        plates = _anchored(plates, plate)
         if len(plates) != 1:
             return [], excluded
 
@@ -689,8 +700,7 @@ def _anchored_plates(frame: np.ndarray, colours: tuple[RingColour, ...],
                      plate: Plate | None) -> tuple[list[Plate], list[Plate]]:
     _, plates, excluded = _observations(frame, colours)
     if plate is not None:
-        plates = [p for p in plates if p.colour == plate.colour
-                  and abs(p.cx - plate.cx) <= min(p.w, plate.w) / 2]
+        plates = _anchored(plates, plate)
     plates.sort(key=lambda p: abs(p.cx - frame.shape[1] / 2))
     return plates, excluded
 
