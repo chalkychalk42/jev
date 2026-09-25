@@ -109,17 +109,25 @@ MAX_CHARACTER_WAITS = 15
 # `None` refuses to act: nothing is pressed at a screen that has not been measured.
 # Character select: the Create New Character plate, the list's first row and the distance
 # between rows; the rows are in the order the server lists the characters, oldest first.
-CREATE_NEW: tuple[float, float] | None = None
-CHARACTER_ROW_FIRST: tuple[float, float] | None = None
-CHARACTER_ROW_STEP: float | None = None
+#
+# Measured 25 September 23:39-23:41 on the live 1600x900 client (`tools/character.py
+# measure`, `tools/find_plates.py`): the list's name lines 67 pixels apart, the selected row's
+# highlight centred on the third row's; the create screen with a human mage chosen.
+CREATE_NEW: tuple[float, float] | None = (0.9009, 0.8044)
+CHARACTER_ROW_FIRST: tuple[float, float] | None = (0.90, 0.141)
+CHARACTER_ROW_STEP: float | None = 0.0744
 # The create screen: its Accept and Back plates tell it apart; each race's and class's
-# button; the name box; and the Okay of the dialog that refuses a name.
-CREATE_ACCEPT: tuple[float, float] | None = None
-CREATE_BACK: tuple[float, float] | None = None
-RACE_BUTTONS: dict[str, tuple[float, float]] = {}
-CLASS_BUTTONS: dict[str, tuple[float, float]] = {}
-NAME_BOX: tuple[float, float] | None = None
-CREATE_REFUSED_OKAY: tuple[float, float] | None = None
+# button; the name box; and the Okay of the dialog that refuses a name. The class buttons
+# are the race's own classes in class order, three a row: a human's mage is the second of
+# the second row (Warrior, Paladin, Rogue; Priest, Mage, Warlock).
+CREATE_ACCEPT: tuple[float, float] | None = (0.919, 0.904)
+CREATE_BACK: tuple[float, float] | None = (0.919, 0.953)
+RACE_BUTTONS: dict[str, tuple[float, float]] = {"human": (0.0606, 0.1967)}
+CLASS_BUTTONS: dict[str, tuple[float, float]] = {"mage": (0.0988, 0.6800)}
+NAME_BOX: tuple[float, float] | None = (0.506, 0.906)
+# Not yet seen: the glue dialog's Okay where the disconnect dialog has it (`OKAY_BUTTON`).
+# A refusal elsewhere ends `create_character` with its frame kept, to measure it from.
+CREATE_REFUSED_OKAY: tuple[float, float] | None = (0.510, 0.513)
 # A new character's first entry plays its race's introduction: waited out, pressing
 # nothing, until the strip paints.
 FIRST_ENTRY_S = 240.0

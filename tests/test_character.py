@@ -193,7 +193,12 @@ def test_an_empty_name_box_is_never_accepted(measured):
     assert at(PLATES["CREATE_ACCEPT"]) not in screen.presses
 
 
-def test_nothing_is_pressed_before_the_screens_are_measured():
+def test_nothing_is_pressed_before_the_screens_are_measured(monkeypatch):
+    for name in ("CREATE_NEW", "CHARACTER_ROW_FIRST", "CHARACTER_ROW_STEP", "CREATE_ACCEPT",
+                 "CREATE_BACK", "NAME_BOX", "CREATE_REFUSED_OKAY"):
+        monkeypatch.setattr(module, name, None)
+    monkeypatch.setattr(module, "RACE_BUTTONS", {})
+    monkeypatch.setattr(module, "CLASS_BUTTONS", {})
     s = _session()
     screen = _Screen(s, SELECT, {})
     assert s.create_character("Kelvaran", "human", "mage") is False
