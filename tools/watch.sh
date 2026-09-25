@@ -20,12 +20,15 @@ LOG=captures/session-loop.log
 ended() { grep -c ' exit=' "$LOG" 2>/dev/null || echo 0; }
 start=$(date +%s)
 seen=$(ended)
-known=$(tools/keep.sh status 2>/dev/null | head -1)
+# The red reasons, one a line: only a reason not seen at the start wakes the watch.
+reasons() { tools/keep.sh status 2>/dev/null | head -1 | sed -n 's/^RED: //p' | tr ';' '\n' \
+            | sed 's/^ *//' | grep -v '^$'; }
+known=$(reasons)
 reason="the watch ran its $max minutes"
 while [ $(( $(date +%s) - start )) -lt $(( max * 60 )) ]; do
-  now=$(tools/keep.sh status 2>/dev/null | head -1)
-  if [ "${now#RED}" != "$now" ] && [ "$now" != "$known" ]; then
-    reason="the status turned red"
+  fresh=$(reasons | grep -F -x -v -f <(printf '%s\n' "$known") | head -1)
+  if [ -n "$fresh" ]; then
+    reason="the status turned red: $fresh"
     break
   fi
   if [ "$sessions" = 1 ] && [ "$(ended)" != "$seen" ]; then
