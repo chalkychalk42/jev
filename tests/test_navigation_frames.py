@@ -251,7 +251,7 @@ def test_a_walks_limit_grows_with_its_route(yards, limit):
     assert given == [pytest.approx(limit)]
 
 
-def inn(here):
+def inn(here, upper=64.0):
     """A hall with a floor above it and a staircase between, as the Lion's Pride Inn has:
     stairs rising 0.7 a yard over ten yards (solid underneath), the hall at 57 west of them
     and on under the floor above at 64 east of them. A point query answers the surface
@@ -266,7 +266,7 @@ def inn(here):
         if x < x0 + 10.0:
             return [57.0 + 0.7 * (x - x0)]
         if x <= x0 + 15.0:
-            return [57.0, 64.0]
+            return [57.0, upper]
         return [57.0]                                # past the balcony: the hall only
 
     def path(map_id, start, end):
@@ -276,7 +276,7 @@ def inn(here):
         # The floor above ends at the balcony: beyond it, its nearest point is its edge.
         candidates = [(here_x, z) for z in surfaces(here_x)]
         if here_x > x0 + 15.0:
-            candidates.append((x0 + 15.0, 64.0))
+            candidates.append((x0 + 15.0, upper))
         x, z = min(candidates, key=lambda c: math.dist((c[0], c[1]), (here_x, start[2])))
         return Path(PathStatus.COMPLETE, ((x, start[1], z),))
     return path
@@ -364,11 +364,13 @@ def test_on_a_route_up_stairs_over_the_hall_the_height_is_the_routes():
     assert heights == [57.0, 59.1, 61.2, 63.3, 64.0, 64.0]
 
 
-@pytest.mark.parametrize(("indoors", "expected"), [
-    (True, [57.0, 64.0, 57.0]),     # the hall, then the floor above, then the hall again
-    (False, [57.0, 57.0, 57.0]),    # outdoors the floor under the field is a mine's
+@pytest.mark.parametrize(("indoors", "upper", "expected"), [
+    (True, 64.0, [57.0, 64.0, 57.0]),   # the hall, then the floor above, then the hall again
+    (False, 64.0, [57.0, 57.0, 57.0]),  # outdoors the floor under the field is a mine's
+    (True, 82.0, [57.0, 57.0, 57.0]),   # 25 yards up is no storey: a hill over a tunnel
 ])
-def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor(indoors, expected):
+def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor(indoors, upper,
+                                                                         expected):
     """Sessions 110 and 111 began upstairs in the Lion's Pride Inn on plans from the hall
     below, and every re-plan, at the height of the route being followed, walked the same
     hall route into the same upstairs walls. Above Fargodeep Mine a walk to a merchant was
@@ -379,7 +381,7 @@ def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor(indoors,
     values["pos.indoors"] = indoors
     here = map_to_world(0.49, 0.42, ELWYNN)
     spot = world_to_map(here[0] + 12.0, here[1], ELWYNN)      # the hall, and the floor above
-    probe = inn(here)
+    probe = inn(here, upper)
     starts = []
 
     def path(map_id, start, end):
@@ -401,4 +403,4 @@ def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor(indoors,
     client.travel.follow = follow
     assert not client.approach((here[0] - 40.0, here[1] + 5.0, 57.0))
     assert starts == expected
-    assert any("planning from the floor at 64.0" in line for line in lines) is indoors
+    assert any("planning from the floor at" in line for line in lines) is (expected[1] != 57.0)
