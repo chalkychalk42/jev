@@ -2820,3 +2820,22 @@ NEXT (backlog, by expected value):
 5. Rib distance in yards, not map fractions (Elwynn is 1.5:1).
 6. Kobold Candles and the Grape Manifest are still complete in the log; they get another
    detour at level 13.
+
+## 25 Sep 2026 23:14-23:55: T-0 of the forty-eight hours
+
+- The operator started the session at 23:14 (T-0), later than the planned 19:30. Hour 15,
+  the switch to the mage, is Saturday 14:15; hour 48 is Sunday 23:15.
+- The client was launched by the keeper and logged in. The strip read as schema 17.
+- The first sessions (hybrid dispatch) loaded all three learned parts: the danger map, the
+  hunt stations and the band rule.
+- Session 134 stopped on a food restock that timed out upstairs in Goldshire's inn. V175:
+  an unreachable restock is blocked for the step and never stops the run.
+- Session 135 ran its 15 minutes: 24 kills, about 650 XP, no deaths, no tutor calls.
+- The character-creation screens were measured, and `tools/character.py` made
+  **Itheamar, a human mage**, entered the world and checked its key, class and race. M2 is
+  met.
+- The mage's dry run exposed three faults, to fix before hour 15:
+  - a bind trip at level 1 through Elwynn, which killed it;
+  - a Frost Armor press read as unanswered and cast twice;
+  - no out-of-combat buffing.
+- Testvvi resumed at 23:54 (session 137).

@@ -17,6 +17,33 @@ Now
     strip read as schema 17.
   - Session 134 (hybrid) started 23:16 with all three proof lines: danger 1,217 cells,
     247 station visits, and the band armed at 13.
+  - Session 134 stopped after 371 s. The food restock walked into the Lion's Pride Inn,
+    ended upstairs and timed out, and one failure stops a session (`--retries 1`).
+    V175 (26750a7): an unreachable restock is blocked for the step and never stops the run.
+  - Session 135 (908 s):
+    - 24 kills, about 650 XP, 0 deaths, 0 tutor records.
+    - The heal line 34 choices and 24 outcomes; stations 42 and 21.
+    - It bought 10 food and walked about 1,400 yards to Riverpaw.
+    - At the client restart after it, Testvvi showed "(Ghost)" at character select: it
+      died at the session's end.
+  - B3, 23:39-23:43:
+    - Glue screens measured (231f870).
+    - `character.py enter` made **Itheamar, a human mage**, entered the world and checked
+      it: **M2 met**.
+  - Session 136, the mage's dry run by hand (534 s, stopped):
+    - A Threat Within accepted.
+    - Its turn-in at Marshal McBride timed out 6.8 yards short, at the Abbey door
+      (16 stuck), and failed over to the 1-3 rib.
+    - BIND_HEARTH then walked the level-1 mage toward Goldshire. It was attacked in melee
+      and died twice.
+    - The one fight: Frost Armor pressed and cast, read as unanswered, and cast again
+      (60 mana each, 73% of 165); then one Fireball, then the staff.
+    - Fixes to make:
+      - a new character's home is where it starts;
+      - a press is answered by its mana leaving;
+      - a caster keeps its lasting buffs up out of combat, not in it.
+  - 23:54: back to Testvvi by row 2 (`enter --name Testvvi`); the loop resumed at
+    session 137.
 
 - **25 Sep 14:10.** Pre-flight A is under way, with the loop stopped and the client closed.
   - The operator logged Testvvi out at 09:13, in Goldshire, at level 13.
