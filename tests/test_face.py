@@ -282,3 +282,35 @@ def test_an_open_loop_turn_toward_a_mark_is_bounded_and_goes_the_right_way(monke
         targeting.turn_toward(float("nan"))
     world.refuse = True
     assert targeting.turn_toward(0.3) is False
+
+
+def test_a_fight_stops_looking_for_its_target_to_heal(monkeypatch):
+    """Session 126: three gnolls on the character, twelve seconds spent looking for the
+    selected one's plate, health 94% to 22% with nothing pressed, and death."""
+    world = World(bearing=150.0, values=radio(**{"vitals.hp": 0.3, "vitals.combat": True}))
+
+    def stop(values):
+        return "hurt" if values.get("vitals.combat") and values.get("vitals.hp", 1.0) < 0.4 else None
+
+    result = targeting_for(world, monkeypatch).face_selected(expected_name_id=2864, stop=stop)
+    assert result.code is FaceCode.INTERRUPTED and result.detail == "hurt"
+    assert world.holds == [], "no turning once health says heal"
+
+
+def test_a_fights_search_is_bounded_by_the_clock_not_only_by_its_turning(monkeypatch):
+    """The turning budget counted 2.8 s while the hovers proving each plate between turns
+    took the rest of twelve seconds (session 126)."""
+    from types import SimpleNamespace
+
+    world = World(bearing=10.0, visible=False)
+    now = [0.0]
+
+    def monotonic():
+        now[0] += 1.5                   # each look's hovers take seconds of the clock
+        return now[0]
+
+    monkeypatch.setattr("jev.clients.targeting.time", SimpleNamespace(monotonic=monotonic))
+    result = targeting_for(world, monkeypatch).face_selected(expected_name_id=2864,
+                                                             deadline_s=3.0)
+    assert result.code is FaceCode.NOT_VISIBLE and "ran out" in result.detail
+    assert sum(seconds for _key, seconds in world.holds) < FACE_SEARCH_MAX_S

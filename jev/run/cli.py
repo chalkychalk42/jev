@@ -21,7 +21,7 @@ from jev.guide.graph import Graph
 from jev.guide.path import MmapQuery
 from jev.guide.route import compile_route
 from jev.guide.route_memory import RouteMemory
-from jev.learn.choices import ChoiceLog, ChoiceMemory, backfill_hunts
+from jev.learn.choices import Choice, ChoiceLog, ChoiceMemory, backfill_hunts
 from jev.learn.episode import Recorder
 from jev.orch.runtime import ClientRuntime
 from jev.persist import atomic_json, file_lock, input_lock_path
@@ -292,11 +292,12 @@ def _live(args, graph) -> int:
             recorder = Recorder(root=args.runs_dir)
         # What each choice has paid off before (`jev.learn.choices`), counted first from any
         # runs that predate the choices' own log; this run logs its own.
-        body.choice_memory = ChoiceMemory(ROOT / "var" / "choices.json")
+        choices = ChoiceMemory(ROOT / "var" / "choices.json")
         counted = backfill_hunts((run for run in Path(args.runs_dir).iterdir() if run.is_dir()),
-                                 body.choice_memory)
-        body.choice_log = ChoiceLog(recorder.dir / "choices.jsonl")
-        visits = sum(arm.tries for arm in body.choice_memory.arms("hunt.station").values())
+                                 choices)
+        choice_log = ChoiceLog(recorder.dir / "choices.jsonl")
+        body.learn(choices, choice_log)
+        visits = sum(arm.tries for arm in choices.arms("hunt.station").values())
         print(f"choices: {visits} hunt station visits remembered"
               + (f", {counted} counted from earlier runs" if counted else ""))
         if args.play_mode != "off":
@@ -314,6 +315,8 @@ def _live(args, graph) -> int:
                 binding_paths=args.bindings, world_db=args.world_db,
                 config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout),
                 dispatch=args.play_dispatch)
+            # After a routine fails: the tutor, or the routine again, learned (V158).
+            playing.recovery = Choice(choices, "recover.after_failure", log=choice_log)
             body = playing
         atomic_json(recorder.dir / "route.json", {
             "mode": args.route_mode, "source": route.source_graph_id, "graph": graph.graph_id,

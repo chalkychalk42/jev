@@ -237,3 +237,34 @@ def _hunt_visits(evidence: Path):
             if at is not None:
                 yield visit[0], visit[1], max(0.0, at - visit[2])
             visit = None
+
+
+class Choice:
+    """A choice among a few named options, each with its own record per objective: which
+    heal line a fight holds, whether a failed routine is retried or handed to the tutor.
+    `pick` draws; `outcome` records how the option it gave did."""
+
+    def __init__(self, memory: ChoiceMemory, point: str, *, log: ChoiceLog | None = None,
+                 rng: random.Random | None = None):
+        self.memory, self.point, self.log = memory, point, log
+        self.rng = rng or random.Random()
+
+    def pick(self, objective: str, options: Sequence[str]) -> str:
+        arms = self.memory.arms(self.point, f"{objective}@")
+        rate = pooled(arms.values())
+        draws = [draw(arms.get(f"{objective}@{option}"), rate, self.rng) for option in options]
+        chosen = options[max(range(len(options)), key=lambda i: draws[i])]
+        if self.log is not None:
+            self.log.write({"event": "choice", "point": self.point, "objective": objective,
+                            "rate": round(rate, 4), "options": list(options),
+                            "draws": [round(d, 4) for d in draws], "chosen": chosen})
+        return chosen
+
+    def outcome(self, objective: str, option: str, won: bool, seconds: float = 0.0) -> Arm:
+        key = f"{objective}@{option}"
+        arm = self.memory.record(self.point, key, won, seconds)
+        if self.log is not None:
+            self.log.write({"event": "outcome", "point": self.point, "key": key,
+                            "won": bool(won), "seconds": round(seconds, 2),
+                            "tries": arm.tries, "wins": arm.wins})
+        return arm

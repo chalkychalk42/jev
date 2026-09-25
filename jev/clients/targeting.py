@@ -357,7 +357,8 @@ class Targeting:
     def face_selected(self, *, expected_name_id: int | None = None,
                       tolerance: float = FACE_TOLERANCE, max_turns: int = FACE_MAX_TURNS,
                       search_s: float = FACE_SEARCH_MAX_S,
-                      hint: units.Plate | None = None) -> FaceResult:
+                      hint: units.Plate | None = None,
+                      stop=None, deadline_s: float | None = None) -> FaceResult:
         """Turn until the selected living unit's own nameplate is on the centre line.
 
         The one facing primitive for closing to melee, turning back to a unit that walked
@@ -365,6 +366,13 @@ class Targeting:
         turn keys: nothing here clicks, walks or selects. Identity is the radio's selected
         target, the plate is found by the selection fade, and a tie between bright plates
         is settled by exact hover ownership, never by position alone.
+
+        In a fight the search is bounded by the clock too (`deadline_s`) - `search_s` counts
+        only the turning, and the hovers that prove each plate between turns took the rest:
+        with three gnolls on the character, a 2.8 s search ran twelve seconds of the clock
+        while health went from 94% to 22% with nothing pressed, and the character died
+        (session 126). `stop(values)` is asked at every look and ends the search with its
+        reason (`INTERRUPTED`): a heal needs no facing.
         """
         if not 0 < tolerance < 0.5 or type(max_turns) is not int or max_turns < 0:
             raise ValueError("facing tolerance and turn budget are out of range")
@@ -372,13 +380,16 @@ class Targeting:
             raise ValueError("facing search budget must be finite and non-negative")
         with operation("target.face", data={"wanted_name_id": expected_name_id,
                        "hint": None if hint is None else [round(hint.cx), round(hint.cy)]}) as span:
-            result = self._face(expected_name_id, tolerance, max_turns, search_s, hint)
+            deadline = None if deadline_s is None else time.monotonic() + deadline_s
+            result = self._face(expected_name_id, tolerance, max_turns, search_s, hint,
+                                stop, deadline)
             span.finish(code=result.code.value, detail=result.detail,
                         data={"offset": result.offset, "turns": result.turns,
                               "turned_s": round(result.turned_s, 3)})
             return result
 
-    def _face(self, wanted, tolerance, max_turns, search_s, hint) -> FaceResult:
+    def _face(self, wanted, tolerance, max_turns, search_s, hint, stop=None,
+              deadline=None) -> FaceResult:
         left = getattr(self.hid, "TURN_LEFT", "a")
         right = getattr(self.hid, "TURN_RIGHT", "d")
         turns, turned, searched = 0, 0.0, 0.0
@@ -393,6 +404,11 @@ class Targeting:
 
         while True:
             view = self._view()
+            reason = stop(view.values) if stop is not None and view.values is not None else None
+            if reason:
+                return done(FaceCode.INTERRUPTED, reason)
+            if deadline is not None and time.monotonic() >= deadline:
+                return done(FaceCode.NOT_VISIBLE, "the fight's time to face its target ran out")
             error = self._eligible(view.values, wanted, "living")
             if error is not None:
                 return done(_FACE_FROM_CLICK.get(error, FaceCode.BLIND),

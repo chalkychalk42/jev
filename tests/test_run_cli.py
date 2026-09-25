@@ -114,6 +114,8 @@ def fake_live(monkeypatch, tmp_path, *, disconnected=False, character=0x26A9640B
             events.append("body created")
         def has_focus(self):
             return self.client.hid.ready()
+        def learn(self, memory, log=None):
+            self.choices = memory
         def reconnect(self, checkpoint, *, env_file=None):
             events.append("body reconnect")
             return cli.reconnect_client(self.client, checkpoint, env_file=env_file)

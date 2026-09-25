@@ -176,7 +176,13 @@ class PlayingBody:
         # Who takes an ordinary objective first (`_ask_tutor`): the tutor always, or the
         # guide's own routine with the tutor on its failures and a fixed sample.
         self.dispatch = dispatch
-        self._routine_failed: set[tuple[str | None, str | None]] = set()
+        # The objectives whose routine just failed, and how it failed (`_note_routine`).
+        self._routine_failed: dict[tuple[str | None, str | None], str] = {}
+        # Whether such an objective goes to the tutor or back to its routine, learned from
+        # how each did (`jev.learn.choices.Choice`, "recover.after_failure"); `None` always
+        # asks the tutor. And the attempt being judged: (objective, option, since).
+        self.recovery = None
+        self._recovering: tuple[str, str, float] | None = None
         self._stalled: dict[tuple[str | None, str], float] = {}
         teacher_model = model_for(teacher_provider, teacher_model)
         self.spine, self.client, self.graph = spine, spine.client, spine.graph
@@ -270,9 +276,12 @@ class PlayingBody:
         # plays, and the catalog's from the moment a scripted routine takes over.
         self.routine_clock = math.inf
         try:
-            return self._execute(arm, state, checkpoint)
+            result = self._execute(arm, state, checkpoint)
+            self._recovered(result)
+            return result
         finally:
             self.routine_clock = None
+            self._recovering = None          # cut short by an exception: nothing learned
 
     def _execute(self, arm, state, checkpoint):
 
@@ -319,6 +328,7 @@ class PlayingBody:
             self.journal.append("actions", {"event": "stalled_routine", "t": time.time(),
                                             "arm_id": arm.arm_id, "skill": arm.decision.skill,
                                             "step_id": arm.step_id})
+            self._recovering = None          # given to the tutor, played by the routine
             if state is None:
                 state = State.model_validate(self.observer.observe(arm).data["state"])
             self.routine_clock = time.monotonic()
@@ -365,8 +375,13 @@ class PlayingBody:
         """
         key = (arm.step_id, arm.decision.skill)
         if key in self._routine_failed:
-            self._routine_failed.discard(key)
-            return True
+            code = self._routine_failed.pop(key)
+            if self.recovery is None:
+                return True
+            objective = f"{arm.decision.skill}:{code}"
+            option = self.recovery.pick(objective, ("tutor", "routine"))
+            self._recovering = (objective, option, time.monotonic())
+            return option == "tutor"
         digest = hashlib.sha1(str(arm.arm_id).encode()).hexdigest()
         return HYBRID_SAMPLE > 0 and int(digest, 16) % HYBRID_SAMPLE == 0
 
@@ -375,7 +390,23 @@ class PlayingBody:
         Being interrupted (a fight, a stop) is not failing."""
         if result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT) \
                 and result.code not in ROUTINE_NOT_FAILED:
-            self._routine_failed.add((arm.step_id, arm.decision.skill))
+            self._routine_failed[(arm.step_id, arm.decision.skill)] = result.code or "failed"
+
+    def _recovered(self, result) -> None:
+        """How the attempt after a routine's failure went, for whichever took it: done, or
+        failed again. One interrupted - a fight, a stop - says neither."""
+        if self._recovering is None or self.recovery is None:
+            return
+        objective, option, since = self._recovering
+        self._recovering = None
+        if result.outcome is SkillOutcome.SUCCEEDED:
+            won = True
+        elif (result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
+              and result.code not in ROUTINE_NOT_FAILED):
+            won = False
+        else:
+            return
+        self.recovery.outcome(objective, option, won, time.monotonic() - since)
 
     def delegable(self, arm) -> tuple[str, ...]:
         return () if arm is None else delegable_skills(arm.decision.skill, self.available)

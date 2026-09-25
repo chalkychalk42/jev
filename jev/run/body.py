@@ -36,7 +36,7 @@ from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
-from jev.learn.choices import Stations, objective_key
+from jev.learn.choices import Choice, Stations, objective_key
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
@@ -715,6 +715,12 @@ class LiveBody:
             return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
         return Result(SkillOutcome.ABORTED, "every spawn point walked and the objective is short",
                       "nothing")
+
+    def learn(self, memory, log=None) -> None:
+        """Choices learned from their outcomes (`jev.learn.choices`, DECISIONS V158): where
+        hunts and gathers stand next, and the heal line each fight holds."""
+        self.choice_memory, self.choice_log = memory, log
+        self.fight.choices = Choice(memory, "fight.heal_below", log=log, rng=self.choice_rng)
 
     def _stations(self, point: str, objective: str):
         """A chooser of stations for `point`, learning under `objective`; `None` without a

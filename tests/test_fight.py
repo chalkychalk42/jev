@@ -203,7 +203,8 @@ def test_engaging_never_clicks_the_body_it_turns_and_starts_the_swing():
     assert f.engage() is True
     assert hid.clicks == [], "aimed by clicking, which does not turn the character"
     assert hid.taps == ["1"], "faced the unit and never started swinging"
-    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.0}]
+    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.0,
+                                  "stop": None, "deadline_s": None}]
 
 
 def test_a_vanishing_target_at_full_health_is_not_a_kill():
@@ -806,7 +807,8 @@ def test_an_unfaced_unit_is_never_walked_at_or_clicked():
     f.targeting.face = FaceResult(FaceCode.UNSETTLED, "plate still off centre", 0.2)
     assert f.run(timeout_s=1) is Fought.NOT_VISIBLE
     assert hid.clicks == [] and hid.holds == []
-    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.0}]
+    assert f.targeting.faces == [{"expected_name_id": None, "hint": None, "search_s": 0.0,
+                                  "stop": None, "deadline_s": None}]
 
 
 @pytest.mark.parametrize("last_hp", [None, 1.0, 0.03])
@@ -2032,3 +2034,82 @@ def test_a_fight_keeps_mana_back_for_a_heal_and_its_save(combat_clock):
     assert hid.taps[:1] == [str(seal.slot)], "with mana to spare the seal goes on"
     _, hid = fight_at(reserve + seal.mana - 5, combat=False)
     assert hid.taps[:1] == [str(seal.slot)], "out of a fight nothing is held back"
+
+
+def test_hurt_while_looking_for_the_target_heals_first_then_looks_again():
+    """Session 126: twelve seconds spent looking for the selected gnoll's plate took the
+    character from 94% to 22% with nothing pressed. In a fight the look stops for the heal,
+    which needs no facing, and the clock bounds the look."""
+    from jev.clients.fight import FIGHT_FACE_S
+
+    hurt = {**ALIVE, "vitals.combat": True, "vitals.hp": 0.3, "target.attacking_me": True,
+            "combat.auto_attack": True}
+    f = _fight([hurt])
+    answers = [FaceResult(FaceCode.INTERRUPTED, "30% health in a fight: the heal first"), FACED]
+    requests = []
+
+    def face(**request):
+        requests.append(request)
+        return answers.pop(0)
+
+    f.targeting.face_selected = face
+    healed = []
+    f._heal_first = lambda values: healed.append(values) or values
+    assert f.engage(hurt) is True
+    assert healed, "the heal came before the second look"
+    assert len(requests) == 2
+    assert callable(requests[0]["stop"]) and requests[0]["deadline_s"] == FIGHT_FACE_S
+    assert requests[0]["stop"](hurt) and not requests[0]["stop"]({**hurt, "vitals.hp": 0.9})
+
+
+class _Lines:
+    def __init__(self, line="0.50"):
+        self.line, self.picks, self.outcomes = line, [], []
+
+    def pick(self, objective, options):
+        self.picks.append((objective, tuple(options)))
+        return self.line
+
+    def outcome(self, objective, option, won, seconds=0.0):
+        self.outcomes.append((objective, option, won))
+
+
+@pytest.mark.parametrize(("result", "low", "recorded"), [
+    (Fought.KILLED, 0.55, True),        # came to blows and never went low: it went well
+    (Fought.KILLED, 0.10, False),       # won, but below the bad line: it went badly
+    (Fought.DIED, 0.0, False),
+    (Fought.NO_TARGET, None, None),     # never came to blows: nothing learned
+])
+def test_each_fight_holds_a_drawn_heal_line_and_records_how_it_went(result, low, recorded):
+    from jev.clients.fight import HEAL_LINES
+
+    f = _fight([ALIVE])
+    lines = _Lines("0.60")
+    f.choices = lines
+
+    def fought(name_id, timeout_s):
+        f._low_hp = low
+        return result
+
+    f._fight = fought
+    assert f.run() is result
+    assert lines.picks == [("all", HEAL_LINES)] and f.heal_below == 0.60
+    assert lines.outcomes == ([] if recorded is None else [("all", "0.60", recorded)])
+
+
+def test_a_fight_cut_short_is_recorded_only_when_it_was_going_badly():
+    f = _fight([ALIVE])
+    lines = _Lines()
+    f.choices = lines
+
+    def cut(low):
+        def fought(name_id, timeout_s):
+            f._low_hp = low
+            raise RuntimeError("cancelled: dead or ghost")
+        return fought
+
+    for low in (0.05, 0.8):
+        f._fight = cut(low)
+        with pytest.raises(RuntimeError):
+            f.run()
+    assert lines.outcomes == [("all", "0.50", False)], "a stop at 80% says nothing"

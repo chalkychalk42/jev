@@ -721,3 +721,39 @@ def test_hybrid_dispatch_asks_the_tutor_only_after_a_routine_failed(tmp_path):
 def test_an_unknown_dispatch_is_refused(tmp_path):
     with pytest.raises(ValueError, match="dispatch"):
         PlayingBody(None, recorder=None, store=tmp_path, screenshots=None, dispatch="sometimes")
+
+
+class _Picks:
+    def __init__(self, option):
+        self.option, self.picks, self.outcomes = option, [], []
+
+    def pick(self, objective, options):
+        self.picks.append((objective, tuple(options)))
+        return self.option
+
+    def outcome(self, objective, option, won, seconds=0.0):
+        self.outcomes.append((objective, option, won))
+
+
+@pytest.mark.parametrize(("option", "tutor_asked"), [("routine", False), ("tutor", True)])
+def test_after_a_routine_fails_the_retry_is_a_learned_choice(tmp_path, option, tutor_asked):
+    """V158: whether the tutor rescues a failed routine better than the routine's own retry
+    is learned per skill and failure, from how each did."""
+    env = composition(tmp_path)
+    env.playing.dispatch = "hybrid"
+    env.playing.recovery = _Picks(option)
+    asked = []
+    env.playing.controller.run = lambda arm, checkpoint: asked.append(arm) or Result(
+        SkillOutcome.SUCCEEDED, "tutor played", "done")
+    env.spine.execute = lambda arm, state, checkpoint: Result(
+        SkillOutcome.SUCCEEDED, "scripted travel arrived", "arrived")
+    try:
+        env.playing._note_routine(env.arm, Result(SkillOutcome.ABORTED, "stuck", "unreachable"))
+        result = env.playing.execute(env.arm, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert result.outcome is SkillOutcome.SUCCEEDED
+    assert bool(asked) is tutor_asked
+    assert env.playing.recovery.picks == [("TRAVEL_TO:unreachable", ("tutor", "routine"))]
+    assert env.playing.recovery.outcomes == [("TRAVEL_TO:unreachable", option, True)]

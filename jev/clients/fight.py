@@ -265,6 +265,15 @@ SAVE_HEAL_BELOW = 0.8
 # How long a fight begun below the heal's line spends on its save and heal before it
 # looks for the attacker, and how long with nothing pressable before it gives that up.
 HEAL_FIRST_S = 8.0
+# In a fight, facing the target may take this long by the clock before the fight falls back
+# to swinging by the client's own errors (`Targeting.face_selected`, `deadline_s`).
+FIGHT_FACE_S = 3.0
+# The heal lines a fight may hold (`Fight.heal_below`), learned from how fights went
+# (`jev.learn.choices`, "fight.heal_below"): a fight that fell below `BAD_FIGHT_HP`, or
+# died, went badly. Of 999 fights where something attacked first, 42% of those that began
+# below 60% health went badly against 4% above it (25 September).
+HEAL_LINES = ("0.40", "0.50", "0.60")
+BAD_FIGHT_HP = 0.15
 HEAL_FIRST_IDLE_S = 0.8
 
 FINISH_MARGIN = 0.8
@@ -320,6 +329,10 @@ class Fight:
     # The zone's map box, to measure the approach in yards; without it, blocked walks are
     # not noticed.
     bounds: ZoneBounds | None = None
+    # The health a fight heals below; each fight's is a learned choice when `choices` is
+    # given (a `jev.learn.choices.Choice`).
+    heal_below: float = HEAL_IN_COMBAT
+    choices: object | None = None
 
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
@@ -392,12 +405,38 @@ class Fight:
     _race: list[tuple] = field(default_factory=list, init=False)
     # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
     _look_at: float | None = field(default=None, init=False)
+    # The lowest health this fight saw, for how it went.
+    _low_hp: float | None = field(default=None, init=False)
 
     # -- the skill -----------------------------------------------------------
 
     @traced("fight")
     def run(self, name_id: int | None = None, *, timeout_s: float = 45.0) -> Fought:
-        """Select, engage, and hold the rotation until something settles it."""
+        """Select, engage, and hold the rotation until something settles it.
+
+        With `choices`, the fight's heal line is drawn from what each line has done, and
+        how the fight went is recorded for it: badly when it died or fell below
+        `BAD_FIGHT_HP`. A fight that never came to blows teaches nothing."""
+        line = None
+        if self.choices is not None:
+            line = self.choices.pick("all", HEAL_LINES)
+            self.heal_below = float(line)
+        self._low_hp = None
+        started = time.monotonic()
+        result = None
+        try:
+            result = self._fight(name_id, timeout_s)
+            return result
+        finally:
+            low = self._low_hp
+            went_badly = result is Fought.DIED or (low is not None and low < BAD_FIGHT_HP)
+            came_to_blows = result in (Fought.KILLED, Fought.DIED, Fought.LOSING, Fought.TIMEOUT,
+                                       Fought.UNREACHABLE, Fought.LOST)
+            # Cut short (a death, a stop): known only when it was going badly.
+            if line is not None and (came_to_blows or (result is None and went_badly)):
+                self.choices.outcome("all", line, not went_badly, time.monotonic() - started)
+
+    def _fight(self, name_id: int | None, timeout_s: float) -> Fought:
         self.pressed = []
         self.closed = 0
         self.broken = False
@@ -465,7 +504,7 @@ class Fight:
         if not in_combat and hp is not None and hp < MIN_START_HP:
             self.detail = f"{hp:.0%} health; not starting a fight on that"
             return Fought.TOO_HURT
-        if in_combat and hp is not None and hp < HEAL_IN_COMBAT:
+        if in_combat and hp is not None and hp < self.heal_below:
             after = self._heal_first(v)
             if self._input_refused:
                 return Fought.REFUSED
@@ -915,7 +954,19 @@ class Fight:
         fighting = v.get("vitals.combat") is True or v.get("target.attacking_me") is True
         result = self._targeting().face_selected(
             expected_name_id=self._selected_name_id, hint=self.last_plate,
-            search_s=FACE_SEARCH_MAX_S if fighting else 0.0)
+            search_s=FACE_SEARCH_MAX_S if fighting else 0.0,
+            stop=self._hurt if fighting else None,
+            deadline_s=FIGHT_FACE_S if fighting else None)
+        if result.code is FaceCode.INTERRUPTED and fighting:
+            # Hurt while looking for it: the heal needs no facing, so it comes first, and
+            # then the look again (session 126: three gnolls, twelve seconds of looking).
+            event("engage.heal_first", detail=result.detail)
+            self._heal_first(self.read())
+            if self._input_refused:
+                return False
+            result = self._targeting().face_selected(
+                expected_name_id=self._selected_name_id, hint=self.last_plate,
+                search_s=FACE_SEARCH_MAX_S, deadline_s=FIGHT_FACE_S)
         if result.code is FaceCode.NOT_VISIBLE and self._ahead and not fighting:
             result = self._close_to_sight(result)
         self._aim_code = result.code
@@ -1294,7 +1345,7 @@ class Fight:
             hp = v.get("vitals.hp")
             saved = (self._saved_at is not None
                      and time.monotonic() - self._saved_at < SAVE_HEAL_WINDOW_S)
-            if hp is None or (hp >= HEAL_IN_COMBAT and not saved and self._pending_heal is None):
+            if hp is None or (hp >= self.heal_below and not saved and self._pending_heal is None):
                 return v
             busy = (v.get("bars.casting") is True or (v.get("bars.gcd") or 0.0) > 0.0
                     or self._pending_heal is not None)
@@ -1365,7 +1416,7 @@ class Fight:
                 # Holy Lights, none of which healed anything, on a 2.5 second cast.
                 and self._pending_heal is None
                 and in_combat and hp is not None
-                and (hp < HEAL_IN_COMBAT or (saved and hp < SAVE_HEAL_BELOW))
+                and (hp < self.heal_below or (saved and hp < SAVE_HEAL_BELOW))
                 and self._has_mana_for(heal, values)
                 and (saved or not self._finishes_first(values))):
             # Clear the way for it first, where the bar can: immune (Divine Protection),
@@ -1710,8 +1761,18 @@ class Fight:
         return (level == start_level and isinstance(xp, (int, float))
                 and isinstance(start_xp, (int, float)) and xp > start_xp)
 
-    @staticmethod
-    def _observe(values: dict | None) -> None:
+    def _hurt(self, values: dict) -> str | None:
+        """Below the heal line in a fight: why a search should stop for the heal."""
+        hp = values.get("vitals.hp")
+        if (values.get("vitals.combat") is True and isinstance(hp, (int, float))
+                and not isinstance(hp, bool) and hp < self.heal_below):
+            return f"{hp:.0%} health in a fight: the heal first"
+        return None
+
+    def _observe(self, values: dict | None) -> None:
+        hp = None if values is None else values.get("vitals.hp")
+        if isinstance(hp, (int, float)) and not isinstance(hp, bool):
+            self._low_hp = hp if self._low_hp is None else min(self._low_hp, hp)
         event("combat.observed", code="blind" if values is None else "readable",
               data={} if values is None else {key: values.get(key) for key in (
                   "vitals.hp", "vitals.power", "vitals.combat", "vitals.dead", "vitals.ghost",
