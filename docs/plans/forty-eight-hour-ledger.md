@@ -7,6 +7,17 @@ Read "Now" after every compaction. Times are BST (the Windows clock runs about 2
 Now
 ---
 
+- **T-0 was Friday 25 Sep 23:14 BST**, when the operator said "start the 48 hours".
+  - Hours count from then: hour 15 is Saturday 14:15, hour 36 Sunday 11:15, hour 44
+    Sunday 19:15, and hour 48 Sunday 23:15.
+  - The campaign's switch deadline was moved to Saturday 14:15.
+- **T-0, step by step:**
+  - 23:14: the desk had been idle 4.5 h and the servers were up.
+  - 23:15: the client was launched; the login put Testvvi in Goldshire at level 13; the
+    strip read as schema 17.
+  - Session 134 (hybrid) started 23:16 with all three proof lines: danger 1,217 cells,
+    247 station visits, and the band armed at 13.
+
 - **25 Sep 14:10.** Pre-flight A is under way, with the loop stopped and the client closed.
   - The operator logged Testvvi out at 09:13, in Goldshire, at level 13.
   - T-0 is Friday 19:30.
