@@ -53,8 +53,12 @@ def reflex(rule: str) -> bool:
 
 # Services only a routine can do, never put to the tutor: training ends in drags from the
 # spellbook onto the bar, which the tutor has no control for, and binding the hearthstone
-# answers a confirmation the tutor has no row for either.
-ROUTINE_RULES = ("service.train", "service.bind", "service.discover")
+# answers a confirmation the tutor has no row for either. A meal between fights is the
+# routine's too: it was a third of the tutor's decisions in teach mode (38 of 112 over five
+# sessions), its choices do not separate in any state a student sees (it ate at a median
+# 57% health and walked about at 71-80%), and walking about took it off its route - session
+# 93's walk back from a mine grew from 1,070 yards to 1,169 and its hand-in failed over.
+ROUTINE_RULES = ("service.train", "service.bind", "service.discover", "recover.eat")
 
 
 def routine_only(rule: str) -> bool:

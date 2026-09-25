@@ -463,25 +463,28 @@ def test_a_fight_or_a_death_runs_its_routine_without_asking_the_tutor(tmp_path, 
     assert [row["rule"] for row in rows if row.get("event") == "reflex"] == [rule]
 
 
-def test_training_runs_its_routine_without_asking_the_tutor(tmp_path):
+@pytest.mark.parametrize(("rule", "skill"), [("service.train", "TRAIN_CLASS"),
+                                             ("recover.eat", "EAT_DRINK")])
+def test_training_and_meals_run_their_routine_without_asking_the_tutor(tmp_path, rule, skill):
     """Training ends in drags from the spellbook onto the bar: the tutor has no control
-    for that, so the routine plays it, as it plays a fight."""
+    for that, so the routine plays it, as it plays a fight. A meal is the routine's too:
+    the tutor walked off its route before eating (session 93)."""
     env = composition(tmp_path)
     env.playing.controller.run = Mock(side_effect=AssertionError("the tutor was asked"))
     scripted = []
     env.spine.execute = lambda arm, state, checkpoint: scripted.append(arm) or Result(
         SkillOutcome.SUCCEEDED, "routine ran", "ok")
-    train = replace(env.arm, rule="service.train",
-                    decision=env.arm.decision.model_copy(update={"skill": "TRAIN_CLASS"}))
+    arm = replace(env.arm, rule=rule,
+                  decision=env.arm.decision.model_copy(update={"skill": skill}))
     try:
-        result = env.playing.execute(train, None, lambda: None)
+        result = env.playing.execute(arm, None, lambda: None)
     finally:
         env.screenshots.close()
         env.playing.close()
-    assert result.code == "ok" and scripted == [train]
+    assert result.code == "ok" and scripted == [arm]
     rows = [json.loads(line) for line in
             (env.recorder.dir / "play-actions.jsonl").read_text().splitlines()]
-    assert [row["rule"] for row in rows if row.get("event") == "routine"] == ["service.train"]
+    assert [row["rule"] for row in rows if row.get("event") == "routine"] == [rule]
 
 
 def test_a_dialog_nobody_can_dismiss_is_not_handed_to_a_routine(tmp_path):
