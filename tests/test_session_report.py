@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
-from session_report import Session, blocks  # noqa: E402
+from session_report import Session, blocks
 
 
 def test_sessions_are_gathered_into_blocks_of_play_and_rated_per_hour():
