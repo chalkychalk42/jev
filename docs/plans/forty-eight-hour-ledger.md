@@ -27,14 +27,21 @@ Now
     upstairs in the Lion's Pride Inn, come back complete.
   - A6: the flaky test did not recur in 3 focused runs or 4 full ones. It stays in Issues.
   - A2 (b) is deferred: neither character reaches the end of 12-20 inside the window.
-- **Caster stage 1, for hours 1.5-15 (the design is in the 25 Sep 12:20 conversation;
-  summary in §8b):**
-  - Conjured water and food, and using a bag item when the bar's slot is empty.
-  - Frost Nova at 10, then a step clear.
-  - A mana line measured from the mana spent per kill.
-  - Caster gear: staff, wand, cloth and intellect.
-  - Schema 17 fields: in range, auras, attackers.
-  - The hunt's stand-off for casters.
+- **Caster stage 1 (§8b), 25 Sep 13:40-14:05:**
+  - Done:
+    - conjuring, and meals from the bags, V166 (14f92ec);
+    - eating and drinking at once, and an 18-yard stand-off in the hunt, V167 (dc7cb28);
+    - Frost Nova at contact, then a step clear, V169 (5d14c38);
+    - the mana line measured from kills, V170 (93aa6d1).
+  - Also V168 (e6741c1): a trainer teaching two spells or more is worth up to 3,000 yards,
+    so Testvvi trains from south Westfall.
+  - Open, for the session: out-of-combat buffs, caster gear, schema 17.
+  - The hunt's stand-off and the rest changes are inert for Testvvi.
+- **Offline checks at 14:05:**
+  - The 1-12 route starts at A Threat Within, with 41 quests (Give Gerard a Drink pays
+    nothing, V163).
+  - The 12-20 route starts at Patrolling Westfall, with 27 quests.
+  - Planned routes: Goldshire to Sentinel Hill 1,656 yards, Westbrook to Sentinel Hill 799.
 - **T-0 runbook (§6), step by step.** WINPY is `/mnt/c/forever-win/Scripts/python.exe`.
   - **B1, state.**
     - `tools/keep.sh status` shows the servers up and no loop running.
