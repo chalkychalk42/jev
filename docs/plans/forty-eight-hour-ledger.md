@@ -66,8 +66,8 @@ Now
       `captures/addon-backup/20260925T131155-StatusStrip` back over
       `/mnt/c/Games/WoW243/Interface/AddOns/StatusStrip` (schema 16; the decoder reads both).
       Then relaunch and log the issue.
-  - **B2, two sessions on Testvvi.** Start the loop. Once the second session starts, touch
-    `var/loop/stop`.
+  - **B2, two sessions on Testvvi.** `rm var/loop/stop`, then start the loop. Once the
+    second session starts, touch `var/loop/stop`: the timer then leaves the loop off.
     - The log must show `danger: ... cells`, `choices: ... hunt station visits`,
       `guide alli_human_1_12: outgrown at level 13, then ally_human_12_20.json`, some XP and
       no Traceback. The tutor is asked only after a routine fails.
@@ -109,7 +109,10 @@ Now
        accepted, a Fireball kill with no melee walk, and a drink.
     9. `tools/keep.sh client-restart`, then `$WINPY tools/character.py enter --name Testvvi`.
   - **B4, arm.**
-    - `tools/keep.sh install-timer`.
+    - The keeper timer was installed at 15:20 on 25 Sep and tested under systemd. With
+      `var/loop/stop` set, it only checks the servers.
+    - Removing `var/loop/stop` lets it start the loop within 5 minutes; start it by hand
+      rather than wait.
     - Start the loop.
     - Start the heartbeat.
     - Add the T-0 row here, write a STATUS entry and push.
