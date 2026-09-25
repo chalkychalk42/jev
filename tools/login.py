@@ -55,8 +55,7 @@ def main() -> int:
     if creds is None:
         print("set JEV_WOW_ACCOUNT and JEV_WOW_PASSWORD in .env")
         return 2
-    account, _ = creds
-    print(f"account {account!r}, password set")
+    print("account and password set")
 
     try:
         hwnd = win32.game_window()
