@@ -20,8 +20,9 @@ With Windows Python, the client at its login screen or at character select, the 
                                 pick its row; enter the world; wait out the introduction,
                                 pressing nothing; check name, class and race by the strip.
                                 The campaign then names it the active one
-    tools/character.py measure [--focus]
-                                keep the client's frame as a PNG, to measure a screen from
+    tools/character.py measure [--focus] [--click FX,FY]
+                                keep the client's frame as a PNG, to measure a screen from;
+                                with a click first at a fraction of the client
 
 Nothing here prints a credential. Nothing is ever deleted.
 """
@@ -366,11 +367,17 @@ def cmd_measure(args) -> int:
     if not win32.available():
         print("run this with Windows Python")
         return 2
-    if args.focus:
-        _hwnd, cap, _hid, _origin, _size = _window()
+    if args.focus or args.click:
+        _hwnd, cap, hid, origin, size = _window()
     else:
         cap = WindowCapture(win32.game_window(), backend=Backend.SCREEN)
     try:
+        if args.click:
+            # One click at a fraction of the client, to step through a screen being
+            # measured; the frame after it is kept.
+            fx, fy = (float(v) for v in args.click.split(","))
+            hid.click(origin[0] + int(fx * size[0]), origin[1] + int(fy * size[1]))
+            time.sleep(2.5)
         frame = cap.grab().rgb
     finally:
         cap.close()
@@ -403,6 +410,8 @@ def main(argv: list[str] | None = None) -> int:
     enter.add_argument("--name")
     measure = commands.add_parser("measure")
     measure.add_argument("--focus", action="store_true")
+    measure.add_argument("--click", metavar="FX,FY",
+                         help="click here first, as fractions of the client (implies --focus)")
     args = parser.parse_args(argv)
     return {"plan": cmd_plan, "name": cmd_name, "due": cmd_due, "status": cmd_status,
             "enter": cmd_enter, "measure": cmd_measure}[args.command](args)
