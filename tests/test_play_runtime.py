@@ -516,6 +516,34 @@ def test_a_stalled_tutor_also_hands_the_objective_to_the_scripted_routine(tmp_pa
     assert result.code == "arrived" and scripted == [env.arm]
 
 
+def test_after_a_stall_the_steps_re_arms_go_to_the_routine_for_a_while(tmp_path, monkeypatch):
+    """A stalled episode earns no labels, and every fight re-arms the objective: at Eastvale
+    the tutor stalled on the wood bundles after every fight, two minutes each (session
+    118)."""
+    import jev.play.runtime as module
+
+    env = composition(tmp_path)
+    asked = []
+    env.playing.controller.run = lambda arm, checkpoint: asked.append(arm) or Result(
+        SkillOutcome.ABORTED, "bounded teaching episode made no verified useful progress",
+        "teaching_stalled")
+    scripted = []
+    env.spine.execute = lambda arm, state, checkpoint: scripted.append(arm) or Result(
+        SkillOutcome.SUCCEEDED, "scripted travel arrived", "arrived")
+    now = [1000.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
+    try:
+        for _ in range(3):
+            env.playing.execute(env.arm, None, lambda: None)
+        assert len(asked) == 1 and len(scripted) == 3, "the tutor asked once, not each re-arm"
+        now[0] += module.STALL_REST_S + 1
+        env.playing.execute(env.arm, None, lambda: None)
+        assert len(asked) == 2, "and again once the rest is over"
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+
+
 def test_a_dialog_the_tutor_left_open_is_handed_back_before_the_routine(tmp_path):
     """The tutor's last Escape opened the game menu; the scripted sale behind it failed and
     the run stopped (run 20260924T012032-0c0c24)."""

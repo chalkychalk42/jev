@@ -58,6 +58,12 @@ def delegable_skills(current: str, available) -> tuple[str, ...]:
     return tuple(sorted(allowed & set(available)))
 
 
+# After the tutor stalls on a step, its re-arms go to the routine for this long. A stalled
+# episode earns no labels, and every fight re-arms the objective: at Eastvale the tutor
+# stalled on the wood bundles after every fight, two minutes each, and the routine then
+# found them (session 118).
+STALL_REST_S = 600.0
+
 # The runs already read into the store, by their play files' sizes and times, kept in the
 # store beside what they gave it: every new session read all 170 runs again, a lock per row,
 # while its controller wrote through the same lock, and met the lock's ten seconds at the
@@ -169,6 +175,7 @@ class PlayingBody:
         # guide's own routine with the tutor on its failures and a fixed sample.
         self.dispatch = dispatch
         self._routine_failed: set[tuple[str | None, str | None]] = set()
+        self._stalled: dict[tuple[str | None, str], float] = {}
         teacher_model = model_for(teacher_provider, teacher_model)
         self.spine, self.client, self.graph = spine, spine.client, spine.graph
         self.available = spine.available
@@ -304,10 +311,22 @@ class PlayingBody:
             result = self.spine.execute(arm, state, focused_checkpoint)
             self._note_routine(arm, result)
             return result
+        stalled = self._stalled.get((arm.step_id, arm.decision.skill))
+        if (stalled is not None and time.monotonic() - stalled < STALL_REST_S
+                and arm.decision.skill not in {"ABORT_WAIT", "IDLE"}):
+            self.journal.append("actions", {"event": "stalled_routine", "t": time.time(),
+                                            "arm_id": arm.arm_id, "skill": arm.decision.skill,
+                                            "step_id": arm.step_id})
+            if state is None:
+                state = State.model_validate(self.observer.observe(arm).data["state"])
+            self.routine_clock = time.monotonic()
+            return self.spine.execute(arm, state, focused_checkpoint)
         result = self.controller.run(arm, focused_checkpoint)
         if (result.code not in {"teacher_unavailable", "teaching_stalled"}
                 or arm.decision.skill in {"ABORT_WAIT", "IDLE"}):
             return result
+        if result.code == "teaching_stalled":
+            self._stalled[(arm.step_id, arm.decision.skill)] = time.monotonic()
         # The system makes progress with zero teacher calls (ARCHITECTURE.md section 0).
         # A tutor that cannot answer - provider down, overloaded past the deadline, or an
         # invalid reply after its re-ask - or that made no verified progress within its
