@@ -146,7 +146,8 @@ def test_a_replan_starts_at_the_height_of_the_route_that_got_us_here():
     asked = []
 
     def path(map_id, start, end):
-        asked.append(start[2])
+        if start != end:                     # a plan; a point query probes the floors
+            asked.append(start[2])
         return outside
 
     client.query.path = path
@@ -182,7 +183,8 @@ def test_a_start_height_that_snaps_onto_the_wrong_floor_is_not_the_plan():
         return island if start[2] > 84.0 else ground
 
     client.query.path = path
-    client.travel.position = lambda: (0.4766, 0.4137)
+    at = [(0.4766, 0.4137)]
+    client.travel.position = lambda: at[0]
     walked = []
 
     def follow(route, *, timeout_s, replan, memory=None):
@@ -191,11 +193,15 @@ def test_a_start_height_that_snaps_onto_the_wrong_floor_is_not_the_plan():
                                stuck_events=0, detail="")
 
     client.travel.follow = follow
-    assert client.approach(rib)
+    client.approach(rib)                 # a walk that went nowhere, whatever it reports
     assert walked == [ground] and asked == [86.4, 83.4]
     asked.clear()
     client.approach(rib)
     assert asked == [81.9], "the next plan from here starts on the ground the walk ended on"
+    at[0] = world_to_map(rib[0] - 60.0, rib[1], ELWYNN)
+    client.travel.follow = lambda route, **kw: SimpleNamespace(
+        outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0, stuck_events=0, detail="")
+    assert not client.approach(rib), "arrived at a route's end, 60 yards from the destination"
 
 
 def test_a_start_far_above_the_destination_is_found_by_widening_the_heights():
@@ -210,10 +216,17 @@ def test_a_start_far_above_the_destination_is_found_by_widening_the_heights():
     nowhere = Path(PathStatus.PARTIAL, ((here[0], here[1], 88.0),))
     route = Path(PathStatus.COMPLETE, ((here[0], here[1], 90.35), wolves))
     client.query.path = lambda map_id, start, end: route if 86.0 <= start[2] <= 97.0 else nowhere
-    client.travel.position = lambda: (0.4787, 0.3220)
+    at = [(0.4787, 0.3220)]
+    client.travel.position = lambda: at[0]
     walked = []
-    client.travel.follow = lambda path, **kw: walked.append(path) or SimpleNamespace(
-        outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0, stuck_events=0, detail="")
+
+    def follow(path, **kw):
+        walked.append(path)
+        at[0] = world_to_map(wolves[0], wolves[1], ELWYNN)
+        return SimpleNamespace(outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0,
+                               stuck_events=0, detail="")
+
+    client.travel.follow = follow
     assert client.approach(wolves)
     assert walked == [route]
 
@@ -349,3 +362,37 @@ def test_on_a_route_up_stairs_over_the_hall_the_height_is_the_routes():
         client.position()
         heights.append(round(client._ground[2], 1))
     assert heights == [57.0, 59.1, 61.2, 63.3, 64.0, 64.0]
+
+
+def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor():
+    """Sessions 110 and 111 began upstairs in the Lion's Pride Inn on plans from the hall
+    below, and every re-plan, at the height of the route being followed, walked the same
+    hall route into the same upstairs walls."""
+    from jev.clients.travel import Outcome
+
+    client, _values = client_in("Elwynn", (0.49, 0.42))
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    spot = world_to_map(here[0] + 12.0, here[1], ELWYNN)      # the hall, and the floor above
+    probe = inn(here)
+    starts = []
+
+    def path(map_id, start, end):
+        if start[:2] != end[:2]:
+            starts.append(round(start[2], 1))
+        return probe(map_id, start, end)
+
+    client.query.path = path
+    client.travel.position = lambda: spot
+    lines = []
+    client.on_path = lines.append
+
+    def follow(route, *, timeout_s, replan, memory=None):
+        replan(spot)
+        replan(spot)
+        return SimpleNamespace(outcome=Outcome.STUCK, remaining_yards=40.0, turns=0,
+                               stuck_events=9, detail="")
+
+    client.travel.follow = follow
+    assert not client.approach((here[0] - 40.0, here[1] + 5.0, 57.0))
+    assert starts == [57.0, 64.0, 57.0], "the hall, then the floor above, then the hall again"
+    assert any("planning from the floor at 64.0" in line for line in lines)

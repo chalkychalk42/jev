@@ -27,6 +27,10 @@ FIND_S = 8.0
 # Map fractions the character must have moved by: about seventy yards in Elwynn, which
 # ten seconds standing still casting cannot cover.
 MOVED = 0.02
+# Or between two reads a quarter of a second apart, which no walk covers: bound in the same
+# inn, the stone moved a character wedged upstairs in the Lion's Pride Inn 21 yards, to
+# Innkeeper Farley in the hall, and that was called "did not move" (session 111).
+JUMP = 0.003
 
 
 class Hearthed(StrEnum):
@@ -69,10 +73,12 @@ class Hearth:
         if not self._click(stone, "inventory.", right=True):
             return Hearthed.REFUSED
         deadline = self.monotonic() + CAST_S + 8.0
+        last = start
         while self.monotonic() < deadline:
             v = self.read()
             if v is not None and v.get("pos.mx") is not None and v.get("pos.my") is not None:
-                if math.dist(start, (v["pos.mx"], v["pos.my"])) > MOVED:
+                at, last = last, (v["pos.mx"], v["pos.my"])
+                if math.dist(start, last) > MOVED or math.dist(at, last) > JUMP:
                     event("hearth.arrived", data={"to": [v["pos.mx"], v["pos.my"]]})
                     if opener is not None:
                         self._click(opener, "inventory.open_")     # close what we opened

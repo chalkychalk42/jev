@@ -92,6 +92,16 @@ LOWER_STEPS = (3.0, 6.0, 9.0, 12.0)
 # samplings (review, 25 September). Within `ROUTE_YARDS` of the route its height is the
 # reference; off it, continuity.
 ROUTE_YARDS = 2.5
+# Blocked where a plan already started, with other floors under the spot, the re-plan starts
+# on one of those. Nothing paints a height, so the first plan's floor is a guess: sessions
+# 110 and 111 began upstairs in the Lion's Pride Inn on plans from the hall below, and each
+# re-plan, started at the height of the route being followed, walked the same hall route
+# into the same upstairs walls for a whole session.
+REPLAN_SPOT_YARDS = 8.0
+# An arrival is within this of the destination. A partial plan ends where the mesh does,
+# and from somewhere no route leaves that is a few yards away: "arrived" there began a
+# grind inside the inn and kept the hearthstone rule from counting the walk (session 110).
+ARRIVED_NEAR_YARDS = 15.0
 
 
 def _route_height(points, xy: tuple[float, float]) -> float | None:
@@ -134,6 +144,8 @@ class Client:
     route_memory: object | None = field(default=None, init=False)
     # How the last `approach` walk ended, for a caller that needs more than arrived or not.
     last_travel: object | None = field(default=None, init=False)
+    # Yards the last walk brought the character nearer its destination, in a straight line.
+    last_headway: float | None = field(default=None, init=False)
     bounds: ZoneBounds | None = field(default=None, init=False)
     coordinate_zones: dict[int, ZoneBounds] = field(default_factory=dict, init=False)
     coordinate_names: dict[int, str] = field(default_factory=dict, init=False)
@@ -331,6 +343,7 @@ class Client:
 
         followed = [path]
         self._following = tuple(path.points)
+        starts = [(hw[0], hw[1], path.points[0][2])]
 
         def replan(here_map):
             # The start's height is unknown (the radio paints map x/y). The destination's
@@ -343,6 +356,16 @@ class Client:
             z = self._height_near(w)
             if z is None:
                 z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
+            # ...unless a plan already started near here, on that floor, and it is blocked
+            # again: then another floor under the spot (`REPLAN_SPOT_YARDS`).
+            tried = [s[2] for s in starts if math.dist(s[:2], w[:2]) <= REPLAN_SPOT_YARDS]
+            if any(abs(t - z) <= FLOOR_GAP for t in tried):
+                others = [f for f in surfaces_under(self.query, self.bounds.map_id, w[0], w[1])
+                          if all(abs(f - t) > FLOOR_GAP for t in tried)]
+                if others:
+                    z = min(others, key=lambda f: abs(f - z))
+                    self._say(f"  blocked again here: planning from the floor at {z:.1f}")
+            starts.append((w[0], w[1], z))
             planned = self.query.path(self.bounds.map_id, (w[0], w[1], z), world)
             if planned.usable:
                 followed.append(planned)
@@ -367,19 +390,26 @@ class Client:
             raise
         ended = self.travel.position()
         self._following = ()
+        arrived = result.outcome.value == "arrived"
+        self.last_headway = None
         if ended is not None:
             w = map_to_world(ended[0], ended[1], self.bounds)
             z = self._height_near(w)
             if z is None:
                 z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
             self._ground = (w[0], w[1], z)
+            short = math.dist(w[:2], world[:2])
+            self.last_headway = math.dist(hw[:2], world[:2]) - short
+            if arrived and short > ARRIVED_NEAR_YARDS:
+                arrived = False
+                self._say(f"  the route ended {short:.1f} yards from the destination")
         remaining = ("unknown" if result.remaining_yards is None
                      else f"{result.remaining_yards:.1f} yards")
         self._say(f"  {result.outcome.value}, {remaining} left, {result.turns} turns, "
                   f"{result.stuck_events} stuck"
                   + (f" - {result.detail}" if result.detail else ""))
         self.last_travel = result
-        return result.outcome.value == "arrived"
+        return arrived
 
     def plan_to(self, world: tuple[float, float, float]):
         """The plan `approach` would follow from here to `world`, without walking it."""

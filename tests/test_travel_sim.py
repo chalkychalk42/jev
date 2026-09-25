@@ -175,3 +175,26 @@ def test_indoors_nothing_is_learned(monkeypatch):
                      monkeypatch=monkeypatch, indoors=lambda: True)
     assert result.outcome is Outcome.ARRIVED and result.stuck_events >= 1
     assert not memory.passages and not memory.blocked
+
+
+def test_arriving_at_the_end_of_a_partial_re_plan_is_not_arriving(monkeypatch):
+    """Upstairs in the Lion's Pride Inn on a plan for the hall below, the re-plans were a
+    few yards of partial route each: two walks to a grind 1,550 yards off were called
+    "arrived, 1209.6 yards left" (session 110), and the grind was begun indoors."""
+    wall = [Segment(-300, -20, 300, -20)]
+    world = WalkWorld(x=X0, y=Y0, heading=-math.pi / 2,
+                      obstacles=tuple(_shifted(o) for o in wall), width_yards=W, height_yards=H)
+    monkeypatch.setattr(travel_module, "time", SimTime(world))
+
+    def at(x, y):
+        return world.world(X0 + x, Y0 + y, ELWYNN, 80.0)
+
+    def replan(here):                       # the mesh from here goes a few yards, no more
+        x, y = here[0] * W - X0, here[1] * H - Y0
+        return Path(PathStatus.PARTIAL, (at(x, y), at(x + 4.0, y)))
+
+    travel = Travel(hid=SimHid(world), bounds=ELWYNN, read_pos=world.map_position)
+    result = travel.follow(Path(PathStatus.COMPLETE, (at(0, 0), at(0, -40))), timeout_s=120.0,
+                           replan=replan)
+    assert result.outcome is Outcome.STUCK, result.detail
+    assert "yards short" in result.detail and result.remaining_yards > 15.0

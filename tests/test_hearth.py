@@ -68,3 +68,31 @@ def test_the_cast_is_not_tried_in_combat():
     world = _World([HEARTHSTONE], bag_open=True, combat=True)
     assert _hearth(world).run() is Hearthed.IN_COMBAT
     assert world.hid.clicks == []
+
+
+def _stepping(steps):
+    """A stone in an open bag, and the character's position read by read after the press."""
+    world = _World([HEARTHSTONE], bag_open=True)
+    plain = world.read
+
+    def read():
+        v = plain()
+        if world.pressed_at is not None:
+            v["pos.mx"], v["pos.my"] = steps[min(world.reads - world.pressed_at, len(steps) - 1)]
+        return v
+    return world, read
+
+
+def test_a_home_in_the_same_inn_is_home():
+    """Bound at the Lion's Pride Inn, the stone moved a character wedged on its upper floor
+    21 yards, to Innkeeper Farley: less than a walk's worth of map, all in one read
+    (session 111)."""
+    world, read = _stepping([(0.4, 0.7)] * 8 + [(0.4059, 0.702)])
+    assert Hearth(world.hid, read, sleep=lambda s: None,
+                  monotonic=iter(i * 0.25 for i in range(10_000)).__next__).run() is Hearthed.HOME
+
+
+def test_a_character_sliding_to_a_stop_is_not_home():
+    world, read = _stepping([(0.4 + 0.001 * i, 0.7) for i in range(6)])
+    assert Hearth(world.hid, read, sleep=lambda s: None,
+                  monotonic=iter(i * 0.25 for i in range(10_000)).__next__).run() is Hearthed.NOT_READY

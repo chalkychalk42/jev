@@ -46,6 +46,9 @@ TAU = 2 * math.pi
 # Pestle and then walked two more minutes of a re-planned route round the building, and
 # the hand-in ran out of time (session 108).
 EARLY = "at the destination before the route's end"
+# How much farther than the arrival radius from a complete route's end a walk may stop and
+# still have arrived: the re-planned route's end is the same destination snapped afresh.
+ARRIVAL_SLACK_YARDS = 1.0
 
 # A seed, not a calibration. Measured once on a level-3 human in Northshire.
 TURN_RATE_SEED = math.radians(134.0)
@@ -447,6 +450,7 @@ class Travel:
         legs = [leg for leg in legs if leg is not None]
         legs = _thin(legs, self.bounds, self.waypoint_arrival_yards)
         exact = self.arrival_yards
+        complete = str(getattr(path, "status", "")) == "complete"
         last: TravelResult | None = None
         replans = 0
 
@@ -527,13 +531,16 @@ class Travel:
                             max_replans - replans, rounds - 1)
                         if rounded is not None:
                             self.arrival_yards = exact
+                            outcome, short = self._short_of(rounded.outcome, rounded.end,
+                                                            legs, exact, complete)
                             return TravelResult(
-                                outcome=rounded.outcome, start=legs[0], end=rounded.end,
+                                outcome=outcome, start=legs[0], end=rounded.end,
                                 remaining_yards=self._short_by(rounded.end, legs),
                                 elapsed_s=time.perf_counter() - t0, turns=self.turns,
                                 stuck_events=self.stuck_events, detours=self.detours,
                                 turn_rate_deg_s=rounded.turn_rate_deg_s,
-                                detail=f"round a blocked spot at leg {i}: {rounded.detail}".strip())
+                                detail=f"round a blocked spot at leg {i}: {rounded.detail}".strip()
+                                + short)
                     self.arrival_yards = exact
                     return self._result(last.outcome, legs[0], last.end, leg,
                                         time.perf_counter() - t0,
@@ -545,13 +552,15 @@ class Travel:
                         abort=abort, replan=replan, max_replans=max_replans - replans,
                         memory=memory, rounds=rounds,
                     )
+                    outcome, short = self._short_of(rest.outcome, rest.end, legs, exact,
+                                                    complete)
                     return TravelResult(
-                        outcome=rest.outcome, start=legs[0], end=rest.end,
+                        outcome=outcome, start=legs[0], end=rest.end,
                         remaining_yards=self._short_by(rest.end, legs),
                         elapsed_s=time.perf_counter() - t0, turns=self.turns,
                         stuck_events=self.stuck_events, detours=self.detours,
                         turn_rate_deg_s=rest.turn_rate_deg_s,
-                        detail=f"re-planned at leg {i}: {rest.detail}".strip(),
+                        detail=f"re-planned at leg {i}: {rest.detail}".strip() + short,
                     )
 
             if last.outcome is not Outcome.ARRIVED:
@@ -781,6 +790,24 @@ class Travel:
         if tried == 0 and unreadable:
             self.last_unstick = "unreadable"
         return False
+
+    def _short_of(self, outcome: Outcome, end, legs, exact: float,
+                  complete: bool) -> tuple[Outcome, str]:
+        """`outcome`, unless it is an arrival short of a complete route's end: then stuck.
+
+        A route taken up part way - re-planned, or round a blocked spot - can be partial,
+        and reaching its end is not reaching the destination. From the Lion's Pride Inn,
+        where a plan can start on the wrong floor, the re-plans were a few yards of hall:
+        two walks to a grind 1,550 yards off were called "arrived, 1209.6 yards left"
+        (session 110), the grind was begun indoors, and the rule that takes the hearthstone
+        after wedged walks was reset by each. A partial route's own end is all a caller
+        asked for, so only a complete one is held to its destination.
+        """
+        short = self._short_by(end, legs)
+        if (outcome is Outcome.ARRIVED and complete and short is not None
+                and short > exact + ARRIVAL_SLACK_YARDS):
+            return Outcome.STUCK, f" (the route ended {short:.1f} yards short)"
+        return outcome, ""
 
     def _short_by(self, end, legs) -> float | None:
         """How far the character stopped from where it was going.

@@ -788,6 +788,35 @@ def test_two_wedged_walks_running_go_home_by_hearthstone():
     assert homes == [1], "blocked is not wedged: the planner still has ways round"
 
 
+def test_walks_that_get_nowhere_are_wedged_too():
+    """Upstairs in the Lion's Pride Inn, walked on plans for the hall below, the character
+    moved about the landing for two sessions and was never wedged by the unstick's measure
+    (sessions 110 and 111)."""
+    from jev.clients.hearth import Hearthed
+    from jev.clients.travel import Outcome
+    from jev.run.body import WEDGED_WALKS
+
+    b = body()
+    homes = []
+    b.hearth = SimpleNamespace(run=lambda: homes.append(1) or Hearthed.HOME, detail="")
+    b.client.approach = lambda world, timeout_s=0: False
+    b.client.last_travel = SimpleNamespace(outcome=Outcome.TIMEOUT,
+                                           detail="leg 3 of 12: ran out of time")
+    b.client.last_headway = 4.0
+    for _ in range(WEDGED_WALKS):
+        b._approach((1.0, 2.0, 3.0))
+    assert homes == [1]
+    b.client.last_headway = 60.0               # a good way along, then out of time
+    for _ in range(WEDGED_WALKS + 1):
+        b._approach((1.0, 2.0, 3.0))
+    assert homes == [1]
+    b.client.last_headway = 0.0
+    b.client.last_travel = SimpleNamespace(outcome=Outcome.ABORTED, detail="caller aborted")
+    for _ in range(WEDGED_WALKS + 1):
+        b._approach((1.0, 2.0, 3.0))
+    assert homes == [1], "a walk the caller cut short is not wedged"
+
+
 def test_upgrades_in_the_bags_are_put_on_before_a_meal_and_remembered(tmp_path, monkeypatch):
     """A Militia Hammer and a Pikeman Shield rode in the bags all night beside a Worn Mace
     (run 20260924T090629-93a85b)."""

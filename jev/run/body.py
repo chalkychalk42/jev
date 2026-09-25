@@ -136,6 +136,9 @@ SELL_ALL = 999
 GATHER_LAPS = 2
 # Walks in a row that ended with the character wedged before it goes home by hearthstone.
 WEDGED_WALKS = 2
+# A walk that failed and brought the character less than this much nearer counts as wedged
+# too: somewhere it can move about but not leave.
+NO_HEADWAY_YARDS = 10.0
 # Where to eat: this far from every spawn point of the step's own creatures, found on rings
 # round the character. A level 6 paladin eating in the middle of the wolf camp was bitten at
 # 26% health and fought a 45 s stalemate of heals; another was at 30% when two more came
@@ -502,10 +505,19 @@ class LiveBody:
         """Home by hearthstone after `WEDGED_WALKS` walks in a row found the character
         wedged: every unstick heading tried and none moved it. Inside Northshire Abbey,
         against a barrel below Brother Neals' stairs, walk after walk ended "could not free
-        the character" (run 20260924T074713-f215ef). A stone on cooldown does nothing."""
+        the character" (run 20260924T074713-f215ef). A stone on cooldown does nothing.
+
+        Or walks that failed without getting anywhere (`NO_HEADWAY_YARDS`): upstairs in the
+        Lion's Pride Inn, walked on plans for the hall below, the character moved about the
+        landing for two sessions and was never once wedged by the unstick's measure
+        (sessions 110 and 111). Not a walk the caller or the desk cut short."""
         last = getattr(self.client, "last_travel", None)
+        headway = getattr(self.client, "last_headway", None)
+        outcome = getattr(getattr(last, "outcome", None), "value", None)
         wedged = (not arrived and last is not None
-                  and "could not free the character" in (getattr(last, "detail", "") or ""))
+                  and ("could not free the character" in (getattr(last, "detail", "") or "")
+                       or (outcome not in ("aborted", "refused", "lost")
+                           and isinstance(headway, float) and headway < NO_HEADWAY_YARDS)))
         self._wedged = self._wedged + 1 if wedged else 0
         if self._wedged >= WEDGED_WALKS:
             self._wedged = 0
