@@ -364,13 +364,19 @@ def test_on_a_route_up_stairs_over_the_hall_the_height_is_the_routes():
     assert heights == [57.0, 59.1, 61.2, 63.3, 64.0, 64.0]
 
 
-def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor():
+@pytest.mark.parametrize(("indoors", "expected"), [
+    (True, [57.0, 64.0, 57.0]),     # the hall, then the floor above, then the hall again
+    (False, [57.0, 57.0, 57.0]),    # outdoors the floor under the field is a mine's
+])
+def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor(indoors, expected):
     """Sessions 110 and 111 began upstairs in the Lion's Pride Inn on plans from the hall
     below, and every re-plan, at the height of the route being followed, walked the same
-    hall route into the same upstairs walls."""
+    hall route into the same upstairs walls. Above Fargodeep Mine a walk to a merchant was
+    re-planned from the mine below the field (session 112)."""
     from jev.clients.travel import Outcome
 
-    client, _values = client_in("Elwynn", (0.49, 0.42))
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    values["pos.indoors"] = indoors
     here = map_to_world(0.49, 0.42, ELWYNN)
     spot = world_to_map(here[0] + 12.0, here[1], ELWYNN)      # the hall, and the floor above
     probe = inn(here)
@@ -394,5 +400,5 @@ def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor():
 
     client.travel.follow = follow
     assert not client.approach((here[0] - 40.0, here[1] + 5.0, 57.0))
-    assert starts == [57.0, 64.0, 57.0], "the hall, then the floor above, then the hall again"
-    assert any("planning from the floor at 64.0" in line for line in lines)
+    assert starts == expected
+    assert any("planning from the floor at 64.0" in line for line in lines) is indoors

@@ -98,6 +98,8 @@ ROUTE_YARDS = 2.5
 # re-plan, started at the height of the route being followed, walked the same hall route
 # into the same upstairs walls for a whole session.
 REPLAN_SPOT_YARDS = 8.0
+# Indoors only: outdoors the other floors under a spot are tunnels, and above Fargodeep Mine
+# a walk to a merchant was re-planned from the mine below the field (session 112).
 # An arrival is within this of the destination. A partial plan ends where the mesh does,
 # and from somewhere no route leaves that is a few yards away: "arrived" there began a
 # grind inside the inn and kept the hearthstone rule from counting the walk (session 110).
@@ -359,7 +361,8 @@ class Client:
             # ...unless a plan already started near here, on that floor, and it is blocked
             # again: then another floor under the spot (`REPLAN_SPOT_YARDS`).
             tried = [s[2] for s in starts if math.dist(s[:2], w[:2]) <= REPLAN_SPOT_YARDS]
-            if any(abs(t - z) <= FLOOR_GAP for t in tried):
+            if (any(abs(t - z) <= FLOOR_GAP for t in tried)
+                    and (self.read() or {}).get("pos.indoors") is True):
                 others = [f for f in surfaces_under(self.query, self.bounds.map_id, w[0], w[1])
                           if all(abs(f - t) > FLOOR_GAP for t in tried)]
                 if others:
