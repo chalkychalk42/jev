@@ -116,7 +116,10 @@ def measure(number: int, table: dict[int, int], exit_code: int | None = None) ->
     session = Session(number=number, exit_code=exit_code)
     text = log.read_text(encoding="utf-8", errors="replace")
     session.walk_timeouts = len(re.findall(r"^  timeout,", text, re.MULTILINE))
-    session.stuck = sum(int(n) for n in re.findall(r"(\d+) stuck", text))
+    # The follower's count runs for the whole session: each walk's line repeats it, so
+    # only its rises are new stuck events (a fall is a fresh follower).
+    counts = [int(n) for n in re.findall(r"(\d+) stuck", text)]
+    session.stuck = sum(max(0, after - before) for before, after in zip([0, *counts], counts))
     session.watchdog = text.count("watchdog")
     session.tutor_unavailable = text.count("tutor unavailable")
     run = _run_of(log)
