@@ -186,6 +186,23 @@ def test_a_cluster_is_pulled_by_drop_chance_not_by_headcount():
     assert plain.x > 500.0
 
 
+def test_an_items_droppers_are_those_the_quests_level_can_fight():
+    """Every Riverpaw gnoll carries Patrolling Westfall's Gnoll Paws (item 725) at 80%, and
+    the pool's densest cluster was the level 17-18 Taskmasters' camp: a level 13 paladin
+    was sent there for a level 14 quest and died twice (session 140)."""
+    from jev.guide.coords import load_bounds
+
+    world = WorldDB(DB)
+    westfall = load_bounds(DB)[40]
+    level = dict(world.con.execute("select Entry, MinLevel from world_creature_template"))
+    fit = world._drops(725, (westfall,), westfall, level=14)
+    assert level[fit.npc_id] <= 16, fit.name
+    assert world._drops(725, (westfall,), westfall).name == "Riverpaw Taskmaster", \
+        "without the quest's level every dropper counts, as before"
+    # A quest whose every dropper is above it keeps them all: somewhere beats nowhere.
+    assert world._drops(725, (westfall,), westfall, level=5) is not None
+
+
 def test_every_protect_frontier_counter_has_its_own_required_creature(human):
     node = next(n for n in human.nodes
                 if n.quest_id == 52 and n.kind is StepKind.QUEST_OBJECTIVE)

@@ -81,6 +81,14 @@ class Spawn:
 CLUSTER_CELL = 60.0
 CLUSTER_REACH = 150.0
 
+# An item's droppers are those the quest's level can fight, when it has any creature
+# among them: at most this many levels above the quest (one more let a level 1 quest's
+# kobolds go for a chest across the zone). With none, every source counts. Every Riverpaw gnoll carries the Gnoll Paws of Patrolling
+# Westfall, a level 14 quest, at 80%, and the pool's densest cluster was the Taskmasters'
+# camp, level 17 and 18, with the level 11-14 gnolls' 92 spawns elsewhere: a level 13
+# paladin was sent there and died twice (session 140).
+DROP_LEVELS_ABOVE = 2
+
 # What a hunt is allowed to believe about a camp's size. The floor keeps a lone spawn
 # searchable; the ceiling catches a cluster query that has gone wrong.
 #
@@ -442,7 +450,8 @@ class WorldDB:
         for index, slot in enumerate(items):
             item_id, count = row[f"ReqItemId{slot}"], row[f"ReqItemCount{slot}"] or 1
             supplied = (item_id == row["SrcItemId"] and (row["SrcItemCount"] or 1) >= count)
-            spawn = self.taker(quest_id) if supplied else self._drops(item_id, zones, home)
+            spawn = (self.taker(quest_id) if supplied
+                     else self._drops(item_id, zones, home, level=row["QuestLevel"]))
             kind = "delivery" if supplied else "loot"
             blocked = blocked_counter
             if spawn is None and not supplied:
@@ -518,7 +527,7 @@ class WorldDB:
         )
 
     def _drops(self, item_id: int, zones: tuple[ZoneBounds, ...] = (),
-               home: ZoneBounds | None = None) -> Spawn | None:
+               home: ZoneBounds | None = None, level: int | None = None) -> Spawn | None:
         """Where the things that drop this item live.
 
         Every source, pooled and then clustered, because a wolf camp is a mixed
@@ -543,7 +552,8 @@ class WorldDB:
             """
             select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py,
                    cast(c.position_z as real) pz, t.Name, t.Entry,
-                   abs(l.ChanceOrQuestChance) as chance, 'creature' as kind
+                   abs(l.ChanceOrQuestChance) as chance, 'creature' as kind,
+                   t.MinLevel as level
             from world_creature_loot_template l
             join world_creature_template t on t.LootId = l.entry
             join world_creature c on c.id = t.Entry
@@ -555,7 +565,8 @@ class WorldDB:
             """
             select g.map, cast(g.position_x as real) px, cast(g.position_y as real) py,
                    cast(g.position_z as real) pz, t.name as Name, t.entry as Entry,
-                   abs(l.ChanceOrQuestChance) as chance, 'gameobject' as kind
+                   abs(l.ChanceOrQuestChance) as chance, 'gameobject' as kind,
+                   null as level
             from world_gameobject_loot_template l
             join world_gameobject_template t on t.data1 = l.entry and t.type = 3
             join world_gameobject g on g.id = t.entry
@@ -568,7 +579,8 @@ class WorldDB:
                 self._random_creatures_cte() + """
                 select c.map, cast(c.position_x as real) px, cast(c.position_y as real) py,
                        cast(c.position_z as real) pz, t.Name, t.Entry,
-                       abs(l.ChanceOrQuestChance) as chance, 'creature' as kind
+                       abs(l.ChanceOrQuestChance) as chance, 'creature' as kind,
+                       t.MinLevel as level
                 from world_creature_loot_template l
                 join world_creature_template t on t.LootId = l.entry
                 join random_creatures e on e.entry = t.Entry
@@ -598,6 +610,10 @@ class WorldDB:
             if inside:
                 rows = inside
                 break
+        if level is not None and level > 0 and any(
+                r["level"] is not None and r["level"] <= level + DROP_LEVELS_ABOVE for r in rows):
+            rows = [r for r in rows if r["level"] is None
+                    or r["level"] <= level + DROP_LEVELS_ABOVE]
         m = max({r["map"] for r in rows},
                 key=lambda mm: sum(1 for r in rows if r["map"] == mm))
         same = [r for r in rows if r["map"] == m]
