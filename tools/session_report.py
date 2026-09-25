@@ -61,6 +61,10 @@ class Session:
     looted: int = 0
     unlooted: int = 0
     stuck: int = 0
+    # Hunt stations visited, and those that found a target (DECISIONS V158): the choice
+    # the station learner makes, measured the same way before it existed and after.
+    stations: int = 0
+    stations_won: int = 0
     walk_timeouts: int = 0
     watchdog: int = 0
     tutor_calls: int = 0
@@ -178,11 +182,28 @@ def measure(number: int, table: dict[int, int], exit_code: int | None = None) ->
                 session.looted += 1
             elif code == "no_corpse":
                 session.unlooted += 1
+    session.stations, session.stations_won = _station_visits(directory)
     latencies = [row["latency_ms"] / 1000 for row in _jsonl(directory / "play-teacher.jsonl")
                  if row.get("event") != "transport" and isinstance(row.get("latency_ms"), (int, float))]
     session.tutor_calls = len(latencies)
     session.tutor_median_s = round(statistics.median(latencies), 1) if latencies else None
     return session
+
+
+def _station_visits(directory: Path) -> tuple[int, int]:
+    """(hunt station visits, those that found a target): from the run's own choice log
+    when it kept one, else from its evidence as `jev.learn.choices` counts earlier runs."""
+    from jev.learn.choices import _hunt_visits
+
+    logged = [row for row in _jsonl(directory / "choices.jsonl")
+              if row.get("event") == "outcome" and row.get("point") == "hunt.station"]
+    if logged or (directory / "choices.jsonl").exists():
+        return len(logged), sum(1 for row in logged if row.get("won"))
+    evidence = directory / "executions.jsonl"
+    if not evidence.exists():
+        return 0, 0
+    visits = list(_hunt_visits(evidence))
+    return len(visits), sum(1 for _, won, _ in visits if won)
 
 
 def motor_counts(store: Path) -> dict[str, tuple[int, int]]:
@@ -274,11 +295,12 @@ def main(argv=None) -> int:
             print(json.dumps(row))
         return 0
     print(f"{'#':>4} {'arm':12} {'min':>5} {'lvl':>5} {'xp':>6} {'xp/h':>6} {'kill':>4} {'step':>4} {'die':>3} "
-          f"{'loot':>7} {'stuck':>5} {'tutor':>5} {'t_med':>5} {'money':>6} {'exit':>4}")
+          f"{'loot':>7} {'stuck':>5} {'stns':>7} {'tutor':>5} {'t_med':>5} {'money':>6} {'exit':>4}")
     for s in sessions:
         print(f"{s.number:>4} {s.arm[:12]:12} {s.minutes:5.1f} {s.level_start or 0:>2}-{s.level_end or 0:<2} "
               f"{s.xp:6.0f} {s.xp_per_hour:6.0f} {s.kills:>4} {s.steps:>4} {s.deaths:>3} "
-              f"{s.looted:>3}/{s.looted + s.unlooted:<3} {s.stuck:>5} {s.tutor_calls:>5} "
+              f"{s.looted:>3}/{s.looted + s.unlooted:<3} {s.stuck:>5} "
+              f"{s.stations_won:>3}/{s.stations:<3} {s.tutor_calls:>5} "
               f"{s.tutor_median_s if s.tutor_median_s is not None else '-':>5} "
               f"{s.money_delta if s.money_delta is not None else '-':>6} "
               f"{s.exit_code if s.exit_code is not None else '-':>4}")
