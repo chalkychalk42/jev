@@ -198,3 +198,18 @@ def test_arriving_at_the_end_of_a_partial_re_plan_is_not_arriving(monkeypatch):
                            replan=replan)
     assert result.outcome is Outcome.STUCK, result.detail
     assert "yards short" in result.detail and result.remaining_yards > 15.0
+
+
+def test_passing_over_the_destination_on_another_level_is_not_arriving(monkeypatch):
+    """Goldtooth's spawn lies 30 yards under the field over Fargodeep Mine: the walk to it
+    "arrived" crossing the field above, and the hunt found nothing to fight (session 113)."""
+    world = WalkWorld(x=X0, y=Y0, heading=-math.pi / 2, width_yards=W, height_yards=H)
+    monkeypatch.setattr(travel_module, "time", SimTime(world))
+    points = [(0, 0), (0, -30), (20, -30), (20, -10), (2, -18)]
+    heights = [80.0, 80.0, 80.0, 80.0, 50.0]            # the last, down a tunnel
+    path = Path(PathStatus.COMPLETE, tuple(world.world(X0 + x, Y0 + y, ELWYNN, z)
+                                           for (x, y), z in zip(points, heights)))
+    travel = Travel(hid=SimHid(world), bounds=ELWYNN, read_pos=world.map_position)
+    result = travel.follow(path, timeout_s=120.0)
+    assert result.outcome is Outcome.ARRIVED
+    assert result.elapsed_s > 8.0, "arrived on the level above"

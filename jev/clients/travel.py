@@ -49,6 +49,11 @@ EARLY = "at the destination before the route's end"
 # How much farther than the arrival radius from a complete route's end a walk may stop and
 # still have arrived: the re-planned route's end is the same destination snapped afresh.
 ARRIVAL_SLACK_YARDS = 1.0
+# Early arrival (`EARLY`) only on a leg whose ends are within this of the destination's
+# height. Positions are map x and y alone, and Goldtooth's spawn lies 30 yards under the
+# field over Fargodeep Mine: the walk to it "arrived" crossing the field above, and the hunt
+# found nothing there to fight (session 113).
+EARLY_HEIGHT_YARDS = 3.0
 
 # A seed, not a calibration. Measured once on a level-3 human in Northshire.
 TURN_RATE_SEED = math.radians(134.0)
@@ -446,9 +451,12 @@ class Travel:
         if memory is not None:
             path = memory.patch(self.bounds.map_id, path)
         t0 = time.perf_counter()
-        legs = [world_to_map(pt[0], pt[1], self.bounds) for pt in path.points]
-        legs = [leg for leg in legs if leg is not None]
+        placed = [(world_to_map(pt[0], pt[1], self.bounds), pt[2] if len(pt) > 2 else None)
+                  for pt in path.points]
+        heights = {leg: z for leg, z in placed if leg is not None}
+        legs = [leg for leg, _ in placed if leg is not None]
         legs = _thin(legs, self.bounds, self.waypoint_arrival_yards)
+        end_z = heights.get(legs[-1]) if legs else None
         exact = self.arrival_yards
         complete = str(getattr(path, "status", "")) == "complete"
         last: TravelResult | None = None
@@ -464,8 +472,12 @@ class Travel:
                 return self._result(Outcome.TIMEOUT, legs[0], self.position(), leg,
                                     time.perf_counter() - t0,
                                     f"ran out of time on leg {i} of {len(legs) - 1}")
+            level = all(end_z is None or heights.get(end) is None
+                        or abs(heights[end] - end_z) <= EARLY_HEIGHT_YARDS
+                        for end in (legs[i - 1], leg))
             last = self.to(leg, timeout_s=remaining, abort=abort, allow_detour=False,
-                           destination=None if final else legs[-1], destination_yards=exact)
+                           destination=None if final or not level else legs[-1],
+                           destination_yards=exact)
             if last.outcome is Outcome.ARRIVED and last.detail == EARLY:
                 self.arrival_yards = exact
                 return self._result(Outcome.ARRIVED, legs[0], self.position(), legs[-1],
