@@ -330,8 +330,13 @@ class Supervisor:
                 self.worker.cancel(self.failure)
         if self.watchdog:
             memory = getattr(getattr(self.runtime, "tracker", None), "memory", None)
+            # A service the step waits on - a meal, a merchant, a trainer - is not a stall:
+            # each is bounded by its own timeout, and the step's clock already stands still
+            # for it (`Tracker.serving`). Session 101's walk of 389 yards to a merchant was
+            # failed over as "no quest or experience progress".
+            serving = getattr(getattr(self.runtime, "tracker", None), "serving", False) is True
             self.watchdog.observe(state, now, closest=getattr(memory, "closest", None),
-                                  paused=operator)
+                                  paused=operator or serving)
             if self.watchdog.escalate:
                 self.watchdog.escalate = False
                 step = self.runtime.tracker.step_id

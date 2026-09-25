@@ -578,6 +578,42 @@ def test_a_stalled_step_is_failed_over_before_the_run_is_stopped(tmp_path):
         supervisor.close()
 
 
+def test_a_service_the_step_waits_on_is_not_a_stall(tmp_path):
+    """Session 101: a 389-yard walk to a merchant was failed over as "no quest or
+    experience progress". A meal, a merchant or a trainer is bounded by its own timeout."""
+    from jev.clients.source import ScriptedSource
+    from jev.guide.graph import Graph, Node
+    from jev.learn.episode import Recorder
+    from jev.orch.runtime import ClientRuntime
+    from jev.run.watchdog import Watchdog
+    from jev.world.state_v1 import StepKind, Vitals
+
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    g = Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1,
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(1, 10), **base),
+    ))
+    hurt = Vitals(hp=0.5, power=1, combat=False, dead=False, ghost=False)
+    rt = ClientRuntime("c", g, ScriptedSource([seen(t, vitals=hurt) for t in range(40)]),
+                       Recorder(tmp_path))
+    body = Body()
+    body.available = Body.available | {"EAT_DRINK"}
+    lines = []
+    supervisor = Supervisor(rt, body, say=lines.append, watchdog=Watchdog(no_progress_s=10))
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        for t in range(1, 30):
+            supervisor.step(t)
+        assert rt.armed.decision.skill == "EAT_DRINK"
+        assert not any("failing it over" in line for line in lines), "a meal was taken for a stall"
+        assert rt.tracker.step_id == "accept" and supervisor.failure is None
+    finally:
+        body.allow_finish.set()
+        supervisor.close()
+
+
 def test_another_character_logging_in_stops_the_run_with_this_ones_playhead_saved(tmp_path):
     """Each character keeps its own playhead. A state from another character - logged
     out, and someone else logged in - is not tracked or saved, and the run stops."""
