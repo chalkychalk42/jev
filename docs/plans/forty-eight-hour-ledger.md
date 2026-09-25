@@ -24,14 +24,45 @@ Now
   - A6, the flaky test.
   - A2 (b) and (c) are deferred: neither character reaches the end of the 12-20 guide inside
     the window.
-- **At T-0 (§6):**
-  - B1 is the state checks.
-  - B2 is the V158-V162 validation: two sessions on Testvvi.
-  - B3 measures the glue screens (`tools/character.py measure --focus`), sets the constants in
-    `jev/clients/session.py`, then `tools/character.py enter` makes Itheamar. One session
-    follows, then `tools/keep.sh client-restart` and `tools/character.py enter --name Testvvi`.
-  - B4 starts the loop, installs the keeper timer (`tools/keep.sh install-timer`) and starts
-    the heartbeat.
+- **T-0 runbook (§6), step by step.** WINPY is `/mnt/c/forever-win/Scripts/python.exe`.
+  - **B1, state.**
+    - `tools/keep.sh status` shows the servers up and no loop running.
+    - `$WINPY tools/desk.py 600` exits 0: nobody has touched the desk for 10 minutes.
+    - `tools/keep.sh client` launches WoW.
+    - `$WINPY tools/login.py` should end with "in the world: True". The list's selection is
+      Testvvi (row 2).
+    - `$WINPY tools/observe.py`: schema 16, key 548c8582, level 13.
+  - **B2, two sessions on Testvvi.** Start the loop. Once the second session starts, touch
+    `var/loop/stop`.
+    - The log must show `danger: ... cells`, `choices: ... hunt station visits`,
+      `guide alli_human_1_12: outgrown at level 13, then ally_human_12_20.json`, some XP and
+      no Traceback. The tutor is asked only after a routine fails.
+    - Expected route: Riverpaw's last armband and its hand-in, then the band rule ends the
+      guide. The next session starts 12-20 at Patrolling Westfall (V163 drops Thunderbrew
+      Lager).
+    - Roll back in the order V161, then V160/V159, then V158 (§6 B2).
+  - **B3, the glue screens and the mage.**
+    1. `tools/keep.sh client-restart`.
+    2. `$WINPY tools/character.py enter` stops at character select with "not measured".
+    3. `$WINPY tools/character.py measure --focus`, then read the PNG. Measure
+       `CREATE_NEW`, `CHARACTER_ROW_FIRST` and `CHARACTER_ROW_STEP`.
+    4. `measure --click FX,FY` at Create New Character, then read the create screen. Measure
+       `RACE_BUTTONS["human"]`, `CLASS_BUTTONS["mage"]`, `NAME_BOX`, `CREATE_ACCEPT` and
+       `CREATE_BACK`.
+    5. `measure --click` at Back.
+    6. Set the constants in `jev/clients/session.py` in one edit. Run the session and
+       character tests, then commit and push.
+    7. `$WINPY tools/character.py enter` makes Itheamar, waits out the introduction and
+       checks key, class 8 and race 1.
+    8. One session on the mage: `timeout 1080 $WINPY -u tools/start_teaching.py --run
+       --dispatch hybrid > captures/live-N.log 2>&1`. The proof is A Threat Within
+       accepted, a Fireball kill with no melee walk, and a drink.
+    9. `tools/keep.sh client-restart`, then `$WINPY tools/character.py enter --name Testvvi`.
+  - **B4, arm.**
+    - `tools/keep.sh install-timer`.
+    - Start the loop.
+    - Start the heartbeat.
+    - Add the T-0 row here, write a STATUS entry and push.
 
 Blocks
 ------
