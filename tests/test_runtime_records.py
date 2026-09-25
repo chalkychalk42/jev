@@ -526,3 +526,33 @@ def test_a_hand_in_on_the_way_that_fails_goes_straight_back_and_is_not_tried_aga
     assert visited[1] == ("turnin", "after")
     assert ("rib", "after") not in visited, "a failed detour is not worth a rib"
     assert visited[2:] == [("after", None)] * 3, "back, and once only"
+
+
+def chain_graph():
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    return Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("next_accept",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="next_accept", kind=StepKind.QUEST_ACCEPT, quest_id=2, next=("next_turnin",),
+             quest_prerequisites=((1,),), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="next_turnin", kind=StepKind.QUEST_TURNIN, quest_id=2, next=("after",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=3,
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+    ))
+
+
+@pytest.mark.parametrize(("retried", "expected"), [
+    (frozenset({"turnin", "detour:turnin"}), "after"),   # passed over, its detour spent
+    (frozenset({"turnin"}), "turnin"),                    # its one detour comes first
+])
+def test_an_accept_waiting_on_a_lost_hand_in_is_passed_by(tmp_path, retried, expected):
+    """The Escape waits on Collecting Kelp's hand-in, lost in the Lion's Pride Inn
+    (session 109); trying it anyway costs a rib, a retry and a pass-over."""
+    rt = ClientRuntime("c", chain_graph(), ScriptedSource([held(0, 11), held(1, 11)]),
+                       Recorder(tmp_path), start_step="next_accept", start_retried=retried)
+    rt.tick(choose=False)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == expected

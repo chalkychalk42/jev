@@ -235,12 +235,17 @@ class ClientRuntime:
             if beyond is not None:
                 self.tracker.enter(beyond, state)
                 self._tracker_event = "rejoin_or_skip"
+        # Every tick that stays on the step, arriving included: standing at the quest giver
+        # re-reports ARRIVED, never NONE.
         if (not self.finished and self.tracker.step_id == before
-                and verdict.event not in (Event.ADVANCE, Event.FAIL, Event.DEATH)
-                and (detour := self._handin_detour(state)) is not None):
-            self._retried.add(DETOUR + detour)
-            self.tracker.enter(detour, state, rejoin_to=before)
-            self._tracker_event = "rejoin_or_skip"
+                and verdict.event not in (Event.ADVANCE, Event.FAIL, Event.DEATH)):
+            if (lost := self._prerequisite_lost()) is not None:
+                self.tracker.enter(lost, state)
+                self._tracker_event = "rejoin_or_skip"
+            elif (detour := self._handin_detour(state)) is not None:
+                self._retried.add(DETOUR + detour)
+                self.tracker.enter(detour, state, rejoin_to=before)
+                self._tracker_event = "rejoin_or_skip"
         node = self.graph.get(self.tracker.step_id)
         state = self._with_guide(state, verdict)
         record = record or verdict.event in (Event.ADVANCE, Event.FAIL, Event.DEATH)
@@ -345,6 +350,27 @@ class ClientRuntime:
                 or any(q.quest_id == node.quest_id for q in state.quests)):
             return None
         return self._beyond_abandoned()
+
+    def _prerequisite_lost(self) -> str | None:
+        """An accept whose prerequisite's hand-in is lost for good - passed over, and its one
+        detour spent - cannot be offered: the step past this quest instead. The Escape
+        waits on Collecting Kelp's hand-in, lost in the Lion's Pride Inn (session 109), and
+        trying it anyway costs a rib, a retry and a pass-over."""
+        node = self.graph.get(self.tracker.step_id)
+        if (node is None or node.kind is not StepKind.QUEST_ACCEPT or node.quest_id is None
+                or not node.quest_prerequisites or node.quest_id in self.completed):
+            return None
+        lost = {n.quest_id for n in self.graph.nodes
+                if n.kind is StepKind.QUEST_TURNIN and n.quest_id is not None
+                and n.quest_id not in self.completed and DETOUR + n.id in self._retried}
+        # Alternatives of quests all required, as the route reads them (`compile_route`):
+        # impossible only when every alternative holds a lost one.
+        if not all(any(q in lost for q in group) for group in node.quest_prerequisites):
+            return None
+        step = node
+        while step is not None and step.quest_id == node.quest_id and step.next:
+            step = self.graph.get(step.next[0])
+        return step.id if step is not None and step.quest_id != node.quest_id else None
 
     def _handin_detour(self, state: State) -> str | None:
         """A passed-over hand-in within reach, for a quest complete in the log (`DETOUR`)."""
