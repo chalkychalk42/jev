@@ -186,6 +186,9 @@ def _tour(points, start) -> list[tuple[float, float, float]]:
 CONJURE_BELOW = 4
 CONJURE_CASTS = 2
 CONJURE_CAST_WAIT_S = 5.0
+# A caster's hunt stands this far short of each station: inside Fireball's 35 yards and
+# Frostbolt's 30, outside most mobs' notice (V167).
+CASTER_STANDOFF_YARDS = 18.0
 
 class LiveBody:
     # Every entry has an executor. The verifier receives exactly this capability set.
@@ -404,7 +407,7 @@ class LiveBody:
     def _node(self):
         return self.graph.get(self.arm.step_id) if self.arm else None
 
-    def _approach(self, world) -> bool:
+    def _approach(self, world, stop_short: float = 0.0) -> bool:
         self.checkpoint()
         v = self._read()
         if v is None:
@@ -426,7 +429,9 @@ class LiveBody:
             self._fly_toward(world)
         self.travelling = True
         try:
-            arrived = self.client.approach(world, timeout_s=self.travel_timeout)
+            arrived = (self.client.approach(world, timeout_s=self.travel_timeout,
+                                            stop_short=stop_short) if stop_short
+                       else self.client.approach(world, timeout_s=self.travel_timeout))
         finally:
             self.travelling = False
         self._note_wedged(arrived)
@@ -660,10 +665,13 @@ class LiveBody:
                 level, needed = progress_reader()
                 return None if level is None else level >= needed
         wanted = name_id(destination.target_name)
+        values = self._read() or {}
+        caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
                     is_complete=complete_reader, service_needed=self._service_needed,
-                    stations=self._stations("hunt.station", objective_key(wanted, node.id)))
+                    stations=self._stations("hunt.station", objective_key(wanted, node.id)),
+                    standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0)
         outcome = hunt.run(destination.world, destination.hunt_yards or DEFAULT_HUNT_YARDS,
                            wanted,
                            timeout_s=self.hunt_timeout,
@@ -810,7 +818,9 @@ class LiveBody:
         caster = is_caster(state.char.cls)
         if (state.vitals.power_type is PowerType.MANA and state.vitals.power is not None
                 and state.vitals.power < rest_mana(caster)):
-            rested = self._result(self.rest.until(drink_to(caster), role=Role.DRINK),
+            hurt = state.vitals.hp is not None and state.vitals.hp < HEAL_OUT_OF_COMBAT
+            rested = self._result(self.rest.until_both(0.9, drink_to(caster)) if caster and hurt
+                                  else self.rest.until(drink_to(caster), role=Role.DRINK),
                                   self.rest.detail)
             self._conjure()
             return rested

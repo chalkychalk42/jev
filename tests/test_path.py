@@ -224,3 +224,17 @@ def test_routes_keep_to_ground_a_character_can_climb():
                 assert (b[2] - a[2]) / run <= CLIMBABLE_GRADE, (a, b)
     finally:
         q.close()
+
+
+def test_a_route_stops_short_along_itself():
+    """V167: a caster stands 18 yards short of a station, along the way it walks."""
+    from jev.guide.path import Path, PathStatus, stop_short_of
+
+    route = Path(PathStatus.COMPLETE, ((0.0, 0.0, 0.0), (30.0, 0.0, 0.0), (30.0, 40.0, 0.0)))
+    short = stop_short_of(route, 18.0)
+    assert short.points[-1] == (30.0, 22.0, 0.0)
+    assert abs(short.length_yards() - (route.length_yards() - 18.0)) < 1e-9
+    across = stop_short_of(route, 50.0)
+    assert across.points == ((0.0, 0.0, 0.0), (20.0, 0.0, 0.0)), "back past a corner"
+    assert stop_short_of(route, 80.0) is None, "already within reach"
+    assert stop_short_of(route, 0.0) is route

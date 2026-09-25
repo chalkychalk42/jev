@@ -174,7 +174,7 @@ class Hunt:
     fight: Fight
     rest: Rest
     read: Callable[[], dict | None]
-    approach: Callable[[tuple[float, float, float]], bool]
+    approach: Callable[..., bool]
     progress: Callable[[], tuple[int | None, int | None]]
     say: Callable[[str], None] = print
     loot: Loot | None = None
@@ -184,6 +184,8 @@ class Hunt:
     # Which station next, by what each has yielded before (`jev.learn.choices.Stations`);
     # `None` walks the tour in its own order.
     stations: object | None = None
+    # How far short of each station the hunt stands: a caster's reach, not its feet (V167).
+    standoff_yards: float = 0.0
     _found: bool = field(default=False, init=False)
 
     kills: int = field(default=0, init=False)
@@ -262,7 +264,8 @@ class Hunt:
                     chooser.arrive(target)
                     self._found = False
                 with operation("hunt.approach", data={"destination": target}) as span:
-                    arrived = self.approach(target)
+                    arrived = (self.approach(target, stop_short=self.standoff_yards)
+                               if self.standoff_yards else self.approach(target))
                     span.finish(code="true" if arrived else "false")
                 if not arrived:
                     continue          # a station we cannot stand on is not a dead end

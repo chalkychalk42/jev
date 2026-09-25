@@ -79,6 +79,29 @@ class Path:
         )
 
 
+def stop_short_of(path: Path, yards: float) -> Path | None:
+    """The same route ending `yards` before its end, measured along it: where a caster
+    stands to cast at what waits at the end (V167). `None` when the route is no longer
+    than that: the start is within `yards` of the end already."""
+    import math
+
+    if yards <= 0:
+        return path
+    points = list(path.points)
+    left = yards
+    while len(points) >= 2:
+        last, before = points[-1], points[-2]
+        leg = math.dist(before, last)
+        if leg > left:
+            f = (leg - left) / leg
+            end = tuple(b + (a - b) * f for a, b in zip(last, before, strict=True))
+            return Path(path.status, (*points[:-1], end), path.source,
+                        (path.detail + "; " if path.detail else "") + f"{yards:.0f} yards short")
+        left -= leg
+        points.pop()
+    return None
+
+
 class PathQuery(Protocol):
     def path(self, map_id: int, start: Point, end: Point) -> Path: ...
     def close(self) -> None: ...

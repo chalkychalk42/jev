@@ -54,3 +54,30 @@ def test_a_drink_on_the_bar_is_pressed_as_before(clock):
                 use_item=lambda role: pytest.fail("the bar's water comes first"))
     assert rest.until(0.95, role=Role.DRINK) is Rested.HEALTHY
     assert hid.taps == ["minus"]
+
+
+def test_a_caster_short_of_both_eats_and_drinks_at_once(clock):
+    """V167: one meal's time, not two."""
+    looks = iter([{**_mana(0.3, water=True), "vitals.hp": 0.5, "bars.usable": 0b110000000010},
+                  {**_mana(0.6, water=True), "vitals.hp": 0.7, "bars.usable": 0b110000000010},
+                  {**_mana(0.96, water=True), "vitals.hp": 0.95, "bars.usable": 0b110000000010}])
+    hid = _Hid()
+    rest = Rest(hid=hid, read=lambda: next(looks), profile=for_class(8, 1))
+    assert rest.until_both(0.9, 0.95) is Rested.HEALTHY
+    assert sorted(hid.taps) == ["equals", "minus"], "the food and the water, once each"
+
+
+def test_eating_and_drinking_stop_for_a_fight(clock):
+    fight = {**_mana(0.3, water=True), "vitals.hp": 0.5, "vitals.combat": True}
+    rest = Rest(hid=_Hid(), read=lambda: fight, profile=for_class(8, 1))
+    assert rest.until_both(0.9, 0.95) is Rested.INTERRUPTED
+
+
+def test_with_no_food_a_meal_still_drinks_to_its_mark(clock):
+    looks = iter([{**_mana(0.3, water=True), "vitals.hp": 0.5, "bars.usable": 0b010000000010},
+                  {**_mana(0.96, water=True), "vitals.hp": 0.6, "bars.usable": 0b010000000010}])
+    hid = _Hid()
+    rest = Rest(hid=hid, read=lambda: next(looks), profile=for_class(8, 1),
+                use_item=lambda role: False)
+    assert rest.until_both(0.9, 0.95) is Rested.HEALTHY
+    assert hid.taps == ["minus"] and "out of food" in rest.detail

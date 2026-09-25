@@ -471,3 +471,16 @@ def test_a_caster_drinks_before_the_pull_and_a_paladin_does_not():
             "vitals.power_type": 0, "char.class_id": class_id, "char.race_id": 1}
         assert hunt._ready_to_pull() is True
         assert asked == expected, class_id
+
+
+def test_a_casters_hunt_stands_short_of_each_station_and_a_paladins_does_not():
+    asked = []
+    hunt, _ = _hunt([], [(0, 8)])
+    hunt.approach = lambda target, **kw: asked.append(kw) or False
+    hunt.standoff_yards = 18.0
+    hunt.run((0.0, 0.0, 0.0), 30.0, 9, timeout_s=0.5)
+    assert asked and all(kw == {"stop_short": 18.0} for kw in asked)
+    asked.clear()
+    hunt.standoff_yards = 0.0
+    hunt.run((0.0, 0.0, 0.0), 30.0, 9, timeout_s=0.5)
+    assert asked and all(kw == {} for kw in asked)

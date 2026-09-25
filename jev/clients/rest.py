@@ -120,3 +120,47 @@ class Rest:
 
         self.detail = f"{timeout_s:.0f}s and still short of {fraction:.0%}"
         return Rested.TIMEOUT
+
+    @traced("rest.both")
+    def until_both(self, health: float, mana: float, *, timeout_s: float = 45.0) -> Rested:
+        """Eat and drink at once, until health reaches `health` and mana `mana` (V167).
+
+        The two go together in the game, and a caster after a fight is often short of both:
+        one after the other was two meals' time for one meal's worth."""
+        self.detail = ""
+        deadline = time.monotonic() + timeout_s
+        started: set[Role] = set()
+        # A role with nothing to consume, on the bar or in the bags: its mark is dropped.
+        missing: set[Role] = set()
+        event("rest.request", data={"role": "both", "health": health, "mana": mana,
+                                    "timeout_s": timeout_s})
+        while time.monotonic() < deadline:
+            v = self.read()
+            if v is None:
+                return Rested.BLIND
+            hp, power = v.get("vitals.hp"), v.get("vitals.power")
+            if ((hp is None or hp >= health or Role.FOOD in missing)
+                    and (power is None or power >= mana or Role.DRINK in missing)):
+                return Rested.NO_FOOD if missing == {Role.FOOD, Role.DRINK} else Rested.HEALTHY
+            if v.get("vitals.combat") is True:
+                self.detail = "in combat; not a moment to eat"
+                return Rested.INTERRUPTED
+            profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
+            usable = v.get("bars.usable")
+            for role, short in ((Role.FOOD, hp is not None and hp < health),
+                                (Role.DRINK, power is not None and power < mana)):
+                if not short or role in started:
+                    continue
+                started.add(role)
+                ability = profile.first(role)
+                ready = (ability is not None
+                         and (usable is None or usable & (1 << (ability.slot - 1))))
+                if ready:
+                    event("consume.request", data={"slot": ability.slot, "role": role.value})
+                    self.hid.tap(SLOT_KEYS.get(ability.slot, str(ability.slot)))
+                elif self.use_item is None or not self.use_item(role):
+                    self.detail = f"out of {role.value}"
+                    missing.add(role)
+            time.sleep(1.0)
+        self.detail = f"{timeout_s:.0f}s and still short"
+        return Rested.TIMEOUT

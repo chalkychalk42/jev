@@ -35,7 +35,7 @@ from jev.guide.coords import (
     names_by_radio_id,
     world_to_map,
 )
-from jev.guide.path import PathQuery, PathStatus
+from jev.guide.path import PathQuery, PathStatus, stop_short_of
 from jev.guide.route_memory import AvoidingQuery, DangerAvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
@@ -324,12 +324,13 @@ class Client:
     # -- the one composed action ---------------------------------------------
 
     def approach(self, world: tuple[float, float, float], *,
-                 timeout_s: float = 180.0) -> bool:
+                 timeout_s: float = 180.0, stop_short: float = 0.0) -> bool:
         """Plan from here to a world point and follow it.
 
         The planner is the only thing that knows about terrain, and the skills above know
         only where to click. Nine yards of blind walking finds a fence the mesh had
-        already routed around.
+        already routed around. With `stop_short`, the walk ends that far before the point,
+        along the route (a caster's stand-off, V167); already within it, nothing is walked.
         """
         if self.travel is None or self.query is None or self.bounds is None:
             return False
@@ -339,6 +340,12 @@ class Client:
             return False
         hw = map_to_world(here[0], here[1], self.bounds)
         path = self._plan(hw, world)
+        if stop_short > 0 and path.usable:
+            short = stop_short_of(path, stop_short)
+            if short is None:
+                self._say(f"  already within {stop_short:.0f} yards")
+                return True
+            path, world = short, short.points[-1]
         self._say(f"  {path.status.value}: {len(path.points)} waypoints, "
                   f"{path.length_yards():.1f} yards")
         if not path.usable:
