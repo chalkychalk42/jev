@@ -2113,3 +2113,92 @@ def test_a_fight_cut_short_is_recorded_only_when_it_was_going_badly():
         with pytest.raises(RuntimeError):
             f.run()
     assert lines.outcomes == [("all", "0.50", False)], "a stop at 80% says nothing"
+
+
+# -- a caster (V164) -----------------------------------------------------------------
+
+MAGE = for_class(8, 1)
+AT_RANGE = {**ALIVE, "char.class_id": 8, "char.race_id": 1, "target.in_melee": False,
+            "target.melee_range": False, "vitals.combat": True, "vitals.power": 1.0,
+            "vitals.power_max": 165, "char.level": 1, "char.xp_pct": 0.1}
+
+
+def _mage(frames, hid=None):
+    f = _fight(frames, hid=hid)
+    f.profile = MAGE
+    return f
+
+
+def test_a_mage_is_a_caster_and_a_paladin_is_not():
+    """Fireball reaches 35 yards (the client's own spell data); Judgement 10."""
+    assert MAGE.caster and not for_class(2, 1).caster
+    fireball = next(a for a in MAGE.abilities if a.name == "Fireball")
+    frost_armor = next(a for a in MAGE.abilities if a.name == "Frost Armor")
+    assert fireball.spell_id == 133 and frost_armor.lasting, "thirty minutes outlasts a fight"
+
+
+def test_a_caster_with_the_mana_casts_and_never_swings_its_staff():
+    hid = _Hid()
+    f = _mage([AT_RANGE], hid=hid)
+    for _ in range(4):
+        _rotate_answered(f, AT_RANGE)
+    assert "1" not in hid.taps, "the staff's swing is for when the mana is gone"
+    assert hid.taps.count("2") >= 2, "Fireball, again and again"
+    assert hid.taps.count("3") == 1, "Frost Armor once, not every look"
+
+
+def test_out_of_mana_a_caster_swings_its_staff():
+    hid = _Hid()
+    dry = {**AT_RANGE, "bars.usable": 0b101, "vitals.power": 0.05}
+    f = _mage([dry], hid=hid)
+    _rotate_answered(f, dry)
+    assert hid.taps == ["1"]
+
+
+def test_a_caster_fight_is_cast_from_where_it_stands(combat_clock):
+    """A mage walked into melee like a paladin would never have been a mage."""
+    casting = {**AT_RANGE, "bars.casting": True}
+    hurt = {**AT_RANGE, "target.hp": 0.4}
+    dead = {**AT_RANGE, "target.hp": 0.0, "char.xp_pct": 0.2}
+    hid = _Hid()
+    f = _mage([AT_RANGE, AT_RANGE, casting, hurt, {**hurt, "bars.casting": True}, dead],
+              hid=hid)
+    f._lasting["Frost Armor"] = 0.0             # up already, for thirty minutes
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+    assert [key for key, _ in hid.holds if key == "w"] == [], "not a step toward it"
+    assert "2" in hid.taps and "1" not in hid.taps
+    assert f.ended_far, "the corpse lies out there: the loot walks to it"
+
+
+def test_a_spell_that_does_not_reach_steps_in_and_one_out_of_sight_steps_aside(combat_clock):
+    far = {**AT_RANGE, "ui.error_count": 1, "ui.error_last": 2}          # out of range
+    unseen = {**AT_RANGE, "ui.error_count": 2, "ui.error_last": 4}       # no line of sight
+    dead = {**AT_RANGE, "ui.error_count": 2, "target.hp": 0.0, "char.xp_pct": 0.2}
+    hid = _Hid()
+    f = _mage([AT_RANGE, far, unseen, dead], hid=hid)
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+    keys = [key for key, _ in hid.holds]
+    assert keys.count("w") == 1, "one step in, on the client's word"
+    assert set(keys) - {"w"}, "and a step aside for the line of sight"
+
+
+def test_a_caster_draws_no_heal_line_it_cannot_use():
+    picks = []
+
+    class Choices:
+        def pick(self, objective, options):
+            picks.append(options)
+            return options[0]
+
+        def outcome(self, *a, **k):
+            pass
+
+    f = _mage([{**AT_RANGE, "target.has": False}])
+    f.choices = Choices()
+    f.acquire = lambda name_id, **_: Fought.NO_TARGET
+    f.run(1161)
+    assert picks == []

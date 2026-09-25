@@ -86,6 +86,7 @@ from jev.world.combat import (
     Role,
     for_class,
     grey_level,
+    ranged,
 )
 
 # The radio fraction preserves zero exactly. Low health is still a living target.
@@ -273,6 +274,10 @@ FIGHT_FACE_S = 3.0
 # died, went badly. Of 999 fights where something attacked first, 42% of those that began
 # below 60% health went badly against 4% above it (25 September).
 HEAL_LINES = ("0.40", "0.50", "0.60")
+# A caster whose spell does not reach yet (the client's "out of range") steps this long
+# toward the unit, facing it first, at most this many times a fight (V164).
+RANGED_STEP_S = 0.8
+MAX_RANGED_STEPS = 8
 BAD_FIGHT_HP = 0.15
 HEAL_FIRST_IDLE_S = 0.8
 
@@ -407,6 +412,12 @@ class Fight:
     _look_at: float | None = field(default=None, init=False)
     # The lowest health this fight saw, for how it went.
     _low_hp: float | None = field(default=None, init=False)
+    # A caster's fight cast from range (V164): its last look was cast from where the unit
+    # was found, not in melee, so a kill lies out there (`ended_far`) and the loot walks to it.
+    ended_far: bool = field(default=False, init=False)
+    _from_range: bool = field(default=False, init=False)
+    _last_near: bool = field(default=False, init=False)
+    _ranged_steps: int = field(default=0, init=False)
 
     # -- the skill -----------------------------------------------------------
 
@@ -418,14 +429,20 @@ class Fight:
         how the fight went is recorded for it: badly when it died or fell below
         `BAD_FIGHT_HP`. A fight that never came to blows teaches nothing."""
         line = None
-        if self.choices is not None:
+        # A class with no heal has no line to draw, and its fights say nothing of one.
+        heals = self.profile is None or self.profile.first(Role.HEAL) is not None
+        if self.choices is not None and heals:
             line = self.choices.pick("all", HEAL_LINES)
             self.heal_below = float(line)
         self._low_hp = None
+        self.ended_far = self._from_range = self._last_near = False
+        self._ranged_steps = 0
         started = time.monotonic()
         result = None
         try:
             result = self._fight(name_id, timeout_s)
+            self.ended_far = (result is Fought.KILLED and self._from_range
+                              and not self._last_near)
             return result
         finally:
             low = self._low_hp
@@ -642,6 +659,37 @@ class Fight:
             if self._note_damage(v) or self._note_swing(v):
                 self._strides = 0              # progress: the approach budget starts again
                 self._approach_s = 0.0
+
+            self._last_near = v.get("target.in_melee") is True
+            profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
+            if self._ranged_ready(profile, v):
+                # A caster with the mana casts from where it stands (V164). The client says
+                # what is wrong with a cast - too far, not facing, out of sight - and each
+                # is answered with the least movement that cures it, never during a cast.
+                self._from_range = True
+                error = self._new_error(v)
+                casting = v.get("bars.casting") is True
+                if error == "not_facing" and not casting:
+                    if not self.engage(v):
+                        return self._aim_failure()
+                elif error == "out_of_range" and not casting:
+                    if self._ranged_steps >= MAX_RANGED_STEPS:
+                        self.detail = (f"stepped in {self._ranged_steps} times and the spell "
+                                       "still does not reach; cannot reach it")
+                        return Fought.UNREACHABLE
+                    self._ranged_steps += 1
+                    if not self._range_step(v):
+                        return Fought.REFUSED if self._input_refused else self._aim_failure()
+                elif error == "no_line_of_sight" and not casting:
+                    self._sidestep("los")
+                    if self._input_refused:
+                        return Fought.REFUSED
+                self._rotate(v)
+                if self._input_refused:
+                    return Fought.REFUSED
+                time.sleep(pace(self.hid, 0.2))
+                continue
+            self._from_range = False
 
             # In reach: the Attack action's own range check when the addon has one (it
             # answers nil on 2.4.3), else a recent resolved swing or recent damage.
@@ -1239,6 +1287,36 @@ class Fight:
                 return result
         return result
 
+    def _ranged_ready(self, profile: CombatProfile, values: dict) -> bool:
+        """A caster (`CombatProfile.caster`) with a spell cast from range that it can use now:
+        the client says the slot is usable, which a spell is not without its mana. Out of
+        mana, a caster fights with its staff until the mana comes back (V164)."""
+        if not profile.caster:
+            return False
+        usable = values.get("bars.usable")
+        for attack in profile.by_role(Role.ATTACK):
+            if not ranged(attack):
+                continue
+            if usable is not None:
+                if usable & (1 << (attack.slot - 1)):
+                    return True
+            elif self._mana_left_after(attack, values) >= 0:
+                return True
+        return False
+
+    def _range_step(self, values: dict) -> bool:
+        """One step toward a unit a spell does not reach yet, facing it first (V164)."""
+        if not self.engage(values):
+            return False
+        event("approach.request", data={"key": "w", "mode": "range_step",
+                                        "duration_s": RANGED_STEP_S, "steps": self._ranged_steps})
+        if not self.hid.hold("w", RANGED_STEP_S):
+            self._input_refused = True
+            self.detail = "approach input refused"
+            return False
+        self.closed += 1
+        return True
+
     def _ensure_attacking(self) -> bool:
         """Press the melee toggle only when it is observed off (ARCHITECTURE section 6).
 
@@ -1252,8 +1330,8 @@ class Fight:
             return False
         profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
         toggle = next((a for a in profile.by_role(Role.ATTACK) if a.toggle), None)
-        if toggle is None or not self._toggle_needed(toggle, v):
-            return True
+        if toggle is None or not self._toggle_needed(toggle, v) or self._ranged_ready(profile, v):
+            return True                        # a caster with the mana opens with a spell
         if not self._press(toggle):
             return False
         self._toggled = True
@@ -1455,11 +1533,13 @@ class Fight:
                 return
 
         # 3. Swing. A toggle is pressed at most once and only before anything has landed,
-        #    because pressing melee auto-attack while already swinging **stops** it.
+        #    because pressing melee auto-attack while already swinging **stops** it. A
+        #    caster with the mana casts instead: its staff is for when the mana is gone.
+        casting_instead = self._ranged_ready(profile, values)
         for attack in profile.by_role(Role.ATTACK):
             if not pressable(attack) or not affordable(attack):
                 continue
-            if attack.toggle and not self._toggle_needed(attack, values):
+            if attack.toggle and (casting_instead or not self._toggle_needed(attack, values)):
                 continue
             if self._press(attack):
                 if attack.toggle:

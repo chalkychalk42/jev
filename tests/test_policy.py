@@ -213,3 +213,28 @@ def test_repairs_and_bags_come_before_training():
     context.trainable = lambda state: True
     broken = _s(char=Char(level=8), bags=Bags(free=10, durability_min=0.0))
     assert service(broken, context=context).decision.skill == "VENDOR_REPAIR"
+
+
+def test_a_caster_drinks_sooner_than_a_paladin():
+    """V164: a level-1 mage's Fireball is 30 of 165 mana, and a Kobold Vermin takes three."""
+    from jev.coach.policy import _recover
+    from jev.world.state_v1 import Char, PowerType, State, Vitals
+
+    def at(cls, power):
+        return State(t=0, client_id="c", char=Char(cls=cls, level=1),
+                     vitals=Vitals(hp=1.0, power=power, power_type=PowerType.MANA,
+                                   combat=False, dead=False, ghost=False))
+
+    assert _recover(at("mage", 0.5)) is not None
+    assert _recover(at("paladin", 0.5)) is None
+    assert _recover(at("paladin", 0.3)) is not None
+    assert _recover(at("mage", 0.6)) is None
+
+
+def test_a_caster_carries_twice_the_water():
+    from jev.world.vendor import supplies_for
+
+    mage = {s.role: s.desired for s in supplies_for(8, 1)}
+    paladin = {s.role: s.desired for s in supplies_for(2, 1)}
+    assert mage.get("drink") == 20 and paladin.get("drink") == 10
+    assert mage.get("food") == paladin.get("food") == 10

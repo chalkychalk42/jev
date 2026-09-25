@@ -89,10 +89,18 @@ def bag_slots() -> dict[int, int]:
     return {int(k): int(v) for k, v in (catalog().get("bags") or {}).items()}
 
 
+# A caster drinks after most fights, so it carries twice the water (V164).
+CASTER_DRINKS = 20
+
+
 def supplies_for(class_id: int | None, race_id: int | None) -> tuple[Supply, ...]:
     """Exact profile only; another race's food would leave the current bar empty."""
+    from jev.world.combat import for_class
+
+    caster = for_class(class_id, race_id).caster
     roles = catalog()["supplies"].get(f"{race_id}:{class_id}", {})
-    return tuple(Supply(item_id=r["item_id"], name=r["name"], role=role, slot=r["slot"])
+    return tuple(Supply(item_id=r["item_id"], name=r["name"], role=role, slot=r["slot"],
+                        desired=CASTER_DRINKS if caster and role == "drink" else 10)
                  for role, r in sorted(roles.items()))
 
 

@@ -60,6 +60,10 @@ SETTLE_S = 2.0
 LOOT_PROBES = 24
 LOOT_IN_COMBAT_PROBES = 6
 LOOT_IN_COMBAT_HP = 0.5
+# A kill made from range (`Fight.ended_far`, V164) lies out there: a corpse that gave
+# nothing is walked toward, a step of this long at a time, and clicked again, this often.
+FAR_STEP_S = 1.0
+FAR_STEPS = 4
 
 class Looted(StrEnum):
     TOOK = "took"              # objective, money or bag capacity changed
@@ -94,13 +98,43 @@ class Loot:
     @traced("loot")
     def run(self, *, settle_s: float = SETTLE_S,
             progress: Callable[[], tuple[int | None, int | None]] | None = None,
-            anchor: Plate | None = None, name_id: int | None = None) -> Looted:
+            anchor: Plate | None = None, name_id: int | None = None,
+            far: bool = False) -> Looted:
         """`progress` is the objective counter, passed by whoever knows which quest is
         being worked. `Loot` has no idea and should not: it is handed a way to ask what
         the server thinks, exactly as `Hunt` is. `anchor` is the last plate the unit had
         while alive and `name_id` the name of the unit killed, when the caller knows them:
         the client can clear the selection at the kill, and then the corpse is found by
-        a dead hover of that name."""
+        a dead hover of that name. `far`: the kill was made from range, and a corpse that
+        gave nothing is walked toward and clicked again (`FAR_STEPS`)."""
+        result = self._once(settle_s=settle_s, progress=progress, anchor=anchor,
+                            name_id=name_id)
+        steps = 0
+        while far and result in (Looted.NOTHING, Looted.NO_CORPSE) and steps < FAR_STEPS:
+            steps += 1
+            if not self._step_toward(anchor, steps):
+                break
+            result = self._once(settle_s=settle_s, progress=progress, anchor=None,
+                                name_id=name_id)
+        return result
+
+    def _step_toward(self, anchor: Plate | None, steps: int) -> bool:
+        """Turn to where the corpse was clicked, or where the unit's plate last stood, and
+        walk a step toward it."""
+        frame = self.read_frame()
+        width = frame.shape[1] if frame is not None and hasattr(frame, "shape") else None
+        x = (self.clicked[0] - self.window_origin[0] if self.clicked is not None
+             else anchor.cx if anchor is not None else None)
+        targeting = self.targeting or Targeting(self.hid, self.read, read_frame=self.read_frame,
+                                                window_origin=self.window_origin)
+        if x is not None and width and not targeting.turn_toward(x / width - 0.5):
+            return False
+        event("loot.step", data={"steps": steps, "duration_s": FAR_STEP_S,
+                                 "turned": x is not None and bool(width)})
+        return bool(self.hid.hold("w", FAR_STEP_S))
+
+    def _once(self, *, settle_s: float, progress, anchor: Plate | None,
+              name_id: int | None) -> Looted:
         self.clicked = None
         self.detail = ""
         self._progress = progress

@@ -331,7 +331,8 @@ class Hunt:
         # The counter is the first thing worth believing about a corpse, and `Hunt` is
         # what knows how to ask for it.
         outcome = self.loot.run(progress=self.progress, anchor=self.fight.last_plate,
-                                name_id=self.fight.killed_name_id)
+                                name_id=self.fight.killed_name_id,
+                                far=getattr(self.fight, "ended_far", False))
         if outcome is not Looted.NO_CORPSE:
             self.say(f"    loot: {outcome.value}"
                      + (f" - {self.loot.detail}" if self.loot.detail else ""))

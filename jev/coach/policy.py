@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from jev.coach.schema import Decision, Intent
 from jev.guide.graph import Node
 from jev.skills.catalog import NAMES
-from jev.world.combat import HEAL_OUT_OF_COMBAT
+from jev.world.combat import HEAL_OUT_OF_COMBAT, is_caster
 from jev.world.state_v1 import PowerType, State, StepKind
 
 # Below this, a decision is worth a teacher call if one is affordable. Above it, asking
@@ -271,12 +271,20 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
     return None
 
 
+# Below this much mana, out of combat, the character drinks before anything else. A caster
+# drinks sooner: its mana is its damage, and a level-1 mage's Fireball is 30 of 165 mana
+# against a Kobold Vermin that takes about three (V164).
+REST_MANA = 0.35
+CASTER_REST_MANA = 0.55
+
+
 def _recover(state: State) -> Plan | None:
     v = state.vitals
     if v.combat is True:
         return None
     hp, power = v.hp, v.power
-    low_mana = v.power_type is PowerType.MANA and power is not None and power < 0.35
+    line = CASTER_REST_MANA if is_caster(state.char.cls) else REST_MANA
+    low_mana = v.power_type is PowerType.MANA and power is not None and power < line
     if (hp is not None and hp < HEAL_OUT_OF_COMBAT) or low_mana:
         return Plan(_d(Intent.SERVICE, "EAT_DRINK", "out of combat and low; recover first",
                        0.8, ("dead", "combat")), True, "recover.eat")

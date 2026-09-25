@@ -761,7 +761,8 @@ class LiveBody:
         outcome = self.fight.run(self._objective_name())
         if outcome.ok:
             looted = self.loot.run(progress=self._progress, anchor=self.fight.last_plate,
-                                   name_id=self.fight.killed_name_id)
+                                   name_id=self.fight.killed_name_id,
+                                   far=getattr(self.fight, "ended_far", False))
             # A corpse not found costs its loot, not the kill: the selection can move on at
             # the kill and leave nothing to hover (run 20260924T033806-a3254d, three times).
             if not looted.ok and looted is not Looted.NO_CORPSE:

@@ -22,9 +22,11 @@ import json
 import pathlib
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from functools import cache
 
 PROFILES_PATH = (pathlib.Path(__file__).resolve().parent.parent.parent
                  / "content" / "tbc" / "combat-profiles.json")
+REACH_PATH = PROFILES_PATH.parent / "spell-reach.json"
 
 
 class Role(StrEnum):
@@ -71,6 +73,17 @@ food, or to a vendor, or break the fight off — never a drink loop inside a fig
 LAST_RESORT_BELOW = 0.15
 """A last resort heals to full and then waits an hour: for a fight about to be lost, when
 a heal would not finish in time."""
+
+RANGED_YD = 20.0
+"""An attack that reaches this far is cast from where the unit was found, not walked into
+melee with (V164). A nameplate proves a unit within about 20 yards (V45), so such a spell
+reaches whatever a fight can select: Fireball 35 yards, Frostbolt 30. Judgement's 10
+does not."""
+
+LASTING_S = 60.0
+"""A starting buff that lasts this long or longer outlasts a fight, and its clock is kept
+between fights: Frost Armor, thirty minutes, was cast again at every pull, 60 of a level-1
+mage's 165 mana each time."""
 
 
 def grey_level(level: int) -> int:
@@ -121,10 +134,44 @@ class Ability:
         return self.role in (Role.HEAL, Role.LAST_RESORT) or self.friendly
 
 
+@cache
+def _reaches() -> dict[int, tuple[float, float, float]]:
+    try:
+        raw = json.loads(REACH_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {int(k): (v["min_yd"], v["max_yd"], v["cast_s"])
+            for k, v in (raw.get("spells") or {}).items()}
+
+
+def reach(spell_id: int | None) -> tuple[float, float, float] | None:
+    """A spell's (minimum yards, maximum yards, cast seconds), from the client's own data
+    (`tools/gen_spell_reach.py`); `None` when the spell is not known there."""
+    return None if spell_id is None else _reaches().get(spell_id)
+
+
+def ranged(ability: Ability) -> bool:
+    """An attack cast from range (`RANGED_YD`): not melee's toggle, and a spell that reaches."""
+    facts = reach(ability.spell_id)
+    return (ability.role is Role.ATTACK and not ability.toggle and facts is not None
+            and facts[1] >= RANGED_YD)
+
+
+def _nuke(ability: Ability) -> bool:
+    """A ranged attack with a cast time: a caster's main attack (Fireball, Smite, Shadow
+    Bolt), not an instant racial a blood elf's paladin starts with (Mana Tap)."""
+    facts = reach(ability.spell_id)
+    return ranged(ability) and facts is not None and facts[2] > 0
+
+
 @dataclass(frozen=True)
 class CombatProfile:
     name: str
     abilities: tuple[Ability, ...]
+    # A class that starts with an attack cast from range with a cast time (`_nuke`): it opens
+    # with spells and keeps its distance while it has the mana (V164). A mage does; a
+    # paladin does not, whatever its race.
+    caster: bool = False
 
     def by_role(self, role: Role) -> tuple[Ability, ...]:
         return tuple(a for a in self.abilities if a.role is role)
@@ -155,15 +202,15 @@ def _load() -> dict[str, CombatProfile]:
         return {}
     out: dict[str, CombatProfile] = {}
     for key, entry in raw.items():
-        out[key] = CombatProfile(
-            name=entry.get("name", key),
-            abilities=tuple(
-                Ability(slot=r["slot"], role=Role(r["role"]), name=r.get("name", ""),
-                        mana=r.get("mana", 0), every_s=r.get("every_s", 0.0),
-                        toggle=r.get("toggle", False))
-                for r in entry.get("rows", ())
-            ),
+        abilities = tuple(
+            Ability(slot=r["slot"], role=Role(r["role"]), name=r.get("name", ""),
+                    mana=r.get("mana", 0), every_s=r.get("every_s", 0.0),
+                    toggle=r.get("toggle", False), spell_id=r.get("spell"),
+                    lasting=Role(r["role"]) is Role.BUFF and r.get("every_s", 0.0) >= LASTING_S)
+            for r in entry.get("rows", ())
         )
+        out[key] = CombatProfile(name=entry.get("name", key), abilities=abilities,
+                                 caster=any(_nuke(a) for a in abilities))
     return out
 
 
@@ -226,7 +273,13 @@ def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatPr
                             every_s=(float("inf") if role is Role.AURA else facts.every_s),
                             toggle=facts.role == "attack", friendly=facts.self_cast,
                             lasting=lasting, spends=facts.spends, spell_id=facts.spell_id))
-    return CombatProfile(name=base.name, abilities=tuple(rows))
+    return CombatProfile(name=base.name, abilities=tuple(rows), caster=base.caster)
+
+
+def is_caster(class_name: str | None) -> bool:
+    """Whether the class of this name (`State.char.cls`: "mage") opens with spells cast
+    from range (`CombatProfile.caster`)."""
+    return any(p.caster for p in PROFILES.values() if p.name == class_name)
 
 
 def for_class(class_id: int | None, race_id: int | None = None) -> CombatProfile:

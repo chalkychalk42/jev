@@ -256,7 +256,8 @@ def test_direct_combat_does_not_hide_post_kill_loot_failure(outcome, status):
     result = b._fight(seen())
     assert result.outcome is status and result.code == outcome.value
     assert result.detail == "post-kill loot: uncompleted corpse action"
-    b.loot.run.assert_called_once_with(progress=b._progress, anchor=plate, name_id=2864)
+    b.loot.run.assert_called_once_with(progress=b._progress, anchor=plate, name_id=2864,
+                                       far=False)
 
 
 @pytest.mark.parametrize("outcome", [Looted.TOOK, Looted.NOTHING, Looted.NO_CORPSE])
