@@ -17,8 +17,6 @@ from jev.clients.choose import ChooseListLine
 from jev.clients.fight import Fight
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth
-from jev.clients.taxi import TaxiDesk
-from jev.clients.windows import close_observed
 from jev.clients.interact import Interact
 from jev.clients.interact import Result as Interacted
 from jev.clients.loot import Loot, Looted
@@ -27,8 +25,10 @@ from jev.clients.repair import Repair
 from jev.clients.rest import Rest
 from jev.clients.spellbook import Spellbook
 from jev.clients.targeting import FaceCode, Targeting
+from jev.clients.taxi import TaxiDesk
 from jev.clients.trainer import TrainerDesk
 from jev.clients.vendor import Vendor
+from jev.clients.windows import close_observed
 from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
@@ -36,6 +36,7 @@ from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
+from jev.learn.choices import Stations, objective_key
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
@@ -44,14 +45,14 @@ from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, for_class
 from jev.world.combat import from_bar as profile_from_bar
-from jev.world.gear import load_worn, save_worn
 from jev.world.gear import keep as gear_keep
+from jev.world.gear import load_worn, save_worn
+from jev.world.gear import upgrades as gear_upgrades
 from jev.world.home import load_home, save_home
+from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.taxi import Node as TaxiNode
 from jev.world.taxi import flight as flight_plan
 from jev.world.taxi import load_nodes, save_node, visited
-from jev.world.gear import upgrades as gear_upgrades
-from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.training import placements as spell_placements
 from jev.world.training import trainer_due
 from jev.world.vendor import (
@@ -201,6 +202,11 @@ class LiveBody:
         self.travel_timeout, self.hunt_timeout, self.say = travel_timeout, hunt_timeout, say
         # Where each hunt's target spawns (`jev.guide.spawns`); empty walks rings.
         self.hunt_spawns = hunt_spawns or {}
+        # What each choice has paid off before, and this run's log of them
+        # (`jev.learn.choices`); without a memory, tours keep their own order.
+        self.choice_memory = None
+        self.choice_log = None
+        self.choice_rng = None               # the draws' source; `None` seeds itself
         # What this character has been given to wear, slot by slot (`jev.world.gear`).
         self.gear_memory = gear_memory
         # Which merchants could not be reached or clicked (`jev.world.vendor`).
@@ -641,11 +647,13 @@ class LiveBody:
             def complete_reader():
                 level, needed = progress_reader()
                 return None if level is None else level >= needed
+        wanted = name_id(destination.target_name)
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
-                    is_complete=complete_reader, service_needed=self._service_needed)
+                    is_complete=complete_reader, service_needed=self._service_needed,
+                    stations=self._stations("hunt.station", objective_key(wanted, node.id)))
         outcome = hunt.run(destination.world, destination.hunt_yards or DEFAULT_HUNT_YARDS,
-                           name_id(destination.target_name),
+                           wanted,
                            timeout_s=self.hunt_timeout,
                            spawns=spawn_points(self.hunt_spawns, node.id,
                                                getattr(destination, "target_id", None)))
@@ -681,17 +689,25 @@ class LiveBody:
         deadline = time.monotonic() + self.hunt_timeout
         here = self._position()
         start = map_to_world(*here, self.client.bounds) if here is not None else points[0][:2]
-        for point in _tour(points, start) * GATHER_LAPS:
+        tour = _tour(points, start)
+        chooser = (self._stations("gather.station", f"object:{target.target_id}")
+                   if len({tuple(p) for p in tour}) > 1 else None)
+        laps = [chooser.order(tour) if chooser is not None else tour for _ in range(GATHER_LAPS)]
+        for point in (p for lap in laps for p in lap):
             if complete() is True:
                 return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
             if time.monotonic() > deadline:
                 return Result(SkillOutcome.TIMED_OUT,
                               f"{self.hunt_timeout:.0f}s and the objective is not done", "timeout")
+            if chooser is not None:
+                chooser.arrive(point)
             self._approach(point)
             got = self.gather.pick(wanted, progress)
             if got is Gathered.NOT_HERE and self.client.hid.hold("s", GATHER_STEP_BACK_S):
                 # Stood on the spawn point, the character itself hides what lies underfoot.
                 got = self.gather.pick(wanted, progress)
+            if chooser is not None:
+                chooser.leave(got is Gathered.TOOK)
             self.say(f"    gather: {got.value} - {self.gather.detail}")
             if not got.ok:
                 return self._result(got, self.gather.detail)
@@ -699,6 +715,14 @@ class LiveBody:
             return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
         return Result(SkillOutcome.ABORTED, "every spawn point walked and the objective is short",
                       "nothing")
+
+    def _stations(self, point: str, objective: str):
+        """A chooser of stations for `point`, learning under `objective`; `None` without a
+        memory (`jev.learn.choices.Stations`)."""
+        if self.choice_memory is None:
+            return None
+        return Stations(self.choice_memory, point, objective, log=self.choice_log,
+                        rng=self.choice_rng)
 
     def _service_needed(self) -> str | None:
         self.checkpoint()

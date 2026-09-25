@@ -431,3 +431,22 @@ def test_a_camp_of_many_spawns_still_moves_on_when_dry():
     h.sleep = lambda s: pytest.fail("a camp is not waited at")
     assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=spawns) is Hunted.UNREACHABLE
     assert len(walked) == 4
+
+
+def test_the_hunt_stands_first_where_its_target_has_been_found_and_records_the_visit():
+    """V158: every empty station is a walk and two looks; the ones that paid off lead."""
+    import random
+
+    from jev.learn.choices import ChoiceMemory, Stations, station_key
+
+    memory = ChoiceMemory()
+    good, barren = (60.0, 0.0, 80.0), (0.0, 0.0, 80.0)
+    for _ in range(6):
+        memory.record("hunt.station", station_key("creature:9", good), True, 10.0)
+        memory.record("hunt.station", station_key("creature:9", barren), False, 10.0)
+    h, walked = _hunt([Fought.KILLED], [(0, 1), (0, 1), (1, 1)])
+    h.stations = Stations(memory, "hunt.station", "creature:9", rng=random.Random(3))
+    assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=(barren, good)) is Hunted.DONE
+    assert walked[0] == good, "the station that has paid off first"
+    arm = memory.arms("hunt.station")[station_key("creature:9", good)]
+    assert (arm.tries, arm.wins) == (7, 7), "the visit and its kill were learned"

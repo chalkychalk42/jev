@@ -218,3 +218,45 @@ def test_a_spawn_point_that_shows_nothing_is_looked_at_again_a_step_back(monkeyp
     b.gather = SimpleNamespace(pick=pick, detail="")
     assert b._hunt(seen(quests=b.client.log.complete)).outcome is SkillOutcome.SUCCEEDED
     assert holds == ["s"]
+
+
+def test_a_gather_tries_first_where_the_object_has_been_found_and_learns_the_visit(monkeypatch):
+    """V158: at the Eastvale Logging Camp nine spawn points of the wood bundles in a row
+    showed nothing; the points that have given something are tried first."""
+    import random
+
+    from jev.clients.gather import Gathered
+    from jev.learn.choices import ChoiceMemory, station_key
+
+    quest = Quest(quest_id=1, complete=False, objectives=(
+        Objective(text="crates", have=7, need=8, counter_index=0),))
+    b = body(StepKind.QUEST_OBJECTIVE, log=(quest,))
+    target = ObjectiveTarget(kind="loot", required_id=11119, required_count=8, counter_index=0,
+                             target_kind="gameobject", target_name="Milly's Harvest",
+                             target_id=161557, world=(50, 50, 0), map_id=0, pos=(0.5, 0.5))
+    node = b.graph.nodes[0].model_copy(update={"objective_targets": (target,)})
+    b.graph = b.graph.model_copy(update={"nodes": (node,)})
+    far, near = (90.0, 90.0, 0.0), (52.0, 52.0, 0.0)
+    b.hunt_spawns = {f"{node.id}#161557": (far, near)}
+    b.client.position = lambda: (0.5, 0.5)
+    b.choice_memory = ChoiceMemory()
+    for _ in range(6):
+        b.choice_memory.record("gather.station", station_key("object:161557", far), True, 5.0)
+        b.choice_memory.record("gather.station", station_key("object:161557", near), False, 5.0)
+    b.choice_rng = random.Random(5)
+    walked = []
+    b.client.approach.side_effect = lambda world, **kw: walked.append(world) or True
+
+    def pick(wanted, progress):
+        current = b.client.log.complete[0]
+        b.client.log.complete = (current.model_copy(update={
+            "objectives": (Objective(text="crates", have=8, need=8, counter_index=0),),
+            "complete": True}),)
+        return Gathered.TOOK
+
+    b.gather = SimpleNamespace(pick=pick, detail="objective")
+    result = b._hunt(seen(quests=b.client.log.complete))
+    assert result.outcome is SkillOutcome.SUCCEEDED
+    assert walked == [far], "the point that has given crates before, though it is further"
+    arm = b.choice_memory.arms("gather.station")[station_key("object:161557", far)]
+    assert (arm.tries, arm.wins) == (7, 7)

@@ -36,7 +36,9 @@ OBJECTIVE_LOOPS = frozenset({"GRIND_UNTIL"})
 # Who takes an ordinary objective first: the tutor, or the guide's own routine (`hybrid`),
 # with the tutor on the routine's failures and on one objective in `HYBRID_SAMPLE`.
 DISPATCHES = frozenset({"tutor", "hybrid"})
-HYBRID_SAMPLE = 4
+# 0: none. The tutor's ordinary objectives fed an imitation student that could at best call
+# the routines back (V158); its time now goes to the objectives a routine has just failed.
+HYBRID_SAMPLE = 0
 # Routine results that are not the routine failing its objective: nothing sellable, too
 # poor, or the objective already done.
 ROUTINE_NOT_FAILED = frozenset({"no_junk", "too_poor", "nothing", "done"})
@@ -366,7 +368,7 @@ class PlayingBody:
             self._routine_failed.discard(key)
             return True
         digest = hashlib.sha1(str(arm.arm_id).encode()).hexdigest()
-        return int(digest, 16) % HYBRID_SAMPLE == 0
+        return HYBRID_SAMPLE > 0 and int(digest, 16) % HYBRID_SAMPLE == 0
 
     def _note_routine(self, arm, result) -> None:
         """A routine that could not do its objective hands the next attempt to the tutor.

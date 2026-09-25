@@ -116,6 +116,11 @@ PACK_PENALTY_YARDS = 40.0
 
 
 def spawn_stations(spawns) -> list[tuple[float, float, float]]:
+    """`spawn_tour`, `SPAWN_LAPS` times round."""
+    return spawn_tour(spawns) * SPAWN_LAPS
+
+
+def spawn_tour(spawns) -> list[tuple[float, float, float]]:
     """Where the target actually spawns, as a walk: lone spawns before packs, each step to
     the nearest point left once its packmates are counted, from the cluster's centre (the
     generator lists it first).
@@ -152,7 +157,7 @@ def spawn_stations(spawns) -> list[tuple[float, float, float]]:
         if all(math.dist(point[:2], t[:2]) > SPAWN_MERGE_YARDS for t in tour):
             tour.append(point)
             here = point
-    return tour * SPAWN_LAPS
+    return tour
 
 
 def _passes(a, b, c, reach: float) -> bool:
@@ -176,6 +181,10 @@ class Hunt:
     is_complete: Callable[[], bool | None] | None = None
     service_needed: Callable[[], str | None] | None = None
     sleep: Callable[[float], None] = time.sleep
+    # Which station next, by what each has yielded before (`jev.learn.choices.Stations`);
+    # `None` walks the tour in its own order.
+    stations: object | None = None
+    _found: bool = field(default=False, init=False)
 
     kills: int = field(default=0, init=False)
     _outdoors: bool | None = field(default=None, init=False)
@@ -186,6 +195,15 @@ class Hunt:
     def run(self, centre: tuple[float, float, float], radius_yards: float,
             name_id: int | None = None, *, timeout_s: float = 900.0,
             spawns=()) -> Hunted:
+        self._found = False
+        try:
+            return self._hunt(centre, radius_yards, name_id, timeout_s=timeout_s,
+                              spawns=spawns)
+        finally:
+            if self.stations is not None:
+                self.stations.leave(self._found)     # the station it was at, however it ended
+
+    def _hunt(self, centre, radius_yards, name_id, *, timeout_s, spawns) -> Hunted:
         self.kills = self.moves = 0
         self._outdoors = None
         self.detail = ""
@@ -194,8 +212,12 @@ class Hunt:
                                     "spawns": len(spawns)})
         deadline = time.monotonic() + timeout_s
         # Where the target spawns when the guide knows it; rings round the centre when not.
-        posts = spawn_stations(spawns) or stations(centre, radius_yards)
+        # Each lap's order is learned, when there is a choice to learn (`stations`).
+        tour, laps = (spawn_tour(spawns), SPAWN_LAPS) if spawns else (stations(centre, radius_yards), 1)
         lone = len({tuple(p) for p in spawns}) == 1
+        chooser = self.stations if len({tuple(p) for p in tour}) > 1 else None
+        posts = ([p for _ in range(laps) for p in chooser.order(tour)] if chooser is not None
+                 else tour * laps)
         post = 0
         dry = 0
         stood = False
@@ -235,6 +257,10 @@ class Hunt:
                 target = posts[post]
                 post += 1
                 self.moves += 1
+                if chooser is not None:
+                    chooser.leave(self._found)       # the last station's visit, as it went
+                    chooser.arrive(target)
+                    self._found = False
                 with operation("hunt.approach", data={"destination": target}) as span:
                     arrived = self.approach(target)
                     span.finish(code="true" if arrived else "false")
@@ -274,6 +300,7 @@ class Hunt:
                 return stopped
             if outcome is Fought.KILLED:
                 self.kills += 1
+                self._found = True
                 dry = 0
                 stopped = self._loot()
                 if stopped is not None:

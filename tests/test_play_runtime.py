@@ -700,15 +700,22 @@ def test_hybrid_dispatch_runs_the_routine_first_and_the_tutor_on_its_failure(tmp
     assert config["dispatch"] == "tutor", "recorded as built; the fixture switched it after"
 
 
-def test_hybrid_dispatch_samples_one_objective_in_four_for_the_tutor(tmp_path):
+def test_hybrid_dispatch_asks_the_tutor_only_after_a_routine_failed(tmp_path):
+    """V158: the tutor's ordinary objectives fed an imitation student that could at best
+    call the routines back; its time goes to the objectives a routine has just failed."""
+    from jev.learn.episode import SkillOutcome as Outcome
+
     env = composition(tmp_path)
     env.playing.dispatch = "hybrid"
     try:
         picks = [env.playing._ask_tutor(replace(env.arm, arm_id=f"arm{i}")) for i in range(400)]
+        env.playing._note_routine(env.arm, Result(Outcome.ABORTED, "stuck", "unreachable"))
+        failed = env.playing._ask_tutor(env.arm)
     finally:
         env.screenshots.close()
         env.playing.close()
-    assert 60 <= sum(picks) <= 140, "about a quarter"
+    assert sum(picks) == 0, "no ordinary objective sampled"
+    assert failed, "the objective its routine just failed"
 
 
 def test_an_unknown_dispatch_is_refused(tmp_path):
