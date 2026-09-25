@@ -432,6 +432,9 @@ class Fight:
     # What each recent kill cost, as a share of the mana pool, and the mana this fight saw
     # first and last (V170).
     mana_costs: deque = field(default_factory=lambda: deque(maxlen=MANA_KILLS), init=False)
+    # The heal line drawn for a fight against two or more (V172), and whether it heals at all.
+    _pack_line: str | None = field(default=None, init=False)
+    _heals: bool = field(default=True, init=False)
     _mana_seen: tuple[float | None, float | None] = field(default=(None, None), init=False)
     _last_near: bool = field(default=False, init=False)
     _ranged_steps: int = field(default=0, init=False)
@@ -448,6 +451,7 @@ class Fight:
         line = None
         # A class with no heal has no line to draw, and its fights say nothing of one.
         heals = self.profile is None or self.profile.first(Role.HEAL) is not None
+        self._heals, self._pack_line = heals, None
         if self.choices is not None and heals:
             line = self.choices.pick("all", HEAL_LINES)
             self.heal_below = float(line)
@@ -470,9 +474,13 @@ class Fight:
             went_badly = result is Fought.DIED or (low is not None and low < BAD_FIGHT_HP)
             came_to_blows = result in (Fought.KILLED, Fought.DIED, Fought.LOSING, Fought.TIMEOUT,
                                        Fought.UNREACHABLE, Fought.LOST)
-            # Cut short (a death, a stop): known only when it was going badly.
+            # Cut short (a death, a stop): known only when it was going badly. A fight that
+            # became one against two or more teaches the pack's line, not the single's.
             if line is not None and (came_to_blows or (result is None and went_badly)):
-                self.choices.outcome("all", line, not went_badly, time.monotonic() - started)
+                objective, option = (("pack", self._pack_line) if self._pack_line is not None
+                                     else ("all", line))
+                self.choices.outcome(objective, option, not went_badly,
+                                     time.monotonic() - started)
 
     def _fight(self, name_id: int | None, timeout_s: float) -> Fought:
         self.pressed = []
@@ -542,7 +550,7 @@ class Fight:
         if not in_combat and hp is not None and hp < MIN_START_HP:
             self.detail = f"{hp:.0%} health; not starting a fight on that"
             return Fought.TOO_HURT
-        if in_combat and hp is not None and hp < self.heal_below:
+        if in_combat and hp is not None and hp < self._heal_line(v):
             after = self._heal_first(v)
             if self._input_refused:
                 return Fought.REFUSED
@@ -1497,7 +1505,8 @@ class Fight:
             hp = v.get("vitals.hp")
             saved = (self._saved_at is not None
                      and time.monotonic() - self._saved_at < SAVE_HEAL_WINDOW_S)
-            if hp is None or (hp >= self.heal_below and not saved and self._pending_heal is None):
+            if hp is None or (hp >= self._heal_line(v) and not saved
+                              and self._pending_heal is None):
                 return v
             busy = (v.get("bars.casting") is True or (v.get("bars.gcd") or 0.0) > 0.0
                     or self._pending_heal is not None)
@@ -1568,7 +1577,7 @@ class Fight:
                 # Holy Lights, none of which healed anything, on a 2.5 second cast.
                 and self._pending_heal is None
                 and in_combat and hp is not None
-                and (hp < self.heal_below or (saved and hp < SAVE_HEAL_BELOW))
+                and (hp < self._heal_line(values) or (saved and hp < SAVE_HEAL_BELOW))
                 and self._has_mana_for(heal, values)
                 and (saved or not self._finishes_first(values))):
             # Clear the way for it first, where the bar can: immune (Divine Protection),
@@ -1922,9 +1931,22 @@ class Fight:
         """Below the heal line in a fight: why a search should stop for the heal."""
         hp = values.get("vitals.hp")
         if (values.get("vitals.combat") is True and isinstance(hp, (int, float))
-                and not isinstance(hp, bool) and hp < self.heal_below):
+                and not isinstance(hp, bool) and hp < self._heal_line(values)):
             return f"{hp:.0%} health in a fight: the heal first"
         return None
+
+    def _heal_line(self, values: dict | None) -> float:
+        """This look's heal line: the fight's, or once two or more are attacking (schema 17's
+        `combat.attackers`), the pack's, drawn and learned apart (V172). Two and three
+        attackers killed Testvvi at Jerod's Landing and Riverpaw: what holds against one
+        wolf need not against a camp."""
+        attackers = (values or {}).get("combat.attackers")
+        if (isinstance(attackers, int) and attackers >= 2 and self.choices is not None
+                and self._heals):
+            if self._pack_line is None:
+                self._pack_line = self.choices.pick("pack", HEAL_LINES)
+            return float(self._pack_line)
+        return self.heal_below
 
     def mana_line(self) -> float | None:
         """The mana a caster wants before a pull, from what its kills have cost (V170); `None`

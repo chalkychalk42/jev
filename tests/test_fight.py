@@ -2270,3 +2270,28 @@ def test_a_caster_steps_in_when_the_strip_says_its_spells_do_not_reach(combat_cl
     f.engage = lambda *_: True
     assert f.run(1161) is Fought.KILLED
     assert [key for key, _ in hid.holds] == ["w"], "one step, on the strip's word"
+
+
+def test_against_a_pack_the_heal_line_is_drawn_and_learned_apart():
+    """V172: with two or more attacking, the pack's line; the fight teaches that one."""
+    from jev.clients.fight import HEAL_LINES
+
+    f = _fight([ALIVE])
+    lines = _Lines("0.60")
+    f.choices = lines
+
+    def fought(name_id, timeout_s):
+        assert f._heal_line({"combat.attackers": 1}) == 0.60
+        lines.line = "0.40"
+        assert f._heal_line({"combat.attackers": 3}) == 0.40
+        assert f._heal_line({"combat.attackers": 2}) == 0.40, "drawn once a fight"
+        f._low_hp = 0.5
+        return Fought.KILLED
+
+    f._fight = fought
+    assert f.run() is Fought.KILLED
+    assert lines.picks == [("all", HEAL_LINES), ("pack", HEAL_LINES)]
+    assert lines.outcomes == [("pack", "0.40", True)]
+    f._fight = lambda name_id, timeout_s: Fought.KILLED
+    f.run()
+    assert lines.outcomes[-1][0] == "all", "a fight against one teaches the single's line"
