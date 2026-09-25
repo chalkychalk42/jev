@@ -398,9 +398,98 @@ whichever comes first, with no extension. `var/campaign.json` holds the deadline
 8b. The caster profile (the mage)
 ---------------------------------
 
-The design is being written, from the fight, targeting, rest and training code, as pre-flight
-A8. This section gets its staged build order: what the level-1 dry run needs, what hour 15
-needs, and what can wait.
+This is the design written for pre-flight A8, from the fight, targeting, rest and training
+code and the world snapshot. Everything keys on spell facts, never on the class, so the same
+code serves a warlock, priest, druid or shaman later. The paladin's behaviour stays as it is,
+checked by golden tests.
+
+**Stage 0, done before T-0.**
+- Casting from range (V164):
+  - Spell reach comes from `content/tbc/spell-reach.json`.
+  - A caster is a class whose starting bar has a ranged attack with a cast time.
+  - With a ranged attack usable, it casts from where it stands. It steps in on the client's
+    "out of range", steps aside on "no line of sight", faces on "not facing", never moves
+    during a cast and never toggles its staff. Out of mana, it fights with the staff.
+  - A kill made from range is looted by walking to the corpse.
+  - It rests below 55% mana, carries 20 waters, and keeps Frost Armor's clock between fights.
+  - It draws no heal line.
+- Roles and order (V165):
+  - Frostbolt and Arcane Missiles are strikes, and go on the bar when trained.
+  - The other new roles: Frost Nova `root`, Polymorph `cc`, the conjures `conjure`.
+  - Order: at contact an instant (Fire Blast), before the mob has come for it a slow
+    (Frostbolt), else the bar's order.
+
+**Mage facts.**
+- Trainers:
+  - Khelden Bremen, upstairs in Northshire Abbey (-8851.6, -188.2, z 89.5). He teaches Arcane
+    Intellect at 1 (10c); Frostbolt and Conjure Water at 4; Fireball 2, Conjure Food and
+    Fire Blast at 6 (1s each).
+  - Zaldimar Wefhellt, upstairs in the Lion's Pride Inn (z 63.9). He teaches Polymorph,
+    Frostbolt 2 and Arcane Missiles at 8 (2s each); Frost Nova, Conjure Water 2 and Frost
+    Armor 2 at 10; Fireball 3 at 12; Frostbolt 3 and Fire Blast 2 at 14; Fireball 4 at 18.
+  - Both upstairs routes plan complete offline.
+- Water: Brother Danil by Northshire's wagons sells water (item 159) and bread (4540).
+- Conjured Water is spell 5350 at level 4 and Fresh Water 2288 at 10. Muffin 5349 at 6,
+  Bread 1113 at 12.
+- A Kobold Vermin (42-55 hp) takes about three Fireballs, 90 of a level-1 mage's 165 mana.
+
+**Stage 1, hours 1.5-15, inert for the paladin, live at the switch.** In order of value:
+1. **Conjuring and bag use.**
+   - Put `conjure` in the training placements.
+   - After a meal, cast a conjure twice when fewer than 4 of its item are in the bags.
+   - When the bar's water or food slot is empty, `Rest` uses the best consumable in the bags
+     by the same right-click that equips gear (`Vendor.use_item`).
+   - `service()` stops buying a role the character conjures.
+2. **Rest.**
+   - `Rest.until_both(0.9, 0.9)` eats and drinks together.
+   - It presses again when a gauge has stalled for 3 s short of the target (at most twice).
+   - With nothing left to consume, it waits on regeneration while the gauge still rises.
+3. **Measured mana line.**
+   - `Fight.mana_spent` per kill.
+   - The line is 1.15 times the median of the last 10, clamped to 0.35-0.85.
+   - Read by `policy._recover` and the hunt's `_ready_to_pull`.
+4. **Frost Nova (root) at 10.**
+   - Pressed at contact.
+   - Then `_step_clear`: S held 2 s (about 9 yards) still facing, a side step if blocked,
+     then Frostbolt.
+   - Its line `fight.nova_below` is a learned choice ("1.00", "0.60", "0.35"), judged like
+     the heal line.
+5. **Buffs out of combat.**
+   - `Fight.buff_up()` before each pull and after meals, never in combat.
+   - Frost Armor, and Arcane Intellect with Alt (a friendly spell).
+6. **Caster gear.**
+   - Staves (spell 227) and Wands (5009) proficiencies.
+   - Slots: InventoryType 17 as main hand for classes without a shield, 23 as off hand, 26 as
+     ranged.
+   - `caster_score` for classes 5, 8 and 9: 10 Int + 8 Sta + 6 Spi + Agi + armour/10, plus
+     staff dps x2 or wand dps x10.
+7. **Schema 17**, which only appends fields:
+   - `bars.in_range`/`bars.out_range` (IsActionInRange per slot);
+   - `target.near28` (CheckInteractDistance 4);
+   - `bars.aura_up` (the slot's spell among the player's buffs);
+   - `bars.autorepeat`;
+   - `combat.attackers` (from the combat log).
+   - Installed at the switch's client restart. Painted range turns striding into one steered
+     walk.
+8. **The hunt's stand-off.** `Hunt.standoff_yards` is 18 for casters: the hunt stands short
+   of each station.
+
+**Stage 2, after the switch, largest measured loss first.**
+- Polymorph when `combat.attackers` is 2 or more.
+- Arcane Missiles, and a wand's Shoot.
+- Tab-plus-mark pulls at 25-35 yards.
+- The `hunt.standoff` choice (12, 18 or 26 yards), once its outcomes vary.
+- Class masks on guide nodes.
+- Buying Ice Cold Milk.
+
+**Risks to measure live.**
+- Spell errors reaching `ui.error_last`, and the delay from a press to `bars.casting`: the
+  dry run's evidence.
+- Aggro at the stand-off: the share of first casts with `target.attacking_me`.
+- Loot from ranged kills: the first far kill.
+- The upstairs trainers: the 10c Arcane Intellect visit.
+- Starting water and food counts: the first tick.
+- The Mage button's place on the create screen: T-0 B3.
 
 9. Schedule and checkpoints
 ---------------------------
