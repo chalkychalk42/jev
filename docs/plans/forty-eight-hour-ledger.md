@@ -74,7 +74,23 @@ Now
     - Expected route: Riverpaw's last armband and its hand-in, then the band rule ends the
       guide. The next session starts 12-20 at Patrolling Westfall (V163 drops Thunderbrew
       Lager).
-    - Roll back in the order V161, then V160/V159, then V158 (§6 B2).
+    - **Rollback map.** Revert the commit the failure points at: the Traceback's module,
+      or the log line of the thing that went wrong.
+      - What reaches the paladin:
+        - V174 learners off (02db32b);
+        - V173 rest and the review's fixes (0b0706a);
+        - V172 pack heal line (d9c2b47);
+        - V171 schema 17 (5f31717, plus the addon backup);
+        - V168 trainer reach (e6741c1);
+        - V163 worthless quests (3a274bf);
+        - V162 band rule (bde61ca);
+        - V161 danger (0dbeb58, b02409a);
+        - V160/V159 heal line and look (0254706);
+        - V158 choices (7e1d7f7).
+      - Caster-only, inert for the paladin, proven at the mage's session: V164-V167 and
+        V169-V170 (fc2ab85, 2236784, c999e25, 14f92ec, dc7cb28, 5d14c38, 93aa6d1).
+      - After two failed reruns, go back to the nine-hour configuration: arm `tutor`, and
+        V158-V174 reverted in reverse order. Record it.
   - **B3, the glue screens and the mage.**
     1. `tools/keep.sh client-restart`.
     2. `$WINPY tools/character.py enter` stops at character select with "not measured".
