@@ -18,12 +18,23 @@ Now
   - A3 put quests 16, 21, 40 and 60 into Testvvi's playhead (not in git; `var/`).
   - A4 is the campaign tool and the create screen, unmeasured (486f754).
   - The danger band from L-1 to L+2 (b02409a).
-- **Pre-flight A open:**
-  - A8, the caster profile: its design is being written.
-  - A5, the scoreboard.
-  - A6, the flaky test.
-  - A2 (b) and (c) are deferred: neither character reaches the end of the 12-20 guide inside
-    the window.
+- **Pre-flight A, since:**
+  - A2 (c): a zero-XP quest leaves the route, V163 (3a274bf). 12-20 now starts at
+    Patrolling Westfall.
+  - A5: the scoreboard, `session_report.py --blocks 2` (29f4947).
+  - A8 stage 0: a caster casts from range, V164 (fc2ab85). Roles and the spell order, V165
+    (2236784). Planned routes to Khelden Bremen, upstairs in the Abbey, and to Zaldimar,
+    upstairs in the Lion's Pride Inn, come back complete.
+  - A6: the flaky test did not recur in 3 focused runs or 4 full ones. It stays in Issues.
+  - A2 (b) is deferred: neither character reaches the end of 12-20 inside the window.
+- **Caster stage 1, for hours 1.5-15 (the design is in the 25 Sep 12:20 conversation;
+  summary in §8b):**
+  - Conjured water and food, and using a bag item when the bar's slot is empty.
+  - Frost Nova at 10, then a step clear.
+  - A mana line measured from the mana spent per kill.
+  - Caster gear: staff, wand, cloth and intellect.
+  - Schema 17 fields: in range, auras, attackers.
+  - The hunt's stand-off for casters.
 - **T-0 runbook (§6), step by step.** WINPY is `/mnt/c/forever-win/Scripts/python.exe`.
   - **B1, state.**
     - `tools/keep.sh status` shows the servers up and no loop running.
@@ -81,3 +92,4 @@ Issues
 
 | Seen | Issue | Evidence | State |
 |---|---|---|---|
+| 25 Sep 12:00 | The adaptive canary-student runtime test failed once in 2 full runs (planning agent) | Not seen in 3 focused runs or 4 full runs since | Watching; remove it with the retired paths (§11) |
