@@ -98,6 +98,16 @@ Now
     - Start the heartbeat.
     - Add the T-0 row here, write a STATUS entry and push.
 
+- **The heartbeat, from T-0.**
+  - Keep a background `tools/watch.sh --sessions --max 90` running. When it exits, it
+    wakes the executor.
+  - Then run `tools/session_check.py` on the session that ended, and act on anything red
+    or `[!!]`.
+  - Restart the watch.
+  - Every 2 hours, add a row from `.venv/bin/python tools/session_report.py --since <the
+    T-0 session> --blocks 2` to the table below, judge the trial, then build the next
+    change in the dev worktree.
+
 Blocks
 ------
 
