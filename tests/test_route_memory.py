@@ -270,3 +270,25 @@ def test_a_planner_that_cannot_go_round_plans_as_before(tmp_path):
     memory.died(0, (50.0, 0.0), now=1000.0)
     query = DangerAvoidingQuery(Corridor(), memory, clock=lambda: 1100.0)
     assert len(query.path(0, (0.0, 0.0, 60.0), (100.0, 0.0, 60.0)).points) == 2
+
+
+def test_walks_keep_clear_of_where_the_character_keeps_being_attacked():
+    """The learned danger map's hot cells (`jev.learn.danger`, V161) are kept clear of like
+    a death spot, unless the walk begins or ends at one: a hunt's camp is where it hunts."""
+    from jev.guide.route_memory import HOT_YARDS, DangerAvoidingQuery, near_route
+
+    asked = []
+
+    def hot(map_id):
+        asked.append(map_id)
+        return [(105.0, 0.0, 1.2)] if map_id == 0 else []
+
+    query = DangerAvoidingQuery(_OpenGround(), RouteMemory(), clock=lambda: 1100.0, hot=hot)
+    route = query.path(0, (0.0, 0.0, 60.0), (200.0, 0.0, 60.0))
+    assert not near_route(route, 105.0, 0.0, HOT_YARDS), "straight through the camp"
+    assert route.detail == "round where the character keeps being attacked"
+    assert route.length_yards() <= 400.0
+    assert len(query.path(0, (0.0, 0.0, 60.0), (110.0, 0.0, 60.0)).points) == 2, \
+        "a walk to the camp goes there"
+    assert len(query.path(1, (0.0, 0.0, 60.0), (200.0, 0.0, 60.0)).points) == 2
+    assert asked == [0, 0, 1]

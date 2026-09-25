@@ -65,6 +65,9 @@ DANGER_S = 2 * 3600.0
 DANGER_MERGE_YARDS = 15.0
 DANGER_RINGS = (50.0, 70.0, 95.0)
 DANGER_DETOUR = 2.0
+# A cell the learned danger map calls hot is kept this far from (`jev.learn.danger`): its
+# half-width and some of a mob's reach.
+HOT_YARDS = 25.0
 
 
 @dataclass
@@ -355,11 +358,15 @@ def near_route(path: Path, x: float, y: float, reach: float) -> bool:
 
 class DangerAvoidingQuery:
     """The planner, asked for routes that keep clear of where the character recently died
-    (`RouteMemory.died`, `DANGER_YARDS`). A walk that starts or ends near such a place goes
-    by it: a corpse run is a walk to one. Anything that goes wrong here plans as before."""
+    (`RouteMemory.died`, `DANGER_YARDS`) and of where it keeps being attacked (`hot`, a
+    learned `jev.learn.danger.DangerMap`'s cells, `HOT_YARDS`). A walk that starts or ends
+    near such a place goes by it: a corpse run is a walk to one, and a hunt's camp is where
+    it hunts. Anything that goes wrong here plans as before."""
 
-    def __init__(self, inner, memory: RouteMemory, clock: Callable[[], float] = time.time):
+    def __init__(self, inner, memory: RouteMemory, clock: Callable[[], float] = time.time,
+                 hot: Callable[[int], list] | None = None):
         self.inner, self.memory, self.clock = inner, memory, clock
+        self.hot = hot
 
     def path(self, map_id: int, start: Point, end: Point) -> Path:
         direct = self.inner.path(map_id, start, end)
@@ -368,36 +375,46 @@ class DangerAvoidingQuery:
         except Exception:
             return direct
 
+    def _spots(self, map_id: int) -> list[tuple[float, float, float, str]]:
+        """(x, y, reach, why) of every place a route keeps clear of on `map_id`."""
+        spots = [(d.x, d.y, DANGER_YARDS, "where the character died")
+                 for d in self.memory.dangers_on(map_id, self.clock())]
+        if self.hot is not None:
+            spots += [(x, y, HOT_YARDS, "where the character keeps being attacked")
+                      for x, y, *_ in self.hot(map_id)]
+        return spots
+
     def _round(self, map_id: int, start: Point, end: Point, direct: Path) -> Path:
         if not direct.usable or start[:2] == end[:2]:
             return direct
-        spots = [d for d in self.memory.dangers_on(map_id, self.clock())
-                 if math.dist((d.x, d.y), start[:2]) > DANGER_YARDS
-                 and math.dist((d.x, d.y), end[:2]) > DANGER_YARDS]
-        hit = next((d for d in spots if near_route(direct, d.x, d.y, DANGER_YARDS)), None)
+        spots = [(x, y, reach, why) for x, y, reach, why in self._spots(map_id)
+                 if math.dist((x, y), start[:2]) > reach and math.dist((x, y), end[:2]) > reach]
+        hit = next((spot for spot in spots if near_route(direct, spot[0], spot[1], spot[2])), None)
         if hit is None:
             return direct
         limit = direct.length_yards() * DANGER_DETOUR
         z = (start[2] + end[2]) / 2
-        for radius in DANGER_RINGS:
+
+        def clear(route) -> bool:
+            return not any(near_route(route, x, y, reach) for x, y, reach, _ in spots)
+
+        for margin in DANGER_RINGS:
+            radius = hit[2] + margin - DANGER_YARDS    # rings kept the death spots' spacing
             best: tuple[float, Path] | None = None
             for k in range(VIA_BEARINGS):
                 angle = 2 * math.pi * k / VIA_BEARINGS
-                via = (hit.x + radius * math.cos(angle), hit.y + radius * math.sin(angle), z)
+                via = (hit[0] + radius * math.cos(angle), hit[1] + radius * math.sin(angle), z)
                 first = self.inner.path(map_id, start, via)
-                if first.status is not PathStatus.COMPLETE or len(first.points) < 2:
-                    continue
-                if any(near_route(first, d.x, d.y, DANGER_YARDS) for d in spots):
+                if first.status is not PathStatus.COMPLETE or len(first.points) < 2 \
+                        or not clear(first):
                     continue
                 second = self.inner.path(map_id, first.points[-1], end)
-                if not second.usable or second.status is not direct.status:
-                    continue
-                if any(near_route(second, d.x, d.y, DANGER_YARDS) for d in spots):
+                if not second.usable or second.status is not direct.status or not clear(second):
                     continue
                 length = first.length_yards() + second.length_yards()
                 if length <= limit and (best is None or length < best[0]):
                     best = (length, Path(direct.status, first.points + second.points[1:],
-                                         direct.source, "round where the character died"))
+                                         direct.source, f"round {hit[3]}"))
             if best is not None:
                 return best[1]
         return direct

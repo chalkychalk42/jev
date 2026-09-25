@@ -404,3 +404,18 @@ def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor(indoors,
     assert not client.approach((here[0] - 40.0, here[1] + 5.0, 57.0))
     assert starts == expected
     assert any("planning from the floor at" in line for line in lines) is (expected[1] != 57.0)
+
+
+def test_walks_are_planned_clear_of_the_learned_danger_at_the_characters_level():
+    """V161: the planner asks the danger map for the character's level as read now."""
+    from jev.guide.route_memory import DangerAvoidingQuery, RouteMemory
+
+    client, values = client_in("Elwynn", (0.5, 0.5))
+    values["char.level"] = 12
+    danger = Mock()
+    danger.hot.return_value = [(1.0, 2.0, 0.9)]
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES,
+                route_memory=RouteMemory(), danger=danger)
+    assert isinstance(client.query, DangerAvoidingQuery)
+    assert client.query.hot(0) == [(1.0, 2.0, 0.9)]
+    danger.hot.assert_called_once_with(0, 12)

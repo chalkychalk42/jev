@@ -22,6 +22,7 @@ from jev.guide.path import MmapQuery
 from jev.guide.route import compile_route
 from jev.guide.route_memory import RouteMemory
 from jev.learn.choices import Choice, ChoiceLog, ChoiceMemory, backfill_hunts
+from jev.learn.danger import DangerMap, count_runs
 from jev.learn.episode import Recorder
 from jev.orch.runtime import ClientRuntime
 from jev.persist import atomic_json, file_lock, input_lock_path
@@ -277,10 +278,21 @@ def _live(args, graph) -> int:
         if bounds is None:
             raise NotRunning("zone has no measured coordinate bounds")
         launcher = ("wsl.exe", "-d", "Ubuntu-24.04", "-e") if win32.IS_WINDOWS else ()
+        # Where the character keeps being attacked, counted from every run not yet counted
+        # (`jev.learn.danger`, V161): routes keep clear of it at the character's level.
+        danger = DangerMap(ROOT / "var" / "danger.json")
+        by_area = {zone.area_id: zone for zone in zones.values()}
+        runs_dir = Path(args.runs_dir)
+        this_run = recorder.dir.name if recorder is not None else None
+        attacks = count_runs((run for run in runs_dir.iterdir()
+                              if run.is_dir() and run.name != this_run)
+                             if runs_dir.is_dir() else (), danger, by_area.get)
+        print(f"danger: {len(danger.cells)} cells learned"
+              + (f", {attacks} attacks counted from earlier runs" if attacks else ""))
         with_travel(client, bounds, MmapQuery(args.jevpath, args.mmaps, launcher=launcher,
                     checkpoint=lambda: client.hid.checkpoint() if client.hid.checkpoint else None),
                     arrival_yards=GOSSIP_YARDS, say=print, zones=zones,
-                    route_memory=RouteMemory(ROOT / "var/route-memory.json"))
+                    route_memory=RouteMemory(ROOT / "var/route-memory.json"), danger=danger)
         body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt,
                         record_frame=screenshots.record_frame if screenshots is not None else None,
                         hunt_spawns=spawns.load(args.graph),

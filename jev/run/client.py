@@ -540,17 +540,23 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                 arrival_yards: float, say: Callable[[str], None] | None = None,
                 zones: dict[int, ZoneBounds] | None = None,
                 zone_names: dict[int, str] | None = None,
-                route_memory=None) -> Client:
+                route_memory=None, danger=None) -> Client:
     """Give a client the ability to walk. Separate because reading needs no planner."""
     client.bounds = bounds
     client.route_memory = route_memory
     zones_path = str(Path(__file__).resolve().parents[2] / "data/zones-tbc-243.json")
     client.coordinate_zones = bounds_by_radio_id(zones_path) if zones is None else zones
     client.coordinate_names = names_by_radio_id(zones_path) if zone_names is None else zone_names
-    # Every plan, first and re-plan, stays clear of the spots walking found blocked, and of
-    # where the character recently died.
+    # Every plan, first and re-plan, stays clear of the spots walking found blocked, of where
+    # the character recently died, and of where it keeps being attacked at its level
+    # (`danger`, a `jev.learn.danger.DangerMap`).
+    hot = None
+    if danger is not None:
+        def hot(map_id):
+            return danger.hot(map_id, (client.read() or {}).get("char.level"))
     client.query = (query if route_memory is None
-                    else DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory))
+                    else DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory,
+                                             hot=hot))
     if route_memory is not None:
         # Passages learned before heights were kept get their floor, once (`Passage.z`).
         route_memory.backfill(bounds.map_id,
