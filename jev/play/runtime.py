@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
 import threading
 import time
@@ -34,11 +33,9 @@ from jev.world.state_v1 import State
 # the scripted fallback when the tutor cannot answer or stalls.
 OBJECTIVE_LOOPS = frozenset({"GRIND_UNTIL"})
 # Who takes an ordinary objective first: the tutor, or the guide's own routine (`hybrid`),
-# with the tutor on the routine's failures and on one objective in `HYBRID_SAMPLE`.
+# with the tutor only on the routine's failures. The sample of ordinary objectives it also
+# took fed an imitation student that could at best call the routines back (V158).
 DISPATCHES = frozenset({"tutor", "hybrid"})
-# 0: none. The tutor's ordinary objectives fed an imitation student that could at best call
-# the routines back (V158); its time now goes to the objectives a routine has just failed.
-HYBRID_SAMPLE = 0
 # Routine results that are not the routine failing its objective: nothing sellable, too
 # poor, or the objective already done.
 ROUTINE_NOT_FAILED = frozenset({"no_junk", "too_poor", "nothing", "done"})
@@ -369,9 +366,9 @@ class PlayingBody:
 
         The routine first, measured: teach mode cost about a fifth of play time on tutor
         decisions, and runs without the tutor levelled 1.6 to 5.5 times faster at levels 2
-        and 3 (docs/plans/nine-hour-session.md). The tutor is still asked where it earns
-        its time - an objective whose routine has just failed - and on a fixed share of
-        ordinary objectives, so its data keeps coming from everything the bot does.
+        and 3 (docs/plans/nine-hour-session.md). The tutor is asked where it earns its
+        time: an objective whose routine has just failed, and then only if the learned
+        recovery choice gives it to the tutor (V160).
         """
         key = (arm.step_id, arm.decision.skill)
         if key in self._routine_failed:
@@ -382,8 +379,7 @@ class PlayingBody:
             option = self.recovery.pick(objective, ("tutor", "routine"))
             self._recovering = (objective, option, time.monotonic())
             return option == "tutor"
-        digest = hashlib.sha1(str(arm.arm_id).encode()).hexdigest()
-        return HYBRID_SAMPLE > 0 and int(digest, 16) % HYBRID_SAMPLE == 0
+        return False
 
     def _note_routine(self, arm, result) -> None:
         """A routine that could not do its objective hands the next attempt to the tutor.

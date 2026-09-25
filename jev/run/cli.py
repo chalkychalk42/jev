@@ -94,8 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--play-mode", choices=("off", "teach", "adaptive"), default="off",
                         help="visual Jev actions inside guide skills; adaptive enables evaluated motor handover")
     parser.add_argument("--play-dispatch", choices=("tutor", "hybrid"), default="tutor",
-                        help="hybrid: the guide's routine first, the tutor on its failures "
-                             "and a fixed sample of objectives")
+                        help="hybrid: the guide's routine first, the tutor on its failures")
     parser.add_argument("--play-teacher-calls-per-hour", type=int, default=240,
                         help="separate motor tutor budget, counting each actual request/lookup")
     parser.add_argument("--play-decision-timeout", type=float, default=30,
