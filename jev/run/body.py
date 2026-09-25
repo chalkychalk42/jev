@@ -1296,6 +1296,13 @@ class LiveBody:
         return self._result(outcome, self.recover.detail)
 
     def _release(self, state) -> Result:
+        # Released where it died: walks keep clear of the spot for a while
+        # (`route_memory.DangerAvoidingQuery`).
+        memory, here = getattr(self.client, "route_memory", None), self._position()
+        values = self._read() or {}
+        if (memory is not None and here is not None and values.get("vitals.dead") is True
+                and values.get("vitals.ghost") is not True):
+            memory.died(self.client.bounds.map_id, map_to_world(*here, self.client.bounds))
         return self._result(self.recover.run(release_only=True), self.recover.detail)
 
     def _wait(self, state) -> Result:

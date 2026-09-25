@@ -201,3 +201,72 @@ def test_a_passage_learned_partway_up_a_slope_matches_its_own_route():
     memory = RouteMemory()
     memory.learn(0, (0.0, -30.0), (12.0, -30.0), z=z)
     assert memory.patch(0, route).points[1][:2] == (12.0, -30.0)
+
+
+class _OpenGround:
+    """A planner on open ground: every route is the straight line."""
+
+    def __init__(self):
+        self.asked = 0
+
+    def path(self, map_id, start, end):
+        from jev.guide.path import Path, PathStatus
+
+        self.asked += 1
+        return Path(PathStatus.COMPLETE, (tuple(start), tuple(end)))
+
+    def close(self):
+        pass
+
+
+def test_walks_keep_clear_of_where_the_character_died(tmp_path):
+    """Three deaths in twenty minutes at Jerod's Landing, the Defias camp between Ma
+    Stonefield and Princess's pumpkin patch, each walked straight through it (sessions 122
+    and 123)."""
+    from jev.guide.route_memory import DANGER_YARDS, DangerAvoidingQuery, near_route
+
+    memory = RouteMemory(tmp_path / "memory.json")
+    memory.died(0, (50.0, 0.0), now=1000.0)
+    query = DangerAvoidingQuery(_OpenGround(), memory, clock=lambda: 1100.0)
+    route = query.path(0, (0.0, 0.0, 60.0), (100.0, 0.0, 60.0))
+    assert not near_route(route, 50.0, 0.0, DANGER_YARDS), "straight through the camp"
+    assert route.length_yards() <= 200.0
+    assert RouteMemory(tmp_path / "memory.json").dangers_on(0, 1100.0), "kept on disk"
+
+
+def test_a_walk_to_or_from_where_it_died_goes_there(tmp_path):
+    from jev.guide.route_memory import DangerAvoidingQuery
+
+    memory = RouteMemory()
+    memory.died(0, (50.0, 0.0), now=1000.0)
+    query = DangerAvoidingQuery(_OpenGround(), memory, clock=lambda: 1100.0)
+    corpse_run = query.path(0, (0.0, 0.0, 60.0), (52.0, 0.0, 60.0))
+    assert len(corpse_run.points) == 2, "the corpse is where the walk is going"
+    way_out = query.path(0, (48.0, 0.0, 60.0), (100.0, 0.0, 60.0))
+    assert len(way_out.points) == 2
+
+
+def test_an_old_death_is_walked_past_again(tmp_path):
+    from jev.guide.route_memory import DANGER_S, DangerAvoidingQuery
+
+    memory = RouteMemory()
+    memory.died(0, (50.0, 0.0), now=1000.0)
+    query = DangerAvoidingQuery(_OpenGround(), memory, clock=lambda: 1000.0 + DANGER_S + 1)
+    assert len(query.path(0, (0.0, 0.0, 60.0), (100.0, 0.0, 60.0)).points) == 2
+
+
+def test_a_planner_that_cannot_go_round_plans_as_before(tmp_path):
+    from jev.guide.path import Path, PathStatus
+    from jev.guide.route_memory import DangerAvoidingQuery
+
+    class Corridor(_OpenGround):
+        def path(self, map_id, start, end):
+            self.asked += 1
+            if abs(end[1]) > 1.0:                  # nothing off the corridor's line
+                return Path(PathStatus.NOPATH, ())
+            return Path(PathStatus.COMPLETE, (tuple(start), tuple(end)))
+
+    memory = RouteMemory()
+    memory.died(0, (50.0, 0.0), now=1000.0)
+    query = DangerAvoidingQuery(Corridor(), memory, clock=lambda: 1100.0)
+    assert len(query.path(0, (0.0, 0.0, 60.0), (100.0, 0.0, 60.0)).points) == 2

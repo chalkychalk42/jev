@@ -947,3 +947,22 @@ def test_a_skill_with_time_to_spare_first_puts_missing_spells_on_the_bar():
     b.execute(Armed(fight, ArmedBy.POLICY, 0, "fight.rotation", "d", "quest"), seen(), lambda: None)
     assert placed == ["ACCEPT_QUEST"], "a fight stopped to put spells on the bar"
 
+
+
+@pytest.mark.parametrize(("dead", "ghost", "kept"), [(True, False, 1), (False, True, 0)])
+def test_where_the_character_died_is_remembered_for_walks_to_keep_clear_of(dead, ghost, kept):
+    """Three deaths in twenty minutes at Jerod's Landing, each walked straight through
+    (sessions 122 and 123). A ghost's position is the graveyard, not the body."""
+    from jev.clients.recover import Recovered
+    from jev.guide.route_memory import RouteMemory
+
+    b = body()
+    b.client.route_memory = RouteMemory()
+    b._read = lambda: {"vitals.dead": dead, "vitals.ghost": ghost}
+    b._position = lambda: (0.5, 0.5)
+    b.recover = SimpleNamespace(run=lambda release_only: Recovered.RELEASED, detail="")
+    b._release(None)
+    dangers = b.client.route_memory.dangers
+    assert len(dangers) == kept
+    if kept:
+        assert (dangers[0].x, dangers[0].y) == (50.0, 50.0)

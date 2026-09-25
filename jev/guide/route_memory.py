@@ -55,6 +55,16 @@ AVOID_HEIGHT = 4.0
 # Where to look for a way round a blocked spot: rings about it, twelve bearings each.
 VIA_RINGS = (4.0, 8.0, 12.0, 18.0)
 VIA_BEARINGS = 12
+# Where the character died is kept clear of for a while (`DangerAvoidingQuery`): walks keep
+# `DANGER_YARDS` from it, a mob's reach and a camp's, by a point on these rings, unless the
+# way round is more than `DANGER_DETOUR` times the way through. Three deaths in twenty
+# minutes at Jerod's Landing, the Defias camp on the way between Ma Stonefield and
+# Princess's pumpkin patch, each walked straight through it (sessions 122 and 123).
+DANGER_YARDS = 35.0
+DANGER_S = 2 * 3600.0
+DANGER_MERGE_YARDS = 15.0
+DANGER_RINGS = (50.0, 70.0, 95.0)
+DANGER_DETOUR = 2.0
 
 
 @dataclass
@@ -91,6 +101,14 @@ class Block:
     dy: float | None = None
 
 
+@dataclass
+class Danger:
+    map_id: int
+    x: float            # where the character died
+    y: float
+    at: float = 0.0     # when, as wall time; the latest death within `DANGER_MERGE_YARDS`
+
+
 def nearest_height(points, xy: tuple[float, float]) -> tuple[float, float] | None:
     """How far a route passes from `xy`, and its height there - interpolated along the
     segment, as `RouteMemory.patch` compares it, not the nearest waypoint's."""
@@ -125,10 +143,31 @@ class RouteMemory:
         self.file = FilePath(file) if file is not None else None
         self.passages: list[Passage] = []
         self.blocked: list[Block] = []
+        self.dangers: list[Danger] = []
         if self.file is not None and self.file.exists():
             document = json.loads(self.file.read_text(encoding="utf-8"))
             self.passages = [Passage(**row) for row in document.get("passages", ())]
             self.blocked = [Block(**row) for row in document.get("blocked", ())]
+            self.dangers = [Danger(**row) for row in document.get("dangers", ())]
+
+    def died(self, map_id: int, spot: tuple[float, float], now: float | None = None) -> Danger:
+        """Remember where the character died, for walks to keep clear of (`DANGER_S`)."""
+        now = time.time() if now is None else now
+        self.dangers = [d for d in self.dangers if now - d.at < DANGER_S]
+        for known in self.dangers:
+            if known.map_id == map_id and math.dist((known.x, known.y), spot[:2]) <= DANGER_MERGE_YARDS:
+                known.at = now
+                self._save()
+                return known
+        found = Danger(map_id, spot[0], spot[1], now)
+        self.dangers.append(found)
+        self._save()
+        return found
+
+    def dangers_on(self, map_id: int, now: float | None = None) -> list[Danger]:
+        """The places on a map the character died at within `DANGER_S`."""
+        now = time.time() if now is None else now
+        return [d for d in self.dangers if d.map_id == map_id and now - d.at < DANGER_S]
 
     def block(self, map_id: int, spot: Point,
               heading: tuple[float, float] | None = None) -> Block:
@@ -230,7 +269,8 @@ class RouteMemory:
         if self.file is None:
             return
         atomic_json(self.file, {"format": 1, "passages": [asdict(p) for p in self.passages],
-                                "blocked": [asdict(b) for b in self.blocked]})
+                                "blocked": [asdict(b) for b in self.blocked],
+                                "dangers": [asdict(d) for d in self.dangers]})
 
 
 def passes(path: Path, block: Block) -> bool:
@@ -300,6 +340,67 @@ class AvoidingQuery:
                         (direct.detail + "; " if direct.detail else "")
                         + "no way round a blocked spot")
         return best[1]
+
+    def close(self) -> None:
+        self.inner.close()
+
+
+def near_route(path: Path, x: float, y: float, reach: float) -> bool:
+    """Does the route come within `reach` of (x, y), in plan?"""
+    points = path.points
+    if len(points) == 1:
+        return math.dist(points[0][:2], (x, y)) < reach
+    return any(_segment_distance((x, y), a, b) < reach for a, b in pairwise(points))
+
+
+class DangerAvoidingQuery:
+    """The planner, asked for routes that keep clear of where the character recently died
+    (`RouteMemory.died`, `DANGER_YARDS`). A walk that starts or ends near such a place goes
+    by it: a corpse run is a walk to one. Anything that goes wrong here plans as before."""
+
+    def __init__(self, inner, memory: RouteMemory, clock: Callable[[], float] = time.time):
+        self.inner, self.memory, self.clock = inner, memory, clock
+
+    def path(self, map_id: int, start: Point, end: Point) -> Path:
+        direct = self.inner.path(map_id, start, end)
+        try:
+            return self._round(map_id, start, end, direct)
+        except Exception:
+            return direct
+
+    def _round(self, map_id: int, start: Point, end: Point, direct: Path) -> Path:
+        if not direct.usable or start[:2] == end[:2]:
+            return direct
+        spots = [d for d in self.memory.dangers_on(map_id, self.clock())
+                 if math.dist((d.x, d.y), start[:2]) > DANGER_YARDS
+                 and math.dist((d.x, d.y), end[:2]) > DANGER_YARDS]
+        hit = next((d for d in spots if near_route(direct, d.x, d.y, DANGER_YARDS)), None)
+        if hit is None:
+            return direct
+        limit = direct.length_yards() * DANGER_DETOUR
+        z = (start[2] + end[2]) / 2
+        for radius in DANGER_RINGS:
+            best: tuple[float, Path] | None = None
+            for k in range(VIA_BEARINGS):
+                angle = 2 * math.pi * k / VIA_BEARINGS
+                via = (hit.x + radius * math.cos(angle), hit.y + radius * math.sin(angle), z)
+                first = self.inner.path(map_id, start, via)
+                if first.status is not PathStatus.COMPLETE or len(first.points) < 2:
+                    continue
+                if any(near_route(first, d.x, d.y, DANGER_YARDS) for d in spots):
+                    continue
+                second = self.inner.path(map_id, first.points[-1], end)
+                if not second.usable or second.status is not direct.status:
+                    continue
+                if any(near_route(second, d.x, d.y, DANGER_YARDS) for d in spots):
+                    continue
+                length = first.length_yards() + second.length_yards()
+                if length <= limit and (best is None or length < best[0]):
+                    best = (length, Path(direct.status, first.points + second.points[1:],
+                                         direct.source, "round where the character died"))
+            if best is not None:
+                return best[1]
+        return direct
 
     def close(self) -> None:
         self.inner.close()
