@@ -2777,7 +2777,7 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
 ## 2026-09-25 07:20 — the nine hours: results against the plan
 
 Sessions 88-125 (22:58-07:58): 38 sessions, 8.1 h of play, 15,950 XP (1,974 an hour),
-332 kills, 30 guide steps, 10 quests handed in (13 to 23 complete), 6 deaths, 50
+332 kills, 30 guide steps, 10 quests handed in (13 to 23 complete), 7 deaths, 50
 commits, DECISIONS V128-V157. Testvvi went from level 10 at 72% and 10 silver to level 12
 at 52% and 35 silver, with new boots, legs, wrists, off-hand and main-hand.
 
@@ -2807,8 +2807,11 @@ What the night fixed, in the order it cost the most:
   character recently died (V157).
 
 NEXT (backlog, by expected value):
-1. The fight's facing with two or more attackers ("You are facing the wrong way!" at
-   Jerod's Landing: three deaths).
+1. The fight with two or more attackers: "You are facing the wrong way!" at Jerod's
+   Landing (three deaths), and at 07:18 three Riverpaw gnolls with the camera pressed
+   into the character against a tree trunk, where no plate showed. Health went from full
+   to nothing in 15 s with no swing and no heal at full mana (session 126, the seventh
+   death).
 2. The gather's object search: a 7x7 probe grid 80 by 45 px apart misses a bundle about
    half the time (A Bundle of Trouble passed over at 1 of 8; V155 withdrawn).
 3. The tutor's aim on units ("fresh hover does not match requested world unit": the most
