@@ -616,3 +616,82 @@ def test_a_hand_in_whose_objective_was_passed_over_is_passed_by(tmp_path, comple
     rt.tick(choose=False)
     rt.tick(choose=False)
     assert rt.tracker.step_id == expected
+
+
+def band_graph():
+    """Quest 1 under way, then an accept; quests 5 and 6 handed in near here, quest 7 in a
+    city and quest 8 across the zone."""
+    here = dict(zone="zone", zone_id=1, coord_zone_id=12)
+    return Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("do",), pos=(0.5, 0.5),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **here),
+        Node(id="do", kind=StepKind.QUEST_OBJECTIVE, quest_id=1, next=("turnin",),
+             pos=(0.5, 0.5), skills=("TRAVEL_TO", "GRIND_UNTIL"), **here),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("next_accept",),
+             pos=(0.5, 0.5), skills=("TRAVEL_TO", "TURNIN_QUEST"), **here),
+        Node(id="next_accept", kind=StepKind.QUEST_ACCEPT, quest_id=2, next=("far_turnin",),
+             pos=(0.5, 0.5), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **here),
+        Node(id="far_turnin", kind=StepKind.QUEST_TURNIN, quest_id=5, next=("near_turnin",),
+             pos=(0.7, 0.6), skills=("TRAVEL_TO", "TURNIN_QUEST"), **here),
+        Node(id="near_turnin", kind=StepKind.QUEST_TURNIN, quest_id=6, next=("city_turnin",),
+             pos=(0.55, 0.5), skills=("TRAVEL_TO", "TURNIN_QUEST"), **here),
+        Node(id="city_turnin", kind=StepKind.QUEST_TURNIN, quest_id=7, zone="city", zone_id=2,
+             coord_zone_id=1519, pos=(0.5, 0.5), next=("across_turnin",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST")),
+        Node(id="across_turnin", kind=StepKind.QUEST_TURNIN, quest_id=8, pos=(0.95, 0.95),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **here),
+    ))
+
+
+def at_level(t, level, *complete, doing=()):
+    from jev.world.state_v1 import Char
+
+    quests = tuple(Quest(quest_id=q, complete=True) for q in complete) + tuple(
+        Quest(quest_id=q, complete=False) for q in doing)
+    return seen(t, char=Char(level=level), quests=quests,
+                pos=Pos(zone="zone", coord_zone_id=12, mx=0.5, my=0.5))
+
+
+def test_an_outgrown_guide_hands_in_what_is_done_nearby_then_ends(tmp_path):
+    """V162: at 13, Testvvi had 26 steps of the 1-12 guide left, its mobs three to five
+    levels below it. Hand-ins within reach come first, nearest first; the city's and one
+    across the zone are not a trip back; then the guide is done, for the next."""
+    saved = []
+    states = [at_level(0, 13, 5, 6, 7, 8), at_level(1, 13, 5, 7, 8), at_level(2, 13, 7, 8)]
+    rt = ClientRuntime("c", band_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       start_step="next_accept", outgrown_at=13,
+                       on_progress=lambda *a, finished=False, **_: saved.append(finished))
+    visited = []
+    for _ in states:
+        rt.tick(choose=False)
+        visited.append(rt.tracker.step_id)
+    assert visited[:2] == ["near_turnin", "far_turnin"], "nearest first; the city's passed by"
+    assert rt.finished and {5, 6} <= rt.completed and not {7, 8} & rt.completed
+    assert saved[-1] is True, "the playhead says the guide is done"
+
+
+@pytest.mark.parametrize(("start", "state", "expected"), [
+    ("next_accept", at_level(0, 12, 5), "next_accept"),     # below the band: the guide goes on
+    ("do", at_level(0, 13, doing=(1,)), "do"),               # a quest under way is finished
+    ("turnin", at_level(0, 13, 1), "turnin"),                # and handed in
+])
+def test_the_guide_goes_on_below_the_band_and_while_a_quest_is_under_way(tmp_path, start,
+                                                                         state, expected):
+    rt = ClientRuntime("c", band_graph(), ScriptedSource([state]), Recorder(tmp_path),
+                       start_step=start, outgrown_at=13)
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.finished) == (expected, False)
+
+
+def test_an_outgrown_guide_does_not_retry_a_hand_in_passed_over(tmp_path):
+    rt = ClientRuntime("c", band_graph(), ScriptedSource([at_level(0, 13, 6)]),
+                       Recorder(tmp_path), start_step="next_accept", outgrown_at=13,
+                       start_retried=frozenset({"near_turnin"}))
+    rt.tick(choose=False)
+    assert rt.finished
+
+
+def test_only_a_guide_with_a_next_is_outgrown():
+    from jev.run.cli import NEXT_GUIDE, OUTGROWN_AT
+
+    assert set(OUTGROWN_AT) <= set(NEXT_GUIDE)

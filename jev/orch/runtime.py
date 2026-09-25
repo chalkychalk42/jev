@@ -71,6 +71,9 @@ SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
 # and sat complete in the log after the walk was fixed (25 September). An entry without a
 # level, from before, counts as spent at the level first read.
 DETOUR = "detour:"
+# How far an outgrown guide goes for a hand-in, in map fractions: a quarter of the zone's map,
+# 580 to 870 yards across Elwynn. A hand-in on the way out, not a trip back (V162).
+OUTGROWN_REACH = 0.25
 
 
 @dataclass
@@ -150,6 +153,9 @@ class ClientRuntime:
     # The character whose playhead this run keeps (`char.key`). Another character's state
     # is not tracked, recorded or saved: it sets `foreign`, and the run stops.
     character_key: int | None = None
+    # The level this guide is outgrown at (`jev.run.cli.OUTGROWN_AT`): from it, between two
+    # quests, the complete quests' hand-ins nearby are made and the guide is done (V162).
+    outgrown_at: int | None = None
     foreign: int | None = field(default=None, init=False)
     last_state: State | None = field(default=None, init=False)
     _was_dead: bool = field(default=False, init=False)
@@ -238,6 +244,17 @@ class ClientRuntime:
             unlevelled = {r for r in self._retried if r.startswith(DETOUR) and "@" not in r}
             self._retried = ((self._retried - unlevelled)
                              | {f"{r}@{state.char.level}" for r in unlevelled})
+        if (not self.finished and self.outgrown_at is not None
+                and state.char.level is not None and state.char.level >= self.outgrown_at
+                and verdict.event not in (Event.FAIL, Event.DEATH)
+                and state.vitals.combat is not True
+                and state.vitals.dead is not True and state.vitals.ghost is not True):
+            onward = self._outgrown(state)
+            if onward is None:
+                self.finished = True
+            elif onward != self.tracker.step_id:
+                self.tracker.enter(onward, state)
+                self._tracker_event = "rejoin_or_skip"
         if verdict.event is Event.NONE and not self.finished:
             beyond = self._abandoned_now(state)
             if beyond is not None:
@@ -428,6 +445,38 @@ class ClientRuntime:
                     and math.dist(step.pos, here) <= step.r):
                 return step.id
         return None
+
+    def _outgrown(self, state: State) -> str | None:
+        """The step to be on once the character has outgrown this guide (`outgrown_at`): the
+        current one while its quest's objective is under way or it is one of the hand-ins
+        below; else the nearest hand-in within `OUTGROWN_REACH` of a quest complete in the
+        log, not passed over; else `None`, and the guide is done. The rest of the 1-12 guide paid
+        about 5,150 XP of hand-ins against mobs three to five levels below a level-13
+        character, when a kill two levels below pays about twice as much as one four below;
+        26% of the nine hours' kills were grey (V162)."""
+        if state.quests is None or state.pos.mx is None or state.pos.my is None:
+            return self.tracker.step_id                 # the log or the place unread: wait
+        in_log = {q.quest_id: q for q in state.quests}
+        node = self.graph.get(self.tracker.step_id)
+        if (node is not None and node.kind is StepKind.QUEST_OBJECTIVE
+                and node.quest_id in in_log):
+            return node.id
+        here = (state.pos.mx, state.pos.my)
+        hand_ins = [step for step in self.graph.nodes
+                    if step.kind is StepKind.QUEST_TURNIN and step.quest_id in in_log
+                    and in_log[step.quest_id].complete is True
+                    and step.quest_id not in self.completed
+                    and step.id not in self._retried
+                    and not self._detour_spent(step.id, state.char.level)
+                    and step.pos is not None
+                    and (step.coord_zone_id is None
+                         or step.coord_zone_id == state.pos.coord_zone_id)
+                    and math.dist(step.pos, here) <= OUTGROWN_REACH]
+        if not hand_ins:
+            return None
+        if node is not None and node in hand_ins:
+            return node.id
+        return min(hand_ins, key=lambda s: math.dist(s.pos, here)).id
 
     def _beyond_abandoned(self) -> str | None:
         node = self.graph.get(self.tracker.step_id)

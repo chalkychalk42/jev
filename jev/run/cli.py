@@ -187,6 +187,12 @@ def main(argv: list[str] | None = None) -> int:
 NEXT_GUIDE: dict[str, Path] = {
     "alli_human_1_12": ROOT / "content/tbc/ally_human_12_20.json",
 }
+# The level each guide with a next is outgrown at: from it, between two quests, the complete
+# quests' hand-ins nearby are made and the next guide takes over (V162,
+# `ClientRuntime.outgrown_at`).
+OUTGROWN_AT: dict[str, int] = {
+    "alli_human_1_12": 13,
+}
 
 
 def remembered(args, graph, key: int | None):
@@ -347,9 +353,14 @@ def _live(args, graph) -> int:
                                           deaths=deaths, retried=retried, rib_until=until,
                                           finished=finished),
             character_key=character,
+            outgrown_at=(OUTGROWN_AT.get(route.source_graph_id)
+                         if route.source_graph_id in NEXT_GUIDE else None),
             available_skills=body.available,
             validate_action=body.validate,
         )
+        if runtime.outgrown_at is not None:
+            print(f"guide {route.source_graph_id}: outgrown at level {runtime.outgrown_at}, "
+                  f"then {NEXT_GUIDE[route.source_graph_id].name}")
         teacher = None
         if args.teacher and args.play_mode == "off":
             try:
