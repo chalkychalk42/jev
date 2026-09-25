@@ -60,6 +60,9 @@ Now
     level 14 quest. The generator had placed the Gnoll Paws among the densest droppers,
     whatever their level: V179 keeps them within two levels of the quest and regenerates
     12-20 (Mongrels 13-14 now); 1-12 comes out unchanged.
+  - Session 141 (689 s) played 1-12 again: once 12-20 had saved its place, the next run
+    read 1-12 as nothing remembered. About 6,700 yards walked toward Goldshire, four kills,
+    and 1-12 marked finished again. V181 starts a run on the guide the playhead names.
 
 - **25 Sep 14:10.** Pre-flight A is under way, with the loop stopped and the client closed.
   - The operator logged Testvvi out at 09:13, in Goldshire, at level 13.

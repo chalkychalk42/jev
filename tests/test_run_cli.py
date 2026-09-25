@@ -577,6 +577,25 @@ def test_a_finished_guide_hands_the_next_session_to_the_one_after_it(tmp_path, c
     assert "continuing with ally_human_12_20.json" in capsys.readouterr().out
 
 
+def test_a_character_on_a_later_guide_starts_there(tmp_path, capsys):
+    """Every session starts from the first guide. Once 12-20 had saved its own place, the
+    next session read 1-12 as nothing remembered and played it again from a scan: session
+    141 walked Testvvi from Westfall back toward Goldshire, 6,700 yards for four kills."""
+    from jev.guide import playhead
+
+    path = tmp_path / "character.json"
+    playhead.save("alli_human_12_20.supported", "alli_human_12_20_102_patrolling_westfall_do",
+                  {54, 109}, path, deaths=2)
+    args = SimpleNamespace(playhead=path, route_mode="supported",
+                           graph=cli.ROOT / "content/tbc/ally_human_1_12.json")
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None)
+    assert graph.graph_id == "alli_human_12_20.supported"
+    assert args.graph.name == "ally_human_12_20.json", "the hunt spawns follow the guide"
+    assert memory.step_id == "alli_human_12_20_102_patrolling_westfall_do"
+    assert memory.deaths == 2 and memory.completed == {54, 109}
+    assert "this character is on ally_human_12_20.json" in capsys.readouterr().out
+
+
 def test_an_unfinished_guide_stays(tmp_path):
     from jev.guide import playhead
 

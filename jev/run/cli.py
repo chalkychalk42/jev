@@ -223,6 +223,35 @@ def worthless_quests(world_db: Path | None, graph: Graph) -> frozenset[int]:
     return frozenset(row[0] for row in rows)
 
 
+def _guide_on(args, graph, path: Path):
+    """The guide this character's playhead names, when it is one after `graph`.
+
+    Every session starts from the first guide, and a finished guide handed over only while
+    the file still named it: once the next guide had saved its own place there, the first
+    read as nothing remembered and was played again from a scan. The session after 12-20
+    began (141) walked Testvvi from Westfall back toward Goldshire for a 1-12 hand-in,
+    6,700 yards for four kills.
+    """
+    try:
+        named = json.loads(path.read_text(encoding="utf-8")).get("graph_id")
+    except (OSError, ValueError, AttributeError):
+        return graph
+    if not isinstance(named, str):
+        return graph
+    named = named.removesuffix(".supported")
+    current = graph
+    for _ in range(len(NEXT_GUIDE)):
+        following = NEXT_GUIDE.get(current.graph_id)
+        if following is None or not following.exists():
+            break
+        current = Graph.load(following)
+        if current.graph_id == named:
+            print(f"guide {graph.graph_id}: this character is on {following.name}")
+            args.graph = following
+            return current
+    return graph
+
+
 def remembered(args, graph, key: int | None):
     """This character's playhead and route: its own file, found by the key the strip
     paints, so each character keeps its own place in the guide (`playhead`)."""
@@ -234,6 +263,7 @@ def remembered(args, graph, key: int | None):
                          "--install and restart the client")
     else:
         path = playhead.for_character(key, ROOT / playhead.CHARACTERS)
+    graph = _guide_on(args, graph, path)
     for _ in range(len(NEXT_GUIDE) + 1):
         memory = playhead.load(graph.graph_id, path)
         route = compile_route(graph, available_skills=LiveBody.available,
