@@ -238,6 +238,38 @@ def _interval(values: list[float], weights: list[float], *, draws: int = 2000) -
     return means[int(0.05 * draws)], means[int(0.95 * draws)]
 
 
+def blocks(sessions: list[Session], hours: float) -> list[dict]:
+    """Consecutive sessions gathered into blocks of about `hours` of play: the scoreboard a
+    change is judged on (docs/plans/forty-eight-hour-session.md, section 7)."""
+    out, group = [], []
+    for s in sessions:
+        group.append(s)
+        if sum(x.minutes for x in group) / 60 >= hours:
+            out.append(_block(group))
+            group = []
+    if group:
+        out.append(_block(group))
+    return out
+
+
+def _block(group: list[Session]) -> dict:
+    played = sum(s.minutes for s in group) / 60
+
+    def per_hour(total: float) -> float:
+        return total / played if played else 0.0
+
+    return {"sessions": f"{group[0].number}-{group[-1].number}", "hours": round(played, 2),
+            "levels": f"{group[0].level_start or 0}-{group[-1].level_end or 0}",
+            "xp": round(sum(s.xp for s in group)),
+            "xp_h": round(per_hour(sum(s.xp for s in group))),
+            "kills_h": round(per_hour(sum(s.kills for s in group)), 1),
+            "deaths_h": round(per_hour(sum(s.deaths for s in group)), 2),
+            "stuck_h": round(per_hour(sum(s.stuck for s in group)), 1),
+            "steps_h": round(per_hour(sum(s.steps for s in group)), 1),
+            "tutor_h": round(per_hour(sum(s.tutor_calls for s in group)), 1),
+            "stations": f"{sum(s.stations_won for s in group)}/{sum(s.stations for s in group)}"}
+
+
 def compare(sessions: list[Session]) -> list[dict]:
     """Each arm's totals: rates over its played hours, and an interval on XP/h."""
     by_arm: dict[str, list[Session]] = defaultdict(list)
@@ -269,6 +301,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--since", type=int, default=88, help="first session number")
     parser.add_argument("--compare", action="store_true", help="totals per arm")
+    parser.add_argument("--blocks", type=float, metavar="HOURS",
+                        help="the scoreboard: consecutive sessions in blocks of this much play")
     parser.add_argument("--skip", type=int, nargs="*", default=[],
                         help="sessions left out of --compare, e.g. ones a fixed bug spoiled")
     parser.add_argument("--csv", type=Path, help="write every session as a CSV row")
@@ -300,6 +334,14 @@ def main(argv=None) -> int:
     if args.compare:
         for row in compare([s for s in sessions if s.number not in args.skip]):
             print(json.dumps(row))
+        return 0
+    if args.blocks:
+        print(f"{'sessions':>9} {'hours':>5} {'lvl':>5} {'xp':>6} {'xp/h':>5} {'kill/h':>6} "
+              f"{'die/h':>5} {'stuck/h':>7} {'step/h':>6} {'tutor/h':>7} {'stns':>7}")
+        for b in blocks([s for s in sessions if s.number not in args.skip], args.blocks):
+            print(f"{b['sessions']:>9} {b['hours']:5.2f} {b['levels']:>5} {b['xp']:6d} "
+                  f"{b['xp_h']:5d} {b['kills_h']:6.1f} {b['deaths_h']:5.2f} {b['stuck_h']:7.1f} "
+                  f"{b['steps_h']:6.1f} {b['tutor_h']:7.1f} {b['stations']:>7}")
         return 0
     print(f"{'#':>4} {'arm':12} {'min':>5} {'lvl':>5} {'xp':>6} {'xp/h':>6} {'kill':>4} {'step':>4} {'die':>3} "
           f"{'loot':>7} {'stuck':>5} {'stns':>7} {'tutor':>5} {'t_med':>5} {'money':>6} {'exit':>4}")
