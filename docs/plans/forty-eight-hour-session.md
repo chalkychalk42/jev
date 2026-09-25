@@ -37,8 +37,10 @@ next change from the largest measured loss, in the dev worktree, with tests.
 - Deploy: `touch var/loop/hold`; after the `exit=` line, `git merge --ff-only w48` in the live
   checkout; offline check `/mnt/c/forever-win/Scripts/python.exe tools/start_teaching.py
   --dispatch hybrid`; `rm var/loop/hold`; `git push origin main`.
-- Recovery: `tools/keep.sh servers` or `tools/keep.sh client` (§10). Switch characters:
-  `tools/character.py switch`, with Windows Python (§8).
+- Recovery: `tools/keep.sh servers`, `tools/keep.sh client` or `tools/keep.sh client-restart`
+  (§10). The loop switches characters by itself. By hand: `tools/keep.sh client-restart`,
+  then `/mnt/c/forever-win/Scripts/python.exe tools/character.py enter [--name NAME]` (§8).
+  `tools/character.py status` shows the campaign.
 - Safe park, for any stop longer than 10 minutes: stop the session, then close the client
   gracefully.
 
