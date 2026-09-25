@@ -9,8 +9,9 @@ open ground next to none. The bot's own pulls were safe (1 bad engagement in 208
 The map keeps, for each 30-yard cell of each world map and each character level, the
 seconds spent there out of combat and the attacks that began there. A cell's rate is its
 attacks per minute there, shrunk toward the map's own rate at the same levels, and counted
-only from levels at or above one below the character's: a camp the character has outgrown
-stops counting as it levels. Cells whose rate is high enough are spots a route keeps clear
+only from one level below the character's to two above (`LEVELS_BELOW`, `LEVELS_ABOVE`): a
+camp the character has outgrown stops counting as it levels, and a new character's is not
+diluted by an older one's walks past it, unattacked, ten levels later. Cells whose rate is high enough are spots a route keeps clear
 of (`hot`), unless the walk begins or ends at one.
 
 Counted from runs' own files (ticks and evidence), each run once, like the hunt stations
@@ -39,6 +40,9 @@ CHAINED_S = 5.0
 BAD_HP = 0.25
 # The pooled rate a cell starts from, worth this many minutes of its own.
 PRIOR_MINUTES = 2.0
+# The levels a character's danger is counted from, around its own.
+LEVELS_BELOW = 1
+LEVELS_ABOVE = 2
 # A route keeps clear of a cell attacked at least this many times the map's own rate, on at
 # least this many attacks. Held out, trained on the earlier 70% of runs: the cells it called
 # hot were attacked 1.55 times a minute in the later runs, the rest 0.71 (25 September).
@@ -82,7 +86,7 @@ class DangerMap:
     def _totals(self, cell: str, level: int) -> tuple[float, int, int]:
         seconds = attacks = bad = 0
         for at, (s, a, b) in (self.cells.get(cell) or {}).items():
-            if int(at) >= level - 1:
+            if level - LEVELS_BELOW <= int(at) <= level + LEVELS_ABOVE:
                 seconds, attacks, bad = seconds + s, attacks + a, bad + b
         return seconds, attacks, bad
 

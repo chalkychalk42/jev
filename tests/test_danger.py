@@ -51,6 +51,18 @@ def test_a_camp_the_character_has_outgrown_stops_counting():
     assert danger.hot(0, 12) == []
 
 
+def test_a_new_characters_danger_is_not_diluted_by_an_older_ones_walks():
+    """The mage at level 3 walks where Testvvi walked at 12, unattacked by what it had
+    outgrown: those minutes say nothing of the camp's danger to a level 3."""
+    danger = DangerMap()
+    camp, field = cell_of(0, 100, 100), cell_of(0, 400, 400)
+    danger.add(camp, 3, seconds=120.0, attacks=4)
+    danger.add(field, 3, seconds=1800.0, attacks=2)
+    danger.add(camp, 12, seconds=3600.0)
+    assert [(x, y) for x, y, _ in danger.hot(0, 3)] == [centre_of(camp)[1:]]
+    assert danger.hot(0, 12) == []
+
+
 def test_the_map_is_kept_with_the_runs_it_counted(tmp_path):
     danger = DangerMap(tmp_path / "danger.json")
     danger.add(cell_of(0, 1, 1), 12, seconds=5.0, attacks=1, bad=1)
