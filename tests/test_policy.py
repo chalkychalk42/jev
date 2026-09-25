@@ -262,3 +262,17 @@ def test_a_restock_does_not_buy_what_the_character_conjures():
     conjuring.conjures = lambda: frozenset({"drink"})
     plan = service(empty, context=conjuring)
     assert plan is None or plan.decision.skill != "BUY_AMMO_REAGENT_FOOD"
+
+
+def test_a_casters_measured_line_decides_its_rest():
+    """V170: a mage whose kills cost 30% of its mana rests below 35%, not 55%."""
+    from jev.coach.policy import Context, _recover
+    from jev.world.state_v1 import Char, PowerType, State, Vitals
+
+    state = State(t=0, client_id="c", char=Char(cls="mage", level=8),
+                  vitals=Vitals(hp=1.0, power=0.45, power_type=PowerType.MANA,
+                                combat=False, dead=False, ghost=False))
+    measured = Context()
+    measured.mana_line = lambda: 0.35
+    assert _recover(state, measured) is None
+    assert _recover(state, Context()) is not None, "unmeasured: the fixed 55%"

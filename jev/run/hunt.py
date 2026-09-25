@@ -382,7 +382,9 @@ class Hunt:
         mana = v.get("vitals.power")
         if (for_class(v.get("char.class_id"), v.get("char.race_id")).caster
                 and v.get("vitals.power_type") in (0, None)             # 0: mana
-                and isinstance(mana, (int, float)) and mana < rest_mana(True)):
+                and isinstance(mana, (int, float))
+                and mana < ((self.fight.mana_line() if hasattr(self.fight, "mana_line") else None)
+                            or rest_mana(True))):
             drank = self.rest.until(drink_to(True), role=Role.DRINK)
             self.say(f"    drink: {drank.value}"
                      + (f" - {self.rest.detail}" if self.rest.detail else ""))

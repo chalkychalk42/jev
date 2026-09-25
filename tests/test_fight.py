@@ -2237,3 +2237,21 @@ def test_at_contact_a_caster_roots_and_backs_off(combat_clock):
     assert hid.taps == ["6"] and hid.holds == [("s", 2.0)]
     cooling = {**contact, "bars.ready": 0b000111}
     assert f._root(mage, cooling) is False, "on its cooldown: the rotation goes on"
+
+
+def test_a_casters_mana_line_is_what_its_kills_cost_it(combat_clock):
+    """V170: 1.15 times the median of the last ten kills' mana, within 0.35-0.85."""
+    f = _mage([AT_RANGE])
+    assert f.mana_line() is None, "nothing to go on yet"
+    f.mana_costs.extend([0.3, 0.4, 0.5])
+    assert abs(f.mana_line() - 0.46) < 1e-9
+    f.mana_costs.extend([0.9] * 10)
+    assert f.mana_line() == 0.85, "never above the ceiling"
+    casting = {**AT_RANGE, "bars.casting": True}
+    spent = {**AT_RANGE, "target.hp": 0.0, "char.xp_pct": 0.2, "vitals.power": 0.62}
+    g = _mage([AT_RANGE, AT_RANGE, casting, spent])
+    g._lasting["Frost Armor"] = 0.0
+    g.acquire = lambda name_id, **_: None
+    g.engage = lambda *_: True
+    assert g.run(1161) is Fought.KILLED
+    assert list(g.mana_costs) == [pytest.approx(0.38)], "a kill from full to 62%"

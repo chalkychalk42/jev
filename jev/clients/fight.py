@@ -54,6 +54,7 @@ the client says is ready, respecting the global cooldown. Priorities are data
 from __future__ import annotations
 
 import math
+import statistics
 import time
 from collections import deque
 from collections.abc import Callable
@@ -283,6 +284,13 @@ MAX_RANGED_STEPS = 8
 # After a root at contact (Frost Nova) a caster backs off this long, still facing: about
 # nine yards at the walk backwards, out of the held unit's reach (V169).
 STEP_CLEAR_S = 2.0
+# A caster's mana line, measured (V170): before a pull it wants this many times what a kill
+# has cost it, the median of the last `MANA_KILLS` kills, within `MANA_LINE_RANGE`, once it
+# has `MANA_KILLS_MIN` kills to go on.
+MANA_MARGIN = 1.15
+MANA_KILLS = 10
+MANA_KILLS_MIN = 3
+MANA_LINE_RANGE = (0.35, 0.85)
 BAD_FIGHT_HP = 0.15
 HEAL_FIRST_IDLE_S = 0.8
 
@@ -421,6 +429,10 @@ class Fight:
     # was found, not in melee, so a kill lies out there (`ended_far`) and the loot walks to it.
     ended_far: bool = field(default=False, init=False)
     _from_range: bool = field(default=False, init=False)
+    # What each recent kill cost, as a share of the mana pool, and the mana this fight saw
+    # first and last (V170).
+    mana_costs: deque = field(default_factory=lambda: deque(maxlen=MANA_KILLS), init=False)
+    _mana_seen: tuple[float | None, float | None] = field(default=(None, None), init=False)
     _last_near: bool = field(default=False, init=False)
     _ranged_steps: int = field(default=0, init=False)
 
@@ -440,6 +452,7 @@ class Fight:
             line = self.choices.pick("all", HEAL_LINES)
             self.heal_below = float(line)
         self._low_hp = None
+        self._mana_seen = (None, None)
         self.ended_far = self._from_range = self._last_near = False
         self._ranged_steps = 0
         started = time.monotonic()
@@ -448,6 +461,9 @@ class Fight:
             result = self._fight(name_id, timeout_s)
             self.ended_far = (result is Fought.KILLED and self._from_range
                               and not self._last_near)
+            first, last = self._mana_seen
+            if result is Fought.KILLED and first is not None and last is not None:
+                self.mana_costs.append(max(0.0, first - last))
             return result
         finally:
             low = self._low_hp
@@ -1899,10 +1915,22 @@ class Fight:
             return f"{hp:.0%} health in a fight: the heal first"
         return None
 
+    def mana_line(self) -> float | None:
+        """The mana a caster wants before a pull, from what its kills have cost (V170); `None`
+        until it has `MANA_KILLS_MIN` kills to go on."""
+        if len(self.mana_costs) < MANA_KILLS_MIN:
+            return None
+        low, high = MANA_LINE_RANGE
+        return min(high, max(low, MANA_MARGIN * statistics.median(self.mana_costs)))
+
     def _observe(self, values: dict | None) -> None:
         hp = None if values is None else values.get("vitals.hp")
         if isinstance(hp, (int, float)) and not isinstance(hp, bool):
             self._low_hp = hp if self._low_hp is None else min(self._low_hp, hp)
+        power = None if values is None else values.get("vitals.power")
+        if isinstance(power, (int, float)) and not isinstance(power, bool):
+            first, _ = self._mana_seen
+            self._mana_seen = (power if first is None else first, power)
         event("combat.observed", code="blind" if values is None else "readable",
               data={} if values is None else {key: values.get(key) for key in (
                   "vitals.hp", "vitals.power", "vitals.combat", "vitals.dead", "vitals.ghost",

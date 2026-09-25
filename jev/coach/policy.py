@@ -125,6 +125,8 @@ class Context:
     # What the character makes for itself ("drink", "food"): a caster's conjures, which
     # a restock need not buy (`LiveBody.conjured_roles`, V166).
     conjures: Callable[[], frozenset[str]] | None = None
+    # A caster's measured mana line (`Fight.mana_line`, V170): `None` keeps the fixed one.
+    mana_line: Callable[[], float | None] | None = None
 
     def conjured(self) -> frozenset[str]:
         try:
@@ -264,30 +266,37 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
     # Last: spells a trainer would teach now. A paladin that never trained fought to level
     # 8 on Seal of Righteousness and Holy Light rank 1, losing to two wolves at once. It can
     # wait for a meal: the walk to Goldshire's trainer is 640 yards of Elwynn.
-    if context is not None and _recover(state) is None and context.can_train(state):
+    if context is not None and _recover(state, context) is None and context.can_train(state):
         return Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
                        0.6, ("dead", "combat"), service="train"), True, "service.train")
 
     # And a home near the work: a hearthstone bound to Northshire took a level 9 back
     # there four times in a day from Goldshire and Fargodeep.
-    if context is not None and _recover(state) is None and context.can_bind(state):
+    if context is not None and _recover(state, context) is None and context.can_bind(state):
         return Plan(_d(Intent.SERVICE, "BIND_HEARTH", "home is far from the guide's work",
                        0.55, ("dead", "combat"), service="bind"), True, "service.bind")
 
     # A flight master passed is a node to fly back to later: only a visited node can be.
-    if context is not None and _recover(state) is None and context.can_discover(state):
+    if context is not None and _recover(state, context) is None and context.can_discover(state):
         return Plan(_d(Intent.SERVICE, "DISCOVER_FLIGHT", "an unvisited flight master is near",
                        0.5, ("dead", "combat"), service="discover"), True, "service.discover")
 
     return None
 
 
-def _recover(state: State) -> Plan | None:
+def _recover(state: State, context: Context | None = None) -> Plan | None:
     v = state.vitals
     if v.combat is True:
         return None
     hp, power = v.hp, v.power
-    line = rest_mana(is_caster(state.char.cls))
+    caster = is_caster(state.char.cls)
+    measured = None
+    if caster and context is not None and context.mana_line is not None:
+        try:
+            measured = context.mana_line()
+        except Exception:
+            measured = None
+    line = measured if measured is not None else rest_mana(caster)
     low_mana = v.power_type is PowerType.MANA and power is not None and power < line
     if (hp is not None and hp < HEAL_OUT_OF_COMBAT) or low_mana:
         return Plan(_d(Intent.SERVICE, "EAT_DRINK", "out of combat and low; recover first",
@@ -381,7 +390,8 @@ def decide(state: State, node: Node | None = None, *, context: Context | None = 
     """
     # Safety first, and safety is not derated: a preempt fires on a positive observation
     # (`is True`), so if one matched, something was read.
-    for plan in (preempt(state), _fight(state), service(state, context=context), _recover(state)):
+    for plan in (preempt(state), _fight(state), service(state, context=context),
+                 _recover(state, context)):
         if plan is not None:
             return plan
 

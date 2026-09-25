@@ -816,8 +816,9 @@ class LiveBody:
         # The policy's line (`jev.coach.policy._recover`): below it, drink; a caster sooner
         # and fuller (V164), or its rest would stop short and be armed again at once.
         caster = is_caster(state.char.cls)
+        line = (self.measured_mana_line() if caster else None) or rest_mana(caster)
         if (state.vitals.power_type is PowerType.MANA and state.vitals.power is not None
-                and state.vitals.power < rest_mana(caster)):
+                and state.vitals.power < line):
             hurt = state.vitals.hp is not None and state.vitals.hp < HEAL_OUT_OF_COMBAT
             rested = self._result(self.rest.until_both(0.9, drink_to(caster)) if caster and hurt
                                   else self.rest.until(drink_to(caster), role=Role.DRINK),
@@ -998,6 +999,12 @@ class LiveBody:
         context.bindable = self.bindable
         context.discoverable = self.discoverable
         context.conjures = self.conjured_roles
+        context.mana_line = self.measured_mana_line
+
+    def measured_mana_line(self) -> float | None:
+        """A caster's mana line from its kills (`Fight.mana_line`, V170), when there is one."""
+        fight = getattr(self, "fight", None)
+        return fight.mana_line() if hasattr(fight, "mana_line") else None
 
     def conjured_roles(self) -> frozenset[str]:
         """What this character's bar makes for itself: "drink", "food" (V166)."""
