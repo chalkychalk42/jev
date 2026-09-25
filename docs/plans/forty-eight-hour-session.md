@@ -11,9 +11,11 @@ Hours count from T-0 = Friday 19:30 BST (hour 24 = Saturday 19:30, hour 40 = Sun
 0. Operating card (read first, and again after every compaction)
 -----------------------------------------------------------------
 
-**Mission.** Testvvi (human paladin, key 548c8582) reaches level 20; then a second character, made
-by the campaign tool, levels from Northshire. One general change at a time, judged on its block,
-kept or reverted, and pushed. The build is streamlined and frozen at hour 44.
+**Mission.** Testvvi (human paladin, key 548c8582) plays until level 20 or hour 15, whichever comes
+first (the operator's rule). A human mage, made by the campaign tool, then levels from Northshire
+on the first caster profile (§8b): ranged engagement and distant targeting. One general change at
+a time, judged on its block, kept or reverted, and pushed. The build is streamlined and frozen at
+hour 44.
 
 **Cold start.** Read this card, the Now section of `docs/plans/forty-eight-hour-ledger.md` and the
 last STATUS.md entry, then run `tools/keep.sh status`. State lives only in files: the ledger,
@@ -139,22 +141,39 @@ needs about 2,760 XP/h. The must tier below assumes no improvement at all.
 3. Goals, in tiers
 ------------------
 
+The operator set the switch at level 20 or hour 15, whichever comes first (§4), so Testvvi has
+about 13.5 h of play (T-0 takes the rest) and the mage about 31 h. Testvvi's own times on older
+code are the mage's baseline: level 5 at 2.1 h of play, 8 at 8.2 h, 10 at 12.7 h, 12 at 19.8 h.
+
 | Tier | Goal | Target | Measured by |
 |---|---|---|---|
-| Must | M1 Character 1 | Level 18.0 or higher by the switch: 67,754 XP from T-0, about 1,780 XP/h over about 38 h (85% of the nine-hour rate) | strip, report |
-| Must | M2 Character 2 made by the tool | Created, entered and verified (key, class, race), with its own playhead and one or more sessions played (the T-0 dry run counts) | log, screenshot |
-| Must | M3 Autonomy | No stop over 60 min. The loop recovers on its own from client, server and disconnect failures | `session-loop.log` |
-| Must | M4 Discipline | Every change judged on its block, committed and pushed; suite green; final report written | ledger, git |
-| Should | S1 Character 1 at 20 | By hour 40: 104,854 XP at about 2,760 XP/h (1.31 times the nine hours) | strip |
-| Should | S2 Character 2 | At least 8 h played and level 8 or higher. Testvvi needed 8.2 h of play for level 8, on older code | report |
-| Should | S3 Survival | 1.0 deaths an hour or fewer (nine hours: 1.23; their last 1.6 h: 3.7) | report |
-| Should | S4 Streamlined | Retired paths removed, docs current, nothing left in `/tmp` | git, docs |
-| Stretch | X1 | Character 1 at 20 by hour 30 (about 3,700 XP/h) | strip |
-| Stretch | X2 | Character 2 at level 12 (43,900 XP) | strip |
+| Must | M1 Testvvi | Level 15.0 or higher at the switch: about 24,000 XP from T-0, 1,780 XP/h over 13.5 h (85% of the nine-hour rate) | strip, report |
+| Must | M2 Mage made by the tool | Created, entered and verified (key, class 8, race 1) at T-0, with its own playhead; the switch at hour 15 made by the loop | log, screenshot |
+| Must | M3 Mage | Level 8 or higher by hour 48, on the caster profile | strip |
+| Must | M4 Autonomy | No stop over 60 min. The loop recovers on its own from client, server and disconnect failures | `session-loop.log` |
+| Must | M5 Discipline | Every change judged on its block, committed and pushed; suite green; final report written | ledger, git |
+| Should | S1 Testvvi | Level 16.0 or higher at the switch (about 2,760 XP/h, 1.31 times the nine hours) | strip |
+| Should | S2 Mage | Beats Testvvi's play time to every milestone above, so level 12 or higher by hour 48 | report |
+| Should | S3 Caster profile | Pulls from 25 yards or more; drinks for mana rather than waiting; trains on time; 1.0 deaths an hour or fewer | evidence, report |
+| Should | S4 Survival | 1.0 deaths an hour or fewer overall (nine hours: 1.23; their last 1.6 h: 3.7) | report |
+| Should | S5 Streamlined | Retired paths removed, docs current, nothing left in `/tmp` | git, docs |
+| Stretch | X1 | Testvvi at 17 at the switch (about 3,800 XP/h) | strip |
+| Stretch | X2 | The mage at level 14 by hour 48 (64,700 XP) | strip |
 | Stretch | X3 | A best 8-hour block at 4,000 XP/h or more; 10 tutor calls an hour or fewer | report |
 
-4. Questions for the operator (answer before 19:30; the defaults apply after that)
------------------------------------------------------------------------------------
+4. Questions for the operator, and the answers
+----------------------------------------------
+
+**Answered 25 September 12:20.**
+- Q1: **human mage**, "as we havent done a caster profile yet so that would be good to get dialled
+  in properly as thats the other half of all classes kinda right so like ranged engagement and
+  distant targetting for max effectiveness kinda thing" (§8b).
+- Q3: **level 20 or hour 15, whichever comes first**. There is no extension.
+- Q5: **yes to both**.
+- Pre-flight A: **start now**.
+- Q2, Q4, Q6, Q7 and Q8 keep their defaults.
+
+The questions as asked:
 
 - **Q1 Class and race for character 2.** Default: **human paladin**, the only class that has
   played live; the guides start at Northshire. The other classes have starting bars only.
@@ -213,7 +232,9 @@ item. In priority order:
   to Sentinel Hill and from Sentinel Hill to Lakeshire must both come back complete.
 - **A3 Reconcile Testvvi (must, 15 min).** Add 16, 21, 40 and 60 to `completed`, leave the step as
   it is, and note it in STATUS.
-- **A4 Character 2 tooling (should, 2 h; see §8).** `tools/character.py` (`name`, `due`,
+- **A8 Caster profile (must for the dry run; see §8b).** The level-1 core first: pull from
+  range, cast, drink. The rest is built in hours 1.5-15, from the dry run's evidence.
+- **A4 Character 2 tooling (must, 2 h; see §8).** `tools/character.py` (`name`, `due`,
   `measure`, `create`, `select`, `switch`) and `var/campaign.json`; Session stages with provisional
   constants; the wait after Enter World; verification in the world. Test on synthetic frames, as
   `tests/fixtures/login-empty.npz` was used for login. If it is not ready by T-0, the dry run moves
@@ -246,7 +267,8 @@ Gate: suite green, everything pushed, the live checkout at `origin/main`, the lo
   - Relaunch and stop at character select. Measure character select, the create screen and a
     refusal dialog, and commit the constants.
   - Run `tools/character.py create`, which must verify in the world.
-  - Play one 15-minute session on character 2; accepting A Threat Within is the proof.
+  - Play one 15-minute session on the mage. The proof: A Threat Within accepted, a kill opened
+    from 25 yards or more, and a drink taken.
   - Return to Testvvi by clicking row 2 of 4, and confirm the key.
 
   Fallback: after two failed creates, run character 1 and retry, attended, between hours 8 and 12.
@@ -328,12 +350,12 @@ of 18-19 September). `SkipCinematics` is 0, so a new character's first entry pla
    which git ignores; the realm name lives only there, never in `session.py`. The server's answer
    is final: a refusal dialog gets Okay and the next name, up to three.
 2. **Glue stages**, measured at T-0 and added to `Session` under login's rules: Create New
-   Character on character select; Human, Paladin, the name box, Accept and Back on the create
+   Character on character select; Human, Mage, the name box, Accept and Back on the create
    screen; the refusal dialog's Okay; list rows 0-9. The name box must show text (`_has_text`)
    before Accept is pressed, and the frame of any unknown screen is kept.
 3. **After Enter World, wait.** An unreadable screen (loading, or the intro) is waited on for up to
    150 s, pressing nothing, until the strip paints.
-4. **Verify in the world:** the recorded key, level 1, `class_id` 2, `race_id` 1. Any mismatch
+4. **Verify in the world:** the recorded key, level 1, `class_id` 8 (mage), `race_id` 1. Any mismatch
    stops the tool with a report. Nothing is ever deleted.
 5. **Trigger.** After every session the loop runs `tools/character.py due`, which reads files only
    (the active character's newest tick). It answers "switch" at level 20 or higher, or once the
@@ -355,47 +377,56 @@ of 18-19 September). `SkipCinematics` is 0, so a new character's first entry pla
    upwards. At level 3 that includes Testvvi's level-12 walks past low camps that nothing
    attacked, which dilutes exactly the cells a low-level character must avoid. Count levels L-1
    to L+2 instead, tested offline on Testvvi's early runs.
-9. **Class.** Human paladin (Q1): the only class with training (V119), heal-and-save roles (V96,
-   V128, V159, V160) and live history.
+9. **Class.** Human mage (the operator's answer to Q1): the first caster profile (§8b). The
+   paladin's training (V119) and save roles (V96, V128, V159, V160) stay exactly as they are.
 10. **Baseline for "fewer bugs".** Testvvi reached level 5 at 2.1 h of play, 8 at 8.2 h, 10 at
     12.7 h and 12 at 19.8 h. Character 2 goes back through Northshire Abbey, Echo Ridge,
     Fargodeep, Jasperlode and the Lion's Pride Inn, the places that cost the first character, so
     it is their regression test.
 
-**When character 1 is behind.** Character 1 comes first, as the operator ordered, but character 2
-gets 8 hours or more to find the fresh-character bugs.
-- Switch at level 20 or at hour 40, whichever comes first.
-- At hours 24 and 36, record the hour character 1 is projected to reach 20, from the last 8 hours'
-  XP/h.
-- At hour 36, allow an extension to hour 43 only if character 1 is at 19.5 or higher and projected
-  to reach 20 by then.
-- There is no earlier switch for slowness: at the nine-hour rate, character 1 still reaches about
-  18.7 by hour 40, which meets M1.
+**The switch rule (the operator's).** At level 20 or at hour 15 (Saturday about 10:30),
+whichever comes first, with no extension. `var/campaign.json` holds the deadline.
+- Before hour 15, the mage plays only the T-0 dry run. One more test session is allowed if a
+  caster change needs a live check before the switch.
+- If the switch fails, Testvvi plays on while it is fixed, attended, and the switch is retried
+  within two hours.
+- If the mage cannot fight after the switch (a Traceback, or two sessions with no kill), Testvvi
+  plays while the caster profile is fixed. Then the mage goes back.
+
+8b. The caster profile (the mage)
+---------------------------------
+
+The design is being written, from the fight, targeting, rest and training code, as pre-flight
+A8. This section gets its staged build order: what the level-1 dry run needs, what hour 15
+needs, and what can wait.
 
 9. Schedule and checkpoints
 ---------------------------
 
-- **Hours 0-1.5:** T-0 (§6).
-- **Hours 1.5-12, Friday night:** Riverpaw. The band rule then takes the character to Westfall,
-  where it binds its hearthstone at Sentinel Hill and learns Thor's node.
-- **Hours 12-24, Saturday:** Westfall, then the one crossing to Redridge (4,266 yards).
-- **Hours 24-36, Saturday night:** Redridge, the level-20 projection, and the danger window.
-- **Hours 36-44, Sunday morning:** the switch, character 2 in Northshire, and consolidation (§11).
+- **Hours 0-1.5:** T-0 (§6), including the mage's dry run.
+- **Hours 1.5-15, Friday night:** Testvvi at Riverpaw. The band rule then takes it to Westfall.
+  Meanwhile the caster profile is built out from the dry run's evidence (§8b), and the switch is
+  rehearsed with fakes.
+- **Hour 15, Saturday about 10:30:** the switch to the mage.
+- **Hours 15-36:** the mage through Northshire and Elwynn. Changes come from the mage's measured
+  losses, caster ones first.
+- **Hours 36-44, Sunday morning:** the mage plays on; consolidation (§11).
 - **Hours 44-48:** freeze, the final report, and the loop playing on.
 
 | Hour (BST) | Go if | Otherwise (named fallback) |
 |---|---|---|
-| 0 (Fri 19:30-21:00) | §6 done; loop playing hybrid on character 1; character 2 made and verified | **Nine-hour config** (§6 B2); **Character 2 later** (dry run at hours 8-12) |
-| 4 (Fri 23:30) | Level 13.5 or higher; no stop over 15 min; 6 or fewer deaths since T-0 | **Last good build**: revert the newest change and resume |
-| 8 (Sat 03:30) | Level 14.1 or higher (should: 14.7); in Westfall; home at Sentinel Hill | **Rib floor**: when 12-20 stalls, grind its rib (A2 b) while the failure is fixed, one session per place at most |
-| 12 (Sat 07:30) | Level 14.7 or higher (should: 15.5); two or more changes judged; under 1.5 deaths an hour | **Largest loss only**: no new features until the pace holds |
-| 24 (Sat 19:30) | Level 16.2 or higher (should: 17.6); projection recorded | **Hour-40 switch stands**, with no extension |
-| 36 (Sun 07:30) | Level 17.6 or higher (should: 19.5), or switched; danger window deployed | **Late switch**: extend only under §8's rule |
-| 44 (Sun 15:30) | Character 2 has played 3.5 h or more; freeze begins; report drafted | **Attended switch**: fix it first, while character 1 plays |
+| 0 (Fri 19:30-21:00) | §6 done; loop playing hybrid on Testvvi; the mage made, verified and one session played | **Nine-hour config** (§6 B2); **Mage later** (dry run at hours 4-8) |
+| 4 (Fri 23:30) | Testvvi 13.5 or higher; no stop over 15 min; 6 or fewer deaths since T-0 | **Last good build**: revert the newest change and resume |
+| 8 (Sat 03:30) | Testvvi 14.0 or higher (should: 14.5); the dry run's caster losses fixed offline | **Rib floor**: when 12-20 stalls, grind its rib (A2 b) while the failure is fixed, one session per place at most |
+| 12 (Sat 07:30) | Testvvi 14.6 or higher (should: 15.4); switch rehearsed with fakes; `danger.json` counts a level band (§8) | **Largest loss only**: no new features until the pace holds |
+| 15 (Sat 10:30) | The switch is made; the mage is in the world and verified | **Attended switch**: Testvvi plays on while it is fixed; retry within 2 h |
+| 24 (Sat 19:30) | The mage at level 5 or higher (should: 8) | **Testvvi covers**: if the mage cannot fight, Testvvi plays while the caster profile is fixed |
+| 36 (Sun 07:30) | The mage at level 7 or higher (should: 12) | **Largest loss only** |
+| 44 (Sun 15:30) | Freeze begins; report drafted | none |
 | 48 (Sun 19:30) | Report pushed; loop playing the frozen build | none |
 
-The go thresholds are the must pace, about 1,780 XP/h. Misses at two checkpoints in a row get a
-STATUS entry that names the cause.
+Testvvi's go thresholds are the must pace, about 1,780 XP/h; the mage's follow Testvvi's own
+times. Misses at two checkpoints in a row get a STATUS entry that names the cause.
 
 10. Unattended safety
 ---------------------
@@ -455,6 +486,7 @@ by expected value; and how to run it, in one paragraph. The ledger is closed and
 | Risk | Mitigation |
 |---|---|
 | V158-V161 misbehave live (never run) | T-0 validation with a set revert order (§6 B2) |
+| The caster profile fails live (the first non-paladin class) | The T-0 dry run; hours 1.5-15 to fix it; Testvvi covers after the switch (§8) |
 | 12-20 fails in new places: Westfall's frame, the bind, the three-floor farmhouse, Lakeshire's inn | Watch the first Westfall hours; one session per place at most; the rib floor (A2 b) |
 | The last guide ends before 20 and the character idles | A2 b, tested before T-0 |
 | Same-level packs raise deaths | Lever 3 first; the death-loop rule; V161 routes |
