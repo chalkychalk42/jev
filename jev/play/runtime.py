@@ -82,6 +82,7 @@ class MotorLearningService:
         # controller writes through the same lock.
         seen: dict[Path, tuple] = {}
         while not self.stop.is_set():
+            phase = "listing runs"
             try:
                 recovered = []
                 for directory in sorted(self.runs.iterdir()) if self.runs.exists() else ():
@@ -95,17 +96,23 @@ class MotorLearningService:
                                                 directory / "play-episodes.jsonl"))
                         if seen.get(directory) == stamp:
                             continue
+                        phase = f"ingesting {directory.name}"
                         report = self.learner.ingest_run(directory)
                         if report.get("errors"):
                             recovered.append({"run": directory.name, "errors": report["errors"]})
                         else:
                             seen[directory] = stamp
+                phase = "training"
                 report = self.learner.update(cancelled=self.stop.is_set)
+                phase = "writing the cycle record"
                 atomic_json(self.learner.directory / "latest-cycle.json",
                             {"t": time.time(), "cycle": report, "ingest_errors": recovered})
                 self.error = None
             except Exception as exc:
-                self.error = f"{type(exc).__name__}: {exc}"
+                # Where, for the intermittent `PermissionError: [Errno 13]` a cycle sometimes
+                # meets on Windows (sessions 93 and 101, no file named: a store lock that
+                # waited out its ten seconds) and the next one does not.
+                self.error = f"{type(exc).__name__}: {exc} ({phase})"
             self.stop.wait(self.interval_s)
 
     def close(self):
