@@ -15,6 +15,9 @@
 #                   so a WSL restart brings everything back; remove-timer takes it off
 # Several may be given in one call: tools/keep.sh servers disk client
 set -u
+# The loop runs this with its lock on fd 9: a server started from here must not hold it
+# after the loop has gone, or no loop could start again (review, 25 September).
+exec 9>&-
 cd "$(dirname "$0")/.." || exit 1
 ROOT=$(pwd)
 WINPY=${JEV_WINPY:-/mnt/c/forever-win/Scripts/python.exe}
@@ -73,18 +76,20 @@ disk() {
   fi
 }
 
+# Every call into Windows is bounded: one hung interop call would stall the loop with the
+# status still green (review, 25 September).
 wow_pid() {
-  tasklist.exe /FI "IMAGENAME eq Wow.exe" /FO CSV /NH 2>/dev/null | tr -d '\r' \
+  timeout 30 tasklist.exe /FI "IMAGENAME eq Wow.exe" /FO CSV /NH 2>/dev/null | tr -d '\r' \
     | awk -F'","' 'tolower($1) ~ /wow\.exe/ {print $2; exit}'
 }
 
-desk_idle() { "$WINPY" tools/desk.py "$IDLE_S" > /dev/null 2>&1; }
+desk_idle() { timeout 60 "$WINPY" tools/desk.py "$IDLE_S" > /dev/null 2>&1; }
 
 launch() {
   local i
   note "launching the game client"
   # Never cmd.exe /c start from WSL: it hung and never started the game (23 September).
-  powershell.exe -NoProfile -Command \
+  timeout 60 powershell.exe -NoProfile -Command \
     "Start-Process -FilePath '$WOW_DIR\\Wow.exe' -WorkingDirectory '$WOW_DIR'" \
     < /dev/null > /dev/null 2>&1
   for i in $(seq 24); do
@@ -118,14 +123,14 @@ client_restart() {
     mark=0
     [ -f "$CMANGOS/bin/Char.log" ] && mark=$(wc -l < "$CMANGOS/bin/Char.log")
     note "closing the game client (pid $pid)"
-    taskkill.exe /PID "$pid" > /dev/null 2>&1        # no /F: a graceful close
+    timeout 30 taskkill.exe /PID "$pid" > /dev/null 2>&1        # no /F: a graceful close
     for i in $(seq 18); do
       [ -z "$(wow_pid)" ] && break
       sleep "$WAIT_S"
     done
     if [ -n "$(wow_pid)" ]; then
       note "the client did not close in 90 s: forcing it"
-      taskkill.exe /F /PID "$pid" > /dev/null 2>&1
+      timeout 30 taskkill.exe /F /PID "$pid" > /dev/null 2>&1
       sleep "$WAIT_S"
     fi
     # A client that asks for the character list while the old session is still logging out
@@ -135,6 +140,11 @@ client_restart() {
         | grep -q "Logout Character" && break
       sleep "$WAIT_S"
     done
+  fi
+  # The close and the Logout wait can take minutes: look at the desk again before taking it.
+  if ! desk_idle; then
+    note "someone came to the desk while the client closed: not launching"
+    return 1
   fi
   launch
 }

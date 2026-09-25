@@ -54,10 +54,10 @@ while [ ! -f var/loop/stop ]; do
   # The campaign: at its level or its deadline the next character takes over (section 8):
   # a fresh client, then the next character made or picked and entered.
   if [ -f tools/character.py ] \
-      && [ "$(.venv/bin/python tools/character.py due 2>> "$LOG")" = "switch" ]; then
+      && [ "$(.venv/bin/python tools/character.py due --mark 2>> "$LOG")" = "switch" ]; then
     say "campaign: switching characters"
     if tools/keep.sh client-restart >> "$LOG" 2>&1 \
-        && "$WINPY" -u tools/character.py enter >> "$LOG" 2>&1; then
+        && timeout 900 "$WINPY" -u tools/character.py enter >> "$LOG" 2>&1; then
       say "campaign: switched"
     else
       say "campaign: the switch failed; the next session plays whoever is selected"

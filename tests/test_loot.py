@@ -346,3 +346,23 @@ def test_in_combat_the_corpse_search_is_short_and_waits_below_half_health(monkey
     skill = _loot([hurt])
     assert skill.run(settle_s=1.0, name_id=1161) is Looted.NO_CORPSE
     assert skill.targeting.requests == [] and "not now" in skill.detail
+
+
+@pytest.mark.parametrize(("results", "too_far", "steps", "final"), [
+    ([Looted.NOTHING, Looted.TOOK], True, 1, Looted.TOOK),     # too far: a step, then taken
+    ([Looted.NOTHING, Looted.TOOK], False, 0, Looted.NOTHING),  # empty: not walked into camp
+    ([Looted.NO_CORPSE] * 5, False, 2, Looted.NO_CORPSE),       # not found: two steps at most
+])
+def test_a_ranged_kills_corpse_is_walked_to_only_when_the_client_says_too_far(
+        results, too_far, steps, final):
+    """Review, 25 September: every empty corpse was four steps into the camp."""
+    skill = _loot([HAVE])
+    outcomes = iter(results)
+    walked = []
+    skill._once = lambda **_: next(outcomes)
+    skill._too_far_since = lambda mark: too_far
+    skill._errors = lambda: 0
+    skill._step_toward = lambda anchor, n: walked.append((anchor, n)) or True
+    assert skill.run(far=True) is final
+    assert len(walked) == steps
+    assert all(anchor is None for anchor, n in walked if n > 1), "turned by the plate once"

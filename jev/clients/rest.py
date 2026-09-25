@@ -33,6 +33,13 @@ from jev.world.combat import CombatProfile, Role, for_class
 # the opposite way round from the constant this file used to carry, which is why it
 # reported "out of food" with a wheel of cheese sitting in the bar.
 SLOT_KEYS = {**{n: str(n) for n in range(1, 10)}, 10: "0", 11: "minus", 12: "equals"}
+# A gauge that has not risen by `RISE` for `STALL_S` has finished its food or drink: another
+# is taken, `TAKES` in all. With nothing to take, the body's own regeneration is waited on,
+# until it too stops rising for `REGEN_STALL_S` (V173).
+RISE = 0.005
+STALL_S = 5.0
+TAKES = 3
+REGEN_STALL_S = 10.0
 
 
 class Rested(StrEnum):
@@ -60,6 +67,26 @@ class Rest:
     started_at: float | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
 
+    def _take(self, v: dict, role: Role) -> bool | None:
+        """Begin eating or drinking: the bar's slot, else the bags (`use_item`). `True` if
+        something was taken, `False` if there is nothing, `None` if the bar has no such row."""
+        profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
+        ability = profile.first(role)
+        if ability is None:
+            self.detail = f"this character has no {role.value} on its bar"
+            return None
+        self.slot = ability.slot
+        usable = v.get("bars.usable")
+        if usable is None or usable & (1 << (ability.slot - 1)):
+            event("consume.request", data={"slot": ability.slot, "role": role.value})
+            self.hid.tap(SLOT_KEYS.get(ability.slot, str(ability.slot)))
+            return True
+        if self.use_item is not None and self.use_item(role):
+            return True
+        self.detail = (f"slot {ability.slot} ({ability.name or role.value}) is not usable "
+                       f"and the bags hold none; out of {role.value}")
+        return False
+
     @traced("rest")
     def until(self, fraction: float = 0.92, *, role: Role = Role.FOOD,
               timeout_s: float = 45.0) -> Rested:
@@ -67,59 +94,13 @@ class Rest:
 
         `role` picks what to consume: food restores health, drink restores mana. Which
         slot that is comes from the profile, because it differs by race and the two are
-        indistinguishable by item class.
+        indistinguishable by item class. When one runs out short of the mark (the gauge has
+        stopped rising for `STALL_S`), another is taken, `TAKES` in all (V173). With
+        nothing to take, the body's own regeneration is waited on while it still rises: out
+        of drink stopped whole sessions, and a caster's conjured water can run out before
+        the next conjure.
         """
-        self.detail = ""
-        deadline = time.monotonic() + timeout_s
-        eating = False
-        from_bags = False
-        gauge = "vitals.power" if role is Role.DRINK else "vitals.hp"
-        event("rest.request", data={"role": role.value, "gauge": gauge,
-                                    "fraction": fraction, "timeout_s": timeout_s})
-
-        while time.monotonic() < deadline:
-            v = self.read()
-            event("rest.observed", code="blind" if v is None else "readable",
-                  data={} if v is None else {key: v.get(key) for key in (
-                      gauge, "vitals.combat", "bars.usable")})
-            if v is None:
-                return Rested.BLIND
-            level = v.get(gauge)
-            if level is not None and level >= fraction:
-                return Rested.HEALTHY
-            if v.get("vitals.combat") is True:
-                self.detail = "in combat; not a moment to eat"
-                return Rested.INTERRUPTED
-
-            profile = self.profile or for_class(v.get("char.class_id"),
-                                                v.get("char.race_id"))
-            ability = profile.first(role)
-            if ability is None:
-                self.detail = f"this character has no {role.value} on its bar"
-                return Rested.NO_FOOD
-            self.slot = ability.slot
-
-            usable = v.get("bars.usable")
-            if usable is not None and not (usable & (1 << (ability.slot - 1))) and not from_bags:
-                if self.use_item is not None and not eating:
-                    from_bags = True
-                    if self.use_item(role):
-                        eating = True
-                        self.started_at = time.monotonic()
-                        continue
-                self.detail = (f"slot {ability.slot} ({ability.name or role.value}) "
-                               f"is not usable; out of {role.value}")
-                return Rested.NO_FOOD
-
-            if not eating:
-                event("consume.request", data={"slot": ability.slot, "role": role.value})
-                self.hid.tap(SLOT_KEYS.get(ability.slot, str(ability.slot)))
-                self.started_at = time.monotonic()
-                eating = True
-            time.sleep(1.0)
-
-        self.detail = f"{timeout_s:.0f}s and still short of {fraction:.0%}"
-        return Rested.TIMEOUT
+        return self._until({role: fraction}, timeout_s)
 
     @traced("rest.both")
     def until_both(self, health: float, mana: float, *, timeout_s: float = 45.0) -> Rested:
@@ -127,40 +108,57 @@ class Rest:
 
         The two go together in the game, and a caster after a fight is often short of both:
         one after the other was two meals' time for one meal's worth."""
+        return self._until({Role.FOOD: health, Role.DRINK: mana}, timeout_s)
+
+    def _until(self, marks: dict[Role, float], timeout_s: float) -> Rested:
         self.detail = ""
         deadline = time.monotonic() + timeout_s
-        started: set[Role] = set()
-        # A role with nothing to consume, on the bar or in the bags: its mark is dropped.
-        missing: set[Role] = set()
-        event("rest.request", data={"role": "both", "health": health, "mana": mana,
+        gauges = {Role.FOOD: "vitals.hp", Role.DRINK: "vitals.power"}
+        takes = dict.fromkeys(marks, 0)
+        regen = dict.fromkeys(marks, False)      # nothing left to take for this role
+        best: dict[Role, float | None] = dict.fromkeys(marks)
+        rose_at = dict.fromkeys(marks, time.monotonic())
+        event("rest.request", data={"marks": {r.value: f for r, f in marks.items()},
                                     "timeout_s": timeout_s})
         while time.monotonic() < deadline:
             v = self.read()
+            event("rest.observed", code="blind" if v is None else "readable",
+                  data={} if v is None else {key: v.get(key) for key in (
+                      "vitals.hp", "vitals.power", "vitals.combat", "bars.usable")})
             if v is None:
                 return Rested.BLIND
-            hp, power = v.get("vitals.hp"), v.get("vitals.power")
-            if ((hp is None or hp >= health or Role.FOOD in missing)
-                    and (power is None or power >= mana or Role.DRINK in missing)):
-                return Rested.NO_FOOD if missing == {Role.FOOD, Role.DRINK} else Rested.HEALTHY
+            short = [r for r, mark in marks.items()
+                     if (v.get(gauges[r]) is not None and v.get(gauges[r]) < mark)]
+            if not short:
+                return Rested.HEALTHY
             if v.get("vitals.combat") is True:
                 self.detail = "in combat; not a moment to eat"
                 return Rested.INTERRUPTED
-            profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
-            usable = v.get("bars.usable")
-            for role, short in ((Role.FOOD, hp is not None and hp < health),
-                                (Role.DRINK, power is not None and power < mana)):
-                if not short or role in started:
+            now = time.monotonic()
+            for role in short:
+                level = v.get(gauges[role])
+                if best[role] is None or level > best[role] + RISE:
+                    best[role], rose_at[role] = level, now
+                stalled = now - rose_at[role] >= STALL_S
+                if regen[role]:
+                    if now - rose_at[role] >= REGEN_STALL_S:
+                        # A timeout, not "no food": that stops the session, and the policy's
+                        # restock is what answers an empty bar.
+                        self.detail = (f"nothing to {'eat' if role is Role.FOOD else 'drink'} "
+                                       f"and {gauges[role]} no longer rising")
+                        return Rested.TIMEOUT
                     continue
-                started.add(role)
-                ability = profile.first(role)
-                ready = (ability is not None
-                         and (usable is None or usable & (1 << (ability.slot - 1))))
-                if ready:
-                    event("consume.request", data={"slot": ability.slot, "role": role.value})
-                    self.hid.tap(SLOT_KEYS.get(ability.slot, str(ability.slot)))
-                elif self.use_item is None or not self.use_item(role):
-                    self.detail = f"out of {role.value}"
-                    missing.add(role)
+                if takes[role] and (not stalled or takes[role] >= TAKES):
+                    continue
+                taken = self._take(v, role)
+                if taken is None:
+                    return Rested.NO_FOOD
+                if taken:
+                    takes[role] += 1
+                    self.started_at = now
+                else:
+                    regen[role] = True       # wait on regeneration while it still rises
+                rose_at[role] = now
             time.sleep(1.0)
         self.detail = f"{timeout_s:.0f}s and still short"
         return Rested.TIMEOUT

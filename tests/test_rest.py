@@ -41,10 +41,6 @@ def test_an_empty_drink_slot_drinks_from_the_bags(clock):
     assert used == [Role.DRINK] and hid.taps == [], "from the bags, not the empty slot"
 
 
-def test_with_nothing_in_the_bags_either_it_says_so(clock):
-    rest = Rest(hid=_Hid(), read=lambda: _mana(0.3), profile=for_class(8, 1),
-                use_item=lambda role: False)
-    assert rest.until(0.95, role=Role.DRINK) is Rested.NO_FOOD
 
 
 def test_a_drink_on_the_bar_is_pressed_as_before(clock):
@@ -73,11 +69,31 @@ def test_eating_and_drinking_stop_for_a_fight(clock):
     assert rest.until_both(0.9, 0.95) is Rested.INTERRUPTED
 
 
-def test_with_no_food_a_meal_still_drinks_to_its_mark(clock):
-    looks = iter([{**_mana(0.3, water=True), "vitals.hp": 0.5, "bars.usable": 0b010000000010},
-                  {**_mana(0.96, water=True), "vitals.hp": 0.6, "bars.usable": 0b010000000010}])
+def test_with_no_food_a_meal_drinks_and_waits_on_the_bodys_own_regeneration(clock):
+    """V173: out of food stopped sessions; health comes back on its own, only slower."""
+    water = 0b010000000010
+    looks = iter([{**_mana(0.3, water=True), "vitals.hp": 0.5, "bars.usable": water},
+                  *({**_mana(0.96, water=True), "vitals.hp": 0.5 + 0.05 * i,
+                     "bars.usable": water} for i in range(1, 9))])
     hid = _Hid()
     rest = Rest(hid=hid, read=lambda: next(looks), profile=for_class(8, 1),
                 use_item=lambda role: False)
     assert rest.until_both(0.9, 0.95) is Rested.HEALTHY
     assert hid.taps == ["minus"] and "out of food" in rest.detail
+
+
+def test_a_drink_that_ends_short_is_followed_by_another(clock):
+    """V173: a level-8 mage's 151-mana water does not reach 95% of 330."""
+    rising = [0.3, 0.4, 0.5, 0.6, 0.62] + [0.62] * 6 + [0.7, 0.8, 0.9, 0.96]
+    looks = iter([_mana(m, water=True) for m in rising])
+    hid = _Hid()
+    rest = Rest(hid=hid, read=lambda: next(looks), profile=for_class(8, 1))
+    assert rest.until(0.95, role=Role.DRINK) is Rested.HEALTHY
+    assert hid.taps == ["minus", "minus"], "a second water when the first ran out"
+
+
+def test_nothing_to_drink_and_no_regeneration_is_a_timeout_not_a_stop(clock):
+    rest = Rest(hid=_Hid(), read=lambda: _mana(0.3), profile=for_class(8, 1),
+                use_item=lambda role: False)
+    assert rest.until(0.95, role=Role.DRINK) is Rested.TIMEOUT
+    assert "no longer rising" in rest.detail

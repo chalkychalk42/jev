@@ -970,7 +970,7 @@ def test_where_the_character_died_is_remembered_for_walks_to_keep_clear_of(dead,
 
 
 def test_a_caster_conjures_what_it_is_short_of_after_a_meal(monkeypatch):
-    """V166: fewer than four Conjured Water in the bags, two casts; enough, none; and a
+    """V166: fewer than four Conjured Water in the bags, three casts; enough, none; and a
     paladin, with no conjure on its bar, never takes a census."""
     from dataclasses import replace
 
@@ -990,7 +990,7 @@ def test_a_caster_conjures_what_it_is_short_of_after_a_meal(monkeypatch):
             return {(0, 1): (5350, have[0]), (0, 2): (159, 0)}
 
     monkeypatch.setattr(module, "Vendor", Counter)
-    for class_id, water, casts in ((8, 2, 2), (8, 6, 0), (2, 0, 0)):
+    for class_id, water, casts in ((8, 2, 3), (8, 6, 0), (2, 0, 0)):
         have = [water]
         b = body()
         taps = []
@@ -1009,3 +1009,37 @@ def test_a_caster_conjures_what_it_is_short_of_after_a_meal(monkeypatch):
         censuses.clear()
         b._conjure()
         assert not censuses, "the bags unchanged since: not looked at again"
+
+
+def test_a_conjure_skipped_for_want_of_mana_is_tried_again_at_the_next_meal(monkeypatch):
+    """Review, 25 September: the bags unchanged, the skipped casts were never tried again."""
+    from dataclasses import replace
+
+    from jev.run import body as module
+    from jev.world.combat import Ability, Role, for_class
+
+    conjure = Ability(slot=5, role=Role.CONJURE, name="Conjure Water", mana=60,
+                      spell_id=5504, creates=5350)
+
+    class Counter:
+        def __init__(self, *a, **k):
+            pass
+
+        def census(self):
+            return {(0, 1): (5350, 0)}
+
+    monkeypatch.setattr(module, "Vendor", Counter)
+    b = body()
+    taps = []
+    b.client.hid.tap = lambda key: taps.append(key) or True
+    b._await_cast = lambda: None
+    values = {"vitals.combat": False, "vitals.power": 0.1, "vitals.power_max": 300,
+              "char.class_id": 8, "char.race_id": 1, "inventory.revision": 7}
+    b._read = lambda: values
+    base = for_class(8, 1)
+    b.fight.profile = replace(base, abilities=(*base.abilities, conjure))
+    b._conjure()
+    assert taps == [], "30 mana cannot pay for a 60-mana conjure"
+    values["vitals.power"] = 1.0
+    b._conjure()
+    assert taps == ["5"] * 3, "the same bags, looked at again"

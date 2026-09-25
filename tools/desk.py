@@ -22,8 +22,9 @@ def person_idle_s(last: int | None, ours: int | None, now: int) -> float:
     if last is None:
         return 0.0                              # unread: somebody may be there
     slack = operator.MARGIN_MS + operator.STAMP_EVERY_S * 1000
-    if ours is not None and (last - ours) % operator.WRAP <= slack:
-        return float("inf")
+    if ours is not None and ((last - ours) % operator.WRAP <= slack
+                             or (ours - last) % operator.WRAP <= slack):
+        return float("inf")              # the bot's own last input, stamped either side of it
     return ((now - last) % operator.WRAP) / 1000
 
 

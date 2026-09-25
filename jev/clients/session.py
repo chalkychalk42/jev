@@ -123,6 +123,9 @@ CREATE_REFUSED_OKAY: tuple[float, float] | None = None
 # A new character's first entry plays its race's introduction: waited out, pressing
 # nothing, until the strip paints.
 FIRST_ENTRY_S = 240.0
+# After Accept, looks (a second apart) for the list to come back or the name to be refused,
+# pressing nothing: a slow list read as a failure made a second character an hour later.
+CREATE_LOOKS = 30
 
 # The login and "Okay" buttons are the interface's red plates: red dominant, everything
 # else low. Measured at (100, 39, 19) and (95, 16, 4).
@@ -171,8 +174,11 @@ def stage(frame: np.ndarray | None, radio_ok: bool) -> Stage:
         return Stage.IN_WORLD
     if frame is None:
         return Stage.ELSEWHERE
+    # Character select has red plates in the same corner (Delete Character, Back), and
+    # Enter World, which the create screen has not: without it, never the create screen.
     if (CREATE_ACCEPT is not None and CREATE_BACK is not None
-            and _is_red_button(frame, CREATE_ACCEPT) and _is_red_button(frame, CREATE_BACK)):
+            and _is_red_button(frame, CREATE_ACCEPT) and _is_red_button(frame, CREATE_BACK)
+            and not _is_red_button(frame, ENTER_WORLD)):
         if CREATE_REFUSED_OKAY is not None and _is_red_button(frame, CREATE_REFUSED_OKAY):
             return Stage.CREATE_REFUSED
         return Stage.CREATE
@@ -390,17 +396,19 @@ class Session:
             self.detail = "typed the name and the box is still empty; nothing was accepted"
             return False
         self.hid.click(*self._screen(CREATE_ACCEPT))
-        self._wait(4.0)
-        current = self.stage()
-        if current is Stage.CHARACTER:
-            return True
-        if current is Stage.CREATE_REFUSED:
-            self.refused = True
-            self.detail = f"the server refused the name {name!r}"
-            self._leave_create(current)
-            return False
+        current = Stage.ELSEWHERE
+        for _ in range(CREATE_LOOKS):
+            self._wait(1.0)
+            current = self.stage()
+            if current is Stage.CHARACTER:
+                return True
+            if current is Stage.CREATE_REFUSED:
+                self.refused = True
+                self.detail = f"the server refused the name {name!r}"
+                self._leave_create(current)
+                return False
         self.unknown_frame = self.read_frame()
-        self.detail = f"after Accept the client is at {current.value}"
+        self.detail = f"{CREATE_LOOKS} s after Accept the client is at {current.value}"
         return False
 
     def enter_world(self, *, timeout_s: float = FIRST_ENTRY_S) -> bool:

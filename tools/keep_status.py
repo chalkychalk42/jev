@@ -4,7 +4,10 @@ Green means leave the loop alone. Red names each reason, from the plan's list
 (docs/plans/forty-eight-hour-session.md, section 0): no loop, or two; the last two sessions
 each short or failed; the last two runs with no XP; three deaths within 20 minutes; a
 Traceback in the last session; a server port closed; no game client; the strip's character
-not the campaign's; under 50 GB free. Exits 0 when green, 1 when red.
+not the campaign's; under 50 GB free. And three a loop can hide behind (review, 25
+September): a loop that has started no session for 35 minutes, a deploy's hold older than
+30, and a character switch tried more than 15 minutes ago and not made. Exits 0 when
+green, 1 when red.
 """
 
 from __future__ import annotations
@@ -15,7 +18,10 @@ import re
 import shutil
 import subprocess
 import sys
+import time
+from contextlib import suppress
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +35,9 @@ DEATH_WINDOW_S = 20 * 60
 DEATHS_RED = 3
 MIN_FREE_GB = 50
 PORTS = {3724: "realmd", 8085: "mangosd"}
+STALLED_S = 35 * 60
+HOLD_S = 30 * 60
+SWITCH_S = 15 * 60
 
 
 @dataclass
@@ -43,6 +52,10 @@ class Facts:
     wow_pid: str | None = None
     free_gb: float = 0.0
     campaign_key: str | None = None
+    now: float = 0.0
+    last_start: float | None = None          # when the loop last started a session
+    hold_age_s: float | None = None
+    switch_tried: float | None = None
 
 
 def sessions(text: str) -> list[tuple[int, int, int]]:
@@ -146,6 +159,14 @@ def verdict(facts: Facts) -> list[str]:
         reasons.append(f"the strip shows character {newest}, the campaign's is {facts.campaign_key}")
     if facts.free_gb < MIN_FREE_GB:
         reasons.append(f"only {facts.free_gb:.0f} GB free")
+    if (facts.loops and facts.last_start is not None
+            and facts.now - facts.last_start > STALLED_S):
+        reasons.append(f"no session started for {(facts.now - facts.last_start) / 60:.0f} minutes")
+    if facts.hold_age_s is not None and facts.hold_age_s > HOLD_S:
+        reasons.append(f"var/loop/hold has stood for {facts.hold_age_s / 60:.0f} minutes")
+    if facts.switch_tried is not None and facts.now - facts.switch_tried > SWITCH_S:
+        reasons.append("a character switch was tried "
+                       f"{(facts.now - facts.switch_tried) / 60:.0f} minutes ago and not made")
     return reasons
 
 
@@ -165,8 +186,17 @@ def collect() -> Facts:
         path = loop_dir / name
         if path.exists():
             facts.flags[name] = path.read_text(errors="replace").strip()
+    facts.now = time.time()
     if LOOP_LOG.exists():
-        facts.sessions = sessions(LOOP_LOG.read_text(encoding="utf-8", errors="replace"))
+        text = LOOP_LOG.read_text(encoding="utf-8", errors="replace")
+        facts.sessions = sessions(text)
+        started = re.findall(r"^session \d+ start (\S+)", text, re.MULTILINE)
+        if started:
+            with suppress(ValueError):
+                facts.last_start = datetime.fromisoformat(started[-1]).timestamp()
+    hold = loop_dir / "hold"
+    if hold.exists():
+        facts.hold_age_s = facts.now - hold.stat().st_mtime
     if facts.sessions:
         log = session_log(facts.sessions[-1][0])
         if log.exists() and "Traceback" in log.read_text(encoding="utf-8", errors="replace"):
@@ -186,6 +216,7 @@ def collect() -> Facts:
     try:
         campaign = json.loads(CAMPAIGN.read_text(encoding="utf-8"))
         facts.campaign_key = campaign["characters"][campaign["active"]]["key"]
+        facts.switch_tried = campaign.get("switch_tried")
     except (OSError, ValueError, KeyError, IndexError, TypeError):
         pass
     return facts

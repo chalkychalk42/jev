@@ -11,8 +11,9 @@ With the repo's own Python in WSL (files, and the character database read-only f
                             --until-level 20 --until 2026-09-26T10:30:00+01:00
                             --next-class mage --next-row 3
     tools/character.py name     a pronounceable name no character has, kept as the next's
-    tools/character.py due      "switch" once the active character is at its level or past its
-                                deadline, at most once an hour; else "stay"
+    tools/character.py due [--mark]
+                                "switch" once the active character is at its level or past its
+                                deadline, at most once an hour after a marked try; else "stay"
     tools/character.py status
 With Windows Python, the client at its login screen or at character select, the desk idle:
     tools/character.py enter [--name NAME]
@@ -216,7 +217,9 @@ def cmd_due(args) -> int:
     campaign = load()
     character = campaign["characters"][campaign["active"]]
     answer, why = due(campaign, time.time(), newest_level(character["key"]))
-    if answer == "switch":
+    if answer == "switch" and args.mark:
+        # Only the loop, which goes on to switch, marks the try: a look by hand must not
+        # hold the loop's switch off for an hour.
         campaign["switch_tried"] = time.time()
         save(campaign)
     print(answer)
@@ -404,7 +407,9 @@ def main(argv: list[str] | None = None) -> int:
     plan.add_argument("--force", action="store_true")
     name = commands.add_parser("name")
     name.add_argument("--seed", type=int)
-    commands.add_parser("due")
+    due_ = commands.add_parser("due")
+    due_.add_argument("--mark", action="store_true",
+                      help="record the try (the loop, which switches on the answer)")
     commands.add_parser("status")
     enter = commands.add_parser("enter")
     enter.add_argument("--name")

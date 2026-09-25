@@ -49,6 +49,7 @@ from enum import StrEnum
 
 from jev.clients.targeting import ClickCode, PaintCode, Targeting
 from jev.clients.windows import CloseCode, close_observed
+from jev.perceive.radio_frame import UI_ERROR_KEYS
 from jev.perceive.units import Plate
 from jev.run.evidence import event, traced
 
@@ -64,6 +65,8 @@ LOOT_IN_COMBAT_HP = 0.5
 # nothing is walked toward, a step of this long at a time, and clicked again, this often.
 FAR_STEP_S = 1.0
 FAR_STEPS = 4
+# A corpse not found from where the kill was made: at most this many of those steps.
+FAR_LOST_STEPS = 2
 
 class Looted(StrEnum):
     TOOK = "took"              # objective, money or bag capacity changed
@@ -107,20 +110,41 @@ class Loot:
         the client can clear the selection at the kill, and then the corpse is found by
         a dead hover of that name. `far`: the kill was made from range, and a corpse that
         gave nothing is walked toward and clicked again (`FAR_STEPS`)."""
+        mark = self._errors() if far else None      # a near kill's loot reads nothing more
         result = self._once(settle_s=settle_s, progress=progress, anchor=anchor,
                             name_id=name_id)
-        steps = 0
-        while far and result in (Looted.NOTHING, Looted.NO_CORPSE) and steps < FAR_STEPS:
-            steps += 1
-            if not self._step_toward(anchor, steps):
+        steps = lost = 0
+        while far and steps < FAR_STEPS:
+            # A step only when the client said the corpse is too far (an empty corpse is
+            # not walked into the camp for), or when it was not found from out there.
+            if result is Looted.NOTHING and self._too_far_since(mark):
+                pass
+            elif result is Looted.NO_CORPSE and lost < FAR_LOST_STEPS:
+                lost += 1
+            else:
                 break
+            steps += 1
+            if not self._step_toward(anchor if steps == 1 else None, steps):
+                break
+            mark = self._errors()
             result = self._once(settle_s=settle_s, progress=progress, anchor=None,
                                 name_id=name_id)
         return result
 
+    def _errors(self) -> int | None:
+        return (self.read() or {}).get("ui.error_count")
+
+    def _too_far_since(self, mark: int | None) -> bool:
+        """The client raised "too far" (or an error it does not name) since `mark`."""
+        v = self.read() or {}
+        count, last = v.get("ui.error_count"), v.get("ui.error_last")
+        key = (UI_ERROR_KEYS[last] if isinstance(last, int) and 0 < last < len(UI_ERROR_KEYS)
+               else None)
+        return count is not None and count != mark and key in ("out_of_range", "other")
+
     def _step_toward(self, anchor: Plate | None, steps: int) -> bool:
-        """Turn to where the corpse was clicked, or where the unit's plate last stood, and
-        walk a step toward it."""
+        """Turn to where the corpse was just clicked, or on the first step to where the
+        unit's plate last stood, and walk a step toward it; later steps go straight on."""
         frame = self.read_frame()
         width = frame.shape[1] if frame is not None and hasattr(frame, "shape") else None
         x = (self.clicked[0] - self.window_origin[0] if self.clicked is not None

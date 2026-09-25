@@ -184,8 +184,10 @@ def _tour(points, start) -> list[tuple[float, float, float]]:
 # After a meal a caster conjures when the bags hold fewer than this of what a conjure makes,
 # this many casts at most, each waited out (V166). Conjure Water makes two a cast at rank 1.
 CONJURE_BELOW = 4
-CONJURE_CASTS = 2
+CONJURE_CASTS = 3
 CONJURE_CAST_WAIT_S = 5.0
+# A census of the bags takes a look a slot; once stocked, the next is not before this.
+CONJURE_EVERY_S = 90.0
 # A caster's hunt stands this far short of each station: inside Fireball's 35 yards and
 # Frostbolt's 30, outside most mobs' notice (V167).
 CASTER_STANDOFF_YARDS = 18.0
@@ -233,6 +235,7 @@ class LiveBody:
         self._flying = False
         self._gear_checked: object = object()     # the bags' revision last looked through
         self._conjure_checked: object = object()  # and for what the conjures make (V166)
+        self._conjure_next = 0.0                  # when the next census may be taken
         self._placing_checked: object = object()  # the bar and spellbook last planned from
         self.travelling = False
         self.policy_context = Context()
@@ -671,7 +674,8 @@ class LiveBody:
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
                     is_complete=complete_reader, service_needed=self._service_needed,
                     stations=self._stations("hunt.station", objective_key(wanted, node.id)),
-                    standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0)
+                    standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0,
+                    conjure=self._conjure)
         outcome = hunt.run(destination.world, destination.hunt_yards or DEFAULT_HUNT_YARDS,
                            wanted,
                            timeout_s=self.hunt_timeout,
@@ -855,28 +859,38 @@ class LiveBody:
         if not rows or not values or values.get("vitals.combat") is not False:
             return
         revision = values.get("inventory.revision")
-        if revision is None or revision == self._conjure_checked:
+        if (revision is None or revision == self._conjure_checked
+                or time.monotonic() < self._conjure_next):
             return
         counter = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
                          self.client.size)
         slots = counter.census()
         if not slots:
             return
+        short = False                 # a cast skipped for want of mana: look again soon
         for row in rows:
             have = sum(count for item, count in slots.values() if item == row.creates)
-            for _ in range(CONJURE_CASTS if have < CONJURE_BELOW else 0):
+            if have >= CONJURE_BELOW:
+                continue
+            cast = 0
+            for _ in range(CONJURE_CASTS):
                 values = self._read()
-                if (not values or values.get("vitals.combat") is not False
-                        or (values.get("vitals.power") or 0) * (values.get("vitals.power_max") or 0)
-                        < row.mana):
+                if not values or values.get("vitals.combat") is not False:
+                    return
+                if (values.get("vitals.power") or 0) * (values.get("vitals.power_max") or 0) \
+                        < row.mana:
+                    short = True
                     break
                 event("conjure.request", data={"slot": row.slot, "spell": row.spell_id,
                                                "creates": row.creates, "have": have})
                 self.client.hid.tap(REST_KEYS.get(row.slot, str(row.slot)))
                 self._await_cast()
-            self.say(f"    conjured {row.name}: had {have}")
+                cast += 1
+            self.say(f"    conjured {row.name} {cast} times: had {have}")
         after = self._read()
-        self._conjure_checked = after.get("inventory.revision") if after else None
+        self._conjure_checked = None if short else (after.get("inventory.revision") if after
+                                                    else None)
+        self._conjure_next = 0.0 if short else time.monotonic() + CONJURE_EVERY_S
 
     def _await_cast(self, timeout_s: float = CONJURE_CAST_WAIT_S) -> None:
         """Until a cast begun ends: it starts within a look, then runs its cast time."""

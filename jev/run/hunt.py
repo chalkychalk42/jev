@@ -186,6 +186,10 @@ class Hunt:
     stations: object | None = None
     # How far short of each station the hunt stands: a caster's reach, not its feet (V167).
     standoff_yards: float = 0.0
+    # After each meal: a caster makes its water and food (`LiveBody._conjure`, V166). The
+    # hunt drinks before most pulls, and a stock made only after the policy's rests ran
+    # out mid-hunt (review, 25 September).
+    conjure: Callable[[], None] | None = None
     _found: bool = field(default=False, init=False)
 
     kills: int = field(default=0, init=False)
@@ -390,6 +394,8 @@ class Hunt:
                      + (f" - {self.rest.detail}" if self.rest.detail else ""))
             if drank is Rested.INTERRUPTED:
                 return True                  # something is hitting us; fight it
+            if self.conjure is not None:
+                self.conjure()
             v = self.read() or v
         hp = v.get("vitals.hp")
         if hp is None or hp >= PULL_LINE:
@@ -425,4 +431,6 @@ class Hunt:
         outcome = self.rest.until(max(EAT_BELOW + 0.3, 0.9))
         self.say(f"    rest: {outcome.value}"
                  + (f" - {self.rest.detail}" if self.rest.detail else ""))
+        if outcome is not Rested.INTERRUPTED and self.conjure is not None:
+            self.conjure()
         return outcome

@@ -234,7 +234,8 @@ local CLASSIFICATION_ID = {
 
 local UI_ERRORS = {
     { key = "other" },
-    { key = "out_of_range",     globals = { "SPELL_FAILED_OUT_OF_RANGE", "ERR_OUT_OF_RANGE", "ERR_BADATTACKPOS" } },
+    { key = "out_of_range",     globals = { "SPELL_FAILED_OUT_OF_RANGE", "ERR_OUT_OF_RANGE", "ERR_BADATTACKPOS",
+                                            "ERR_LOOT_TOO_FAR", "ERR_TOO_FAR_TO_INTERACT", "ERR_USE_TOO_FAR" } },
     { key = "not_facing",       globals = { "SPELL_FAILED_UNIT_NOT_INFRONT", "ERR_BADATTACKFACING" } },
     { key = "no_line_of_sight", globals = { "SPELL_FAILED_LINE_OF_SIGHT" } },
     { key = "bad_target",       globals = { "SPELL_FAILED_BAD_TARGETS", "SPELL_FAILED_TARGET_FRIENDLY", "ERR_NO_ATTACK_TARGET" } },

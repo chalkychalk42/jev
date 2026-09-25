@@ -1940,9 +1940,10 @@ class Fight:
         `combat.attackers`), the pack's, drawn and learned apart (V172). Two and three
         attackers killed Testvvi at Jerod's Landing and Riverpaw: what holds against one
         wolf need not against a camp."""
+        if not self._heals:
+            return 0.0                   # no heal to stop anything for: a mage's search goes on
         attackers = (values or {}).get("combat.attackers")
-        if (isinstance(attackers, int) and attackers >= 2 and self.choices is not None
-                and self._heals):
+        if (isinstance(attackers, int) and attackers >= 2 and self.choices is not None):
             if self._pack_line is None:
                 self._pack_line = self.choices.pick("pack", HEAL_LINES)
             return float(self._pack_line)

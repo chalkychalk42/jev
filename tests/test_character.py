@@ -222,3 +222,28 @@ def test_signing_in_can_stop_at_character_select(measured):
     screen = _Screen(s, CREATE, {s._screen(PLATES["CREATE_BACK"]): SELECT})
     assert s.sign_in("acct", "pw", timeout_s=5, stop_at_select=True) is True
     assert screen.presses == [s._screen(PLATES["CREATE_BACK"])], "back from the create screen"
+
+
+def test_character_select_with_red_plates_in_the_create_corner_is_still_character_select(
+        measured):
+    """Delete Character and Back are red, in the same corner (review, 25 September)."""
+    select = _plates(ENTER_WORLD, PLATES["CREATE_ACCEPT"], PLATES["CREATE_BACK"])
+    assert module.stage(select, False) is Stage.CHARACTER
+
+
+def test_a_slow_list_after_accept_is_waited_for_pressing_nothing(measured):
+    s = _session()
+    at = s._screen
+    screen = _Screen(s, SELECT, {at(PLATES["CREATE_NEW"]): CREATE})
+    looks = iter([CREATE] * 5 + [SELECT])
+    real = screen.click
+
+    def click(x, y, *a, **k):
+        real(x, y, *a, **k)
+        if (x, y) == at(PLATES["CREATE_ACCEPT"]):
+            s.read_frame = lambda: next(looks, SELECT)
+        return True
+
+    s.hid.click = click
+    assert s.create_character("Kelvaran", "human", "mage") is True
+    assert screen.presses[-1] == at(PLATES["CREATE_ACCEPT"]), "nothing pressed while it loads"

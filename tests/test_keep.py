@@ -38,7 +38,7 @@ def _green() -> Facts:
                  runs=[{"run": "a", "t": 1.0, "level": 13.1, "gain": 0.05, "key": "548c8582"},
                        {"run": "b", "t": 2.0, "level": 13.2, "gain": 0.04, "key": "548c8582"}],
                  ports={3724: True, 8085: True}, wow_pid="4242", free_gb=700.0,
-                 campaign_key="548c8582")
+                 campaign_key="548c8582", now=10_000.0, last_start=9_500.0)
 
 
 def test_green_when_all_is_well_and_red_names_each_reason():
@@ -57,6 +57,10 @@ def test_green_when_all_is_well_and_red_names_each_reason():
         "the strip shows character 548c8582, the campaign's is 0badc0de": {
             "campaign_key": "0badc0de"},
         "only 12 GB free": {"free_gb": 12.0},
+        "no session started for 40 minutes": {"last_start": 10_000.0 - 40 * 60},
+        "var/loop/hold has stood for 31 minutes": {"hold_age_s": 31 * 60},
+        "a character switch was tried 20 minutes ago and not made": {
+            "switch_tried": 10_000.0 - 20 * 60},
     }
     for reason, change in cases.items():
         facts = _green()
@@ -220,3 +224,8 @@ def test_the_status_screen_reads_both_log_names(tmp_path, monkeypatch):
     assert keep_status.session_log(133).name == "live-testvvi-133.log"
     (tmp_path / "live-134.log").write_text("")
     assert keep_status.session_log(134).name == "live-134.log"
+
+
+def test_the_bots_input_stamped_just_after_it_is_still_the_bots():
+    """The stamp can land a tick after the input it stands for (review, 25 September)."""
+    assert desk.person_idle_s(last=10_000, ours=10_040, now=70_000) == float("inf")
