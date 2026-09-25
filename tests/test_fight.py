@@ -2144,7 +2144,7 @@ def test_a_caster_with_the_mana_casts_and_never_swings_its_staff():
         _rotate_answered(f, AT_RANGE)
     assert "1" not in hid.taps, "the staff's swing is for when the mana is gone"
     assert hid.taps.count("2") >= 2, "Fireball, again and again"
-    assert hid.taps.count("3") == 1, "Frost Armor once, not every look"
+    assert "3" not in hid.taps, "Frost Armor between fights, not in one (V176)"
 
 
 def test_out_of_mana_a_caster_swings_its_staff():
@@ -2295,3 +2295,34 @@ def test_against_a_pack_the_heal_line_is_drawn_and_learned_apart():
     f._fight = lambda name_id, timeout_s: Fought.KILLED
     f.run()
     assert lines.outcomes[-1][0] == "all", "a fight against one teaches the single's line"
+
+
+
+def test_a_press_is_answered_by_its_mana_leaving():
+    """V176: Frost Armor was cast (60 of 165 mana gone) with the bar and the global
+    cooldown unpainted, read as dropped, and cast again."""
+    f = _mage([AT_RANGE])
+    armour = next(a for a in MAGE.abilities if a.name == "Frost Armor")
+    f._mana_seen = (1.0, 1.0)
+    assert f._press(armour)
+    quiet = {**AT_RANGE, "bars.gcd": 0.0, "bars.casting": False, "bars.ready": 0b111}
+    assert f._press_answered(quiet) is False, "nothing yet: it may still answer"
+    spent = {**quiet, "vitals.power": 1.0 - 60 / 165}
+    assert f._press_answered(spent) is True and f._pending_press is None
+
+
+def test_a_caster_buffs_up_between_fights_while_it_has_the_mana(combat_clock):
+    """V176: before the pull, not in it, and not at the mana it needs for the fight."""
+    rested = {**AT_RANGE, "vitals.combat": False, "bars.ready": 0b111, "bars.usable": 0b111}
+    hid = _Hid()
+    f = _mage([rested], hid=hid)
+    assert f.buff_up() == 1 and hid.taps == ["3"]
+    assert f.buff_up() == 0, "thirty minutes: not again"
+    low = _mage([{**rested, "vitals.power": 0.6}])
+    assert low.buff_up() == 0, "60 of 165 would leave under half"
+    fighting = _mage([{**rested, "vitals.combat": True}])
+    assert fighting.buff_up() == 0
+    paladin = _fight([{**ALIVE, "vitals.combat": False}])
+    paladin.profile = for_class(2, 1)
+    assert paladin.buff_up() == 0, "not a caster: its buffs are the rotation's"
+    assert _fight([rested]).buff_up() == 0, "no census yet: nothing read, nothing pressed"

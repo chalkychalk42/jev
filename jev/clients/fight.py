@@ -284,6 +284,13 @@ MAX_RANGED_STEPS = 8
 # After a root at contact (Frost Nova) a caster backs off this long, still facing: about
 # nine yards at the walk backwards, out of the held unit's reach (V169).
 STEP_CLEAR_S = 2.0
+# A press whose ability's mana has at least this share gone since it was pressed was
+# answered, whatever the bar painted (V176).
+ANSWER_SPENT = 0.7
+# A caster keeps its lasting buffs up between fights (V176), with at least this share of
+# its mana left after each, and waits this long for the global cooldown between two.
+BUFF_UP_RESERVE = 0.5
+BUFF_UP_GCD_S = 1.6
 # A caster's mana line, measured (V170): before a pull it wants this many times what a kill
 # has cost it, the median of the last `MANA_KILLS` kills, within `MANA_LINE_RANGE`, once it
 # has `MANA_KILLS_MIN` kills to go on.
@@ -1321,6 +1328,43 @@ class Fight:
                 return result
         return result
 
+    def buff_up(self) -> int:
+        """Out of combat, a caster's lasting buffs that are due (Frost Armor, Arcane
+        Intellect), each only with `BUFF_UP_RESERVE` of the mana left after it (V176).
+        How many were pressed; nothing for a class that is not a caster."""
+        pressed = 0
+        profile = self.profile               # the bar's census: without it, nothing is read
+        if profile is None or not profile.caster:
+            return 0
+        v = self.read()
+        if v is None or v.get("vitals.combat") is not False:
+            return 0
+        pool = v.get("vitals.power_max")
+        for buff in (*profile.by_role(Role.AURA), *profile.by_role(Role.BUFF)):
+            if not buff.lasting:
+                continue
+            last = self._lasting.get(buff.name)
+            if last is not None and time.monotonic() - last < buff.every_s:
+                continue
+            v = self.read() or v
+            if v.get("vitals.combat") is not False:
+                break
+            bit = 1 << (buff.slot - 1)
+            usable, ready = v.get("bars.usable"), v.get("bars.ready")
+            if (usable is not None and not usable & bit) or (ready is not None and not ready & bit):
+                continue
+            power = v.get("vitals.power")
+            if (isinstance(power, (int, float)) and pool and buff.mana
+                    and power - buff.mana / pool < BUFF_UP_RESERVE):
+                continue
+            if self._press(buff):
+                self._lasting[buff.name] = time.monotonic()
+                self._pending_press = None
+                pressed += 1
+                event("buff.up", data={"slot": buff.slot, "name": buff.name})
+                time.sleep(pace(self.hid, BUFF_UP_GCD_S))
+        return pressed
+
     def _ranged_ready(self, profile: CombatProfile, values: dict) -> bool:
         """A caster (`CombatProfile.caster`) with a spell cast from range that it can use now:
         the client says the slot is usable, which a spell is not without its mana. Out of
@@ -1609,6 +1653,8 @@ class Fight:
             return self._mana_left_after(a, values) >= reserve
 
         for buff in (*profile.by_role(Role.AURA), *profile.by_role(Role.BUFF)):
+            if profile.caster and buff.lasting and in_combat:
+                continue                 # a caster's mana is its damage: buffed between fights
             last = self._lasting.get(buff.name) if buff.lasting else self._last_use.get(buff.slot)
             if pressable(buff) and affordable(buff) and (last is None or now - last >= buff.every_s):
                 if self._press(buff) and buff.lasting:
@@ -1768,7 +1814,7 @@ class Fight:
         now = time.monotonic()
         if not ability.toggle:
             self._pending_press = (ability, now, dict(self._last_use), dict(self._lasting),
-                                   self._saved_at)
+                                   self._saved_at, self._mana_seen[1])
         self._last_use[ability.slot] = now
         self.pressed.append(ability.slot)
         return True
@@ -1788,11 +1834,17 @@ class Fight:
         """
         if self._pending_press is None:
             return True
-        ability, when, last_use, lasting, saved_at = self._pending_press
+        ability, when, last_use, lasting, saved_at, power_before = self._pending_press
         ready = values.get("bars.ready")
         gcd = values.get("bars.gcd")
+        power, pool = values.get("vitals.power"), values.get("vitals.power_max")
+        # Its mana gone is an answer too (V176): a mage's Frost Armor, cast, left the bar and
+        # the global cooldown unpainted, was read as dropped and cast again, 60 of 165 mana.
+        spent = (bool(ability.mana) and isinstance(power_before, (int, float))
+                 and isinstance(power, (int, float)) and bool(pool)
+                 and (power_before - power) * pool >= ANSWER_SPENT * ability.mana)
         if (values.get("bars.casting") is True or (gcd is not None and gcd > 0.0)
-                or (ready is not None and not ready & (1 << (ability.slot - 1)))):
+                or (ready is not None and not ready & (1 << (ability.slot - 1))) or spent):
             self._pending_press = None
             self._dropped = (0, 0)
             return True

@@ -1043,3 +1043,20 @@ def test_a_conjure_skipped_for_want_of_mana_is_tried_again_at_the_next_meal(monk
     values["vitals.power"] = 1.0
     b._conjure()
     assert taps == ["5"] * 3, "the same bags, looked at again"
+
+
+
+def test_a_new_characters_home_is_where_it_began(tmp_path):
+    """V176: with home unknown, a level-1 mage left Northshire for Goldshire's inn and died
+    twice on the way. Its hearthstone is bound to where it began."""
+    from jev.world.home import load_home
+    from jev.world.state_v1 import Char
+
+    b = body()
+    b.home_memory = tmp_path / "home.json"
+    b._inn = lambda state: SimpleNamespace(world=(-9460.0, 60.0, 57.0), name="Innkeeper Farley")
+    fresh = seen(char=Char(level=1))
+    assert b.bindable(fresh) is False
+    assert load_home(b.home_memory) is not None, "where it stands, remembered"
+    b.home_memory.unlink()
+    assert b.bindable(seen(char=Char(level=5))) is True, "later, home unknown: bind"

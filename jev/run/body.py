@@ -828,11 +828,13 @@ class LiveBody:
                                   else self.rest.until(drink_to(caster), role=Role.DRINK),
                                   self.rest.detail)
             self._conjure()
+            self.fight.buff_up()
             return rested
         if self.fight.top_up():
             return Result(SkillOutcome.SUCCEEDED, "health topped up", "healthy")
         rested = self._result(self.rest.until(0.9), self.rest.detail)
         self._conjure()
+        self.fight.buff_up()
         return rested
 
     def _use_consumable(self, role: Role) -> bool:
@@ -1085,12 +1087,24 @@ class LiveBody:
         return min(near, key=lambda pair: pair[0])[1] if near else None
 
     def bindable(self, state: State) -> bool:
-        """An inn near the guide's work while home is far from it, or unknown."""
+        """An inn near the guide's work while home is far from it, or unknown.
+
+        A character at level 1 with no home remembered stands where its hearthstone is
+        bound: every new character's is, to its starting area. That place is remembered as
+        home instead (V176): with home unknown, a level-1 mage left Northshire for
+        Goldshire's inn at T-0 and died twice on the way."""
         try:
             inn = self._inn(state)
             if inn is None:
                 return False
             home = load_home(self.home_memory)
+            if (home is None and state.char.level == 1 and state.pos.mx is not None
+                    and state.pos.my is not None and self.client.bounds is not None):
+                here = map_to_world(state.pos.mx, state.pos.my, self.client.bounds)
+                if here is not None:
+                    save_home(self.home_memory, (here[0], here[1], 0.0),
+                              name="where the character began")
+                    return False
             if home is None:
                 return True
             node = self.graph.get(state.guide.step_id or "")

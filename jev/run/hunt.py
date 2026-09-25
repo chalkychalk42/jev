@@ -397,6 +397,8 @@ class Hunt:
             if self.conjure is not None:
                 self.conjure()
             v = self.read() or v
+        if hasattr(self.fight, "buff_up"):
+            self.fight.buff_up()              # a caster's lasting buffs, before the pull (V176)
         hp = v.get("vitals.hp")
         if hp is None or hp >= PULL_LINE:
             return True
