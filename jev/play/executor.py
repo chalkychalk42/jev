@@ -31,6 +31,14 @@ from jev.play.controls import ControlManifest, Limits, build_manifest
 # Where to look for a world unit a requested point just missed, as fractions of the window:
 # below first, where a body hangs under its plate, then either side, then just above.
 NEAR_PROBES = ((0.0, 0.03), (0.0, 0.06), (-0.025, 0.045), (0.025, 0.045), (0.0, -0.025))
+# A unit farther off than the probes may have walked: the tutor answers seconds after the
+# picture it chose from, and a click where a boar had been was refused 17 times in five
+# teaching sessions (24-25 September). The plates drawn now within `RELOCATE_REACH` of
+# the point it named are tried, nearest first (at most `RELOCATE_PLATES`), each by the
+# body under it; the hover still has to prove the unit asked for.
+RELOCATE_REACH = 0.25
+RELOCATE_PLATES = 3
+RELOCATE_BELOW = (0.03, 0.06)
 
 
 @dataclass(frozen=True)
@@ -81,10 +89,12 @@ class Executor:
                  checkpoint: Callable[[], None] | None = None,
                  execute_skill: Callable[[SkillAction], object] | None = None,
                  invalidate_camera: Callable[[str], None] | None = None,
+                 plates: Callable[[], list[tuple[float, float]]] | None = None,
                  clock: Callable[[], float] = time.time,
                  monotonic: Callable[[], float] = time.monotonic,
                  sleep: Callable[[float], None] = time.sleep):
         self.hid, self.read_guard = hid, read_guard
+        self.plates = plates
         self.manifest = manifest or build_manifest(limits=limits)
         self.limits = limits or self.manifest.limits
         self.checkpoint = checkpoint or (lambda: None)
@@ -376,6 +386,21 @@ class Executor:
                 and values.get("cursor.name_id") == action.expected_target_id
                 and values.get("cursor.dead") is action.expected_dead)
 
+    def _relocate(self, action: ClickAction, view: GuardState, coordinates, point, hover):
+        """Hover the bodies under the plates drawn now near `coordinates` (`RELOCATE_REACH`);
+        the point and hover frame that proved the unit, else the last tried."""
+        nearby = sorted((p for p in self.plates() if math.dist(p, coordinates) <= RELOCATE_REACH),
+                        key=lambda p: math.dist(p, coordinates))[:RELOCATE_PLATES]
+        for px, py in nearby:
+            for below in RELOCATE_BELOW:
+                if not self.hid.move_to(*self._point(view, px, min(1.0, py + below))):
+                    raise _Refusal("refused", "pointer movement was refused")
+                point = self._cursor(view)
+                hover = self._fresh_hover(action, view, point)
+                if self._world_match(action, hover.values):
+                    return point, hover
+        return point, hover
+
     def _click(self, action: ClickAction, view: GuardState) -> tuple[int, int]:
         if action.intent == "ui":
             coordinates = self._ui_point(action, view)
@@ -407,6 +432,10 @@ class Executor:
                     values = hover.values
                     if self._world_match(action, values):
                         break
+            if (not self._world_match(action, values) and coordinates is not None
+                    and self.plates is not None):
+                point, hover = self._relocate(action, view, coordinates, point, hover)
+                values = hover.values
             if not self._world_match(action, values):
                 raise _Refusal("wrong_target", "fresh hover does not match requested world unit")
             if action.intent == "interact" and (

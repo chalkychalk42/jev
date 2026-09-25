@@ -163,7 +163,8 @@ class PlayingBody:
         self.executor = Executor(self.client.hid, self.observer.guard, manifest=self.manifest,
                                  checkpoint=lambda: self._checkpoint(),
                                  execute_skill=self._delegate,
-                                 invalidate_camera=self.spine.camera.invalidate)
+                                 invalidate_camera=self.spine.camera.invalidate,
+                                 plates=self.observer.plates)
         if teacher is None:
             transport = make_vision_client(
                 provider=teacher_provider, binary=teacher_binary, model=teacher_model,

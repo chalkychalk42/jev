@@ -144,6 +144,16 @@ class LiveObserver:
             raise RuntimeError("client geometry changed; reattach before continuing")
         return captured_at, frame, values, state, generation
 
+    def plates(self) -> list[tuple[float, float]]:
+        """Where nameplates are drawn now, as fractions of the image: for re-finding a
+        unit that walked while its click was being decided (`Executor`)."""
+        from jev.perceive import units
+
+        with self.client._capturing:
+            frame = self.client.cap.grab()
+        height, width = frame.rgb.shape[:2]
+        return [(float(p.cx) / width, float(p.cy) / height) for p in units.find_plates(frame.rgb)]
+
     def guard(self):
         from jev.play.executor import GuardState
 

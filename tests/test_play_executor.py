@@ -528,3 +528,27 @@ def test_a_unit_nowhere_near_the_point_is_still_refused():
     result = h.run(**action)
     assert result.code == "wrong_target"
     assert not any(call[0] == "click" for call in h.hid.calls)
+
+
+def test_a_unit_that_walked_off_is_found_again_under_a_plate_drawn_now():
+    """The tutor answers seconds after the picture it chose from: a click where a boar had
+    been was refused 17 times in five teaching sessions (24-25 September). The plate
+    drawn now near the point it named, and the body under it, prove the unit."""
+    h = Harness(plates=lambda: [(0.2, 0.9), (0.8, 0.3)])
+
+    def hover():
+        x, y = h.hid.position
+        h.values["cursor.name_id"] = 42 if abs(x - 90) <= 1 and 44 <= y <= 52 else 43
+    h.on_read = hover
+    result = h.run(**{**interact(), "button": "left", "intent": "select", "x": 0.7, "y": 0.4})
+    assert result.delivered, result.detail
+    assert h.hid.calls[-1] == ("click", False)
+    assert abs(result.point[0] - 90) <= 1, "clicked where the unit is now"
+
+
+def test_plates_near_the_point_that_are_not_the_unit_are_still_refused():
+    h = Harness(plates=lambda: [(0.55, 0.45)])
+    h.values["cursor.name_id"] = 43
+    result = h.run(**{**interact(), "button": "left", "intent": "select"})
+    assert result.code == "wrong_target"
+    assert not any(call[0] == "click" for call in h.hid.calls)
