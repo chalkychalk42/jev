@@ -2751,3 +2751,25 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
 - XP/h: sessions 113-117 made 1,508, 1,509, 1,235, 463 and 1,237 (the inn hours made 137,
   0 and 822). Testvvi: level 12 at 9%, 25 silver, 22 quests done, on A Bundle of Trouble
   in Eastvale.
+
+## 2026-09-25 06:05 — hour seven: bundles, stalls, and the store's startup
+
+- **A Bundle of Trouble** (Eastvale Logging Camp) was accepted and then passed over at 1
+  of 8. All 29 Bundles of Wood are live spawns (no pool), but the gather's hover search
+  found one in about 20 spawn points. The search is a 7x7 grid of probes 80 by 45 pixels
+  apart ahead of the feet, and a bundle a few yards off is about 60 by 30. Facing the
+  spawn point first (V155) made it worse: straight ahead, the object lands on the
+  character's own model. V155 is withdrawn, and a denser search where ground objects land
+  is in the backlog. The quest's hand-in was passed by (V152), and the guide went on to
+  Princess Must Die.
+- **A stalled tutor no longer costs two minutes per fight** (V154). In teach mode every
+  re-arm of an objective went to the tutor first, and at Eastvale it stalled on the
+  bundles after each fight (eight no-effect actions). A stall earns no labels, so the
+  step's re-arms now go to the routine for ten minutes.
+- **The motor learner's startup lock timeout is gone** (V153): the runs already read are
+  kept in the store, so a new session reads only new runs (sessions 119-121: no Errno 13).
+- **Goldtooth's hand-in was passed by** as intended (V152), and lone spawns are now waited
+  at (V151). Floor switching is limited to a storey (V145).
+- XP/h: sessions 117-120 made 1,698, 1,389, 1,081 and 2,625; stuck events 13, 0, 0 and 1
+  (the inn hours had 46 to 59). No deaths since session 105. Testvvi: level 12 at 25%,
+  30 silver, walking to Ma Stonefield for Princess Must Die.
