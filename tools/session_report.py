@@ -113,8 +113,15 @@ def _jsonl(path: Path):
                     continue
 
 
+def session_log(number: int) -> Path:
+    """A session's own log: `live-N.log` from `tools/session_loop.sh`, `live-testvvi-N.log`
+    from the loops before it."""
+    ours = CAPTURES / f"live-{number}.log"
+    return ours if ours.exists() else CAPTURES / f"live-testvvi-{number}.log"
+
+
 def measure(number: int, table: dict[int, int], exit_code: int | None = None) -> Session | None:
-    log = CAPTURES / f"live-testvvi-{number}.log"
+    log = session_log(number)
     if not log.exists():
         return None
     session = Session(number=number, exit_code=exit_code)
@@ -272,8 +279,8 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     table = xp_table()
     exits = _sessions_from_loop(args.since)
-    numbers = sorted(set(exits) | {int(m.group(1)) for p in CAPTURES.glob("live-testvvi-*.log")
-                                   if (m := re.search(r"(\d+)\.log$", p.name))
+    numbers = sorted(set(exits) | {int(m.group(1)) for p in CAPTURES.glob("live-*.log")
+                                   if (m := re.fullmatch(r"live-(?:testvvi-)?(\d+)\.log", p.name))
                                    and int(m.group(1)) >= args.since})
     sessions = [s for n in numbers if (s := measure(n, table, exits.get(n))) is not None]
     if args.motor and args.store.exists():
