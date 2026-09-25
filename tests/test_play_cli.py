@@ -13,7 +13,7 @@ from jev.run import cli
 
 
 @pytest.mark.parametrize("mode", ["teach", "adaptive"])
-def test_play_check_is_read_only_and_forces_evidence_and_learning(tmp_path, monkeypatch, capsys, mode):
+def test_play_check_is_read_only_and_forces_evidence_not_learning(tmp_path, monkeypatch, capsys, mode):
     graph = route_file(tmp_path)
     monkeypatch.setattr(cli, "ROOT", tmp_path)
     prohibited = []
@@ -38,8 +38,9 @@ def test_play_check_is_read_only_and_forces_evidence_and_learning(tmp_path, monk
                        "--bindings", str(tmp_path / "character-bindings.wtf")])
     assert result == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["play_mode"] == mode and report["motor_learning"] and report["visual_teacher"]
-    assert report["screenshots"] and report["learning"]
+    assert report["play_mode"] == mode and report["motor_recording"] and report["visual_teacher"]
+    # Evidence, not learning: no student is trained inside a live session (V174).
+    assert report["screenshots"] and not report["learning"] and not report["motor_learning"]
     assert report["motor_handover"] is (mode == "adaptive")
     assert report["play_teacher_calls_per_hour"] == 3
     assert report["bindings"] == [str(tmp_path / "account-bindings.wtf"),

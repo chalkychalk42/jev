@@ -551,7 +551,44 @@ focus is taken,** any launch, login or switch outside a session needs 10 minutes
 ----------------------------------------------
 
 **Hours 36-44: consolidation.** Nothing new goes in; each removal gets its own commit and
-DECISIONS row.
+DECISIONS row. The map was drawn on 25 Sep by a read-only survey (import graph plus grep).
+Step 0, turning off live learning, went in before T-0 as V174. The order, each step
+leaving the suite green:
+
+1. **`HYBRID_SAMPLE`.** Code: `jev/play/runtime.py:5, 36-41, 385-386`. Tests:
+   `test_play_runtime.py:687-718`.
+2. **The tutor/ab arms,** after the B2 rollback window has closed.
+   - Code: `play/runtime.py:38, 171-178, 235, 315`; `cli.py` `--play-dispatch`;
+     `start_teaching.py --mode/--dispatch`; `session_loop.sh`'s arm file; `keep_status`;
+     `session_report --compare`.
+   - Tests: the `composition` fixture in `test_play_runtime.py:91-123` (force
+     `_ask_tutor`); `test_keep.py`'s arm test.
+3. **The decision learner** (about 4,100 source lines, 2,300 test lines).
+   - Remove: `learn/{worker,registry,distill,dataset,evidence,parquet,promote,grade}`,
+     `eval/*`, `run/background.py`, the grading parts of `episode.py`, the `learned` hooks,
+     and sklearn/pyarrow from the `learn` extra.
+   - Delete the tests `test_distill`, `test_learning_cycle`, `test_grade_run`,
+     `test_worker_cli`, `test_background_services` and `test_eval`.
+   - Move the helpers other tests import: `test_execution_evidence` imports from
+     `test_grade_run`; `test_background_runtime` from `test_teacher`.
+4. **The motor handover and canary, then motor training** (about 1,100 lines).
+   - Keep `record`, `finish_episode`, `ingest_run`, `records`, `remember_controls` and the
+     `_qualified` checks (`session_report --motor` uses them).
+   - This removes the flaky test (`test_play_runtime.py:126-159`).
+5. **Dead code.**
+   - Remove `tools/probe_{input,motion,reaction,travel,turn,unstick,window}.py`,
+     `contact_sheet.py`, `recover.py`, `verify_facing.py`, `calibrate_camera.py` and
+     `env_lock.py`, which have no caller.
+   - Remove the small functions the survey listed.
+   - Only tests call `jev/clients/live.py`, `run/heartbeat.py`, `run/journal.py`,
+     `eval/board.py` and `learn/promote.py`: remove them with their tests.
+6. **Folds.**
+   - One `.env` parser: `tools/login.py`'s does not strip quotes, unlike the reconnect's.
+   - One `session_log` and loop-log parser, shared by `keep_status`, `session_report` and
+     `session_check`.
+   - `FakeClient` moves into tests.
+
+Steps 0-5 remove about 7,250 source lines (18%) and 3,600 test lines.
 - **Retired imitation paths.** Remove what no configuration reaches since V158: `HYBRID_SAMPLE`
   sampling, the teach-first arms (`tutor`, `ab`), the student canary and adaptive handover, and
   the flaky test. Stop training retired students inside live sessions (CPU, and the lock waits

@@ -51,12 +51,16 @@ class Background:
                 runtime.ask, runtime.take = self.teacher.ask, self.teacher.take
             except Exception as exc:
                 self._error("teacher_setup", exc)
-        try:
-            self.loader = threading.Thread(target=self._load_loop, name="jev-policy-loader", daemon=True)
-            self.loader.start()
-        except Exception as exc:
-            self.loader = None
-            self._error("policy_setup", exc)
+        # The loader serves a policy someone asked for; with none asked, its registry reads
+        # every 5 s and the two predictions a tick went unused (V174).
+        if self._want_policy or self.teacher is not None:
+            try:
+                self.loader = threading.Thread(target=self._load_loop, name="jev-policy-loader",
+                                               daemon=True)
+                self.loader.start()
+            except Exception as exc:
+                self.loader = None
+                self._error("policy_setup", exc)
         if learn:
             try:
                 self.thread = threading.Thread(target=self._learn_loop, args=(Path(runs), adaptive),

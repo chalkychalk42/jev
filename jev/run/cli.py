@@ -128,7 +128,10 @@ def main(argv: list[str] | None = None) -> int:
             or not math.isfinite(args.play_decision_timeout) or args.play_decision_timeout <= 0):
         parser.error("watchdog durations and budgets must be positive")
     if args.play_mode != "off":
-        args.screenshots = args.learn = True
+        # Screenshots, not learning: since V158 no imitation student acts, and training
+        # them inside the live process re-read every run each cycle, held the lock and cost
+        # the fight and the walk their reaction time (V174). The corpus is still recorded.
+        args.screenshots = True
     if not re.fullmatch(r"[A-Za-z0-9_-]+", args.client_id):
         parser.error("client-id must contain only letters, numbers, underscores or hyphens")
     graph = Graph.load(args.graph)
@@ -157,7 +160,8 @@ def main(argv: list[str] | None = None) -> int:
                           "teacher": args.teacher, "reconnect": args.reconnect,
                           "play_mode": args.play_mode,
                           "visual_teacher": args.play_mode != "off",
-                          "motor_learning": args.play_mode != "off",
+                          "motor_learning": False,          # recorded, not trained (V174)
+                          "motor_recording": args.play_mode != "off",
                           "motor_handover": args.play_mode == "adaptive",
                           "play_teacher_calls_per_hour": args.play_teacher_calls_per_hour,
                           "teacher_provider": args.teacher_provider,
@@ -358,7 +362,7 @@ def _live(args, graph) -> int:
                 teacher_calls_per_hour=args.play_teacher_calls_per_hour,
                 binding_paths=args.bindings, world_db=args.world_db,
                 config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout),
-                dispatch=args.play_dispatch)
+                dispatch=args.play_dispatch, start_learning=False)
             # After a routine fails: the tutor, or the routine again, learned (V158).
             playing.recovery = Choice(choices, "recover.after_failure", log=choice_log)
             body = playing
