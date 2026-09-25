@@ -57,6 +57,7 @@ class Session:
     xp_per_hour: float = 0.0
     kills: int = 0
     deaths: int = 0
+    steps: int = 0                  # guide steps completed (quest progress, lumpy XP aside)
     looted: int = 0
     unlooted: int = 0
     stuck: int = 0
@@ -150,6 +151,8 @@ def measure(number: int, table: dict[int, int], exit_code: int | None = None) ->
                     session.xp += max(0.0, xb - xa) * table[la]
                 elif lb > la:
                     session.xp += (1 - (xa or 0.0)) * table[la] + (xb or 0.0) * table.get(lb, table[la])
+            if b.get("tracker_event") == "advance":
+                session.steps += 1
             dead = a["state"]["vitals"].get("dead") is True
             if dead and not dead_before:
                 session.deaths += 1
@@ -222,6 +225,7 @@ def compare(sessions: list[Session]) -> list[dict]:
             "xp_per_hour_90": (round(low), round(high)) if not math.isnan(low) else None,
             "deaths_per_hour": round(sum(s.deaths for s in group) / hours, 2) if hours else 0,
             "kills_per_hour": round(sum(s.kills for s in group) / hours, 1) if hours else 0,
+            "steps_per_hour": round(sum(s.steps for s in group) / hours, 1) if hours else 0,
             "loot_rate": round(sum(s.looted for s in group) / loot_total, 2) if loot_total else None,
             "stuck_per_hour": round(sum(s.stuck for s in group) / hours, 1) if hours else 0,
             "tutor_calls_per_hour": round(sum(s.tutor_calls for s in group) / hours, 1) if hours else 0,
@@ -266,11 +270,11 @@ def main(argv=None) -> int:
         for row in compare([s for s in sessions if s.number not in args.skip]):
             print(json.dumps(row))
         return 0
-    print(f"{'#':>4} {'arm':12} {'min':>5} {'lvl':>5} {'xp':>6} {'xp/h':>6} {'kill':>4} {'die':>3} "
+    print(f"{'#':>4} {'arm':12} {'min':>5} {'lvl':>5} {'xp':>6} {'xp/h':>6} {'kill':>4} {'step':>4} {'die':>3} "
           f"{'loot':>7} {'stuck':>5} {'tutor':>5} {'t_med':>5} {'money':>6} {'exit':>4}")
     for s in sessions:
         print(f"{s.number:>4} {s.arm[:12]:12} {s.minutes:5.1f} {s.level_start or 0:>2}-{s.level_end or 0:<2} "
-              f"{s.xp:6.0f} {s.xp_per_hour:6.0f} {s.kills:>4} {s.deaths:>3} "
+              f"{s.xp:6.0f} {s.xp_per_hour:6.0f} {s.kills:>4} {s.steps:>4} {s.deaths:>3} "
               f"{s.looted:>3}/{s.looted + s.unlooted:<3} {s.stuck:>5} {s.tutor_calls:>5} "
               f"{s.tutor_median_s if s.tutor_median_s is not None else '-':>5} "
               f"{s.money_delta if s.money_delta is not None else '-':>6} "
