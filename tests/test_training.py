@@ -150,3 +150,14 @@ def test_a_mage_puts_its_conjures_on_the_bar():
     bar = {1: 6603, 2: 133, 3: 168, 11: None, 12: None, **{s: 0 for s in range(4, 11)}}
     placed = {p.spell_id for p in placements(bar, frozenset({6603, 133, 168, 5504, 587, 116}))}
     assert {5504, 587, 116} <= placed
+
+
+def test_a_trainer_teaching_more_is_worth_a_longer_walk():
+    """V168: from Moonbrook, Brother Wilhelm is about 2,070 yards; worth it for two spells
+    or more, not for one."""
+    moonbrook = (-11000.0, 1500.0)
+    known = {6603, 20154, 635}
+    assert trainer_due(2, 1, 14, known, 100_000, 0, moonbrook).name == "Brother Wilhelm"
+    cheapest = min(o.cost for t in training.trainers(2, 1, 0) if t.name == "Brother Wilhelm"
+                   for o in training.learnable(t, 14, known))
+    assert trainer_due(2, 1, 14, known, cheapest, 0, moonbrook) is None

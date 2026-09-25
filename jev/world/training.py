@@ -38,7 +38,11 @@ HORDE_RACES = frozenset({2, 5, 6, 8, 10})
 
 # A trainer further than this is not worth the walk on its own. Northshire's Brother
 # Sammuel stands 50 yards from the Abbey door; Goldshire's Brother Wilhelm is 600 yards on.
+# One that teaches two spells or more the purse can pay for is worth twice the walk (V168):
+# from Sentinel Hill Brother Wilhelm is 1,400 yards, from Moonbrook about 2,070, and a
+# paladin working south Westfall would otherwise not train from 14 to 18.
 MAX_TRAINER_YARDS = 1500.0
+TRAINER_REACH_SPELLS = 2
 
 # Roles worth a new bar slot, in the order free slots are handed out.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
@@ -197,14 +201,14 @@ def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
     best, best_key = None, None
     for trainer in trainers(class_id, race_id, map_id, facts):
         yards = math.dist(trainer.world[:2], here)
-        if yards > max_yards:
+        if yards > max_yards * TRAINER_REACH_SPELLS:
             continue
         bought, left = 0, money
         for offer in sorted(learnable(trainer, level, known, facts=facts), key=lambda o: o.cost):
             if offer.cost > left:
                 break
             bought, left = bought + 1, left - offer.cost
-        if not bought:
+        if not bought or yards > max_yards * min(bought, TRAINER_REACH_SPELLS):
             continue
         key = (-bought, yards)
         if best_key is None or key < best_key:
