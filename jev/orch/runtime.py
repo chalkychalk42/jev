@@ -64,8 +64,12 @@ SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
 # A hand-in passed over after failing twice leaves its quest complete in the log for good:
 # Kobold Candles sat there with William Pestle twenty yards from Marshal Dughan, whom the
 # guide visits again and again (25 September). A later step that brings the character
-# within the hand-in's own arrival radius hands the quest in on the way, once ever - the
-# attempt is kept among the retried steps as `DETOUR` + its id - and comes back.
+# within the hand-in's own arrival radius hands the quest in on the way, once a level - the
+# attempt is kept among the retried steps as `DETOUR` + its id + "@" + the level - and
+# comes back. Once a level, not once ever: Kobold Candles, Collecting Kelp and the Grape
+# Manifest spent theirs on an inn and an abbey whose stairs the walk could not yet climb,
+# and sat complete in the log after the walk was fixed (25 September). An entry without a
+# level, from before, counts as spent at the level first read.
 DETOUR = "detour:"
 
 
@@ -230,6 +234,10 @@ class ClientRuntime:
         if verdict.event is Event.ADVANCE and not verdict.completed:
             self._tracker_event = "rejoin_or_skip"
         self._apply(verdict, state)
+        if state.char.level is not None:
+            unlevelled = {r for r in self._retried if r.startswith(DETOUR) and "@" not in r}
+            self._retried = ((self._retried - unlevelled)
+                             | {f"{r}@{state.char.level}" for r in unlevelled})
         if verdict.event is Event.NONE and not self.finished:
             beyond = self._abandoned_now(state)
             if beyond is not None:
@@ -239,11 +247,11 @@ class ClientRuntime:
         # re-reports ARRIVED, never NONE.
         if (not self.finished and self.tracker.step_id == before
                 and verdict.event not in (Event.ADVANCE, Event.FAIL, Event.DEATH)):
-            if (lost := self._prerequisite_lost()) is not None:
+            if (lost := self._prerequisite_lost(state)) is not None:
                 self.tracker.enter(lost, state)
                 self._tracker_event = "rejoin_or_skip"
             elif (detour := self._handin_detour(state)) is not None:
-                self._retried.add(DETOUR + detour)
+                self._retried.add(f"{DETOUR}{detour}@{state.char.level}")
                 self.tracker.enter(detour, state, rejoin_to=before)
                 self._tracker_event = "rejoin_or_skip"
         node = self.graph.get(self.tracker.step_id)
@@ -351,9 +359,16 @@ class ClientRuntime:
             return None
         return self._beyond_abandoned()
 
-    def _prerequisite_lost(self) -> str | None:
-        """An accept whose prerequisite's hand-in is lost for good - passed over, and its one
-        detour spent - cannot be offered: the step past this quest instead. The Escape
+    def _detour_spent(self, step_id: str, level: int | None) -> bool:
+        """The hand-in's detour at this level is spent (`DETOUR`); with no level read, any."""
+        if level is not None:
+            return f"{DETOUR}{step_id}@{level}" in self._retried
+        return any(r == DETOUR + step_id or r.startswith(f"{DETOUR}{step_id}@")
+                   for r in self._retried)
+
+    def _prerequisite_lost(self, state: State) -> str | None:
+        """An accept whose prerequisite's hand-in is lost - passed over, and its detour for
+        the level spent - cannot be offered: the step past this quest instead. The Escape
         waits on Collecting Kelp's hand-in, lost in the Lion's Pride Inn (session 109), and
         trying it anyway costs a rib, a retry and a pass-over."""
         node = self.graph.get(self.tracker.step_id)
@@ -362,7 +377,8 @@ class ClientRuntime:
             return None
         lost = {n.quest_id for n in self.graph.nodes
                 if n.kind is StepKind.QUEST_TURNIN and n.quest_id is not None
-                and n.quest_id not in self.completed and DETOUR + n.id in self._retried}
+                and n.quest_id not in self.completed
+                and self._detour_spent(n.id, state.char.level)}
         # Alternatives of quests all required, as the route reads them (`compile_route`):
         # impossible only when every alternative holds a lost one.
         if not all(any(q in lost for q in group) for group in node.quest_prerequisites):
@@ -377,6 +393,7 @@ class ClientRuntime:
         node = self.graph.get(self.tracker.step_id)
         if (node is None or node.kind is StepKind.GRIND or self.tracker.memory.rejoin_to
                 or state.quests is None or state.vitals.combat is True
+                or state.char.level is None
                 or state.pos.mx is None or state.pos.my is None):
             return None
         complete = {q.quest_id for q in state.quests if q.complete is True}
@@ -384,7 +401,8 @@ class ClientRuntime:
         for step in self.graph.nodes:
             if (step.kind is StepKind.QUEST_TURNIN and step.id != node.id
                     and step.quest_id in complete and step.id in self._retried
-                    and DETOUR + step.id not in self._retried and step.pos is not None
+                    and not self._detour_spent(step.id, state.char.level)
+                    and step.pos is not None
                     and (step.coord_zone_id is None or state.pos.coord_zone_id is None
                          or step.coord_zone_id == state.pos.coord_zone_id)
                     and math.dist(step.pos, here) <= step.r):
@@ -434,7 +452,7 @@ class ClientRuntime:
                 self.counters.fails += 1
                 beyond = self._past_abandoned_quest(verdict)
                 back = self.tracker.memory.rejoin_to
-                if back is not None and DETOUR + self.tracker.step_id in self._retried:
+                if back is not None and self._detour_spent(self.tracker.step_id, None):
                     # A hand-in on the way that could not be done: straight back, no rib.
                     self.tracker.enter(back, state)
                 elif beyond is not None:

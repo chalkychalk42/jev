@@ -509,7 +509,7 @@ def test_a_passed_over_hand_in_within_reach_is_made_on_the_way(tmp_path):
     rt = detour_runtime(tmp_path, states)
     rt.tick(choose=False)
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("turnin", "after")
-    assert DETOUR + "turnin" in rt._retried
+    assert DETOUR + "turnin@5" in rt._retried, "spent at the level it was tried at"
     rt.tick(choose=False)
     assert rt.tracker.step_id == "turnin", "still in the log: still handing it in"
     rt.tick(choose=False)
@@ -526,6 +526,32 @@ def test_a_hand_in_on_the_way_that_fails_goes_straight_back_and_is_not_tried_aga
     assert visited[1] == ("turnin", "after")
     assert ("rib", "after") not in visited, "a failed detour is not worth a rib"
     assert visited[2:] == [("after", None)] * 3, "back, and once only"
+
+
+def test_a_level_is_another_try_at_a_hand_in_on_the_way(tmp_path):
+    """Kobold Candles, Collecting Kelp and the Grape Manifest spent their one detour on an
+    inn and an abbey whose stairs the walk could not yet climb, and sat complete in the log
+    after the walk was fixed (25 September)."""
+    states = [held(0, 5), held(1, 5), held(13, 5), held(14, 5), held(15, 6), held(16, 6)]
+    rt = detour_runtime(tmp_path, states)
+    visited = []
+    for _ in states:
+        rt.tick(choose=False)
+        visited.append((rt.tracker.step_id, rt.tracker.memory.rejoin_to))
+    assert visited[2:4] == [("after", None)] * 2, "failed at level 5: back"
+    assert visited[4] == ("turnin", "after"), "at level 6, on the way again"
+
+
+def test_a_detour_spent_before_levels_were_kept_counts_for_the_level_first_read(tmp_path):
+    from jev.orch.runtime import DETOUR
+
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource([held(0, 5), held(1, 6)]),
+                       Recorder(tmp_path), start_step="after",
+                       start_retried=frozenset({"turnin", DETOUR + "turnin"}))
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "after" and DETOUR + "turnin@5" in rt._retried
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "turnin", "a level later, another try"
 
 
 def chain_graph():
