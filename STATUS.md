@@ -2691,3 +2691,35 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
   choice already avoids crowded plates; this pull was the tutor's.
 - Stray inputs: two more, labelled - 2,203 ms after the bot held W, 313 ms after it
   released jump - each "1 of 3", no pause. Testvvi: level 11 at 89%, 31 silver.
+
+## 2026-09-25 04:05 — hour five: out of the inn, and walks that say where they got to
+
+- **The character spent sessions 109 to 111 upstairs in the Lion's Pride Inn.** Nothing
+  paints a height, so each session's first plan guessed the floor from the destination's
+  height and picked the hall below. Every re-plan, started at the height of the route being
+  followed, walked the same hall route into the same upstairs walls (session 110: 0 XP, 51
+  stuck events, 15 minutes). A re-plan blocked again near where a plan started now begins
+  on another floor under the spot, indoors only (V145). In session 112 it fired in
+  Fargodeep Mine. Outdoors it had picked the mine's floor under a field, hence indoors
+  only.
+- **Walks said "arrived" 1,209 yards short.** A re-planned route can be partial, and
+  reaching its end was reported as arriving at the destination: a grind began indoors,
+  and the two-walk hearthstone rule was reset each time. An arrival now has to be at the
+  destination (V145). Session 112 logged "stuck, 197.6 yards left - (the route ended 197.6
+  yards short)" where it used to say arrived.
+- **The hearthstone freed it** (session 111, the old rule firing at last) and was
+  reported as "did not move": bound in the same inn, it moved the character 21 yards, and
+  arrival wanted 70. A jump between two reads now counts, and failed walks meant to go 20
+  yards or more that got under 10 yards nearer now count towards the stone (V146).
+- **The Escape** needed a hand-in lost in the inn, so it could never be offered, and it
+  cost two failures and two walks to a rib. An accept whose prerequisite hand-in is lost
+  is now passed by (V144). **Short ribs** go to the nearest rib whose mobs all give
+  experience: 610 yards instead of 1,550 from Goldshire (V147). **Lost hand-ins get a new
+  detour each level** (V148): Kobold Candles, Collecting Kelp and the Grape Manifest,
+  about 1,500 XP, are complete in the log.
+- Goldtooth accepted (session 111), and the character is hunting in Fargodeep Mine. Bags
+  were full: Homer Stonefield failed once with the porch post blocking the camera, then
+  sold on the next try. The motor learner hit its known intermittent Windows lock timeout
+  once (session 112), and the next cycle was clean (generation 2302).
+- XP/h over the inn hours: sessions 109-112 made 137, 0, 822 and 1,331. Testvvi: level 11
+  at 95%, 32 silver; 21 quests done.
