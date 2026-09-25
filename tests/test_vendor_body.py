@@ -245,3 +245,39 @@ def test_merchants_are_ranked_by_their_walk_not_their_distance(monkeypatch):
     monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
     assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
     assert visit.call_args.args == ("At The Forge",)
+
+
+def test_a_farther_merchant_with_an_easy_walk_beats_the_nearest_up_a_tower(monkeypatch):
+    """From the vineyards the two nearest merchants were up a tower, 982 and 1,209 yards of
+    climbing, and a window of 100 yards round the nearest left Goldshire's out (session 101)."""
+    b = body()
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+    vendors = (Merchant(1, "Up The Tower", 0, (55, 55, 40), frozenset()),
+               Merchant(2, "Also Up The Tower", 0, (56, 56, 40), frozenset()),
+               Merchant(3, "In The Street", 0, (80, 80, 0), frozenset()))
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    plans = {(55, 55, 40): SimpleNamespace(usable=True, points=[(0, 0, 0)] * 41,
+                                           length_yards=lambda: 380.0),
+             (56, 56, 40): SimpleNamespace(usable=True, points=[(0, 0, 0)] * 53,
+                                           length_yards=lambda: 430.0),
+             (80, 80, 0): SimpleNamespace(usable=True, points=[(0, 0, 0)] * 6,
+                                          length_yards=lambda: 140.0)}
+    b.client.plan_to = lambda world: plans[tuple(world)]
+    visit = Mock(return_value=Interacted.VENDOR)
+    b.interact = SimpleNamespace(open_on=visit)
+    class FakeVendor:
+        detail = "observed service"
+        def equip_bags(self, bags, **kw):
+            return 0
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
+            self.open_shop = open_shop
+        def run(self, **kwargs):
+            assert self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
+    assert visit.call_args.args == ("In The Street",)

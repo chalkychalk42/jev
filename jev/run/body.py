@@ -105,10 +105,13 @@ MERCHANT_TRIES = 5
 # sells too, in the inn's cellar: the nearest in a straight line from the south, and the
 # way back out took 155 turns and 18 stuck events (session 90). Planned from there, the
 # cellar costs 818 yards and the smith at the forge 571. The `MERCHANT_PLANS` nearest in a
-# straight line, within `MERCHANT_WINDOW_YARDS` of the nearest, are planned (a few ms).
+# straight line are planned (a few ms). No narrower window: from the vineyards the two
+# nearest were up a tower (41 and 53 corners, 982 and 1,209 yards), a 100-yard window left
+# Goldshire's out, and both climbs failed (session 101). A merchant no route reaches costs
+# `UNPLANNED_FACTOR` times its straight distance.
 CORNER_YARDS = 15.0
-MERCHANT_WINDOW_YARDS = 100.0
 MERCHANT_PLANS = 12
+UNPLANNED_FACTOR = 3.0
 # Binding the hearthstone (`LiveBody.bindable`): an inn this near the guide's current step,
 # while home is farther than `HOME_FAR_YARDS` from it or unknown. Goldshire's inn is 590
 # yards from Northshire's quests, which bind nowhere, and 360 from Fargodeep Mine's.
@@ -1106,10 +1109,7 @@ class LiveBody:
         world = map_to_world(*here, self.client.bounds)
         failed = load_merchant_failures(self.merchant_memory)
         # The ones that answered before first, then the shortest walk.
-        nearest = min(math.dist(m.world[:2], world) for m in candidates)
-        near = sorted((m for m in candidates
-                       if math.dist(m.world[:2], world) <= nearest + MERCHANT_WINDOW_YARDS),
-                      key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_PLANS]
+        near = sorted(candidates, key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_PLANS]
         walks = {m.entry: self._walk_yards(m.world, math.dist(m.world[:2], world)) for m in near}
         ranked = sorted(near, key=lambda m: (failed.get(m.entry, 0), walks[m.entry]))
         ranked += sorted((m for m in candidates if m.entry not in walks),
@@ -1143,8 +1143,10 @@ class LiveBody:
         """What walking to `world` costs, in yards: its plan's length and corners."""
         plan_to = getattr(self.client, "plan_to", None)
         planned = plan_to(world) if plan_to is not None else None
-        if planned is None or not planned.usable:
-            return straight
+        if planned is None:
+            return straight                      # no planner to ask: distance as before
+        if not planned.usable:
+            return straight * UNPLANNED_FACTOR
         return planned.length_yards() + CORNER_YARDS * max(0, len(planned.points) - 2)
 
     def _open_merchant(self, name, world, point) -> bool:
