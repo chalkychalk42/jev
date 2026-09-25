@@ -2658,3 +2658,36 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
 - The guide moves at 2-5 steps an hour against about 60 left in 1-12, mostly kill-and-
   collect objectives: Westfall is out of tonight's reach, level 13 by morning is not.
   Testvvi: level 11 at 56%, 29 silver, on Pie for Billy.
+
+## 2026-09-25 03:10 — hour four: teach stays, a review, meals, and the inn again
+
+- **The tutor A/B is decided: teach stays** (rule 6.3, DECISIONS V129). Clean sessions:
+  hybrid 3,152 XP/h over 1.0 h against teach's 2,620 over 1.5 h - 1.20 times, short of
+  1.4 - and 11 qualified teaching examples an hour against 40 (27%, short of 40%); no
+  deaths in either. Every session from 106 plays teach.
+- **Meals are the routine's** (V140): a third of the tutor's decisions, unlearnable from
+  the state a student sees, and the tutor walked off its route before eating. The first
+  session with it then stopped on a meal's timeout - the routine's 60 s budget, which the
+  tutor's episodes had never been timed by, ran out drinking level-1 water from low
+  mana - so a meal now has 120 s and never counts toward stopping a run.
+- **A review of the night's changes** found six real problems, all fixed (V141): height
+  tracking now takes the route's own height while walking it (stairs over the inn's hall
+  had kept it on the hall); one input that is not the bot's stops the window being taken
+  back for 30 s, and a person interrupting a focus attempt no longer stops the run; the
+  step's clock stands still in a pause; a slow typist keeps the desk; passages keep the
+  height `patch` compares; and a routine taking over from the tutor has only its own walk
+  taken off its budget.
+- **A tutor click on a unit that walked** is re-found by the nameplates drawn now (V139):
+  its most common failure, 17 of 112 results. Misses on distant units (no plate drawn)
+  remain the tutor's own.
+- **William Pestle, in the Lion's Pride Inn,** worked once (Note to William, session 105:
+  16.8 yards, arrived) and failed twice for Collecting Kelp: in session 108 the character
+  passed 3.9 yards from him and then walked two more minutes of a re-planned route round
+  the building - a walk now ends when it reaches its destination early (V142) - and in
+  session 109 it saw two other NPCs' nameplates and not his. The hand-in detour is making
+  its one extra try.
+- **One death** (session 105): a murloc pack at Crystal Lake, entered at full health and
+  mana; Lay on Hands was spent a minute before, then mana ran out. The routine's own target
+  choice already avoids crowded plates; this pull was the tutor's.
+- Stray inputs: two more, labelled - 2,203 ms after the bot held W, 313 ms after it
+  released jump - each "1 of 3", no pause. Testvvi: level 11 at 89%, 31 silver.
