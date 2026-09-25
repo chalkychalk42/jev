@@ -58,6 +58,13 @@ def delegable_skills(current: str, available) -> tuple[str, ...]:
     return tuple(sorted(allowed & set(available)))
 
 
+# The runs already read into the store, by their play files' sizes and times, kept in the
+# store beside what they gave it: every new session read all 170 runs again, a lock per row,
+# while its controller wrote through the same lock, and met the lock's ten seconds at the
+# start (sessions 112 and 117).
+INGESTED = "ingested-runs.json"
+
+
 class MotorLearningService:
     """Training never owns HID and cannot block the supervisor's stop clock."""
 
@@ -80,11 +87,12 @@ class MotorLearningService:
         # and a blocking lock on Windows gives up after ten seconds: a cycle failed with
         # `PermissionError: [Errno 13]` (run 20260923T232300-e3b21c), and the teaching
         # controller writes through the same lock.
-        seen: dict[Path, tuple] = {}
+        seen: dict[Path, tuple] = self._ingested()
         while not self.stop.is_set():
             phase = "listing runs"
             try:
                 recovered = []
+                kept = dict(seen)
                 for directory in sorted(self.runs.iterdir()) if self.runs.exists() else ():
                     if self.stop.is_set():
                         break
@@ -102,6 +110,11 @@ class MotorLearningService:
                             recovered.append({"run": directory.name, "errors": report["errors"]})
                         else:
                             seen[directory] = stamp
+                if seen != kept:
+                    phase = "keeping the runs read"
+                    atomic_json(self.learner.directory / INGESTED,
+                                {d.name: [list(e) if e is not None else None for e in stamp]
+                                 for d, stamp in seen.items()})
                 phase = "training"
                 report = self.learner.update(cancelled=self.stop.is_set)
                 phase = "writing the cycle record"
@@ -114,6 +127,17 @@ class MotorLearningService:
                 # waited out its ten seconds) and the next one does not.
                 self.error = f"{type(exc).__name__}: {exc} ({phase})"
             self.stop.wait(self.interval_s)
+
+    def _ingested(self) -> dict[Path, tuple]:
+        """The runs an earlier session read in full (`INGESTED`); none if unreadable."""
+        import json
+
+        try:
+            kept = json.loads((self.learner.directory / INGESTED).read_text(encoding="utf-8"))
+            return {self.runs / name: tuple(tuple(e) if e is not None else None for e in stamp)
+                    for name, stamp in kept.items()}
+        except (OSError, ValueError, TypeError, AttributeError):
+            return {}
 
     def close(self):
         self.stop.set()

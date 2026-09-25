@@ -582,6 +582,40 @@ def test_background_rereads_a_run_only_when_its_play_files_change(tmp_path):
     assert sorted(ingested) == ["live", "live", "quiet"]
 
 
+def test_a_new_session_does_not_read_again_the_runs_an_earlier_one_read(tmp_path):
+    """Every new session read all 170 runs again, a lock per row, and met the lock's ten
+    seconds at its start (sessions 112 and 117)."""
+    runs, store = tmp_path / "runs", tmp_path / "learning"
+    store.mkdir()
+    for name in ("old", "older"):
+        (runs / name).mkdir(parents=True)
+        (runs / name / "play-actions.jsonl").write_text("")
+    ingested = []
+
+    class OfflineLearner:
+        directory = store
+        def __init__(self):
+            self.cycled = threading.Event()
+        def ingest_run(self, directory):
+            ingested.append(directory.name)
+            return {"errors": []}
+        def update(self, *, cancelled):
+            self.cycled.set()
+            return {"candidates": 0}
+
+    for session in range(2):
+        learner = OfflineLearner()
+        service = MotorLearningService(learner, runs, interval_s=60).start()
+        try:
+            assert learner.cycled.wait(3)
+        finally:
+            service.close()
+        if session == 0:
+            (runs / "new").mkdir()
+            (runs / "new" / "play-actions.jsonl").write_text("")
+    assert sorted(ingested) == ["new", "old", "older"]
+
+
 def test_background_leaves_the_run_in_progress_to_its_own_controller(tmp_path):
     """The live run's controller records every row itself; re-reading it each cycle held
     the store's lock in bursts the controller had to wait through (Errno 13 on Windows)."""
