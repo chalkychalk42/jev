@@ -48,6 +48,16 @@ Now
     - a failed switch left the status green.
   - A meal now takes another food or drink when the first ends short, and waits on
     regeneration rather than stopping.
+- **Also, 25 Sep 15:00-15:25:**
+  - V174: no student is trained inside a live session (02db32b). A survey found three
+    learner threads in every session re-reading hundreds of megabytes for students that
+    never act.
+  - Consolidation step 1 (9b9cc58).
+  - The consolidation order is now in the plan's §11.
+  - `tools/session_check.py` (2e68841).
+  - The keeper timer is installed, held off by `var/loop/stop`.
+  - **Pre-flight is complete.** The loop is stopped, the client is closed, and the tree
+    is at origin/main.
 - **Offline checks at 14:05:**
   - The 1-12 route starts at A Threat Within, with 41 quests (Give Gerard a Drink pays
     nothing, V163).
