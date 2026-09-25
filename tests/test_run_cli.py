@@ -95,7 +95,7 @@ def fake_live(monkeypatch, tmp_path, *, disconnected=False, character=0x26A9640B
         hid=SimpleNamespace(checkpoint=None, ready=lambda: True, keys_down=lambda: [],
                             release_all=Mock()),
         focused=lambda *args, **kwargs: True,
-        frame=lambda: None, quest_ids=lambda: (),
+        frame=lambda: None, quest_ids=lambda tries=40: (),
         close=lambda: events.append("client closed"), restored=not disconnected)
     client.character = character
     client.read = lambda: ({"pos.zone_id": 1, "char.key": client.character}

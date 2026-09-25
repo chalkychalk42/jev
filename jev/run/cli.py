@@ -36,6 +36,9 @@ from jev.world.state_v1 import StepKind
 ROOT = Path(__file__).resolve().parents[2]
 # How long an operator stop waits for a fight in progress to end before stopping anyway.
 STOP_COMBAT_GRACE_S = 90.0
+# Reads to wait at start for one whole quest-log cycle (about 0.13 s each). Forty failed
+# sessions 97 and 98 with "complete quest log unavailable" while the radio painted.
+STARTUP_LOG_TRIES = 250
 
 
 @contextmanager
@@ -256,8 +259,13 @@ def _live(args, graph) -> int:
                 raise NotRunning(result.detail)
             values = client.read()
         startup_checkpoint()
-        if values is None or client.quest_ids() is None:
-            raise NotRunning("radio or complete quest log unavailable")
+        if values is None or client.quest_ids(tries=STARTUP_LOG_TRIES) is None:
+            # What was seen, for the next time: four sessions in a row stopped here while the
+            # strip painted, and a separate reader assembled the same log in under a second.
+            seen, count = client.log.progress
+            raise NotRunning(f"radio or complete quest log unavailable (reading "
+                             f"{'none' if values is None else 'ok'}, strip frozen "
+                             f"{client.frozen_for():.1f} s, quest slots {seen} of {count})")
         # Which character is logged in decides whose playhead this run keeps.
         character = values.get("char.key")
         path, memory, route, graph = remembered(args, graph, character)
