@@ -153,7 +153,7 @@ def test_a_replan_starts_at_the_height_of_the_route_that_got_us_here():
     client.query.path = path
     client.travel.position = lambda: (0.49, 0.42)
 
-    def follow(route, *, timeout_s, replan, memory=None):
+    def follow(route, *, timeout_s, replan, memory=None, **kw):
         replan((0.49, 0.42))
         return SimpleNamespace(outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0,
                                stuck_events=1, detail="")
@@ -187,7 +187,7 @@ def test_a_start_height_that_snaps_onto_the_wrong_floor_is_not_the_plan():
     client.travel.position = lambda: at[0]
     walked = []
 
-    def follow(route, *, timeout_s, replan, memory=None):
+    def follow(route, *, timeout_s, replan, memory=None, **kw):
         walked.append(route)
         return SimpleNamespace(outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0,
                                stuck_events=0, detail="")
@@ -392,7 +392,7 @@ def test_blocked_where_a_plan_started_the_re_plan_tries_the_other_floor(indoors,
     lines = []
     client.on_path = lines.append
 
-    def follow(route, *, timeout_s, replan, memory=None):
+    def follow(route, *, timeout_s, replan, memory=None, **kw):
         replan(spot)
         replan(spot)
         return SimpleNamespace(outcome=Outcome.STUCK, remaining_yards=40.0, turns=0,

@@ -54,6 +54,11 @@ ARRIVAL_SLACK_YARDS = 1.0
 # field over Fargodeep Mine: the walk to it "arrived" crossing the field above, and the hunt
 # found nothing there to fight (session 113).
 EARLY_HEIGHT_YARDS = 3.0
+# And, when the caller can ask the planner (`reach`), only where the planned walk from there
+# is within the arrival radius and this: William Pestle stands 2.9 yards from the next room
+# of the Lion's Pride Inn and 13.8 yards' walk round its wall, and the hand-ins "arrived"
+# in that room, facing the wall, until the step failed over (session 114).
+EARLY_WALK_YARDS = 3.0
 
 # A seed, not a calibration. Measured once on a level-3 human in Northshire.
 TURN_RATE_SEED = math.radians(134.0)
@@ -261,7 +266,9 @@ class Travel:
     def to(self, target, *, timeout_s: float = 90.0,
            abort: Callable[[], bool] | None = None,
            allow_detour: bool = True, destination=None,
-           destination_yards: float | None = None) -> TravelResult:
+           destination_yards: float | None = None,
+           destination_reach: Callable[[tuple[float, float]], float | None] | None = None,
+           ) -> TravelResult:
         """Walk at a point.
 
         `allow_detour=False` on a planned leg. `_detour` is the wall heuristic for a
@@ -281,6 +288,7 @@ class Travel:
         pulse_key: str | None = None
         pulse_started_heading: float | None = None
         pulse_len = 0.0
+        early_refused = False
 
         best, best_at = None, t0
         self.hid.key_down("w")
@@ -326,9 +334,14 @@ class Travel:
                 if remaining <= self.arrival_yards:
                     return self._result(Outcome.ARRIVED, start, here, target, elapsed, "")
                 if (destination is not None and destination_yards is not None
+                        and not early_refused
                         and self.distance(here, destination) <= destination_yards):
-                    return self._result(Outcome.ARRIVED, start, here, destination, elapsed,
-                                        EARLY)
+                    walk = None if destination_reach is None else destination_reach(here)
+                    if destination_reach is None or (
+                            walk is not None and walk <= destination_yards + EARLY_WALK_YARDS):
+                        return self._result(Outcome.ARRIVED, start, here, destination,
+                                            elapsed, EARLY)
+                    early_refused = True             # a wall between: this leg walks on
                 if best is None or remaining < best - self.no_progress_yards:
                     best, best_at = remaining, now
 
@@ -415,7 +428,9 @@ class Travel:
     def follow(self, path, *, timeout_s: float = 300.0,
                abort: Callable[[], bool] | None = None,
                replan: Callable[[tuple[float, float]], object] | None = None,
-               max_replans: int = 3, memory=None, rounds: int = 2) -> TravelResult:
+               max_replans: int = 3, memory=None, rounds: int = 2,
+               reach: Callable[[tuple[float, float]], float | None] | None = None,
+               ) -> TravelResult:
         """Walk a planned route, one waypoint at a time.
 
         Sequencing only. The follower is unchanged and learns nothing new about geometry:
@@ -477,7 +492,7 @@ class Travel:
                         for end in (legs[i - 1], leg))
             last = self.to(leg, timeout_s=remaining, abort=abort, allow_detour=False,
                            destination=None if final or not level else legs[-1],
-                           destination_yards=exact)
+                           destination_yards=exact, destination_reach=reach)
             if last.outcome is Outcome.ARRIVED and last.detail == EARLY:
                 self.arrival_yards = exact
                 return self._result(Outcome.ARRIVED, legs[0], self.position(), legs[-1],
@@ -540,7 +555,7 @@ class Travel:
                         rounded = self._round_blocked(
                             path, legs[i - 1], leg, stuck_at, memory, replan,
                             timeout_s - (time.perf_counter() - t0), abort,
-                            max_replans - replans, rounds - 1)
+                            max_replans - replans, rounds - 1, reach)
                         if rounded is not None:
                             self.arrival_yards = exact
                             outcome, short = self._short_of(rounded.outcome, rounded.end,
@@ -562,7 +577,7 @@ class Travel:
                     rest = self.follow(
                         fresh, timeout_s=timeout_s - (time.perf_counter() - t0),
                         abort=abort, replan=replan, max_replans=max_replans - replans,
-                        memory=memory, rounds=rounds,
+                        memory=memory, rounds=rounds, reach=reach,
                     )
                     outcome, short = self._short_of(rest.outcome, rest.end, legs, exact,
                                                     complete)
@@ -633,7 +648,7 @@ class Travel:
         return self.indoors is not None and self.indoors() is True
 
     def _round_blocked(self, path, previous, leg, stuck_at, memory, replan, timeout_s,
-                       abort, max_replans, rounds) -> TravelResult | None:
+                       abort, max_replans, rounds, reach=None) -> TravelResult | None:
         """Block the spot where the route met what stopped it, and follow a way round.
 
         The spot is on the route, not where the character ended up: pressed into the log
@@ -660,7 +675,8 @@ class Travel:
                 or self._same_answer(fresh, position, leg)):
             return None
         return self.follow(fresh, timeout_s=timeout_s, abort=abort, replan=replan,
-                           max_replans=max_replans, memory=memory, rounds=rounds)
+                           max_replans=max_replans, memory=memory, rounds=rounds,
+                           reach=reach)
 
     def _same_answer(self, fresh, position, leg) -> bool:
         """Would following `fresh` walk straight back into the leg that just blocked?

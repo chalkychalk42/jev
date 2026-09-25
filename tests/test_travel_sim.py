@@ -213,3 +213,19 @@ def test_passing_over_the_destination_on_another_level_is_not_arriving(monkeypat
     result = travel.follow(path, timeout_s=120.0)
     assert result.outcome is Outcome.ARRIVED
     assert result.elapsed_s > 8.0, "arrived on the level above"
+
+
+@pytest.mark.parametrize(("walk", "early"), [(3.9, True), (13.8, False), (None, False)])
+def test_an_early_arrival_asks_the_planner_how_far_the_walk_is(walk, early, monkeypatch):
+    """William Pestle stands 2.9 yards from the next room of the Lion's Pride Inn and 13.8
+    yards' walk round its wall: the hand-ins "arrived" in that room, facing the wall, until
+    the step failed over (session 114)."""
+    world = WalkWorld(x=X0, y=Y0, heading=-math.pi / 2, width_yards=W, height_yards=H)
+    monkeypatch.setattr(travel_module, "time", SimTime(world))
+    points = [(0, 0), (0, -30), (20, -30), (20, -10), (2, -18)]
+    path = Path(PathStatus.COMPLETE, tuple(world.world(X0 + x, Y0 + y, ELWYNN, 80.0)
+                                           for x, y in points))
+    travel = Travel(hid=SimHid(world), bounds=ELWYNN, read_pos=world.map_position)
+    result = travel.follow(path, timeout_s=120.0, reach=lambda here: walk)
+    assert result.outcome is Outcome.ARRIVED
+    assert (result.elapsed_s < 8.0) is early

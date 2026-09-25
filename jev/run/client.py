@@ -377,9 +377,19 @@ class Client:
                 self._following = tuple(planned.points)
             return planned
 
+        def reach(here_map):
+            # The planner's walk from here to the destination, which an early arrival must
+            # be near as well as the straight line (`travel.EARLY_WALK_YARDS`).
+            w = map_to_world(here_map[0], here_map[1], self.bounds)
+            z = self._height_near(w)
+            if z is None:
+                return None
+            walk = self.query.path(self.bounds.map_id, (w[0], w[1], z), world)
+            return walk.length_yards() if walk.status is PathStatus.COMPLETE else None
+
         try:
             result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
-                                        memory=self.route_memory)
+                                        memory=self.route_memory, reach=reach)
             if result.outcome is Outcome.REFUSED:
                 # Nothing was pressed because the window was not focused - a notification
                 # panel, or anything else that takes the foreground. `Hid` is right to
@@ -389,7 +399,7 @@ class Client:
                 self._say("  the window lost focus; taking it back")
                 if self.focused(FOCUS_QUICK_S):
                     result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
-                                                memory=self.route_memory)
+                                                memory=self.route_memory, reach=reach)
         except BaseException:
             self._following = ()             # a walk given up is no route to track against
             raise
