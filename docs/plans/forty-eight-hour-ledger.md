@@ -49,7 +49,12 @@ Now
     - `tools/keep.sh client` launches WoW.
     - `$WINPY tools/login.py` should end with "in the world: True". The list's selection is
       Testvvi (row 2).
-    - `$WINPY tools/observe.py`: schema 16, key 548c8582, level 13.
+    - `$WINPY tools/observe.py`: **schema 17** (installed 14:10, V171), key 548c8582,
+      level 13.
+    - If the strip does not read: close the client and copy
+      `captures/addon-backup/20260925T131155-StatusStrip` back over
+      `/mnt/c/Games/WoW243/Interface/AddOns/StatusStrip` (schema 16; the decoder reads both).
+      Then relaunch and log the issue.
   - **B2, two sessions on Testvvi.** Start the loop. Once the second session starts, touch
     `var/loop/stop`.
     - The log must show `danger: ... cells`, `choices: ... hunt station visits`,
