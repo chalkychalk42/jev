@@ -156,6 +156,9 @@ class ClientRuntime:
     # The level this guide is outgrown at (`jev.run.cli.OUTGROWN_AT`): from it, between two
     # quests, the complete quests' hand-ins nearby are made and the guide is done (V162).
     outgrown_at: int | None = None
+    # The quest under way when the band first applied (`_outgrown`, V177).
+    _band_quest: int | None = field(default=None, init=False)
+    _band_started: bool = field(default=False, init=False)
     foreign: int | None = field(default=None, init=False)
     last_state: State | None = field(default=None, init=False)
     _was_dead: bool = field(default=False, init=False)
@@ -458,8 +461,16 @@ class ClientRuntime:
             return self.tracker.step_id                 # the log or the place unread: wait
         in_log = {q.quest_id: q for q in state.quests}
         node = self.graph.get(self.tracker.step_id)
-        if (node is not None and node.kind is StepKind.QUEST_OBJECTIVE
-                and node.quest_id in in_log):
+        # The quest under way when the band first applied is finished, its hand-in too,
+        # however far (V177): the Riverpaw bounty came to 8 of 8 at the camp and its hand-in,
+        # across Elwynn, was left for the next guide, which never makes it.
+        if not self._band_started:
+            self._band_started = True
+            if node is not None and node.quest_id in in_log:
+                self._band_quest = node.quest_id
+        if (node is not None and node.quest_id == self._band_quest
+                and node.quest_id in in_log and node.id not in self._retried
+                and node.kind in (StepKind.QUEST_OBJECTIVE, StepKind.QUEST_TURNIN)):
             return node.id
         here = (state.pos.mx, state.pos.my)
         hand_ins = [step for step in self.graph.nodes

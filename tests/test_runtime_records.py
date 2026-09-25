@@ -695,3 +695,21 @@ def test_only_a_guide_with_a_next_is_outgrown():
     from jev.run.cli import NEXT_GUIDE, OUTGROWN_AT
 
     assert set(OUTGROWN_AT) <= set(NEXT_GUIDE)
+
+
+def test_the_quest_under_way_when_the_band_applies_is_handed_in_however_far():
+    """V177: the Riverpaw bounty came to 8 of 8 at the camp, and its hand-in across Elwynn
+    was left for the next guide, which never makes it (session 137)."""
+    from jev.world.state_v1 import Char
+
+    far = band_graph().model_copy(update={"nodes": tuple(
+        n.model_copy(update={"pos": (0.95, 0.95)}) if n.id == "turnin" else n
+        for n in band_graph().nodes)})
+    doing = seen(0, char=Char(level=13), quests=(Quest(quest_id=1, complete=False),),
+                 pos=Pos(zone="zone", coord_zone_id=12, mx=0.5, my=0.5))
+    done = doing.model_copy(update={"t": 1, "quests": (Quest(quest_id=1, complete=True),)})
+    rt = ClientRuntime("c", far, ScriptedSource([doing, done, done]), Recorder("/tmp"),
+                       start_step="do", outgrown_at=13)
+    for _ in range(3):
+        rt.tick(choose=False)
+    assert rt.tracker.step_id == "turnin" and not rt.finished, "its hand-in, 0.63 away"
