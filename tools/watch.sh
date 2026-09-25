@@ -1,6 +1,7 @@
 #!/bin/bash
 # The executor's heartbeat (docs/plans/forty-eight-hour-session.md, section 0): run in the
-# background, it exits - and so wakes whoever started it - when the status turns red, when a
+# background, it exits - and so wakes whoever started it - when the status turns red or its
+# red reasons change (a red already known at the start does not wake it again), when a
 # session ends (with --sessions), or after --max minutes, printing the status screen.
 #   tools/watch.sh [--sessions] [--every SECONDS] [--max MINUTES]
 set -u
@@ -19,10 +20,12 @@ LOG=captures/session-loop.log
 ended() { grep -c ' exit=' "$LOG" 2>/dev/null || echo 0; }
 start=$(date +%s)
 seen=$(ended)
+known=$(tools/keep.sh status 2>/dev/null | head -1)
 reason="the watch ran its $max minutes"
 while [ $(( $(date +%s) - start )) -lt $(( max * 60 )) ]; do
-  if ! tools/keep.sh status > /dev/null 2>&1; then
-    reason="the status is red"
+  now=$(tools/keep.sh status 2>/dev/null | head -1)
+  if [ "${now#RED}" != "$now" ] && [ "$now" != "$known" ]; then
+    reason="the status turned red"
     break
   fi
   if [ "$sessions" = 1 ] && [ "$(ended)" != "$seen" ]; then
