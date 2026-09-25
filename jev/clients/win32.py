@@ -414,8 +414,16 @@ def send_inputs(inputs: list[INPUT]) -> int:
     arr = (INPUT * n)(*inputs)                          # pragma: no cover - platform
     accepted = user32.SendInput(n, arr, ctypes.sizeof(INPUT))  # pragma: no cover - platform
     # Ours, not a person's: every injection is stamped (`jev.clients.operator`).
-    operator.stamp()                                    # pragma: no cover - platform
+    operator.stamp(_describe(inputs[-1]))               # pragma: no cover - platform
     return accepted                                     # pragma: no cover - platform
+
+
+def _describe(event: INPUT) -> str:
+    """A short name for an input, for the operator log: which key or mouse action."""
+    if event.type == INPUT_KEYBOARD:
+        return (f"key {event.ki.wScan:#x} "
+                + ("up" if event.ki.dwFlags & KEYEVENTF_KEYUP else "down"))
+    return f"mouse {event.mi.dwFlags:#x}"
 
 
 def scan_code(vk: int) -> int:

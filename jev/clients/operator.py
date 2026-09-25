@@ -27,11 +27,13 @@ MARGIN_MS = 300
 QUIET_S = float(os.environ.get("JEV_OPERATOR_QUIET_S", "600"))
 # The file stamp is refreshed at most this often; the in-process one every injection.
 STAMP_EVERY_S = 0.5
-# A person is a second input that is not the bot's within this long of the first. One
+# A person is `CONFIRM_INPUTS` inputs that are not the bot's within `CONFIRM_MS`. One
 # alone can be the machine's: a lone input 391 ms after the bot's own, then nothing for
 # minutes with nobody at the desk, paused session 91 mid-fight and the character died
-# (24 September). A hand on a mouse or a keyboard makes many.
+# (24 September), and session 102 saw three more, 650-750 ms after the bot's own, each
+# alone. A hand on a mouse or a keyboard makes many.
 CONFIRM_MS = 10_000
+CONFIRM_INPUTS = 3
 WRAP = 1 << 32
 
 
@@ -60,6 +62,8 @@ class Operator:
             self._ours, self._slack_ms = tick_now(), 0
         self._human: int | None = None
         self._odd: int | None = None     # the last input seen that was not the bot's
+        self._odds: list[int] = []       # the recent ones, for `CONFIRM_INPUTS`
+        self._last_label = ""            # what the bot last sent, for the log
         self._written = -float("inf")
         self._unwritten = False
 
@@ -71,9 +75,10 @@ class Operator:
         except (OSError, ValueError):
             return None
 
-    def stamp(self) -> None:
-        """The bot has just injected input."""
+    def stamp(self, label: str = "") -> None:
+        """The bot has just injected input (`label`: what, for the log)."""
         self._ours, self._slack_ms = self._tick_now(), 0
+        self._last_label = label
         now = self._clock()
         self._unwritten = True
         if now - self._written >= STAMP_EVERY_S:
@@ -99,13 +104,15 @@ class Operator:
         ours = self._ours if self._ours is not None else last
         after = (last - ours) % WRAP
         if MARGIN_MS + self._slack_ms < after < WRAP // 2 and last != self._odd:
-            confirmed = (self._odd is not None
-                         and (last - self._odd) % WRAP <= CONFIRM_MS)
+            self._odds = [t for t in self._odds if (last - t) % WRAP <= CONFIRM_MS] + [last]
+            confirmed = len(self._odds) >= CONFIRM_INPUTS
             present = (self._human is not None
                        and (self._tick_now() - self._human) % WRAP < self.quiet_s * 1000)
             if self._say is not None and not present:
-                self._say(f"operator: input {after} ms after the bot's own; "
-                          + ("a person" if confirmed else "alone, not yet a person"))
+                self._say(f"operator: {time.strftime('%H:%M:%S')} input {after} ms after the "
+                          f"bot's own ({self._last_label or 'unlabelled'}); "
+                          + ("a person" if confirmed
+                             else f"{len(self._odds)} of {CONFIRM_INPUTS}, not yet a person"))
             if confirmed:
                 self._human = last
             self._odd = last
@@ -136,10 +143,10 @@ def default() -> Operator | None:
     return _default
 
 
-def stamp() -> None:
+def stamp(label: str = "") -> None:
     watch = default()
     if watch is not None:
-        watch.stamp()
+        watch.stamp(label)
 
 
 def active() -> bool:

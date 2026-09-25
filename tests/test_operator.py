@@ -28,10 +28,11 @@ def watch(desk, tmp_path=None, **kw):
 
 
 def person(desk, op, dt):
-    """A hand at the desk: an input `dt` ms on, seen, and another 150 ms later."""
+    """A hand at the desk: an input `dt` ms on, seen, and two more 150 ms apart."""
     desk.input(dt)
-    op.active()
-    desk.input(150)
+    for _ in range(2):
+        op.active()
+        desk.input(150)
     return op.active()
 
 
@@ -73,7 +74,9 @@ def test_a_new_session_reads_the_last_ones_stamp(tmp_path):
     second = watch(desk, tmp_path)
     assert not second.active(), "one input alone is not yet a person"
     desk.input(300)
-    assert second.active(), "a second is"
+    assert not second.active()
+    desk.input(300)
+    assert second.active(), "a third is"
 
 
 def test_the_tick_wrapping_round_does_not_fool_it():
@@ -81,8 +84,9 @@ def test_the_tick_wrapping_round_does_not_fool_it():
     op = watch(desk)
     op.stamp()
     desk.now = desk.last = 900                   # the 32-bit tick wrapped
-    op.active()
-    desk.input(150)
+    for _ in range(2):
+        op.active()
+        desk.input(150)
     assert op.active(), "input 1,000 ms after the bot's, across the wrap"
 
 
@@ -179,19 +183,23 @@ def test_a_paused_session_is_not_a_stalled_one():
     assert dog.failure is not None, "the window still runs once the person has gone"
 
 
-def test_one_stray_input_is_not_a_person():
+def test_stray_inputs_are_not_a_person():
     """Session 91: one input 391 ms after the bot's own, then nothing for minutes, and
-    nobody at the desk. Paused mid-fight for it, the character died."""
+    nobody at the desk; paused mid-fight for it, the character died. Session 102 saw
+    three more, 650-750 ms after the bot's own, each alone."""
     desk = Desk()
     said = []
     op = watch(desk, say=said.append)
-    op.stamp()
+    op.stamp("key 0x20 up")
     desk.input(391)
     assert not op.active()
     desk.now += 20_000
     op.stamp()                                   # the bot plays on
-    desk.input(400)                              # another stray, but long after the first
-    assert not op.active(), "two strays minutes apart are not a hand at the desk"
-    assert said and all("alone" in line for line in said)
+    desk.input(700)                              # another stray, long after the first
+    assert not op.active(), "strays minutes apart are not a hand at the desk"
+    desk.input(150)
+    assert not op.active(), "two within the window are not yet one either"
+    assert said and all("not yet a person" in line for line in said)
+    assert "key 0x20 up" in said[0], "the log says what the bot last sent"
     desk.input(150)
     assert op.active() and "a person" in said[-1]
