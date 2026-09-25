@@ -803,3 +803,33 @@ def test_a_run_whose_time_is_up_out_of_a_fight_stops_at_once(tmp_path):
     supervisor.step(0)
     supervisor.run(0)
     assert rt.counters.ticks == 1
+
+
+def test_a_merchant_out_of_reach_is_not_walked_to_again_on_the_step_and_never_stops_the_run(
+        tmp_path):
+    """V175: Goldshire's innkeeper, upstairs of whom the walk kept ending, stopped two
+    sessions at T-0 on one timed-out restock each."""
+    from jev.world.state_v1 import Bags
+
+    class ShoppingBody(Body):
+        available = Body.available | {"BUY_AMMO_REAGENT_FOOD"}
+
+    empty = Bags(free=20, durability_min=1.0, money_copper=500, food_id=2070, food_count=0,
+                 drink_id=159, drink_count=5)
+    rt = runtime(tmp_path, [seen(t, bags=empty) for t in (0, 1, 2)])
+    body = ShoppingBody(result=Result(SkillOutcome.TIMED_OUT, "skill timeout", "timeout"))
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert not supervisor.stopped.is_set(), supervisor.failure
+        step = rt.tracker.step_id
+        assert rt.policy_context.supplies_unreachable_step == step
+        assert not rt.policy_context.can_restock(500, step)
+        assert rt.policy_context.can_restock(500, "another step")
+    finally:
+        supervisor.close()

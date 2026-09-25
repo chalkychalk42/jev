@@ -93,7 +93,17 @@ class Context:
     def supplies_failed(self, money: int | None) -> None:
         self.supplies_blocked, self.supplies_money = True, money
 
-    def can_restock(self, money: int | None) -> bool:
+    # A merchant out of reach (the walk or the talk timed out) is not walked to again on
+    # this step, as a trainer is not (V175): Goldshire's innkeeper, upstairs of whom the
+    # walk kept ending, stopped two sessions at T-0.
+    supplies_unreachable_step: str | None = None
+
+    def supplies_unreachable(self, step_id: str | None) -> None:
+        self.supplies_unreachable_step = step_id
+
+    def can_restock(self, money: int | None, step_id: str | None = None) -> bool:
+        if step_id is not None and step_id == self.supplies_unreachable_step:
+            return False
         return not self.supplies_blocked or (
             money is not None and self.supplies_money is not None and money > self.supplies_money)
 
@@ -256,7 +266,7 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
                        ("dead", "combat"), service="repair"), True, "service.durability")
 
     conjured = context.conjured() if context is not None else frozenset()
-    if ((context is None or context.can_restock(b.money_copper))
+    if ((context is None or context.can_restock(b.money_copper, state.guide.step_id))
             and ((b.food_id is not None and b.food_count == 0 and "food" not in conjured)
                  or (b.drink_id is not None and b.drink_count == 0
                      and "drink" not in conjured))):
