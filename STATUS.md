@@ -2625,3 +2625,36 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
 - Not done, measured: better food (level-1 cheese and water at level 11; rests take a
   median 25 s, p90 50 s) would save about 2 minutes an hour but needs the new item used
   without its bar slot. Testvvi: level 11 at 42%, 20 silver, on Pie for Billy.
+
+## 2026-09-25 01:50 — hour three: merchants, floors, the watchdog, a restartable loop
+
+- **Merchants**: the bag service twice chose badly and both are fixed. Session 101's two
+  nearest merchants were up a tower (982 and 1,209 yards of climbing, 41 and 53 corners)
+  and a 100-yard window round the nearest left Goldshire's out; both climbs failed with
+  178 stuck events in session 102. The twelve nearest are now always weighed by their
+  planned walk (V134), and the failure memory has since marked the tower's two.
+- **Floors**: learned passages (where walking was stopped and the escape that got past)
+  were applied by x and y alone, and one learned beside William Pestle bent every route
+  to him towards the inn's stairs. Passages now keep their floor's height and are taken
+  only there (V137); 90 of 113 old ones were given their floor from the navmesh, 14 over
+  several floors (the inn's) are set aside.
+- **The watchdog held during services** (V138): a 389-yard walk to a merchant failed Pie for
+  Billy over as "no quest or experience progress" (session 101).
+- **A hand-in made on the way**: session 102 walked past Marshal Dughan for a merchant and
+  handed in The Jasperlode Mine, passed over in session 95 (V135) - 959 XP in one step.
+- **Startup**: sessions 97-100 stopped at "radio or complete quest log unavailable" while
+  the strip painted, and a separate reader assembled the same log in under a second;
+  session 101 then started normally. The start now waits up to 250 reads and reports
+  what it saw. Session 99's crash was mine - a half-written edit imported between two
+  steps, which stopped the loop; it was restarted in two minutes, and the loop now waits
+  five minutes and retries after three quick failures instead of stopping (loop5).
+- **Stray inputs**: session 102 saw three lone inputs 650-750 ms after the bot's own with
+  nobody at the desk; a person is now three such inputs in ten seconds, and each stray is
+  logged with the bot's last input to find what produces them.
+- **A/B** (clean sessions, 90-91 left out): hybrid 2,650 XP/h over 4 sessions (0.84 h),
+  1.2 guide steps/h, 45 tutor calls/h; teach 2,815 XP/h over 5 (1.25 h), 4.0 steps/h,
+  122 calls/h; no deaths in either. Hybrid is not 1.4 times teach, so teach is likely to
+  stay; the decision is at about 02:55 with three clean blocks each.
+- The guide moves at 2-5 steps an hour against about 60 left in 1-12, mostly kill-and-
+  collect objectives: Westfall is out of tonight's reach, level 13 by morning is not.
+  Testvvi: level 11 at 56%, 29 silver, on Pie for Billy.
