@@ -14,7 +14,7 @@ def _route(*points):
 
 def test_a_route_through_a_known_spot_goes_by_its_learned_point():
     memory = RouteMemory()
-    memory.learn(0, (0.0, -20.0), (31.0, -21.0))           # a fence, passed at its end
+    memory.learn(0, (0.0, -20.0), (31.0, -21.0), z=80.0)   # a fence, passed at its end
     patched = memory.patch(0, _route((0.0, 0.0), (0.0, -40.0)))
     assert [p[:2] for p in patched.points] == [(0.0, 0.0), (31.0, -21.0), (0.0, -40.0)]
     assert "learned passage" in patched.detail
@@ -22,6 +22,32 @@ def test_a_route_through_a_known_spot_goes_by_its_learned_point():
         "a passage belongs to its map"
     assert memory.patch(0, _route((5.0, 0.0), (5.0, -40.0))).points[1][:2] == (5.0, -40.0), \
         "a route five yards away does not pass the spot"
+
+
+def test_a_passage_is_only_taken_on_its_own_floor():
+    """Beside William Pestle an escape learned on one floor bent every route to him
+    towards the stairs, and the character walked the floor above him (session 95)."""
+    memory = RouteMemory()
+    memory.learn(0, (0.0, -20.0), (31.0, -21.0), z=87.0)   # learned one floor up
+    assert len(memory.patch(0, _route((0.0, 0.0), (0.0, -40.0))).points) == 2
+    memory.learn(0, (0.5, -20.0), (-12.0, -20.0), z=80.0)  # the same spot, this floor
+    assert len(memory.passages) == 2, "floors apart are two passages"
+    assert memory.patch(0, _route((0.0, 0.0), (0.0, -40.0))).points[1][:2] == (-12.0, -20.0)
+
+
+def test_a_passage_without_a_height_is_given_its_floor_or_left_untaken(tmp_path):
+    file = tmp_path / "route-memory.json"
+    memory = RouteMemory(file)
+    memory.learn(0, (0.0, -20.0), (31.0, -21.0))           # learned before heights were kept
+    memory.learn(0, (100.0, -20.0), (131.0, -21.0))
+    floors = {0.0: [80.2], 100.0: [57.0, 64.0, 74.5]}      # open ground; the inn's three floors
+    assert memory.backfill(0, lambda x, y: floors[x]) == 2
+    assert [(p.z, p.floors) for p in memory.passages] == [(80.2, 1), (None, 3)]
+    assert memory.patch(0, _route((100.0, 0.0), (100.0, -40.0))).points[1][:2] == (100.0, -40.0), \
+        "a spot over several floors is not guessed at"
+    assert memory.patch(0, _route((0.0, 0.0), (0.0, -40.0))).points[1][:2] == (31.0, -21.0)
+    again = RouteMemory(file)
+    assert again.backfill(0, lambda x, y: [0.0]) == 0, "looked up once, the answer kept"
 
 
 def test_a_spot_at_the_route_start_is_left_to_the_follower():

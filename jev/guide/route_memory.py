@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import math
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from itertools import pairwise
 from pathlib import Path as FilePath
@@ -65,6 +66,14 @@ class Passage:
     via_y: float
     hits: int = 1
     updated: float = 0.0
+    # The stopped spot's height: a passage is only taken on its own floor. Beside William
+    # Pestle in the Lion's Pride Inn an escape learned on one floor bent every route to
+    # him twelve yards towards the stairs, and the character walked the floor above him
+    # (session 95). `None` for passages learned before heights were kept: `backfill` gives
+    # them the navmesh's floor there when there is only one (`floors`); over several they
+    # are not taken.
+    z: float | None = None
+    floors: int | None = None
 
 
 @dataclass
@@ -136,18 +145,23 @@ class RouteMemory:
         """The confirmed blocked spots on a map: those walking was stopped at repeatedly."""
         return [b for b in self.blocked if b.map_id == map_id and b.hits >= BLOCK_CONFIRM_HITS]
 
-    def learn(self, map_id: int, stuck: tuple[float, float], via: tuple[float, float]) -> Passage:
-        """Remember that the character stopped at `stuck` and got past by `via`."""
+    def learn(self, map_id: int, stuck: tuple[float, float], via: tuple[float, float],
+              z: float | None = None) -> Passage:
+        """Remember that the character stopped at `stuck` (at height `z`) and got past by
+        `via`."""
         now = time.time()
         for known in self.passages:
-            if known.map_id == map_id and math.dist((known.x, known.y), stuck) <= MERGE_YARDS:
+            if (known.map_id == map_id and math.dist((known.x, known.y), stuck) <= MERGE_YARDS
+                    and (z is None or known.z is None or abs(known.z - z) < AVOID_HEIGHT)):
                 known.x, known.y = stuck
                 known.via_x, known.via_y = via
+                if z is not None:
+                    known.z, known.floors = z, None
                 known.hits += 1
                 known.updated = now
                 self._save()
                 return known
-        passage = Passage(map_id, stuck[0], stuck[1], via[0], via[1], updated=now)
+        passage = Passage(map_id, stuck[0], stuck[1], via[0], via[1], updated=now, z=z)
         self.passages.append(passage)
         same_map = [p for p in self.passages if p.map_id == map_id]
         if len(same_map) > MAX_PER_MAP:
@@ -169,18 +183,36 @@ class RouteMemory:
         out = [points[0]]
         for a, b in pairwise(points):
             for index, known in enumerate(self.passages):
-                if (index in used or known.map_id != map_id
+                if (index in used or known.map_id != map_id or known.z is None
                         or math.dist((known.x, known.y), points[0][:2]) <= PASS_YARDS):
                     continue
-                if _segment_distance((known.x, known.y), a, b) <= PASS_YARDS:
+                near = _nearest_on_segment((known.x, known.y), a, b)
+                if (math.dist(near[:2], (known.x, known.y)) <= PASS_YARDS
+                        and abs(near[2] - known.z) < AVOID_HEIGHT):
                     used.add(index)
-                    z = (a[2] + b[2]) / 2
-                    out.append((known.via_x, known.via_y, z))
+                    out.append((known.via_x, known.via_y, near[2]))
             out.append(b)
         if len(out) == len(points):
             return path
         return Path(path.status, tuple(out), path.source,
                     (path.detail + "; " if path.detail else "") + f"{len(out) - len(points)} learned passage(s)")
+
+    def backfill(self, map_id: int, surfaces: Callable[[float, float], list[float]]) -> int:
+        """Give this map's passages learned without a height the navmesh's floor under
+        their spot, where there is one floor (`surfaces` lists the heights found); over
+        several they stay untaken. Each is looked up once, the answer kept."""
+        changed = 0
+        for known in self.passages:
+            if known.map_id != map_id or known.z is not None or known.floors is not None:
+                continue
+            found = surfaces(known.x, known.y)
+            known.floors = len(found)
+            if len(found) == 1:
+                known.z = found[0]
+            changed += 1
+        if changed:
+            self._save()
+        return changed
 
     def _save(self) -> None:
         if self.file is None:

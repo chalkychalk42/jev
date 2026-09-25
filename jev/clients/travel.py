@@ -491,7 +491,7 @@ class Travel:
                         last = self.to(leg, abort=abort, allow_detour=True,
                                        timeout_s=timeout_s - (time.perf_counter() - t0))
                         if last.outcome is Outcome.ARRIVED:
-                            self._learn(memory, position, leg)
+                            self._learn(memory, position, leg, path)
                             continue           # past it; the planner has the route back
                     finally:
                         self._trace = None
@@ -557,7 +557,7 @@ class Travel:
             turn_rate_deg_s=last.turn_rate_deg_s, detail="",
         )
 
-    def _learn(self, memory, blocked, leg) -> None:
+    def _learn(self, memory, blocked, leg, path=None) -> None:
         """Remember where a leg was blocked, and the widest point of the escape that worked.
 
         The escape traced since its last stuck event is the one that got past; its point
@@ -580,7 +580,10 @@ class Travel:
         stuck = map_to_world(blocked[0], blocked[1], self.bounds)
         via = map_to_world(widest[0], widest[1], self.bounds)
         if stuck is not None and via is not None:
-            memory.learn(self.bounds.map_id, stuck, via)
+            # The route's height where it was stopped: the floor the passage belongs to.
+            points = getattr(path, "points", None) or ()
+            z = min(points, key=lambda p: math.dist(p[:2], stuck[:2]))[2] if points else None
+            memory.learn(self.bounds.map_id, stuck, via, z=z)
 
     def _round_blocked(self, path, previous, leg, stuck_at, memory, replan, timeout_s,
                        abort, max_replans, rounds) -> TravelResult | None:

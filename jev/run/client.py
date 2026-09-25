@@ -441,6 +441,26 @@ def attach(client_id: str = "run", *, title: str = "World of Warcraft",
     )
 
 
+# Heights a spot's floors are looked for from, and how far apart two floors are. The
+# planner answers the surface nearest the asked height, so a spread of asks finds each
+# floor over a spot; one found beside it rather than under it is some other surface.
+PROBE_HEIGHTS = (-40.0, 0.0, 40.0, 80.0, 120.0, 160.0, 200.0, 240.0, 280.0)
+FLOOR_GAP = 3.0
+
+
+def surfaces_under(query: PathQuery, map_id: int, x: float, y: float) -> list[float]:
+    """The navmesh's floors under a spot, lowest first."""
+    found: list[float] = []
+    for z in PROBE_HEIGHTS:
+        snapped = query.path(map_id, (x, y, z), (x, y, z))
+        if (snapped.status in (PathStatus.COMPLETE, PathStatus.PARTIAL) and snapped.points
+                and math.dist(snapped.points[0][:2], (x, y)) <= UNDER_YARDS):
+            height = snapped.points[0][2]
+            if all(abs(height - known) > FLOOR_GAP for known in found):
+                found.append(height)
+    return sorted(found)
+
+
 def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                 arrival_yards: float, say: Callable[[str], None] | None = None,
                 zones: dict[int, ZoneBounds] | None = None,
@@ -454,6 +474,10 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     client.coordinate_names = names_by_radio_id(zones_path) if zone_names is None else zone_names
     # Every plan, first and re-plan, stays clear of the spots walking found blocked.
     client.query = query if route_memory is None else AvoidingQuery(query, route_memory)
+    if route_memory is not None:
+        # Passages learned before heights were kept get their floor, once (`Passage.z`).
+        route_memory.backfill(bounds.map_id,
+                              lambda x, y: surfaces_under(query, bounds.map_id, x, y))
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards)
