@@ -51,12 +51,17 @@ while [ ! -f var/loop/stop ]; do
   dur=$(( $(date +%s) - start ))
   echo "session $n exit=$code after ${dur}s $(date -Is)" >> "$LOG"
   n=$((n+1))
-  # The campaign: at its level or its deadline the next character takes over (section 8).
+  # The campaign: at its level or its deadline the next character takes over (section 8):
+  # a fresh client, then the next character made or picked and entered.
   if [ -f tools/character.py ] \
       && [ "$(.venv/bin/python tools/character.py due 2>> "$LOG")" = "switch" ]; then
     say "campaign: switching characters"
-    "$WINPY" -u tools/character.py switch >> "$LOG" 2>&1 \
-      || say "campaign: the switch failed; the same character plays on"
+    if tools/keep.sh client-restart >> "$LOG" 2>&1 \
+        && "$WINPY" -u tools/character.py enter >> "$LOG" 2>&1; then
+      say "campaign: switched"
+    else
+      say "campaign: the switch failed; the next session plays whoever is selected"
+    fi
   fi
   if [ "$dur" -lt "$QUICK_S" ]; then fails=$((fails+1)); sleep "$PAUSE_S"; else fails=0; fi
   if [ "$fails" -ge 3 ]; then

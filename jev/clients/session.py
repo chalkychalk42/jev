@@ -40,6 +40,8 @@ class Stage(StrEnum):
     REALM_ASSIGNED = "realm_assigned"  # red plates at Accept and View Realm List
     REALM_LIST = "realm_list"          # red plates at the list's Okay and Cancel
     REALM_WIZARD = "realm_wizard"      # a red plate at the wizard's Cancel, and its Suggest
+    CREATE = "create"                  # red plates at the create screen's Accept and Back
+    CREATE_REFUSED = "create_refused"  # the same, under a dialog: the name was refused
     ELSEWHERE = "elsewhere"    # none of the above, and nothing gets pressed
 
 
@@ -102,6 +104,26 @@ MAX_REALM_STEPS = 4
 CHARACTER_WAIT_S = 2.0
 MAX_CHARACTER_WAITS = 15
 
+# Character select and the create screen, for the characters a campaign makes
+# (`tools/character.py`). Each stays `None` until it is measured off a live screen, and a
+# `None` refuses to act: nothing is pressed at a screen that has not been measured.
+# Character select: the Create New Character plate, the list's first row and the distance
+# between rows; the rows are in the order the server lists the characters, oldest first.
+CREATE_NEW: tuple[float, float] | None = None
+CHARACTER_ROW_FIRST: tuple[float, float] | None = None
+CHARACTER_ROW_STEP: float | None = None
+# The create screen: its Accept and Back plates tell it apart; each race's and class's
+# button; the name box; and the Okay of the dialog that refuses a name.
+CREATE_ACCEPT: tuple[float, float] | None = None
+CREATE_BACK: tuple[float, float] | None = None
+RACE_BUTTONS: dict[str, tuple[float, float]] = {}
+CLASS_BUTTONS: dict[str, tuple[float, float]] = {}
+NAME_BOX: tuple[float, float] | None = None
+CREATE_REFUSED_OKAY: tuple[float, float] | None = None
+# A new character's first entry plays its race's introduction: waited out, pressing
+# nothing, until the strip paints.
+FIRST_ENTRY_S = 240.0
+
 # The login and "Okay" buttons are the interface's red plates: red dominant, everything
 # else low. Measured at (100, 39, 19) and (95, 16, 4).
 _RED_MIN = 70
@@ -149,6 +171,11 @@ def stage(frame: np.ndarray | None, radio_ok: bool) -> Stage:
         return Stage.IN_WORLD
     if frame is None:
         return Stage.ELSEWHERE
+    if (CREATE_ACCEPT is not None and CREATE_BACK is not None
+            and _is_red_button(frame, CREATE_ACCEPT) and _is_red_button(frame, CREATE_BACK)):
+        if CREATE_REFUSED_OKAY is not None and _is_red_button(frame, CREATE_REFUSED_OKAY):
+            return Stage.CREATE_REFUSED
+        return Stage.CREATE
     if _is_red_button(frame, ENTER_WORLD):
         return Stage.CHARACTER
     if _is_grey_plate(frame, ENTER_WORLD):
@@ -187,6 +214,8 @@ class Session:
     entered_world: int = field(default=0, init=False)
     realm_steps: int = field(default=0, init=False)
     character_waits: int = field(default=0, init=False)
+    # The server refused the last name `create_character` tried: taken, or not allowed.
+    refused: bool = field(default=False, init=False)
 
     def stage(self) -> Stage:
         if self.checkpoint:
@@ -209,8 +238,13 @@ class Session:
         w, h = self.window_size
         return (ox + int(at[0] * w), oy + int(at[1] * h))
 
-    def sign_in(self, account: str, password: str, *, timeout_s: float = 180.0) -> bool:
+    def sign_in(self, account: str, password: str, *, timeout_s: float = 180.0,
+                stop_at_select: bool = False) -> bool:
         """Log in and enter the world. Returns whether the strip is painting at the end.
+
+        With `stop_at_select` it stops at character select instead, for a campaign to pick
+        or make its character (`select_row`, `create_character`), and returns whether it is
+        there; a client already in the world is not at character select.
 
         The only success condition is the strip. Every other signal at a login screen is
         a guess about a UI this cannot see properly, and a login that "worked" without a
@@ -224,7 +258,15 @@ class Session:
         while time.perf_counter() < deadline:
             current = self.stage()
             if current is Stage.IN_WORLD:
+                if stop_at_select:
+                    self.detail = "already in the world, not at character select"
+                    return False
                 return True
+            if stop_at_select and current is Stage.CHARACTER:
+                return True
+            if stop_at_select and current in (Stage.CREATE, Stage.CREATE_REFUSED):
+                self._leave_create(current)
+                continue
 
             if current is Stage.LOGIN:
                 if self.attempts >= MAX_ATTEMPTS:
@@ -286,6 +328,96 @@ class Session:
         self.detail = (f"still not in the world after {timeout_s:.0f}s "
                        f"({self.enters} enters, credentials "
                        f"{'sent' if self.typed_credentials else 'not sent'})")
+        return False
+
+    def _leave_create(self, current: Stage) -> None:
+        """Back from the create screen to character select, by its measured plates."""
+        if current is Stage.CREATE_REFUSED:
+            self.hid.click(*self._screen(CREATE_REFUSED_OKAY))
+            self._wait(1.0)
+        self.hid.click(*self._screen(CREATE_BACK))
+        self._wait(3.0)
+
+    def select_row(self, row: int) -> bool:
+        """At character select, pick the character in list row `row` (0 is the first)."""
+        if CHARACTER_ROW_FIRST is None or CHARACTER_ROW_STEP is None:
+            self.detail = "character select's rows are not measured"
+            return False
+        if self.stage() is not Stage.CHARACTER:
+            self.unknown_frame = self.read_frame()
+            self.detail = "not at character select"
+            return False
+        x, y = CHARACTER_ROW_FIRST
+        self.hid.click(*self._screen((x, y + row * CHARACTER_ROW_STEP)))
+        self._wait(1.5)
+        return True
+
+    def create_character(self, name: str, race: str, cls: str) -> bool:
+        """At character select, make a character. True when the list is back, with the new
+        character selected. A refused name is `refused`, and the list is back without it.
+
+        Each press is at a measured plate, and the name is confirmed in its box before
+        Accept, as the login confirms the account before the password."""
+        self.refused = False
+        if (CREATE_NEW is None or NAME_BOX is None or CREATE_ACCEPT is None
+                or CREATE_BACK is None or race not in RACE_BUTTONS or cls not in CLASS_BUTTONS):
+            self.detail = f"the create screen is not measured for a {race} {cls}"
+            return False
+        if self.stage() is not Stage.CHARACTER:
+            self.unknown_frame = self.read_frame()
+            self.detail = "not at character select"
+            return False
+        self.hid.click(*self._screen(CREATE_NEW))
+        self._wait(3.0)
+        if self.stage() is not Stage.CREATE:
+            self.unknown_frame = self.read_frame()
+            self.detail = "Create New Character did not open the create screen"
+            return False
+        self.hid.click(*self._screen(RACE_BUTTONS[race]))
+        self._wait(1.0)
+        self.hid.click(*self._screen(CLASS_BUTTONS[cls]))
+        self._wait(1.0)
+        self.hid.click(*self._screen(NAME_BOX))
+        self._wait(0.3)
+        self.hid.chord("ctrl", "a")
+        if not self.hid.type_text(name):
+            self.detail = f"could not type the name: {list(self.hid.unsendable)!r}"
+            return False
+        self._wait(0.4)
+        frame = self.read_frame()
+        if frame is None or not _has_text(frame, NAME_BOX):
+            self.unknown_frame = frame
+            self.detail = "typed the name and the box is still empty; nothing was accepted"
+            return False
+        self.hid.click(*self._screen(CREATE_ACCEPT))
+        self._wait(4.0)
+        current = self.stage()
+        if current is Stage.CHARACTER:
+            return True
+        if current is Stage.CREATE_REFUSED:
+            self.refused = True
+            self.detail = f"the server refused the name {name!r}"
+            self._leave_create(current)
+            return False
+        self.unknown_frame = self.read_frame()
+        self.detail = f"after Accept the client is at {current.value}"
+        return False
+
+    def enter_world(self, *, timeout_s: float = FIRST_ENTRY_S) -> bool:
+        """Enter World with whoever is selected, then wait for the strip, pressing nothing:
+        a new character's first entry plays its race's introduction first."""
+        if self.stage() is not Stage.CHARACTER:
+            self.unknown_frame = self.read_frame()
+            self.detail = "not at character select"
+            return False
+        self.hid.click(*self._screen(ENTER_WORLD))
+        self.entered_world += 1
+        deadline = time.perf_counter() + timeout_s
+        while time.perf_counter() < deadline:
+            self._wait(2.0)
+            if self.radio_ok():
+                return True
+        self.detail = f"the strip did not paint within {timeout_s:.0f}s of Enter World"
         return False
 
     def _choose_realm(self, current: Stage) -> None:
