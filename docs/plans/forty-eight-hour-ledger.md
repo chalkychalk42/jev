@@ -37,6 +37,17 @@ Now
     so Testvvi trains from south Westfall.
   - Open, for the session: out-of-combat buffs, caster gear, schema 17.
   - The hunt's stand-off and the rest changes are inert for Testvvi.
+- **Also, 25 Sep 14:10-14:55:**
+  - V171, schema 17: range per slot and the attacker count, installed with the client
+    closed (5f31717).
+  - V172: the pack heal line (d9c2b47).
+  - V173: a review of the whole day's diff by a subagent found 10 defects, all fixed
+    (0b0706a). The worst three:
+    - the mage's conjured stock ran dry mid-hunt and stopped the session;
+    - character select could be read as the create screen;
+    - a failed switch left the status green.
+  - A meal now takes another food or drink when the first ends short, and waits on
+    regeneration rather than stopping.
 - **Offline checks at 14:05:**
   - The 1-12 route starts at A Threat Within, with 41 quests (Give Gerard a Drink pays
     nothing, V163).
