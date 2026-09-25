@@ -1,79 +1,35 @@
-"""Learned passages: where walking got stuck, and the point that got past it."""
+"""Blocked spots, deaths and hot cells: what walks keep clear of."""
 
 from __future__ import annotations
 
 import json
 
 from jev.guide.path import Path, PathStatus
-from jev.guide.route_memory import MAX_PER_MAP, RouteMemory
+from jev.guide.route_memory import MAX_PER_MAP, RouteMemory, nearest_height
 
 
 def _route(*points):
     return Path(PathStatus.COMPLETE, tuple((x, y, 80.0) for x, y in points))
 
 
-def test_a_route_through_a_known_spot_goes_by_its_learned_point():
-    memory = RouteMemory()
-    memory.learn(0, (0.0, -20.0), (31.0, -21.0), z=80.0)   # a fence, passed at its end
-    patched = memory.patch(0, _route((0.0, 0.0), (0.0, -40.0)))
-    assert [p[:2] for p in patched.points] == [(0.0, 0.0), (31.0, -21.0), (0.0, -40.0)]
-    assert "learned passage" in patched.detail
-    assert memory.patch(1, _route((0.0, 0.0), (0.0, -40.0))).points[1][:2] == (0.0, -40.0), \
-        "a passage belongs to its map"
-    assert memory.patch(0, _route((5.0, 0.0), (5.0, -40.0))).points[1][:2] == (5.0, -40.0), \
-        "a route five yards away does not pass the spot"
-
-
-def test_a_passage_is_only_taken_on_its_own_floor():
-    """Beside William Pestle an escape learned on one floor bent every route to him
-    towards the stairs, and the character walked the floor above him (session 95)."""
-    memory = RouteMemory()
-    memory.learn(0, (0.0, -20.0), (31.0, -21.0), z=87.0)   # learned one floor up
-    assert len(memory.patch(0, _route((0.0, 0.0), (0.0, -40.0))).points) == 2
-    memory.learn(0, (0.5, -20.0), (-12.0, -20.0), z=80.0)  # the same spot, this floor
-    assert len(memory.passages) == 2, "floors apart are two passages"
-    assert memory.patch(0, _route((0.0, 0.0), (0.0, -40.0))).points[1][:2] == (-12.0, -20.0)
-
-
-def test_a_passage_without_a_height_is_given_its_floor_or_left_untaken(tmp_path):
+def test_passages_already_learned_are_kept_as_data(tmp_path):
+    """V178: escapes are no longer learned or taken, and a file that has them keeps them."""
     file = tmp_path / "route-memory.json"
+    file.write_text(json.dumps({"format": 1, "passages": [
+        {"map_id": 0, "x": 1.0, "y": 2.0, "via_x": 3.0, "via_y": 4.0, "hits": 2,
+         "updated": 5.0, "z": 80.0, "floors": 1}], "blocked": [], "dangers": []}))
     memory = RouteMemory(file)
-    memory.learn(0, (0.0, -20.0), (31.0, -21.0))           # learned before heights were kept
-    memory.learn(0, (100.0, -20.0), (131.0, -21.0))
-    floors = {0.0: [80.2], 100.0: [57.0, 64.0, 74.5]}      # open ground; the inn's three floors
-    assert memory.backfill(0, lambda x, y: floors[x]) == 2
-    assert [(p.z, p.floors) for p in memory.passages] == [(80.2, 1), (None, 3)]
-    assert memory.patch(0, _route((100.0, 0.0), (100.0, -40.0))).points[1][:2] == (100.0, -40.0), \
-        "a spot over several floors is not guessed at"
-    assert memory.patch(0, _route((0.0, 0.0), (0.0, -40.0))).points[1][:2] == (31.0, -21.0)
+    memory.block(0, (50.0, 50.0, 80.0))
     again = RouteMemory(file)
-    assert again.backfill(0, lambda x, y: [0.0]) == 0, "looked up once, the answer kept"
+    assert [(p.x, p.via_x, p.hits) for p in again.passages] == [(1.0, 3.0, 2)]
+    assert not hasattr(memory, "patch") and not hasattr(memory, "learn")
 
 
-def test_a_spot_at_the_route_start_is_left_to_the_follower():
-    memory = RouteMemory()
-    memory.learn(0, (0.0, 0.0), (10.0, 0.0))
-    assert len(memory.patch(0, _route((0.5, 0.0), (0.0, -40.0))).points) == 2
-
-
-def test_the_same_obstacle_learned_twice_keeps_the_newer_escape(tmp_path):
-    file = tmp_path / "route-memory.json"
-    memory = RouteMemory(file)
-    memory.learn(0, (0.0, -20.0), (14.0, -20.0))
-    memory.learn(0, (1.5, -20.0), (31.0, -21.0))
-    assert len(memory.passages) == 1
-    assert (memory.passages[0].via_x, memory.passages[0].hits) == (31.0, 2)
-    again = RouteMemory(file)                                  # persisted, and read back
-    assert [(p.x, p.y, p.via_x, p.via_y, p.hits) for p in again.passages] == [
-        (1.5, -20.0, 31.0, -21.0, 2)]
-    assert json.loads(file.read_text())["format"] == 1
-
-
-def test_memory_is_bounded_per_map():
+def test_blocked_spots_are_bounded_per_map():
     memory = RouteMemory()
     for i in range(MAX_PER_MAP + 5):
-        memory.learn(0, (i * 10.0, 0.0), (i * 10.0, 5.0))
-    assert len(memory.passages) == MAX_PER_MAP
+        memory.block(0, (i * 10.0, 0.0, 80.0))
+    assert len(memory.blocked) == MAX_PER_MAP
 
 
 def confirmed(memory, spot, heading=None):
@@ -189,18 +145,12 @@ def test_one_bump_is_not_a_blocked_spot():
     assert len(memory.blocks(0)) == 1
 
 
-def test_a_passage_learned_partway_up_a_slope_matches_its_own_route():
-    """The height stored was the nearest waypoint's and the height compared the segment's:
-    stopped 30 yards up a 100-yard leg rising 20, 60 against 66, and the passage never
-    matched the route that learned it (review, 25 September)."""
-    from jev.guide.route_memory import nearest_height
-
+def test_a_routes_height_is_read_along_its_segment():
+    """Not the nearest waypoint's: 30 yards up a 100-yard leg rising 20 is 66, not 60
+    (review, 25 September)."""
     route = Path(PathStatus.COMPLETE, ((0.0, 0.0, 60.0), (0.0, -100.0, 80.0)))
     distance, z = nearest_height(route.points, (0.0, -30.0))
     assert distance == 0.0 and abs(z - 66.0) < 1e-9
-    memory = RouteMemory()
-    memory.learn(0, (0.0, -30.0), (12.0, -30.0), z=z)
-    assert memory.patch(0, route).points[1][:2] == (12.0, -30.0)
 
 
 class _OpenGround:

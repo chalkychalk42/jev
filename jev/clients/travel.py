@@ -115,10 +115,8 @@ class Travel:
     hid: Hid
     bounds: ZoneBounds
     read_pos: Callable[[], tuple[float, float] | None]
-    # Indoors nothing is learned (`RouteMemory`): in a hall's tight corners an escape is
-    # wherever an unstick move happened to land, and the Lion's Pride Inn's learned points
-    # bent every route to William Pestle past the foot of its stairs, and up them
-    # (session 109).
+    # Indoors no blocked spot is kept (`RouteMemory.block`): in a hall's tight corners a
+    # stop is wherever an unstick move happened to land (session 109).
     indoors: Callable[[], bool] | None = None
 
     arrival_yards: float = 5.0
@@ -178,12 +176,8 @@ class Travel:
     _pulse_ended_at: float = field(default=0.0, init=False)
     stuck_events: int = field(default=0, init=False)
     last_unstick: str = field(default="", init=False)
-    # Where the last `_detour` left the character: the escape a blocked spot is learned by.
-    last_detour_end: tuple[float, float] | None = field(default=None, init=False)
     # Where the last stuck event stopped the character, before anything moved it.
     last_stuck_at: tuple[float, float] | None = field(default=None, init=False)
-    # Positions of the escape in progress since its last stuck event, while one is traced.
-    _trace: list | None = field(default=None, init=False)
     _track: deque = field(default_factory=lambda: deque(maxlen=64), init=False)
 
     # -- geometry ------------------------------------------------------------
@@ -309,8 +303,6 @@ class Travel:
                 if p is not None:
                     here = p
                     self._track.append((now, p))
-                    if self._trace is not None:
-                        self._trace.append(p)
 
                 # Close out a turn pulse and learn from what it did.
                 if pulse_key is not None and now >= pulse_until:
@@ -391,8 +383,6 @@ class Travel:
                             f"{self.detours} detours did not get around it "
                             f"(closest {self.closest_yards:.1f} yards); "
                             "this node needs a recorded route")
-                    if self._trace is not None:
-                        self._trace = []        # only the attempt that works is learned
                     self._detour(here)
                     self._track.clear()
                     best, best_at = None, time.perf_counter()   # the detour starts afresh
@@ -452,19 +442,20 @@ class Travel:
         than turning ninety degrees and hoping. The mesh knows about the door; the
         follower does not and should not learn.
 
-        What the mesh does not know is learned instead (`memory`, a `RouteMemory`): a
-        spot where a leg was blocked and only the follower's own detour got past it -
-        a tree gap, a rail fence, a ledge the server's creature mesh calls open ground -
-        is remembered with the point the detour reached, and every later route passing
-        that spot goes by the point.
+        What the mesh does not know is got past by the follower's own detour, each time.
+        A spot no detour gets past is remembered as blocked (`memory`, a `RouteMemory`),
+        and the planner is asked for a way round it. The point an escape reached is not
+        kept (V178): an escape lands wherever an unstick move took it, and routes bent
+        through such points walked into walls - a straight leg to one inside Northshire
+        Abbey met its front wall beside the door, and the mage's walk to Marshal McBride,
+        49.7 yards planned, became 124 yards and ran out of time (session 136). Walks to
+        McBride took 15 to 26 s before any point there was learned and 120 to 240 s after.
         """
         if not path.usable:
             return self._result(Outcome.STUCK, self.position(), self.position(),
                                 self.position() or (0.0, 0.0), 0.0,
                                 f"no usable path: {path.status.value} {path.detail}".strip())
 
-        if memory is not None:
-            path = memory.patch(self.bounds.map_id, path)
         t0 = time.perf_counter()
         placed = [(world_to_map(pt[0], pt[1], self.bounds), pt[2] if len(pt) > 2 else None)
                   for pt in path.points]
@@ -534,18 +525,12 @@ class Travel:
                     # Round it now. Walking the same leg first only found the same
                     # obstacle again: measured in simulation, a whole second stuck cycle
                     # per fence before the first detour.
-                    self.last_detour_end = None
-                    self._trace = []
-                    try:
-                        if position is not None:
-                            self._detour(position)
-                        last = self.to(leg, abort=abort, allow_detour=True,
-                                       timeout_s=timeout_s - (time.perf_counter() - t0))
-                        if last.outcome is Outcome.ARRIVED:
-                            self._learn(memory, position, leg, path)
-                            continue           # past it; the planner has the route back
-                    finally:
-                        self._trace = None
+                    if position is not None:
+                        self._detour(position)
+                    last = self.to(leg, abort=abort, allow_detour=True,
+                                   timeout_s=timeout_s - (time.perf_counter() - t0))
+                    if last.outcome is Outcome.ARRIVED:
+                        continue               # past it; the planner has the route back
                     # Nor did the wall heuristic get past: a spot with no way round a
                     # detour can find, like the pocket under Echo Ridge Mine's pit prop.
                     # Remember it as blocked and ask the planner once more, for a route
@@ -612,37 +597,6 @@ class Travel:
             stuck_events=self.stuck_events, detours=self.detours,
             turn_rate_deg_s=last.turn_rate_deg_s, detail="",
         )
-
-    def _learn(self, memory, blocked, leg, path=None) -> None:
-        """Remember where a leg was blocked, and the widest point of the escape that worked.
-
-        The escape traced since its last stuck event is the one that got past; its point
-        farthest from the blocked line is where it went round - the end of a fence, the
-        far side of a trunk. The end of the first detour is not: along a long fence it
-        is still in front of the fence.
-        """
-        trace = self._trace or ([self.last_detour_end] if self.last_detour_end else [])
-        if memory is None or blocked is None or not trace or self._inside():
-            return
-        bx, by = _yards(blocked, self.bounds)
-        lx, ly = _yards(leg, self.bounds)
-        length = math.hypot(lx - bx, ly - by) or 1.0
-
-        def lateral(point):
-            px, py = _yards(point, self.bounds)
-            return abs((lx - bx) * (py - by) - (ly - by) * (px - bx)) / length
-
-        widest = max(trace, key=lateral)
-        stuck = map_to_world(blocked[0], blocked[1], self.bounds)
-        via = map_to_world(widest[0], widest[1], self.bounds)
-        if stuck is not None and via is not None:
-            # The route's height where it was stopped, along its segment as `patch` reads
-            # it: the floor the passage belongs to. The nearest waypoint's was 6 yards off
-            # on a sloped leg, and the passage never matched its own route (review).
-            from jev.guide.route_memory import nearest_height
-
-            near = nearest_height(getattr(path, "points", None) or (), stuck[:2])
-            memory.learn(self.bounds.map_id, stuck, via, z=near[1] if near else None)
 
     def _inside(self) -> bool:
         return self.indoors is not None and self.indoors() is True
@@ -727,9 +681,6 @@ class Travel:
         after_pos = self.position()
         if after_pos is None:
             return
-        self.last_detour_end = after_pos
-        if self._trace is not None:
-            self._trace.append(after_pos)
         self._sweep_left -= 1
         if self.distance(here, after_pos) < DETOUR_BLOCKED_YARDS:
             self._detour_side *= -1
@@ -877,11 +828,6 @@ def _thin(legs: list[tuple[float, float]], bounds: ZoneBounds,
             kept.append(leg)
     kept.append(legs[-1])
     return kept
-
-
-def _yards(point: tuple[float, float], bounds: ZoneBounds) -> tuple[float, float]:
-    """A map position in the map-aligned yard frame `heading_yards` measures in."""
-    return point[0] * abs(bounds.left - bounds.right), point[1] * abs(bounds.top - bounds.bottom)
 
 
 def _wrap(a: float) -> float:

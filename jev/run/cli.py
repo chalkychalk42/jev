@@ -324,10 +324,14 @@ def _live(args, graph) -> int:
                              if runs_dir.is_dir() else (), danger, by_area.get)
         print(f"danger: {len(danger.cells)} cells learned"
               + (f", {attacks} attacks counted from earlier runs" if attacks else ""))
+        # What walks steer by (V178): confirmed blocked spots; escapes are not taken.
+        route_memory = RouteMemory(ROOT / "var/route-memory.json")
+        print(f"route memory: {len(route_memory.blocks(bounds.map_id))} blocked spots kept "
+              f"clear of; {len(route_memory.passages)} old passages not taken")
         with_travel(client, bounds, MmapQuery(args.jevpath, args.mmaps, launcher=launcher,
                     checkpoint=lambda: client.hid.checkpoint() if client.hid.checkpoint else None),
                     arrival_yards=GOSSIP_YARDS, say=print, zones=zones,
-                    route_memory=RouteMemory(ROOT / "var/route-memory.json"), danger=danger)
+                    route_memory=route_memory, danger=danger)
         body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt,
                         record_frame=screenshots.record_frame if screenshots is not None else None,
                         hunt_spawns=spawns.load(args.graph),

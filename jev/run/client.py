@@ -564,10 +564,6 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     client.query = (query if route_memory is None
                     else DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory,
                                              hot=hot))
-    if route_memory is not None:
-        # Passages learned before heights were kept get their floor, once (`Passage.z`).
-        route_memory.backfill(bounds.map_id,
-                              lambda x, y: surfaces_under(query, bounds.map_id, x, y))
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards,

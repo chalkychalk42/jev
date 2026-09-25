@@ -17,7 +17,7 @@ from jev.clients.travel import Outcome, Travel
 from jev.clients.walk_sim import Circle, Segment, SimHid, SimTime, WalkWorld
 from jev.guide.coords import ZoneBounds
 from jev.guide.path import Path, PathStatus
-from jev.guide.route_memory import RouteMemory
+from jev.guide.route_memory import Passage, RouteMemory
 
 ELWYNN = ZoneBounds(area_id=12, map_id=0, left=1535.4166, right=-1935.4166,
                     top=-7939.583, bottom=-10254.166)
@@ -58,30 +58,39 @@ WEDGE = [Segment(-20, 0, 20, 0), Circle(0, 1.4, 0.7)]       # a trunk a body-wid
     ("long fence", [(0, 0), (0, -40)], FENCE, -math.pi / 2),
     ("tree beside a wall", [(-10, 1.0), (12, 1.0), (14, 8.0)], WEDGE, 0.0),
 ])
-def test_a_spot_the_mesh_calls_open_is_learned_once_and_then_walked_round(
+def test_a_spot_the_mesh_calls_open_is_rounded_on_every_trip_and_nothing_is_kept(
         name, points, obstacles, heading, monkeypatch):
     """Measured 23 September: routes through a rail fence and a gap between a trunk and
-    Northshire Abbey's wall stopped the character on every trip."""
+    Northshire Abbey's wall stopped the character on every trip. The follower's own detour
+    gets past each time; where the escape went is not kept (V178)."""
     memory = RouteMemory()
-    first, _ = walk(points, obstacles, heading, memory=memory, monkeypatch=monkeypatch)
-    assert first.outcome is Outcome.ARRIVED and first.stuck_events >= 1
-    assert memory.passages, "the escape was not learned"
-    second, _ = walk(points, obstacles, heading, memory=memory, monkeypatch=monkeypatch)
-    assert second.outcome is Outcome.ARRIVED
-    assert second.stuck_events == 0, "walked into a spot it had already learned"
-    assert second.elapsed_s < first.elapsed_s
+    for _ in range(2):
+        result, _ = walk(points, obstacles, heading, memory=memory, monkeypatch=monkeypatch)
+        assert result.outcome is Outcome.ARRIVED and result.stuck_events >= 1
+    assert not memory.passages
 
 
-def test_the_learned_point_is_where_the_escape_went_round_not_where_it_started(monkeypatch):
-    memory = RouteMemory()
-    walk([(0, 0), (0, -40)], FENCE, -math.pi / 2, memory=memory, monkeypatch=monkeypatch)
-    [passage] = memory.passages
-    # World x/y back to map-yards: the via point is at an end of the 60-yard fence.
+def test_a_route_through_an_old_passage_is_walked_as_planned(monkeypatch):
+    """A passage learned before V178 sent every route through its spot to its via point in
+    a straight line: to one inside Northshire Abbey through its front wall (session 136)."""
     world = WalkWorld(x=0, y=0, heading=0, width_yards=W, height_yards=H)
-    via = next(((X0 + dx, Y0 + dy) for dx in range(-40, 41) for dy in range(-30, 10)
-                if math.dist(world.world(X0 + dx, Y0 + dy, ELWYNN)[:2],
-                             (passage.via_x, passage.via_y)) < 1.0), None)
-    assert via is not None and abs(via[0] - X0) >= 28, "learned a point still in front of the fence"
+    spot = world.world(X0, Y0 - 20, ELWYNN, 80.0)
+    via = world.world(X0 + 25, Y0 - 20, ELWYNN, 80.0)
+    memory = RouteMemory()
+    memory.passages.append(Passage(0, spot[0], spot[1], via[0], via[1], hits=3, z=80.0))
+    positions = []
+    real = WalkWorld.map_position
+
+    def traced(self):
+        point = real(self)
+        positions.append(self.x)
+        return point
+
+    monkeypatch.setattr(WalkWorld, "map_position", traced)
+    result, _ = walk([(0, 0), (0, -40)], [], -math.pi / 2, memory=memory,
+                     monkeypatch=monkeypatch)
+    assert result.outcome is Outcome.ARRIVED and result.stuck_events == 0
+    assert max(abs(x - X0) for x in positions) < 3.0, "went by the old passage's point"
 
 
 def test_a_blocked_leg_is_rounded_without_walking_into_it_twice(monkeypatch):
@@ -107,19 +116,15 @@ def test_a_fence_met_nearly_square_is_unstuck_not_pressed_into(monkeypatch):
     ([(0, 0), (0, -40)], FENCE, -math.pi / 2),
     ([(-10, 1.0), (12, 1.0), (14, 8.0)], WEDGE, 0.0),
 ], ids=["long fence", "tree beside a wall"])
-def test_with_drawn_holds_and_waits_every_spot_is_still_learned_and_rounded(
+def test_with_drawn_holds_and_waits_every_spot_is_still_rounded(
         points, obstacles, heading, seed, monkeypatch):
     """In play every hold and loop wait is drawn (`Humaniser`), so a walk never repeats
-    one exact trajectory. Simulated over forty draws each, every first trip arrived and
-    learned, and every second trip arrived faster with no stuck event."""
+    one exact trajectory."""
     memory, humaniser = RouteMemory(), Humaniser(rng=random.Random(seed))
-    first, _ = walk(points, obstacles, heading, memory=memory, humaniser=humaniser,
-                    monkeypatch=monkeypatch)
-    assert first.outcome is Outcome.ARRIVED and memory.passages
-    second, _ = walk(points, obstacles, heading, memory=memory, humaniser=humaniser,
-                     monkeypatch=monkeypatch)
-    assert second.outcome is Outcome.ARRIVED and second.stuck_events == 0
-    assert second.elapsed_s < first.elapsed_s
+    for _ in range(2):
+        result, _ = walk(points, obstacles, heading, memory=memory, humaniser=humaniser,
+                         monkeypatch=monkeypatch)
+        assert result.outcome is Outcome.ARRIVED, result.detail
 
 
 def test_open_ground_is_walked_without_any_recovery(monkeypatch):

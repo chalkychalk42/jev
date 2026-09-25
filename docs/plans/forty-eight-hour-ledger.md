@@ -44,6 +44,17 @@ Now
       - a caster keeps its lasting buffs up out of combat, not in it.
   - 23:54: back to Testvvi by row 2 (`enter --name Testvvi`); the loop resumed at
     session 137.
+  - Sessions 137-138: the band rule finished 1-12 with the Riverpaw bounty's hand-in left
+    behind (850 XP), V177. At 00:20 the playhead was pointed back at that hand-in; session
+    139 handed it in (+0.083 level) and 1-12 finished, and session 140 started 12-20.
+  - 00:30-01:10, the mage's Abbey door, offline:
+    - The walk to Marshal McBride was planned at 49.7 yards. Three learned passages bent it
+      into 124, and a straight leg to one inside the Abbey met its front wall beside the
+      door. McBride hand-ins took 15-26 s before any passage there and 120-240 s after.
+      V178 stops taking passages.
+    - The second attempt selected McBride by his plate, but the view moved 76 px before
+      the click frame, past the anchor's half-plate width: "no eligible target geometry".
+      On that frame the ring bracket finds his chest. The fix (V179) is next.
 
 - **25 Sep 14:10.** Pre-flight A is under way, with the loop stopped and the client closed.
   - The operator logged Testvvi out at 09:13, in Goldshire, at level 13.
@@ -186,6 +197,7 @@ Trials
 
 | Change | Deployed | Predicted effect (metric) | Proof it fired (log line) | Judged | Kept/reverted |
 |---|---|---|---|---|---|
+| V178 walks no longer go by learned passages | next boundary after session 141 | stuck events a walk (7.0 over 215 walks, sessions 88-140) and walks not arrived (15 of 215) fall or hold; guards XP/h and deaths | `route memory: N blocked spots kept clear of; 151 old passages not taken` | | |
 
 Issues
 ------

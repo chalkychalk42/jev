@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from keep_status import LOOP_LOG, RUNS, deaths, run_summary, session_log, sessions  # noqa: E402
 
 PROOFS = (("danger", r"^danger: .*cells learned"),
+          ("route memory", r"^route memory: .*not taken"),
           ("choices", r"^choices: .*hunt station visits"),
           ("band rule", r"outgrown at level \d+"),
           ("guide handed over", r"finished; continuing with"))
