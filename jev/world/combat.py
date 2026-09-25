@@ -75,6 +75,23 @@ LAST_RESORT_BELOW = 0.15
 """A last resort heals to full and then waits an hour: for a fight about to be lost, when
 a heal would not finish in time."""
 
+REST_MANA = 0.35
+"""Drink below this much mana out of combat, and to `DRINK_TO`."""
+DRINK_TO = 0.75
+CASTER_REST_MANA = 0.55
+"""A caster drinks sooner and fuller: its mana is its damage. A level-1 mage's Fireball is 30
+of 165 mana, against a Kobold Vermin that takes about three (V164)."""
+CASTER_DRINK_TO = 0.95
+
+
+def rest_mana(caster: bool) -> float:
+    return CASTER_REST_MANA if caster else REST_MANA
+
+
+def drink_to(caster: bool) -> float:
+    return CASTER_DRINK_TO if caster else DRINK_TO
+
+
 RANGED_YD = 20.0
 """An attack that reaches this far is cast from where the unit was found, not walked into
 melee with (V164). A nameplate proves a unit within about 20 yards (V45), so such a spell

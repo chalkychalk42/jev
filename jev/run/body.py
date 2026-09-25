@@ -43,7 +43,7 @@ from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, lis
 from jev.run.client import FOCUS_QUICK_S, Client
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
-from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, for_class
+from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
 from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import keep as gear_keep
 from jev.world.gear import load_worn, save_worn
@@ -793,8 +793,13 @@ class LiveBody:
         self._wear_upgrades()
         self._place_spells()
         self._bar_profile()
-        if state.vitals.power_type is PowerType.MANA and state.vitals.power is not None and state.vitals.power < 0.35:
-            return self._result(self.rest.until(0.75, role=Role.DRINK), self.rest.detail)
+        # The policy's line (`jev.coach.policy._recover`): below it, drink; a caster sooner
+        # and fuller (V164), or its rest would stop short and be armed again at once.
+        caster = is_caster(state.char.cls)
+        if (state.vitals.power_type is PowerType.MANA and state.vitals.power is not None
+                and state.vitals.power < rest_mana(caster)):
+            return self._result(self.rest.until(drink_to(caster), role=Role.DRINK),
+                                self.rest.detail)
         if self.fight.top_up():
             return Result(SkillOutcome.SUCCEEDED, "health topped up", "healthy")
         return self._result(self.rest.until(0.9), self.rest.detail)

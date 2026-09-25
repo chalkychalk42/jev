@@ -238,3 +238,12 @@ def test_a_caster_carries_twice_the_water():
     paladin = {s.role: s.desired for s in supplies_for(2, 1)}
     assert mage.get("drink") == 20 and paladin.get("drink") == 10
     assert mage.get("food") == paladin.get("food") == 10
+
+
+def test_the_body_drinks_to_the_policys_line_so_a_rest_is_not_armed_again():
+    """The policy armed a mage's rest at 45% mana while the body drank only below 35%: a
+    rest that did nothing, armed again at once."""
+    from jev.world.combat import drink_to, rest_mana
+
+    assert rest_mana(True) > 0.45 > rest_mana(False)
+    assert drink_to(True) > rest_mana(True) and drink_to(False) > rest_mana(False)

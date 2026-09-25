@@ -28,7 +28,7 @@ from jev.clients.fight import Fight, Fought
 from jev.clients.loot import Loot, Looted
 from jev.clients.rest import Rest, Rested
 from jev.run.evidence import event, operation, traced
-from jev.world.combat import EAT_BELOW, HEAL_OUT_OF_COMBAT
+from jev.world.combat import EAT_BELOW, HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, rest_mana
 
 # Fractions of the radius to ring, nearest first, and how many points on each ring.
 #
@@ -375,6 +375,17 @@ class Hunt:
             return True                      # unreadable is not a reason to stand still
         if v.get("vitals.combat") is True:
             return True                      # already in it; Fight decides
+        # A caster's mana is its damage: below its line it drinks before the pull (V164).
+        mana = v.get("vitals.power")
+        if (for_class(v.get("char.class_id"), v.get("char.race_id")).caster
+                and v.get("vitals.power_type") in (0, None)             # 0: mana
+                and isinstance(mana, (int, float)) and mana < rest_mana(True)):
+            drank = self.rest.until(drink_to(True), role=Role.DRINK)
+            self.say(f"    drink: {drank.value}"
+                     + (f" - {self.rest.detail}" if self.rest.detail else ""))
+            if drank is Rested.INTERRUPTED:
+                return True                  # something is hitting us; fight it
+            v = self.read() or v
         hp = v.get("vitals.hp")
         if hp is None or hp >= PULL_LINE:
             return True

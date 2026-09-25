@@ -450,3 +450,24 @@ def test_the_hunt_stands_first_where_its_target_has_been_found_and_records_the_v
     assert walked[0] == good, "the station that has paid off first"
     arm = memory.arms("hunt.station")[station_key("creature:9", good)]
     assert (arm.tries, arm.wins) == (7, 7), "the visit and its kill were learned"
+
+
+def test_a_caster_drinks_before_the_pull_and_a_paladin_does_not():
+    """V164: a mage's mana is its damage; below 55% it drinks, to 95%, before pulling."""
+    from jev.world.combat import CASTER_DRINK_TO, Role
+
+    asked = []
+
+    class Rest(_Rest):
+        def until(self, fraction=0.9, *, role=Role.FOOD, **_):
+            asked.append((round(fraction, 2), role))
+            return Rested.HEALTHY
+
+    for class_id, expected in ((8, [(CASTER_DRINK_TO, Role.DRINK)]), (2, [])):
+        asked.clear()
+        hunt, _ = _hunt([], [(0, 8)], rest=Rest())
+        hunt.read = lambda class_id=class_id: {
+            "vitals.combat": False, "vitals.hp": 1.0, "vitals.power": 0.4,
+            "vitals.power_type": 0, "char.class_id": class_id, "char.race_id": 1}
+        assert hunt._ready_to_pull() is True
+        assert asked == expected, class_id
