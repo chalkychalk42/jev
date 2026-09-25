@@ -2723,3 +2723,31 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
   once (session 112), and the next cycle was clean (generation 2302).
 - XP/h over the inn hours: sessions 109-112 made 137, 0, 822 and 1,331. Testvvi: level 11
   at 95%, 32 silver; 21 quests done.
+
+## 2026-09-25 05:10 — hour six: level 12, a hand-in recovered, and more "arrived" that was not
+
+- **Level 12 at 04:15** (session 114). Brother Wilhelm's training went cleanly: 2 spells
+  for 19 silver (Blessing of Might and Seal of the Crusader rank 2).
+- **Per-level detours paid off at once (V148).** Level 12 renewed the lost hand-ins, and
+  the training walk through Goldshire took both inn detours. **Collecting Kelp was handed
+  in.** Kobold Candles "arrived" in the next room, 2.9 yards from William Pestle through
+  a wall (13.8 yards round it), saw no nameplate, and failed.
+- **Two more ways an arrival lied, both fixed.** An early arrival (V142) measured only x
+  and y: the walk to Goldtooth "arrived" on the field above its spawn, 30 yards over it
+  (V149), and to Pestle through a wall (V150). Early arrival now needs the route's height
+  to match and the planner's walk from there to be short.
+- **Goldtooth was never seen.** The hunt reached its single spawn at the bottom of
+  Fargodeep Mine (1.4 yards off, the right floor) and found no nameplate. Some kills there
+  ended "no_corpse", so an unlooted kill is likely. It looked four times in 90 s and left
+  a mob that respawns in six minutes. Lone spawns are now waited at (V151). The quest's
+  hand-in, with the necklace never taken, is passed by instead of walked to (V152).
+- **Floor switching is narrowed** to indoors and a storey away (V145 amended twice): from
+  outdoors above the mine, and from the mine's tunnels, the "other floor" was the mine or
+  the hill.
+- Short ribs now go to the level 7-9 rib 730 yards from the mine, not the 9-11 one 1,550
+  from Goldshire (V147). Bags filled in the mine and the merchant walk was cut short by
+  kobolds for most of session 116 (463 XP/h). The motor learner's startup lock timeout
+  recurred once (session 117), and the next cycle was clean.
+- XP/h: sessions 113-117 made 1,508, 1,509, 1,235, 463 and 1,237 (the inn hours made 137,
+  0 and 822). Testvvi: level 12 at 9%, 25 silver, 22 quests done, on A Bundle of Trouble
+  in Eastvale.
