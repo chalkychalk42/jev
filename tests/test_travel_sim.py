@@ -31,7 +31,7 @@ def _shifted(ob):
     return Segment(X0 + ob.ax, Y0 + ob.ay, X0 + ob.bx, Y0 + ob.by, ob.thickness, ob.height)
 
 
-def walk(points, obstacles, heading, *, memory=None, humaniser=None, monkeypatch):
+def walk(points, obstacles, heading, *, memory=None, humaniser=None, monkeypatch, **travel):
     world = WalkWorld(x=X0 + points[0][0], y=Y0 + points[0][1], heading=heading,
                       obstacles=tuple(_shifted(o) for o in obstacles),
                       width_yards=W, height_yards=H)
@@ -44,7 +44,8 @@ def walk(points, obstacles, heading, *, memory=None, humaniser=None, monkeypatch
     def replan(here):                       # the mesh does not know the obstacle
         return route([(here[0] * W - X0, here[1] * H - Y0), *points[1:]])
 
-    travel = Travel(hid=SimHid(world, humaniser), bounds=ELWYNN, read_pos=world.map_position)
+    travel = Travel(hid=SimHid(world, humaniser), bounds=ELWYNN, read_pos=world.map_position,
+                    **travel)
     result = travel.follow(route(points), timeout_s=120.0, replan=replan, memory=memory)
     return result, world
 
@@ -164,3 +165,13 @@ def test_a_walk_that_passes_its_destination_early_arrives_there(monkeypatch):
     result, _ = walk(points, [], -math.pi / 2, monkeypatch=monkeypatch)
     assert result.outcome is Outcome.ARRIVED
     assert result.elapsed_s < 8.0, "walked the whole loop round to where it had been"
+
+
+def test_indoors_nothing_is_learned(monkeypatch):
+    """In a hall's tight corners an escape is wherever an unstick move landed: the Lion's
+    Pride Inn's learned points bent routes to William Pestle up its stairs (session 109)."""
+    memory = RouteMemory()
+    result, _ = walk([(0, 0), (0, -40)], FENCE, -math.pi / 2, memory=memory,
+                     monkeypatch=monkeypatch, indoors=lambda: True)
+    assert result.outcome is Outcome.ARRIVED and result.stuck_events >= 1
+    assert not memory.passages and not memory.blocked

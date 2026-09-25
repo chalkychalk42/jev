@@ -505,7 +505,8 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                               lambda x, y: surfaces_under(query, bounds.map_id, x, y))
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
-                           read_pos=client.position, arrival_yards=arrival_yards)
+                           read_pos=client.position, arrival_yards=arrival_yards,
+                           indoors=lambda: (client.read() or {}).get("pos.indoors") is True)
     return client
 
 

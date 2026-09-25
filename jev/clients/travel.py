@@ -102,6 +102,11 @@ class Travel:
     hid: Hid
     bounds: ZoneBounds
     read_pos: Callable[[], tuple[float, float] | None]
+    # Indoors nothing is learned (`RouteMemory`): in a hall's tight corners an escape is
+    # wherever an unstick move happened to land, and the Lion's Pride Inn's learned points
+    # bent every route to William Pestle past the foot of its stairs, and up them
+    # (session 109).
+    indoors: Callable[[], bool] | None = None
 
     arrival_yards: float = 5.0
     # A single failed decode is not a lost position. Frames get captured mid-paint and
@@ -581,7 +586,7 @@ class Travel:
         is still in front of the fence.
         """
         trace = self._trace or ([self.last_detour_end] if self.last_detour_end else [])
-        if memory is None or blocked is None or not trace:
+        if memory is None or blocked is None or not trace or self._inside():
             return
         bx, by = _yards(blocked, self.bounds)
         lx, ly = _yards(leg, self.bounds)
@@ -603,6 +608,9 @@ class Travel:
             near = nearest_height(getattr(path, "points", None) or (), stuck[:2])
             memory.learn(self.bounds.map_id, stuck, via, z=near[1] if near else None)
 
+    def _inside(self) -> bool:
+        return self.indoors is not None and self.indoors() is True
+
     def _round_blocked(self, path, previous, leg, stuck_at, memory, replan, timeout_s,
                        abort, max_replans, rounds) -> TravelResult | None:
         """Block the spot where the route met what stopped it, and follow a way round.
@@ -623,7 +631,8 @@ class Travel:
                                                         + (at[1] - a[1]) * dy) / length2))
         spot = (a[0] + t * dx, a[1] + t * dy)
         z = min(path.points, key=lambda p: math.dist(p[:2], spot))[2] if path.points else 0.0
-        memory.block(self.bounds.map_id, (spot[0], spot[1], z), heading=(dx, dy))
+        if not self._inside():
+            memory.block(self.bounds.map_id, (spot[0], spot[1], z), heading=(dx, dy))
         position = self.position()
         fresh = replan(position) if position is not None else None
         if (fresh is None or not getattr(fresh, "usable", False)
