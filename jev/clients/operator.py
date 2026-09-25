@@ -34,6 +34,10 @@ STAMP_EVERY_S = 0.5
 # alone. A hand on a mouse or a keyboard makes many.
 CONFIRM_MS = 10_000
 CONFIRM_INPUTS = 3
+# An input that is not the bot's, not yet a person, is still reason enough not to take the
+# window back for this long: a click into another window is one or two inputs, and raising
+# the game over it takes the window from whoever clicked (review, 25 September).
+SUSPECT_S = 30.0
 WRAP = 1 << 32
 
 
@@ -108,6 +112,9 @@ class Operator:
             confirmed = len(self._odds) >= CONFIRM_INPUTS
             present = (self._human is not None
                        and (self._tick_now() - self._human) % WRAP < self.quiet_s * 1000)
+            # A person already here keeps the pause with every input, one key at a time
+            # included: a slow typist otherwise lost the desk ten minutes after a burst.
+            confirmed = confirmed or present
             if self._say is not None and not present:
                 self._say(f"operator: {time.strftime('%H:%M:%S')} input {after} ms after the "
                           f"bot's own ({self._last_label or 'unlabelled'}); "
@@ -124,6 +131,13 @@ class Operator:
         """A person has used the desktop within `quiet_s`."""
         age = self.age_s()
         return age is not None and age < self.quiet_s
+
+    def suspected(self) -> bool:
+        """Input that was not the bot's within `SUSPECT_S`, a person or not yet."""
+        if self.active():
+            return True
+        return (self._odd is not None
+                and (self._tick_now() - self._odd) % WRAP < SUSPECT_S * 1000)
 
 
 _default: Operator | None = None
@@ -152,3 +166,8 @@ def stamp(label: str = "") -> None:
 def active() -> bool:
     watch = default()
     return watch is not None and watch.active()
+
+
+def suspected() -> bool:
+    watch = default()
+    return watch is not None and watch.suspected()

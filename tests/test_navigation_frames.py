@@ -315,3 +315,37 @@ def test_a_plan_starts_on_the_floor_the_character_was_tracked_to():
         outcome=Outcome.ARRIVED, remaining_yards=0.0, turns=0, stuck_events=0, detail="")
     client.approach((here[0] + 30.0, here[1], 57.0))
     assert asked[0] == 64.0, "the plan started in the hall below"
+
+
+def test_on_a_route_up_stairs_over_the_hall_the_height_is_the_routes():
+    """The inn's stairs rise over its hall, and the hall is always the nearer surface:
+    continuity alone left a character walked up to the trainers on the floor above on
+    the hall in 21 of 25 samplings (review, 25 September). On the route, its height wins."""
+    from jev.guide.path import Path, PathStatus
+
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    x0 = here[0]
+
+    def surfaces(x):
+        if x < x0 + 1.0:
+            return [57.0]
+        if x < x0 + 10.0:
+            return [57.0, 57.0 + 0.7 * (x - x0)]        # the hall goes on under the stairs
+        return [57.0, 64.0]
+
+    def path(map_id, start, end):
+        z = min(surfaces(start[0]), key=lambda s: abs(s - start[2]))
+        return Path(PathStatus.COMPLETE, ((start[0], start[1], z),))
+
+    client.query.path = path
+    client._ground = (x0, here[1], 57.0)
+    client._following = ((x0, here[1], 57.0), (x0 + 10.0, here[1], 64.0),
+                         (x0 + 14.0, here[1], 64.0))
+    heights = []
+    for dx in (0.0, 3.0, 6.0, 9.0, 12.0, 14.0):
+        values["pos.mx"], values["pos.my"] = world_to_map(x0 + dx, here[1], ELWYNN)
+        client._tracked_at = -math.inf
+        client.position()
+        heights.append(round(client._ground[2], 1))
+    assert heights == [57.0, 59.1, 61.2, 63.3, 64.0, 64.0]

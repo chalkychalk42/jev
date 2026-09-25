@@ -714,3 +714,29 @@ def test_a_trainer_out_of_reach_waits_a_level_and_never_stops_the_run(tmp_path):
         assert rt.policy_context.train_blocked_level == 9
     finally:
         supervisor.close()
+
+
+def test_a_routine_taking_over_from_the_tutor_has_only_its_own_walk_taken_off(tmp_path):
+    """The walk allowance subtracted the tutor's walking too, and the routine that took
+    over got its sixty seconds and more (review, 25 September)."""
+    rt = runtime(tmp_path, [seen(t) for t in (0, 10, 40, 41, 42, 102, 104)])
+    body = Body()
+    body.routine_clock = float("inf")                # the tutor holds the objective
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        body.travelling = True
+        for now in (10, 40):                         # the tutor walks thirty seconds
+            supervisor.step(now)
+        body.travelling = False
+        body.routine_clock = 41.0                    # the routine takes over, not walking
+        supervisor.step(41)
+        supervisor.step(42)
+        assert worker.walked_s == 0.0, "the tutor's walk came off the routine's budget"
+        supervisor.step(102)
+        assert worker.cancelled.is_set() and worker.reason == "skill timeout"
+    finally:
+        body.allow_finish.set()
+        supervisor.close()

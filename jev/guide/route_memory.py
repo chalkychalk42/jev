@@ -91,6 +91,18 @@ class Block:
     dy: float | None = None
 
 
+def nearest_height(points, xy: tuple[float, float]) -> tuple[float, float] | None:
+    """How far a route passes from `xy`, and its height there - interpolated along the
+    segment, as `RouteMemory.patch` compares it, not the nearest waypoint's."""
+    best = None
+    for a, b in pairwise(points):
+        near = _nearest_on_segment(xy, a, b)
+        distance = math.dist(near[:2], xy)
+        if best is None or distance < best[0]:
+            best = (distance, near[2])
+    return best
+
+
 def _segment_distance(p: tuple[float, float], a: Point, b: Point) -> float:
     return math.dist(p, _nearest_on_segment(p, a, b)[:2])
 

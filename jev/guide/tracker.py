@@ -110,6 +110,9 @@ class Tracker:
     # from the abbey on a sale and a meal, and it failed over into the wolves (run
     # 20260924T043610).
     serving: bool = False
+    # A person at the desk has paused everything (`jev.clients.operator`): the step's clock
+    # stands still with it, or a ten-minute pause ran out a four-minute hand-in.
+    paused: bool = False
 
     def __post_init__(self) -> None:
         self.memory = StepMemory(step_id=self.step_id, entered_at=0.0)
@@ -299,7 +302,7 @@ class Tracker:
                        and state.t - mem.closest_at <= PROGRESS_WINDOW_S)
         v = state.vitals
         stopped = (v.dead is True or v.ghost is True or v.combat is True or approaching
-                   or self.serving)
+                   or self.serving or self.paused)
         if mem.clocked_at is not None and not stopped:
             mem.working_s += max(0.0, state.t - mem.clocked_at)
         mem.clocked_at = state.t

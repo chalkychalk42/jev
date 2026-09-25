@@ -128,7 +128,7 @@ def test_focus_is_never_taken_while_a_person_is_at_the_desk(monkeypatch):
     from jev.run import client as client_module
 
     taken = []
-    monkeypatch.setattr(client_module.operator, "active", lambda: True)
+    monkeypatch.setattr(client_module.operator, "suspected", lambda: True)
     monkeypatch.setattr(client_module.win32, "focus", lambda hwnd: taken.append(hwnd) or True)
     monkeypatch.setattr(client_module.win32, "is_foreground", lambda hwnd: False)
     fake = SimpleNamespace(hwnd=42)
@@ -203,3 +203,68 @@ def test_stray_inputs_are_not_a_person():
     assert "key 0x20 up" in said[0], "the log says what the bot last sent"
     desk.input(150)
     assert op.active() and "a person" in said[-1]
+
+
+def test_one_stray_is_reason_enough_not_to_take_the_window_for_a_while():
+    """A click into another window is one or two inputs; raising the game over it takes the
+    window from whoever clicked (review, 25 September)."""
+    from jev.clients.operator import SUSPECT_S
+
+    desk = Desk()
+    op = watch(desk)
+    op.stamp()
+    desk.input(900)
+    assert not op.active() and op.suspected()
+    desk.now += int(SUSPECT_S * 1000) + 1
+    assert not op.suspected()
+
+
+def test_a_person_typing_slowly_keeps_the_desk():
+    """Confirmed once, every input of theirs keeps the pause: one key in fifteen seconds
+    otherwise lost the desk ten minutes after the first burst (review, 25 September)."""
+    desk = Desk()
+    op = watch(desk, quiet_s=600)
+    op.stamp()
+    assert person(desk, op, 1_000)
+    for _ in range(50):                          # a key every fifteen seconds, 12.5 minutes
+        desk.input(15_000)
+        assert op.active(), "the bot took the desk from a slow typist"
+
+
+def test_a_pause_holds_the_steps_own_clock_and_a_refused_focus_is_not_a_stop(tmp_path):
+    """A ten-minute pause ran out a four-minute hand-in's clock (review, 25 September); and
+    a person arriving while the window was being taken back stopped the run."""
+    from jev.run.supervisor import Result
+    from jev.learn.episode import SkillOutcome
+
+    rt = runtime(tmp_path, [seen(t) for t in range(30)])
+    body = Body()
+    person = threading.Event()
+    person.set()
+    lines = []
+    supervisor = Supervisor(rt, body, say=lines.append, operator_active=person.is_set,
+                            has_focus=lambda: True,
+                            focus=lambda checkpoint: False)
+    try:
+        for t in range(20):
+            supervisor.step(t)
+        assert rt.tracker.paused is True
+        assert rt.tracker.memory.working_s == 0.0, "the step's clock ran through the pause"
+        assert body.calls == 0
+    finally:
+        body.allow_finish.set()
+        supervisor.close()
+    suspected = threading.Event()
+    suspected.set()
+    focus_calls = []
+    rt2 = runtime(tmp_path / "second", [seen(t) for t in range(10)])
+    supervisor = Supervisor(rt2, body, say=lines.append, operator_suspected=suspected.is_set,
+                            has_focus=lambda: False,
+                            focus=lambda checkpoint: focus_calls.append(1) or False)
+    try:
+        for t in range(5):
+            supervisor.step(t)
+        assert focus_calls == [], "the window was taken back over a click in another window"
+        assert not supervisor.stopped.is_set()
+    finally:
+        supervisor.close()

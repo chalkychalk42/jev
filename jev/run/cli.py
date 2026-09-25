@@ -376,7 +376,8 @@ def _live(args, graph) -> int:
                                 focus=lambda checkpoint: client.focused(FOCUS_QUICK_S,
                                                                          checkpoint=checkpoint),
                                 housekeeping=housekeeping, watchdog=watchdog,
-                                operator_active=operator.active)
+                                operator_active=operator.active,
+                                operator_suspected=operator.suspected)
         print(f"recording to {recorder.dir}")
         supervisor.run(args.run_for, max_steps=args.steps)
         if screenshots is not None:

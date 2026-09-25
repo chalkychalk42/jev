@@ -580,10 +580,13 @@ class Travel:
         stuck = map_to_world(blocked[0], blocked[1], self.bounds)
         via = map_to_world(widest[0], widest[1], self.bounds)
         if stuck is not None and via is not None:
-            # The route's height where it was stopped: the floor the passage belongs to.
-            points = getattr(path, "points", None) or ()
-            z = min(points, key=lambda p: math.dist(p[:2], stuck[:2]))[2] if points else None
-            memory.learn(self.bounds.map_id, stuck, via, z=z)
+            # The route's height where it was stopped, along its segment as `patch` reads
+            # it: the floor the passage belongs to. The nearest waypoint's was 6 yards off
+            # on a sloped leg, and the passage never matched its own route (review).
+            from jev.guide.route_memory import nearest_height
+
+            near = nearest_height(getattr(path, "points", None) or (), stuck[:2])
+            memory.learn(self.bounds.map_id, stuck, via, z=near[1] if near else None)
 
     def _round_blocked(self, path, previous, leg, stuck_at, memory, replan, timeout_s,
                        abort, max_replans, rounds) -> TravelResult | None:

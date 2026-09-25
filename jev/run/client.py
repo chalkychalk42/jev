@@ -86,6 +86,20 @@ GROUND_MEMORY_YARDS = 15.0
 TRACK_EVERY_S = 0.5
 UNDER_YARDS = 1.0
 LOWER_STEPS = (3.0, 6.0, 9.0, 12.0)
+# On a route being walked, the route's own height is the better evidence: the inn's stairs
+# rise over its hall, where the hall is always the nearer surface, and continuity alone left
+# a character walked up to the priest, rogue and mage trainers on the hall in 21 of 25
+# samplings (review, 25 September). Within `ROUTE_YARDS` of the route its height is the
+# reference; off it, continuity.
+ROUTE_YARDS = 2.5
+
+
+def _route_height(points, xy: tuple[float, float]) -> float | None:
+    """The route's height at its point nearest `xy`, when that is within `ROUTE_YARDS`."""
+    from jev.guide.route_memory import nearest_height
+
+    near = nearest_height(points, xy)
+    return near[1] if near is not None and near[0] <= ROUTE_YARDS else None
 # A walk's limit grows with the route planned for it: twice the time at running pace, up to
 # just under TRAVEL_TO's own 600 s. A flat 180 s was about the clean time for the 1,038
 # yards between Northshire and Gerard Tiller, so one stuck corner failed the step.
@@ -127,6 +141,7 @@ class Client:
     # Where the character is, with its height as last tracked (`TRACK_EVERY_S`).
     _ground: tuple[float, float, float] | None = field(default=None, init=False)
     _tracked_at: float = field(default=-math.inf, init=False)
+    _following: tuple = field(default=(), init=False)     # the route being walked, if any
     # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
     # context and bitmap once and reuses them, so two threads grabbing at the same time
     # tear each other's frame in half. The heartbeat samples on its own thread, so every
@@ -226,8 +241,11 @@ class Client:
         if math.dist(self._ground[:2], (x, y)) > GROUND_MEMORY_YARDS:
             self._ground = None          # a hearth, a death or a gap: the height is unknown
             return
+        reference = _route_height(self._following, (x, y))
+        if reference is None:
+            reference = self._ground[2]
         for drop in (0.0, *LOWER_STEPS):
-            z = self._ground[2] - drop
+            z = reference - drop
             snapped = self.query.path(self.bounds.map_id, (x, y, z), (x, y, z))
             # One point, the surface nearest: not a walkable route (`Path.usable`).
             if (snapped.status in (PathStatus.COMPLETE, PathStatus.PARTIAL) and snapped.points
@@ -312,6 +330,7 @@ class Client:
                                        path.length_yards() / RUN_YARDS_PER_S * WALK_SLACK))
 
         followed = [path]
+        self._following = tuple(path.points)
 
         def replan(here_map):
             # The start's height is unknown (the radio paints map x/y). The destination's
@@ -327,22 +346,27 @@ class Client:
             planned = self.query.path(self.bounds.map_id, (w[0], w[1], z), world)
             if planned.usable:
                 followed.append(planned)
+                self._following = tuple(planned.points)
             return planned
 
-        result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
-
-                                    memory=self.route_memory)
-        if result.outcome is Outcome.REFUSED:
-            # Nothing was pressed because the window was not focused - a notification
-            # panel, or anything else that takes the foreground. `Hid` is right to refuse,
-            # and `Travel` is right to say so rather than call it stuck, but somebody has
-            # to take the window back. A live run made three kills and then spent twelve
-            # stations refused, walking nowhere.
-            self._say("  the window lost focus; taking it back")
-            if self.focused(FOCUS_QUICK_S):
-                result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
-                                            memory=self.route_memory)
+        try:
+            result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
+                                        memory=self.route_memory)
+            if result.outcome is Outcome.REFUSED:
+                # Nothing was pressed because the window was not focused - a notification
+                # panel, or anything else that takes the foreground. `Hid` is right to
+                # refuse, and `Travel` is right to say so rather than call it stuck, but
+                # somebody has to take the window back. A live run made three kills and
+                # then spent twelve stations refused, walking nowhere.
+                self._say("  the window lost focus; taking it back")
+                if self.focused(FOCUS_QUICK_S):
+                    result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
+                                                memory=self.route_memory)
+        except BaseException:
+            self._following = ()             # a walk given up is no route to track against
+            raise
         ended = self.travel.position()
+        self._following = ()
         if ended is not None:
             w = map_to_world(ended[0], ended[1], self.bounds)
             z = self._height_near(w)
@@ -395,8 +419,9 @@ class Client:
         while True:
             if checkpoint is not None:
                 checkpoint()
-            if operator.active():
-                # A person is at the desk: the window is theirs to give back, never taken.
+            if operator.suspected():
+                # A person at the desk, or input that may be one (a click into another
+                # window is one or two inputs): the window is theirs to give back.
                 return win32.is_foreground(self.hwnd)
             if win32.focus(self.hwnd) and win32.is_foreground(self.hwnd):
                 return True

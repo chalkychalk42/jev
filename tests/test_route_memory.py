@@ -187,3 +187,17 @@ def test_one_bump_is_not_a_blocked_spot():
     assert len(inner.asked) == 1, "planned round a spot seen blocked once"
     memory.block(0, (0.3, -20.0, 80.0))
     assert len(memory.blocks(0)) == 1
+
+
+def test_a_passage_learned_partway_up_a_slope_matches_its_own_route():
+    """The height stored was the nearest waypoint's and the height compared the segment's:
+    stopped 30 yards up a 100-yard leg rising 20, 60 against 66, and the passage never
+    matched the route that learned it (review, 25 September)."""
+    from jev.guide.route_memory import nearest_height
+
+    route = Path(PathStatus.COMPLETE, ((0.0, 0.0, 60.0), (0.0, -100.0, 80.0)))
+    distance, z = nearest_height(route.points, (0.0, -30.0))
+    assert distance == 0.0 and abs(z - 66.0) < 1e-9
+    memory = RouteMemory()
+    memory.learn(0, (0.0, -30.0), (12.0, -30.0), z=z)
+    assert memory.patch(0, route).points[1][:2] == (12.0, -30.0)

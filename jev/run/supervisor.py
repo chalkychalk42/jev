@@ -84,6 +84,7 @@ class Worker:
         # Seconds the body has spent walking inside this skill (`Skill.walk_free`).
         self.walked_s = 0.0
         self._walk_seen: float | None = None
+        self._walk_clock: float | None = None     # the routine clock the walk is counted in
         self._evidence = bind(recorder, arm, client_id=state.client_id)
         self._skill = arm.decision.skill if arm else None
         self._released = False
@@ -205,12 +206,16 @@ class Supervisor:
                  has_focus: Callable[[], bool] | None = None,
                  focus: Callable[[Callable[[], None]], bool] | None = None,
                  housekeeping: Callable[[State], None] | None = None,
-                 watchdog=None, operator_active: Callable[[], bool] | None = None):
+                 watchdog=None, operator_active: Callable[[], bool] | None = None,
+                 operator_suspected: Callable[[], bool] | None = None):
         if (has_focus is None) != (focus is None):
             raise ValueError("focus observation and restoration must be supplied together")
         # A person at the desk pauses everything (`jev.clients.operator`): no skill, no
         # focus taken, until the desk has been quiet for the operator module's window.
         self.operator_active = operator_active
+        # Input that is not the bot's, a person or not yet: the window is not taken back
+        # and no session is typed into while there is (`jev.clients.operator.suspected`).
+        self.operator_suspected = operator_suspected
         self._operator_paused = False
         self.runtime, self.body, self.say = runtime, body, say
         self.has_focus, self.focus = has_focus, focus
@@ -264,7 +269,10 @@ class Supervisor:
                     self.stopped.set()
             elif worker.focus is not None:
                 self.say(f"focus: {result.detail}")
-                if result.outcome is not SkillOutcome.SUCCEEDED:
+                if result.outcome is not SkillOutcome.SUCCEEDED and self._person():
+                    # Left to whoever is at the desk; the pause resumes play, not a stop.
+                    self.say("focus: left to the person at the desk")
+                elif result.outcome is not SkillOutcome.SUCCEEDED:
                     self.failure = result.detail or "focus restoration interrupted"
                     self.stopped.set()
             else:
@@ -318,6 +326,11 @@ class Supervisor:
             self._operator_paused = operator
             self.say("operator active: paused until the desk is quiet" if operator
                      else "operator quiet: resuming")
+        suspected = operator or self._person()
+        # The step's own clock stands still with the pause (`Tracker.paused`).
+        tracker = getattr(self.runtime, "tracker", None)
+        if tracker is not None:
+            tracker.paused = operator
         choose = (self.worker is None and not needs_focus and now >= self.next_coach
                   and not self.stopped.is_set())
         record = now >= self.next_record
@@ -390,6 +403,10 @@ class Supervisor:
                 # if combat is active; the next arm can then service combat normally.
                 self.worker.completion_observed = True
             walking = self.body.travelling is True
+            if clock != self.worker._walk_clock:
+                # A routine that takes over from the tutor starts its own budget, and only
+                # its own walking comes off it (review, 25 September).
+                self.worker.walked_s, self.worker._walk_clock = 0.0, clock
             if walking and self.worker._walk_seen is not None:
                 self.worker.walked_s += max(0.0, now - self.worker._walk_seen)
             self.worker._walk_seen = now if walking else None
@@ -408,12 +425,15 @@ class Supervisor:
                     reason = f"service needed: {needed.decision.why}"
             if reason:
                 self.worker.cancel(reason)
-        elif self.worker is None and not self.stopped.is_set() and needs_focus and not operator:
+        elif self.worker is not None and self.worker.arm is None and operator:
+            # Taking the window back or reconnecting stops for a person as a skill does.
+            self.worker.cancel("operator active")
+        elif self.worker is None and not self.stopped.is_set() and needs_focus and not suspected:
             # Raising the already-bound window sends no game keys. Keep recording while
             # the existing focus backoff runs, even if another window hides the radio.
             self.worker = Worker(self.body, None, state, focus=self.focus)
             self.worker.thread.start()
-        elif (self.worker is None and not self.stopped.is_set() and self.watchdog and not operator
+        elif (self.worker is None and not self.stopped.is_set() and self.watchdog and not suspected
               and (maintenance := self.watchdog.maintenance(now)) is not None):
             self.runtime.finish(SkillOutcome.PREEMPTED, "session reconnect")
             self.worker = Worker(self.body, None, state, maintenance=maintenance)
@@ -430,6 +450,11 @@ class Supervisor:
                 self.worker = Worker(self.body, arm, state, recorder=self.runtime.recorder)
                 self.worker.thread.start()
         return state
+
+    def _person(self) -> bool:
+        """A person at the desk, or input that may be one (`operator_suspected`)."""
+        return ((self.operator_active is not None and self.operator_active())
+                or (self.operator_suspected is not None and self.operator_suspected()))
 
     def run(self, seconds: float, *, max_steps: int = 0) -> None:
         deadline = time.monotonic() + seconds
