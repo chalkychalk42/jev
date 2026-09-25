@@ -2220,3 +2220,20 @@ def test_a_casters_opener_slows_and_at_contact_an_instant_comes_first():
     assert order(attacks, {**AT_RANGE, "target.attacking_me": False})[0] is frostbolt
     assert order(attacks, {**AT_RANGE, "target.attacking_me": True})[0] is fireball
     assert order(attacks, {**AT_RANGE, "target.in_melee": True})[0] is blast
+
+
+def test_at_contact_a_caster_roots_and_backs_off(combat_clock):
+    """V169: Frost Nova at contact, then two seconds walking backwards, still facing."""
+    from dataclasses import replace
+
+    nova = Ability(slot=6, role=Role.ROOT, name="Frost Nova", mana=55, spell_id=122)
+    mage = replace(MAGE, abilities=(*MAGE.abilities, nova))
+    contact = {**AT_RANGE, "target.in_melee": True, "bars.usable": 0b100111,
+               "bars.ready": 0b100111}
+    hid = _Hid()
+    f = _fight([contact], hid=hid)
+    f.profile = mage
+    assert f._root(mage, contact) is True
+    assert hid.taps == ["6"] and hid.holds == [("s", 2.0)]
+    cooling = {**contact, "bars.ready": 0b000111}
+    assert f._root(mage, cooling) is False, "on its cooldown: the rotation goes on"

@@ -42,6 +42,7 @@ class Role(StrEnum):
     STUN = "stun"                  # the attacker held still: pressed before a heal
     LAST_RESORT = "last_resort"    # a full heal on a long cooldown, at the very end
     CONJURE = "conjure"            # makes an item: pressed out of combat, never in a fight
+    ROOT = "root"                  # holds what is round the caster: then a step clear
 
 
 # -- policy -------------------------------------------------------------------------
@@ -254,7 +255,7 @@ PROFILES: dict[str, CombatProfile] = _load()
 TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL,
                  "short_buff": Role.BUFF, "long_buff": Role.BUFF, "aura": Role.AURA,
                  "save": Role.SAVE, "stun": Role.STUN, "last_resort": Role.LAST_RESORT,
-                 "conjure": Role.CONJURE}
+                 "conjure": Role.CONJURE, "root": Role.ROOT}
 
 
 def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatProfile:

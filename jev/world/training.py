@@ -17,7 +17,7 @@ here, by role, so a class needs no list of its own:
   exclusive, and a second save shares the first one's cooldown;
 - one long buff per kind of aura it applies (a blessing of attack power, one of mana);
 - every strike;
-- every conjure (a caster's water and food, V166);
+- every conjure (a caster's water and food, V166), and a root (Frost Nova, V169);
 - no new heal and no new short buff: the starting bar has its heal and its seal already,
   and a second seal would only replace the first.
 """
@@ -46,7 +46,8 @@ TRAINER_REACH_SPELLS = 2
 
 # Roles worth a new bar slot, in the order free slots are handed out.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
-NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort", "conjure")
+NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort", "conjure",
+                  "root")
 BAR_SLOTS = 12
 
 

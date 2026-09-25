@@ -280,6 +280,9 @@ HEAL_LINES = ("0.40", "0.50", "0.60")
 # toward the unit, facing it first, at most this many times a fight (V164).
 RANGED_STEP_S = 0.8
 MAX_RANGED_STEPS = 8
+# After a root at contact (Frost Nova) a caster backs off this long, still facing: about
+# nine yards at the walk backwards, out of the held unit's reach (V169).
+STEP_CLEAR_S = 2.0
 BAD_FIGHT_HP = 0.15
 HEAL_FIRST_IDLE_S = 0.8
 
@@ -686,6 +689,11 @@ class Fight:
                     self._sidestep("los")
                     if self._input_refused:
                         return Fought.REFUSED
+                elif v.get("target.in_melee") is True and not casting and self._root(profile, v):
+                    if self._input_refused:
+                        return Fought.REFUSED
+                    time.sleep(pace(self.hid, 0.2))
+                    continue
                 self._rotate(v)
                 if self._input_refused:
                     return Fought.REFUSED
@@ -1324,6 +1332,24 @@ class Fight:
             return (0, attack.slot)
 
         return tuple(sorted(attacks, key=rank))
+
+    def _root(self, profile: CombatProfile, values: dict) -> bool:
+        """At contact, hold what is round the caster (Frost Nova) and back off, still facing,
+        to cast again out of its reach (V169). `True` if a root was pressed."""
+        usable, ready = values.get("bars.usable"), values.get("bars.ready")
+        for row in profile.by_role(Role.ROOT):
+            bit = 1 << (row.slot - 1)
+            if (usable is not None and not usable & bit) or (ready is not None and not ready & bit):
+                continue
+            if self._mana_left_after(row, values) < 0 or not self._press(row):
+                continue
+            event("engage.root", data={"slot": row.slot, "step_clear_s": STEP_CLEAR_S})
+            time.sleep(pace(self.hid, 0.3))    # the root lands with the press: no cast time
+            if not self.hid.hold("s", STEP_CLEAR_S):
+                self._input_refused = True
+                self.detail = "step-clear input refused"
+            return True
+        return False
 
     def _range_step(self, values: dict) -> bool:
         """One step toward a unit a spell does not reach yet, facing it first (V164)."""
