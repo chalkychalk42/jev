@@ -27,6 +27,11 @@ from jev.world.state_v1 import State
 # same jump for 45 s. Jumps and runs down a slope in the next run measured up to 2.05 s at
 # the half-second tick. A fall that outlasts all of those is a real one.
 FALL_GRACE_S = 2.5
+# A run whose time is up waits out a fight in progress, up to this, as an operator stop does
+# (`cli.STOP_COMBAT_GRACE_S`). Session 121 ran out of time at 41% health in a fight, the next
+# session's first read was five seconds later at 18%, and the character died before its
+# first swing. Under the session loop's hard limit: 900 s of play, this, and the start.
+DEADLINE_COMBAT_GRACE_S = 60.0
 
 
 class Cancelled(Exception):
@@ -460,9 +465,20 @@ class Supervisor:
 
     def run(self, seconds: float, *, max_steps: int = 0) -> None:
         deadline = time.monotonic() + seconds
+        waited = False
         try:
-            while not self.stopped.is_set() and time.monotonic() < deadline:
+            while not self.stopped.is_set():
                 started = time.monotonic()
+                if started >= deadline:
+                    state = self.runtime.last_state
+                    fighting = (state is not None and state.vitals.combat is True
+                                and state.vitals.dead is not True
+                                and state.vitals.ghost is not True)
+                    if not fighting or started >= deadline + DEADLINE_COMBAT_GRACE_S:
+                        break
+                    if not waited:
+                        waited = True
+                        self.say("run time is up; stopping once this fight is over")
                 self.step(started)
                 if ((self.runtime.finished and self.worker is None)
                         or (max_steps and self.runtime.counters.advances >= max_steps)):

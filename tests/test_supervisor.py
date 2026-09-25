@@ -775,3 +775,31 @@ def test_a_meal_that_runs_out_of_time_does_not_stop_the_run(tmp_path):
     finally:
         body.allow_finish.set()
         supervisor.close()
+
+
+def test_a_run_whose_time_is_up_waits_out_the_fight_it_is_in(tmp_path):
+    """Session 121 ran out of time at 41% health in a fight, the next session's first read
+    was five seconds later at 18%, and the character died before its first swing."""
+    fight = Vitals(hp=0.4, combat=True, dead=False, ghost=False)
+    states = [seen(t, vitals=fight) for t in range(4)] + [seen(t) for t in range(4, 8)]
+    rt = runtime(tmp_path, states, available_skills=Body.available | {"COMBAT_PROFILE"})
+    body = Body()
+    body.available = Body.available | {"COMBAT_PROFILE"}
+    body.allow_finish.set()
+    lines = []
+    supervisor = Supervisor(rt, body, say=lines.append)
+    supervisor.step(0)                          # in the fight when the time runs out
+    assert not supervisor.stopped.is_set()
+    supervisor.run(0)
+    assert rt.counters.ticks == 5, "stepped through the fight, and stopped once it was over"
+    assert "run time is up; stopping once this fight is over" in lines
+
+
+def test_a_run_whose_time_is_up_out_of_a_fight_stops_at_once(tmp_path):
+    rt = runtime(tmp_path, [seen(t) for t in range(4)])
+    body = Body()
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None)
+    supervisor.step(0)
+    supervisor.run(0)
+    assert rt.counters.ticks == 1
