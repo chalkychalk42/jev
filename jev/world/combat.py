@@ -23,6 +23,7 @@ import pathlib
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from functools import cache
+from typing import NamedTuple
 
 PROFILES_PATH = (pathlib.Path(__file__).resolve().parent.parent.parent
                  / "content" / "tbc" / "combat-profiles.json")
@@ -134,19 +135,31 @@ class Ability:
         return self.role in (Role.HEAL, Role.LAST_RESORT) or self.friendly
 
 
+class Reach(NamedTuple):
+    """How far a spell reaches and how long it takes, from the client's own data."""
+
+    min_yd: float
+    max_yd: float
+    cast_s: float
+    channel: bool = False
+
+    @property
+    def instant(self) -> bool:
+        return self.cast_s == 0 and not self.channel
+
+
 @cache
-def _reaches() -> dict[int, tuple[float, float, float]]:
+def _reaches() -> dict[int, Reach]:
     try:
         raw = json.loads(REACH_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return {int(k): (v["min_yd"], v["max_yd"], v["cast_s"])
+    return {int(k): Reach(v["min_yd"], v["max_yd"], v["cast_s"], bool(v.get("channel")))
             for k, v in (raw.get("spells") or {}).items()}
 
 
-def reach(spell_id: int | None) -> tuple[float, float, float] | None:
-    """A spell's (minimum yards, maximum yards, cast seconds), from the client's own data
-    (`tools/gen_spell_reach.py`); `None` when the spell is not known there."""
+def reach(spell_id: int | None) -> Reach | None:
+    """A spell's reach (`tools/gen_spell_reach.py`); `None` when it is not known there."""
     return None if spell_id is None else _reaches().get(spell_id)
 
 
@@ -161,7 +174,7 @@ def _nuke(ability: Ability) -> bool:
     """A ranged attack with a cast time: a caster's main attack (Fireball, Smite, Shadow
     Bolt), not an instant racial a blood elf's paladin starts with (Mana Tap)."""
     facts = reach(ability.spell_id)
-    return ranged(ability) and facts is not None and facts[2] > 0
+    return ranged(ability) and facts is not None and not facts.instant
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ A caster opens from range (`jev.world.combat.ranged`, DECISIONS V164): Fireball 
 yards, a paladin's Judgement 10. The facts are the client's own, from the exact server's
 world snapshot (`data/knowledge/tbc-243.sqlite`): a spell's `RangeIndex` into
 `SpellRange.dbc` (minimum and maximum, in yards, stored as floats) and its
-`CastingTimeIndex` into `SpellCastTimes.dbc` (milliseconds).
+`CastingTimeIndex` into `SpellCastTimes.dbc` (milliseconds), and whether it is channelled.
 
 Covered: every spell in the trainer catalog, and every spell a class starts with on its
 bar (`content/tbc/combat-profiles.json`).
@@ -23,6 +23,9 @@ import struct
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DB = ROOT / "data/knowledge/tbc-243.sqlite"
 OUT = ROOT / "content/tbc/spell-reach.json"
+# AttributesEx bits of a channelled spell (Arcane Missiles, Evocation): no cast time, and
+# yet not instant - the character stands still while it lasts.
+CHANNELED = 0x4 | 0x40
 
 
 def _float(bits: int) -> float:
@@ -44,12 +47,14 @@ def reach(db: sqlite3.Connection, ids: list[int]) -> dict[str, dict]:
               for row in db.execute("SELECT id, c1, c2 FROM dbc_SpellRange")}
     casts = {row[0]: row[1] for row in db.execute("SELECT id, c1 FROM dbc_SpellCastTimes")}
     out = {}
-    for spell_id, range_index, cast_index in db.execute(
-            f"SELECT Id, RangeIndex, CastingTimeIndex FROM world_spell_template "
+    for spell_id, range_index, cast_index, attributes_ex in db.execute(
+            f"SELECT Id, RangeIndex, CastingTimeIndex, AttributesEx FROM world_spell_template "
             f"WHERE Id IN ({','.join('?' * len(ids))})", ids):
         low, high = ranges.get(range_index, (0.0, 0.0))
         out[str(spell_id)] = {"min_yd": round(low, 1), "max_yd": round(high, 1),
                               "cast_s": round(max(0, casts.get(cast_index, 0)) / 1000, 2)}
+        if (attributes_ex or 0) & CHANNELED:
+            out[str(spell_id)]["channel"] = True
     return dict(sorted(out.items(), key=lambda item: int(item[0])))
 
 

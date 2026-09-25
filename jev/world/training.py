@@ -57,6 +57,8 @@ class SpellFacts:
     target: str = "other"
     spends: bool = False
     aura: int | None = None
+    # A spell that slows the enemy it hits (Frostbolt): a caster's opener (V165).
+    slows: bool = False
 
     @property
     def self_cast(self) -> bool:
@@ -110,7 +112,7 @@ def spell(spell_id: int | None, facts: dict | None = None) -> SpellFacts | None:
                       every_s=float(raw.get("every_s", 0.0)),
                       cooldown_s=float(raw.get("cooldown_s", 0.0)),
                       target=raw.get("target", "other"), spends=bool(raw.get("spends")),
-                      aura=raw.get("aura"))
+                      aura=raw.get("aura"), slows=bool(raw.get("slows")))
 
 
 def side(race_id: int | None) -> str | None:

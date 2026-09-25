@@ -4,7 +4,8 @@
   "10": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "17": {
    "min_yd": 0.0,
@@ -69,7 +70,8 @@
   "126": {
    "min_yd": 0.0,
    "max_yd": 50000.0,
-   "cast_s": 5.0
+   "cast_s": 5.0,
+   "channel": true
   },
   "130": {
    "min_yd": 0.0,
@@ -344,7 +346,8 @@
   "605": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "channel": true
   },
   "633": {
    "min_yd": 0.0,
@@ -399,7 +402,8 @@
   "689": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "693": {
    "min_yd": 0.0,
@@ -424,12 +428,14 @@
   "698": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 5.0
+   "cast_s": 5.0,
+   "channel": true
   },
   "699": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "702": {
    "min_yd": 0.0,
@@ -464,7 +470,8 @@
   "709": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "710": {
    "min_yd": 0.0,
@@ -474,7 +481,8 @@
   "740": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "750": {
    "min_yd": 0.0,
@@ -484,7 +492,8 @@
   "755": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "759": {
    "min_yd": 0.0,
@@ -664,7 +673,8 @@
   "1002": {
    "min_yd": 0.0,
    "max_yd": 50000.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "channel": true
   },
   "1004": {
    "min_yd": 0.0,
@@ -784,7 +794,8 @@
   "1120": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "1126": {
    "min_yd": 0.0,
@@ -904,7 +915,8 @@
   "1510": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 4293967.3,
+   "channel": true
   },
   "1513": {
    "min_yd": 0.0,
@@ -1109,7 +1121,8 @@
   "1949": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "1953": {
    "min_yd": 0.0,
@@ -1209,7 +1222,8 @@
   "2096": {
    "min_yd": 0.0,
    "max_yd": 100.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "2098": {
    "min_yd": 0.0,
@@ -1514,17 +1528,20 @@
   "3698": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "3699": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "3700": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "3738": {
    "min_yd": 0.0,
@@ -1554,22 +1571,26 @@
   "5138": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "5143": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "5144": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "5145": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "5171": {
    "min_yd": 0.0,
@@ -1799,7 +1820,8 @@
   "5740": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "5763": {
    "min_yd": 0.0,
@@ -1899,7 +1921,8 @@
   "6141": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "6143": {
    "min_yd": 0.0,
@@ -1924,12 +1947,14 @@
   "6196": {
    "min_yd": 0.0,
    "max_yd": 50000.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "channel": true
   },
   "6197": {
    "min_yd": 0.0,
    "max_yd": 50000.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "6201": {
    "min_yd": 0.0,
@@ -1964,7 +1989,8 @@
   "6219": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "6222": {
    "min_yd": 0.0,
@@ -1979,7 +2005,8 @@
   "6226": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "6229": {
    "min_yd": 0.0,
@@ -2284,7 +2311,8 @@
   "7651": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "7658": {
    "min_yd": 0.0,
@@ -2569,12 +2597,14 @@
   "8288": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "8289": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "8380": {
    "min_yd": 0.0,
@@ -2624,12 +2654,14 @@
   "8416": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "8417": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "8422": {
    "min_yd": 0.0,
@@ -2644,7 +2676,8 @@
   "8427": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "8437": {
    "min_yd": 0.0,
@@ -2894,7 +2927,8 @@
   "8918": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "8921": {
    "min_yd": 0.0,
@@ -3209,12 +3243,14 @@
   "9862": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "9863": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "9866": {
    "min_yd": 0.0,
@@ -3449,17 +3485,20 @@
   "10185": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "10186": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "10187": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "10191": {
    "min_yd": 0.0,
@@ -3514,12 +3553,14 @@
   "10211": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "10212": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "10215": {
    "min_yd": 0.0,
@@ -3974,17 +4015,20 @@
   "10909": {
    "min_yd": 0.0,
    "max_yd": 50000.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "10911": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "channel": true
   },
   "10912": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "channel": true
   },
   "10915": {
    "min_yd": 0.0,
@@ -4464,27 +4508,32 @@
   "11675": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11677": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11678": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11683": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11684": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11687": {
    "min_yd": 0.0,
@@ -4504,37 +4553,44 @@
   "11693": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11694": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11695": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11699": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11700": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11703": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11704": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "11707": {
    "min_yd": 0.0,
@@ -4629,7 +4685,8 @@
   "12051": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "12505": {
    "min_yd": 0.0,
@@ -4964,12 +5021,14 @@
   "14294": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 4293967.3,
+   "channel": true
   },
   "14295": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 4293967.3,
+   "channel": true
   },
   "14302": {
    "min_yd": 0.0,
@@ -5239,27 +5298,32 @@
   "16914": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "17311": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "17312": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "17313": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "17314": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "17329": {
    "min_yd": 0.0,
@@ -5294,12 +5358,14 @@
   "17401": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "17402": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "17727": {
    "min_yd": 0.0,
@@ -5394,7 +5460,8 @@
   "18807": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "18809": {
    "min_yd": 0.0,
@@ -6519,7 +6586,8 @@
   "25345": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "25347": {
    "min_yd": 0.0,
@@ -6589,7 +6657,8 @@
   "25387": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "25389": {
    "min_yd": 0.0,
@@ -6959,7 +7028,8 @@
   "26983": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "26984": {
    "min_yd": 0.0,
@@ -7089,7 +7159,8 @@
   "27012": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27013": {
    "min_yd": 0.0,
@@ -7134,7 +7205,8 @@
   "27022": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 4293967.3,
+   "channel": true
   },
   "27023": {
    "min_yd": 0.0,
@@ -7209,7 +7281,8 @@
   "27075": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27078": {
    "min_yd": 0.0,
@@ -7234,7 +7307,8 @@
   "27085": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27086": {
    "min_yd": 0.0,
@@ -7469,12 +7543,14 @@
   "27212": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27213": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27215": {
    "min_yd": 0.0,
@@ -7489,7 +7565,8 @@
   "27217": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27218": {
    "min_yd": 0.0,
@@ -7499,17 +7576,20 @@
   "27219": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27220": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27221": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27222": {
    "min_yd": 0.0,
@@ -7559,7 +7639,8 @@
   "27259": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "27260": {
    "min_yd": 0.0,
@@ -7729,7 +7810,8 @@
   "29893": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "30016": {
    "min_yd": 0.0,
@@ -7834,7 +7916,8 @@
   "30908": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "30909": {
    "min_yd": 0.0,
@@ -8214,7 +8297,8 @@
   "38699": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "channel": true
   },
   "38764": {
    "min_yd": 0.0,

@@ -2202,3 +2202,21 @@ def test_a_caster_draws_no_heal_line_it_cannot_use():
     f.acquire = lambda name_id, **_: Fought.NO_TARGET
     f.run(1161)
     assert picks == []
+
+
+def test_a_casters_opener_slows_and_at_contact_an_instant_comes_first():
+    """V165: Frostbolt before the unit has come for it, Fire Blast once it is hitting."""
+    from dataclasses import replace
+
+    from jev.world.combat import Ability, CombatProfile
+
+    fireball = Ability(slot=2, role=Role.ATTACK, name="Fireball", mana=30, spell_id=133)
+    frostbolt = Ability(slot=5, role=Role.ATTACK, name="Frostbolt", mana=25, spell_id=116)
+    blast = Ability(slot=6, role=Role.ATTACK, name="Fire Blast", mana=40, spell_id=2136)
+    mage = replace(MAGE, abilities=(*MAGE.abilities, frostbolt, blast))
+    assert isinstance(mage, CombatProfile) and mage.caster
+    order = Fight._caster_order
+    attacks = (fireball, frostbolt, blast)
+    assert order(attacks, {**AT_RANGE, "target.attacking_me": False})[0] is frostbolt
+    assert order(attacks, {**AT_RANGE, "target.attacking_me": True})[0] is fireball
+    assert order(attacks, {**AT_RANGE, "target.in_melee": True})[0] is blast

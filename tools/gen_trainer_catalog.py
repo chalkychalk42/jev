@@ -23,7 +23,12 @@ Roles, from the spell's own data, never from its name:
     short_buff   an aura on the caster lasting under a minute (a seal)
     save         the caster or a friend made immune to damage (aura 39 or 40, any effect)
     stun         the enemy stunned (aura 12)
-    strike       damage, a weapon blow or a drain on the enemy target, on a cooldown or not
+    strike       damage, a weapon blow or a drain on the enemy target, on a cooldown or not;
+                 or an aura on the enemy with damage beside it (Frostbolt's slow) or a
+                 periodic missile (Arcane Missiles)
+    root         everything round the caster held in place (aura 26: Frost Nova)
+    cc           the enemy transformed (aura 56: Polymorph)
+    conjure      an item made for the caster (effect 24: Conjure Water, Conjure Food)
     attack       melee auto-attack (78), a toggle
     passive      a passive spell: nothing to press
     utility      anything else (dispels, resurrection, a strike only some creatures take)
@@ -60,6 +65,11 @@ EFFECT_HEAL_MAX_HEALTH = 67
 EFFECT_SCRIPT = 77
 EFFECT_ATTACK = 78
 AURA_STUN = 12
+AURA_PERIODIC_TRIGGER = 4
+AURA_ROOT = 26
+AURA_SLOW = 33
+AURA_TRANSFORM = 56
+EFFECT_CREATE_ITEM = 24
 # Threat (Righteous Fury): a tank's buff, of no use to a character fighting alone.
 AURA_THREAT = 10
 AURAS_IMMUNE = (39, 40)
@@ -85,12 +95,12 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         "select SpellName, Rank1, Attributes, Effect1, EffectApplyAuraName1, "
         "EffectImplicitTargetA1, DurationIndex, RecoveryTime, CategoryRecoveryTime, "
         "ManaCost, ManaCostPercentage, CasterAuraState, TargetCreatureType, "
-        "EffectApplyAuraName2, EffectApplyAuraName3 "
+        "EffectApplyAuraName2, EffectApplyAuraName3, Effect2, Effect3 "
         "from world_spell_template where Id=?", (spell_id,)).fetchone()
     if row is None:
         return None
     (name, rank, attributes, effect, aura, target, duration_index, recovery, category,
-     mana, mana_pct, caster_state, creature_type, aura2, aura3) = row
+     mana, mana_pct, caster_state, creature_type, aura2, aura3, effect2, effect3) = row
     # Divine Protection pacifies first and makes immune second: any effect's aura counts.
     auras = {aura, aura2, aura3} - {0, None}
     duration_ms = None
@@ -138,8 +148,21 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
                      *EFFECTS_WEAPON)
           and target == TARGET_ENEMY and not creature_type):
         facts["role"] = "strike"
+    elif (effect == EFFECT_APPLY_AURA and target == TARGET_ENEMY and not creature_type
+          and (EFFECT_SCHOOL_DAMAGE in (effect2, effect3) or aura == AURA_PERIODIC_TRIGGER)):
+        # Damage whose first effect is its rider: Frostbolt's slow, Arcane Missiles'
+        # periodic missile (V165).
+        facts["role"] = "strike"
+    elif AURA_ROOT in auras and target != TARGET_ENEMY:
+        facts["role"] = "root"
+    elif AURA_TRANSFORM in auras and target == TARGET_ENEMY:
+        facts["role"] = "cc"
+    elif effect == EFFECT_CREATE_ITEM and target == TARGET_SELF:
+        facts["role"] = "conjure"
     else:
         facts["role"] = "utility"
+    if AURA_SLOW in auras and target == TARGET_ENEMY:
+        facts["slows"] = True
     return facts
 
 

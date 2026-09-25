@@ -125,3 +125,19 @@ def test_a_rank_below_one_the_spellbook_holds_is_not_for_sale():
     sale = {o.spell_id for o in training.learnable(trainer, 10, [465])}
     assert 10290 in sale and 465 not in sale, "rank 1 held: rank 2 is still for sale"
     assert 465 not in {o.spell_id for o in training.learnable(trainer, 10, [10290])}
+
+
+def test_the_mages_spells_have_roles_and_the_paladins_stay_as_they_were():
+    """V165: Frostbolt's first effect is its slow and Arcane Missiles' its periodic missile,
+    so both read as utility and never reached the bar; Frost Nova roots, Polymorph
+    transforms, the conjures make items. No paladin spell changed role."""
+    from jev.world.training import spell
+
+    mage = {133: "strike", 2136: "strike", 116: "strike", 5143: "strike", 122: "root",
+            118: "cc", 5504: "conjure", 587: "conjure"}
+    assert {sid: spell(sid).role for sid in mage} == mage
+    assert spell(116).slows and not spell(133).slows
+    paladin = {635: "heal", 20154: "short_buff", 20271: "strike", 465: "aura",
+               19740: "long_buff", 498: "save", 853: "stun", 633: "last_resort",
+               879: "utility", 26573: "utility", 7294: "aura"}
+    assert {sid: spell(sid).role for sid in paladin} == paladin

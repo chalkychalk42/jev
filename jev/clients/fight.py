@@ -87,7 +87,9 @@ from jev.world.combat import (
     for_class,
     grey_level,
     ranged,
+    reach,
 )
+from jev.world.training import spell as spell_facts
 
 # The radio fraction preserves zero exactly. Low health is still a living target.
 DEAD_HP = 0.0
@@ -1304,6 +1306,25 @@ class Fight:
                 return True
         return False
 
+    @staticmethod
+    def _caster_order(attacks: tuple[Ability, ...], values: dict) -> tuple[Ability, ...]:
+        """A caster's attacks, best first (V165): at contact an instant (Fire Blast), which
+        nothing hitting it can push back; before the unit has come for it, a spell that
+        slows it (Frostbolt), for another cast before it arrives; else the bar's order."""
+        near = values.get("target.in_melee") is True
+        coming = values.get("target.attacking_me") is True
+
+        def rank(attack: Ability) -> tuple[int, int]:
+            facts = reach(attack.spell_id)
+            if near:
+                return (0 if facts is not None and facts.instant else 1, attack.slot)
+            if not coming:
+                known = spell_facts(attack.spell_id)
+                return (0 if known is not None and known.slows else 1, attack.slot)
+            return (0, attack.slot)
+
+        return tuple(sorted(attacks, key=rank))
+
     def _range_step(self, values: dict) -> bool:
         """One step toward a unit a spell does not reach yet, facing it first (V164)."""
         if not self.engage(values):
@@ -1536,7 +1557,10 @@ class Fight:
         #    because pressing melee auto-attack while already swinging **stops** it. A
         #    caster with the mana casts instead: its staff is for when the mana is gone.
         casting_instead = self._ranged_ready(profile, values)
-        for attack in profile.by_role(Role.ATTACK):
+        attacks = profile.by_role(Role.ATTACK)
+        if casting_instead:
+            attacks = self._caster_order(attacks, values)
+        for attack in attacks:
             if not pressable(attack) or not affordable(attack):
                 continue
             if attack.toggle and (casting_instead or not self._toggle_needed(attack, values)):
