@@ -2773,3 +2773,47 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
 - XP/h: sessions 117-120 made 1,698, 1,389, 1,081 and 2,625; stuck events 13, 0, 0 and 1
   (the inn hours had 46 to 59). No deaths since session 105. Testvvi: level 12 at 25%,
   30 silver, walking to Ma Stonefield for Princess Must Die.
+
+## 2026-09-25 07:20 — the nine hours: results against the plan
+
+Sessions 88-125 (22:58-07:58): 38 sessions, 8.1 h of play, 15,950 XP (1,974 an hour),
+332 kills, 30 guide steps, 10 quests handed in (13 to 23 complete), 6 deaths, 50
+commits, DECISIONS V128-V157. Testvvi went from level 10 at 72% and 10 silver to level 12
+at 52% and 35 silver, with new boots, legs, wrists, off-hand and main-hand.
+
+| Goal | Result |
+|---|---|
+| G1 never fight the operator | **Met.** A person's input pauses play and focus is never taken back (V130, verified live). Eight stray inputs tonight, none paused play since the three-input rule |
+| G2 >=1.5x XP/h, hybrid vs teach | **Not met**: 1.20x, and hybrid gave 27% of teach's qualified examples. Teach stays (V129) |
+| G3 student coverage >=50% at >=90% | **Not met.** The corpus pools across controls generations (V131); acquire and rest still cover 0 held-out (pixel labels, ambiguous state) |
+| G4 frontier (1-12 done, Westfall) | **Not met.** About 25 steps of 1-12 remain; the guide moved 3.4 steps an hour |
+| G5 <=1 death per 2 h | **Not met**: 1.5. Four of the six came in the last 90 minutes: the session-end fight (V156) and Jerod's Landing (V157) |
+| G6 no unrecoverable stops | **Met.** One loop stop (my NameError, 01:06) was restarted in 2 minutes; loop5 now retries itself |
+| G7 level >=12.5 (teach) | **Met**: 12.52 |
+
+What the night fixed, in the order it cost the most:
+- **Navigation that said "arrived" when it had not** (V142-V150): partial re-plans, the
+  field over a mine, the wall beside William Pestle. Re-plans try another floor when
+  blocked where a plan began (V145). The upstairs trap in the Lion's Pride Inn cost
+  sessions 109-111 (137, 0 and 822 XP/h). Stuck events fell from 46-59 a session in the
+  inn to 0-13 after.
+- **Guide logic around quests that cannot finish**: lost prerequisites and unfinished
+  hand-ins are passed by (V144, V152); lost hand-ins get a detour each level (V148,
+  Collecting Kelp recovered at 12); short ribs go to the nearest rib worth experience
+  (V147); lone named mobs are waited for (V151).
+- **Time lost in the machinery**: stalled tutor episodes (V154), the motor store's startup
+  re-read (V153), meals (V140), merchant choice (V134), accept and hand-in walks (V133).
+- **Deaths**: a session ending mid-fight (V156), and walks now keep clear of where the
+  character recently died (V157).
+
+NEXT (backlog, by expected value):
+1. The fight's facing with two or more attackers ("You are facing the wrong way!" at
+   Jerod's Landing: three deaths).
+2. The gather's object search: a 7x7 probe grid 80 by 45 px apart misses a bundle about
+   half the time (A Bundle of Trouble passed over at 1 of 8; V155 withdrawn).
+3. The tutor's aim on units ("fresh hover does not match requested world unit": the most
+   common tutor failure all night).
+4. Loot on quest kills ("no_corpse": likely Goldtooth's necklace).
+5. Rib distance in yards, not map fractions (Elwynn is 1.5:1).
+6. Kobold Candles and the Grape Manifest are still complete in the log; they get another
+   detour at level 13.
