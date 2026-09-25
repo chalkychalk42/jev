@@ -2255,3 +2255,18 @@ def test_a_casters_mana_line_is_what_its_kills_cost_it(combat_clock):
     g.engage = lambda *_: True
     assert g.run(1161) is Fought.KILLED
     assert list(g.mana_costs) == [pytest.approx(0.38)], "a kill from full to 62%"
+
+
+def test_a_caster_steps_in_when_the_strip_says_its_spells_do_not_reach(combat_clock):
+    """V171: schema 17's out-of-range mask, before the press and its error."""
+    far = {**AT_RANGE, "bars.out_range": 0b10, "bars.in_range": 0}
+    near = {**AT_RANGE, "bars.out_range": 0, "bars.in_range": 0b10}
+    assert Fight._beyond_reach(MAGE, far) and not Fight._beyond_reach(MAGE, near)
+    assert not Fight._beyond_reach(MAGE, AT_RANGE), "no schema 17: the error decides"
+    dead = {**near, "target.hp": 0.0, "char.xp_pct": 0.2}
+    hid = _Hid()
+    f = _mage([far, far, near, dead], hid=hid)          # the first look is before the fight
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+    assert [key for key, _ in hid.holds] == ["w"], "one step, on the strip's word"

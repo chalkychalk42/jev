@@ -805,6 +805,18 @@ local function BAR_BITS(which)
     return v
 end
 
+-- Which slots reach the selected unit (1) or do not (0), by IsActionInRange; an action
+-- with no range answers nil and is in neither mask. Not available without a target.
+local function BAR_RANGE(want)
+    if not UnitExists("target") or not IsActionInRange then return nil end
+    local v, place = 0, 1
+    for slot = 1, BAR_SLOTS do
+        if HasAction(slot) and IsActionInRange(slot) == want then v = v + place end
+        place = place * 2
+    end
+    return v
+end
+
 local function GCD_FRAC()
     local now, best, any = GetTime(), 0, false
     for slot = 1, BAR_SLOTS do
@@ -1056,6 +1068,20 @@ local function SWINGS()
     return swingCount
 end
 
+-- Who hit or missed the character lately, by source GUID and when; counted over the last
+-- ATTACKER_S at each paint. A pack of three is three, whatever the plates show.
+local ATTACKER_S = 6
+local attackers = {}
+
+local function ATTACKERS()
+    local now, n = GetTime(), 0
+    for guid, at in pairs(attackers) do
+        if now - at > ATTACKER_S then attackers[guid] = nil else n = n + 1 end
+    end
+    if n > 14 then n = 14 end
+    return n
+end
+
 -- `LAST_ERROR` is an edge painted once. A reader sampling at 2 Hz misses most of those,
 -- so the last error is also held for a short window and every error bumps a counter.
 local RECENT_ERROR_S = 1.5
@@ -1143,10 +1169,15 @@ watcher:SetScript("OnEvent", function(self, event, a1)
         attackingByEvent = false
     elseif ev == "COMBAT_LOG_EVENT_UNFILTERED" then
         -- 2.4.3: timestamp, sub-event, source GUID, ... in arg1..argN.
-        local sub, source = arg2, arg3
+        local sub, source, dest = arg2, arg3, arg6
+        local me = UnitGUID and UnitGUID("player")
         if (sub == "SWING_DAMAGE" or sub == "SWING_MISSED") and source ~= nil
-                and UnitGUID and source == UnitGUID("player") then
+                and source == me then
             swingCount = (swingCount + 1) % 15
+        end
+        if dest ~= nil and dest == me and source ~= nil and source ~= me and type(sub) == "string"
+                and (string.find(sub, "_DAMAGE$") or string.find(sub, "_MISSED$")) then
+            attackers[source] = GetTime()
         end
     elseif ev == "ACTIONBAR_SLOT_CHANGED" or ev == "ACTIONBAR_PAGE_CHANGED"
         or ev == "UPDATE_BONUS_ACTIONBAR" then
@@ -1232,6 +1263,7 @@ return {
     advanceQuestSlot = advanceQuestSlot,
     OBJ = OBJ,
     BAR_BITS = BAR_BITS,
+    BAR_RANGE = BAR_RANGE,
     BAR_CENSUS = BAR_CENSUS,
     SPELL_CENSUS = SPELL_CENSUS,
     SPELLBOOK_OPEN = SPELLBOOK_OPEN,
@@ -1246,6 +1278,7 @@ return {
     MELEE_RANGE = MELEE_RANGE,
     RECENT_ERROR = RECENT_ERROR,
     SWINGS = SWINGS,
+    ATTACKERS = ATTACKERS,
     MODAL_UP = MODAL_UP,
     LAST_ERROR = LAST_ERROR,
     CLASS_ID = CLASS_ID,

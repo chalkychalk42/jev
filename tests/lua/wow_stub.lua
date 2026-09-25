@@ -231,6 +231,7 @@ function IsCurrentAction(slot)
 end
 function IsActionInRange(slot)
     if slot == STATE.attackSlot then return pick("meleeRange", nil) end
+    if STATE.inRange then return STATE.inRange[slot] end
     return nil
 end
 

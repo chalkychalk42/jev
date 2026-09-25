@@ -27,6 +27,7 @@ from jev.perceive.fields import (
     GRID_COLS,
     MARKER_L,
     MARKER_R,
+    SCHEMA,
     layout,
 )
 from tools import gen_addon_fields as addon_build
@@ -492,7 +493,7 @@ def _painted(ticks: int, **state) -> dict:
 
 def test_the_bar_census_names_each_slot_s_spell_and_where_its_button_is():
     third = _painted(3)
-    assert third["schema"] == 16 and third["bars.slot"] == 3
+    assert third["schema"] == SCHEMA and third["bars.slot"] == 3
     assert third["bars.slot_spell"] == 635                   # Holy Light, by its spell link
     assert abs(third["bars.slot_x"] - 220 / 1600) < 0.002
     assert _painted(4)["bars.slot_spell"] == 0               # empty
@@ -566,3 +567,31 @@ def test_the_flight_map_names_each_node_and_where_its_button_is():
 def test_a_closed_flight_map_paints_nothing_of_it():
     shut = _taxi(1)
     assert shut["ui.taxi"] is False and shut["taxi.total"] is None and shut["taxi.x"] is None
+
+
+def test_the_selected_units_range_is_painted_per_slot():
+    """Schema 17 (V171): IsActionInRange's 1 and 0 per slot; nil, an action with no range,
+    in neither mask; nothing without a target."""
+    values = radio.unpack(payload(paint({"inRange": [None, 1, 0], "actionSlots": 6}))
+                          [:PAYLOAD_CELLS])
+    assert values["bars.in_range"] == 0b10 and values["bars.out_range"] == 0b100
+    none = radio.unpack(payload(paint({"hasTarget": False, "inRange": [None, 1, 0]}))
+                        [:PAYLOAD_CELLS])
+    assert none["bars.in_range"] is None and none["bars.out_range"] is None
+
+
+def test_the_attackers_are_counted_from_the_combat_log():
+    """Distinct units that hit or missed the character in the last six seconds."""
+    me, wolf, gnoll, bystander = ("0x0000000000000042", "0xF1300000000000A1",
+                                  "0xF1300000000000B2", "0xF1300000000000C3")
+    log = "COMBAT_LOG_EVENT_UNFILTERED"
+    events = [[log, 1.0, "SWING_DAMAGE", wolf, "Wolf", 0, me],
+              [log, 1.5, "SWING_MISSED", wolf, "Wolf", 0, me],
+              [log, 2.0, "SPELL_DAMAGE", gnoll, "Gnoll", 0, me],
+              [log, 2.5, "SWING_DAMAGE", bystander, "Gnoll", 0, wolf],
+              [log, 3.0, "SWING_DAMAGE", me, "Testvii", 0, wolf]]
+    values = radio.unpack(payload(paint({"events": events}))[:PAYLOAD_CELLS])
+    assert values["combat.attackers"] == 2
+    later = radio.unpack(payload(paint({"events": events, "paintTime": 1010.0}))
+                         [:PAYLOAD_CELLS])
+    assert later["combat.attackers"] == 0, "six seconds on, they are not attacking"

@@ -693,7 +693,7 @@ class Fight:
                 if error == "not_facing" and not casting:
                     if not self.engage(v):
                         return self._aim_failure()
-                elif error == "out_of_range" and not casting:
+                elif (error == "out_of_range" or self._beyond_reach(profile, v)) and not casting:
                     if self._ranged_steps >= MAX_RANGED_STEPS:
                         self.detail = (f"stepped in {self._ranged_steps} times and the spell "
                                        "still does not reach; cannot reach it")
@@ -1367,6 +1367,17 @@ class Fight:
             return True
         return False
 
+    @staticmethod
+    def _beyond_reach(profile: CombatProfile, values: dict) -> bool:
+        """The strip says none of the caster's ranged attacks reaches the unit (schema 17's
+        `bars.out_range`): step in before pressing, not after the client's error (V171)."""
+        out, reach_ = values.get("bars.out_range"), values.get("bars.in_range")
+        if not isinstance(out, int) or not isinstance(reach_, int):
+            return False
+        slots = [1 << (a.slot - 1) for a in profile.by_role(Role.ATTACK) if ranged(a)]
+        return bool(slots) and all(out & bit for bit in slots) and not any(
+            reach_ & bit for bit in slots)
+
     def _range_step(self, values: dict) -> bool:
         """One step toward a unit a spell does not reach yet, facing it first (V164)."""
         if not self.engage(values):
@@ -1935,4 +1946,5 @@ class Fight:
               data={} if values is None else {key: values.get(key) for key in (
                   "vitals.hp", "vitals.power", "vitals.combat", "vitals.dead", "vitals.ghost",
                   "target.has", "target.name_id", "target.hp", "target.in_melee",
-                  "target.attacking_me", "bars.casting", "bars.ready", "bars.usable")})
+                  "target.attacking_me", "bars.casting", "bars.ready", "bars.usable",
+                  "combat.attackers")})

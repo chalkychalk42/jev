@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 16                                   # bump when the field table changes shape
+SCHEMA = 17                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -579,6 +579,18 @@ FIELDS: tuple[Field, ...] = (
     Field("taxi.x", 11, Kind.FRAC, "return TAXI_CENSUS('x')",
           "fraction across the interface of its button, while shown"),
     Field("taxi.y", 11, Kind.FRAC, "return TAXI_CENSUS('y')"),
+
+    # -- schema 17: the selected unit's range per slot, and the attackers (V171) ----------
+    # Which main-bar slots reach the selected unit, by the client's own IsActionInRange: 1
+    # in `bars.in_range`, 0 in `bars.out_range`, neither for an action with no range. Not
+    # available without a target. A caster steps in before it presses, not after the error.
+    Field("bars.in_range", 13, Kind.UINT, "return BAR_RANGE(1)",
+          "slots whose action reaches the selected unit; NA without one"),
+    Field("bars.out_range", 13, Kind.UINT, "return BAR_RANGE(0)",
+          "slots whose action does not reach it"),
+    # Distinct units that hit or missed the character in the last six seconds, from the
+    # combat log: how many it is fighting, which no count of plates can say.
+    Field("combat.attackers", 4, Kind.UINT, "return ATTACKERS()", "0-14; 15 is NA"),
 )
 
 # --------------------------------------------------------------------------- layout
@@ -590,7 +602,7 @@ FIELDS: tuple[Field, ...] = (
 _LEGACY = FIELDS[:1] + FIELDS[2:131]
 SCHEMA_FIELDS = {6: _LEGACY[:75], 7: _LEGACY[:112], 8: _LEGACY[:117], 9: _LEGACY[:121],
                  10: _LEGACY[:125], 11: _LEGACY[:126], 12: _LEGACY[:127], 13: _LEGACY[:128],
-                 14: _LEGACY, 15: FIELDS[:147], 16: FIELDS}
+                 14: _LEGACY, 15: FIELDS[:147], 16: FIELDS[:154], 17: FIELDS}
 # Schema 14 was the last the 4-bit header could name (15 is its not-available code), and
 # was redefined once, within the hour it was installed on one client, to add `target.guid`.
 # From 15 the header says EXTENDED and the number is in `schema_rev`; a new layout appends
@@ -607,6 +619,8 @@ assert sum(f.bits for f in SCHEMA_FIELDS[13]) == 1137
 assert sum(f.bits for f in SCHEMA_FIELDS[14]) == 1169
 assert sum(f.bits for f in SCHEMA_FIELDS[15]) == 1317
 assert SCHEMA_FIELDS[15][-1].name == "cursor.holding"
+assert sum(f.bits for f in SCHEMA_FIELDS[16]) == 1371
+assert SCHEMA_FIELDS[16][-1].name == "taxi.y"
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16
