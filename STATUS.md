@@ -2587,3 +2587,41 @@ tried; a failed trainer visit waits for the next level instead of stopping the s
   Tutor calls: 15 an hour in hybrid, 90 in teach.
 - The canary integration test no longer times its fake tutor with real sleeps; it failed
   under load. Testvvi: level 11 at 14%, 18 silver, handing in The Jasperlode Mine.
+
+## 2026-09-25 01:05 — hour two: the operator verified, the inn, hand-ins on the way
+
+- **The operator pause works live** (V130, session 96): two bursts of 1-pixel mouse moves
+  from another process paused the bot inside two seconds - "input 1625 ms after the bot's
+  own; alone", then "375 ms ...; a person" - the walk under way was cancelled, and it
+  resumed 30 s after the last input (a test window; normally ten minutes). Five sparse
+  single moves were not seen: the bot's own keys land between them and each sample. A
+  hand on a mouse makes events every few milliseconds. No stray inputs in normal play since.
+- **Goldshire's Lion's Pride Inn is the night's worst place.** William Pestle stands on its
+  ground floor; the planner's routes to him stay there, but the follower sticks at a tight
+  corner beside him (a remembered blocked spot, two hits), and its jumps and falls took
+  the character up to the floor above for four minutes (session 95). Walking back out to
+  Marshal Dughan then failed too, so both hand-ins were passed over (Jasperlode Mine,
+  Kobold Candles). Changes: the character's height is now tracked along the navmesh
+  (V136), and a passed-over hand-in is made on the way when its NPC is in reach, once
+  (V135 - it fired for Kobold Candles at session 95's start and failed in the inn; the
+  Jasperlode hand-in will get its try when the guide next brings the character to Dughan).
+  The heading-from-motion follower (2.4.3 paints no facing) is weak on 2-5 yard indoor
+  legs; three more William Pestle steps are ahead and will be watched.
+- **Teach mode wanders when it rests.** Session 93's walk back from the mine: after each
+  fight the tutor moved the character before eating, and the walk grew from 1,070 yards to
+  1,169; the hand-in step ran out of time into a grind. Hybrid rests where it stands.
+- **A/B so far** (clean sessions; 90 and 91 left out): tutor 3,536 XP/h over 4 sessions, 48
+  kills/h, 109 tutor calls/h, 46 qualified examples/h; hybrid 2,330 XP/h over 2 sessions,
+  58 kills/h, 36 calls/h, 14 examples/h. Both hybrid sessions were spent on the inn and the
+  walk back from a grind, so the A/B runs to four clean blocks per arm (about 03:20) before
+  rule 6.3 decides. The report now counts guide steps completed per hour too.
+- Learning, measured: the motor corpus is pooled across controls generations (V131) and
+  the live store trains on it; acquire and rest still cover no held-out examples. Two
+  thirds of the tutor's target clicks (162 of 241) are on units with no detected plate, so
+  "which plate" cannot express them; rest's labels overlap in state (the tutor eats at a
+  median 57% health, moves at 71-80%). Qualification stays strict: 394 successful actions
+  sit in episodes that ended unverified, and counting them would teach the tutor's
+  wandering too.
+- Not done, measured: better food (level-1 cheese and water at level 11; rests take a
+  median 25 s, p90 50 s) would save about 2 minutes an hour but needs the new item used
+  without its bar slot. Testvvi: level 11 at 42%, 20 silver, on Pie for Billy.
