@@ -154,3 +154,13 @@ def test_a_point_close_and_to_one_side_is_reached_not_circled(yards, bearing, mo
                     arrival_yards=3.0)
     result = travel.to(target, timeout_s=60.0)
     assert result.outcome is Outcome.ARRIVED and result.elapsed_s < 8.0
+
+
+def test_a_walk_that_passes_its_destination_early_arrives_there(monkeypatch):
+    """Inside the Lion's Pride Inn a character passed 3.9 yards from William Pestle and
+    walked two more minutes of route round the building; the hand-in ran out of time
+    (session 108). Within arrival of the destination on any leg is arrival."""
+    points = [(0, 0), (0, -30), (20, -30), (20, -10), (2, -18)]
+    result, _ = walk(points, [], -math.pi / 2, monkeypatch=monkeypatch)
+    assert result.outcome is Outcome.ARRIVED
+    assert result.elapsed_s < 8.0, "walked the whole loop round to where it had been"

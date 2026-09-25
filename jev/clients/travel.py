@@ -41,6 +41,11 @@ from jev.guide.coords import (
 )
 
 TAU = 2 * math.pi
+# Within arrival of the walk's destination on any leg is arrival: the route is a way
+# there, not a tour. Inside the Lion's Pride Inn a character passed 3.9 yards from William
+# Pestle and then walked two more minutes of a re-planned route round the building, and
+# the hand-in ran out of time (session 108).
+EARLY = "at the destination before the route's end"
 
 # A seed, not a calibration. Measured once on a level-3 human in Northshire.
 TURN_RATE_SEED = math.radians(134.0)
@@ -242,7 +247,8 @@ class Travel:
 
     def to(self, target, *, timeout_s: float = 90.0,
            abort: Callable[[], bool] | None = None,
-           allow_detour: bool = True) -> TravelResult:
+           allow_detour: bool = True, destination=None,
+           destination_yards: float | None = None) -> TravelResult:
         """Walk at a point.
 
         `allow_detour=False` on a planned leg. `_detour` is the wall heuristic for a
@@ -306,6 +312,10 @@ class Travel:
                     self.closest_yards = remaining
                 if remaining <= self.arrival_yards:
                     return self._result(Outcome.ARRIVED, start, here, target, elapsed, "")
+                if (destination is not None and destination_yards is not None
+                        and self.distance(here, destination) <= destination_yards):
+                    return self._result(Outcome.ARRIVED, start, here, destination, elapsed,
+                                        EARLY)
                 if best is None or remaining < best - self.no_progress_yards:
                     best, best_at = remaining, now
 
@@ -445,7 +455,12 @@ class Travel:
                 return self._result(Outcome.TIMEOUT, legs[0], self.position(), leg,
                                     time.perf_counter() - t0,
                                     f"ran out of time on leg {i} of {len(legs) - 1}")
-            last = self.to(leg, timeout_s=remaining, abort=abort, allow_detour=False)
+            last = self.to(leg, timeout_s=remaining, abort=abort, allow_detour=False,
+                           destination=None if final else legs[-1], destination_yards=exact)
+            if last.outcome is Outcome.ARRIVED and last.detail == EARLY:
+                self.arrival_yards = exact
+                return self._result(Outcome.ARRIVED, legs[0], self.position(), legs[-1],
+                                    time.perf_counter() - t0, "")
 
             if last.outcome is Outcome.STUCK:
                 stuck_at = self.last_stuck_at
