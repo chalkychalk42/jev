@@ -247,7 +247,8 @@ class ClientRuntime:
         # re-reports ARRIVED, never NONE.
         if (not self.finished and self.tracker.step_id == before
                 and verdict.event not in (Event.ADVANCE, Event.FAIL, Event.DEATH)):
-            if (lost := self._prerequisite_lost(state)) is not None:
+            if (lost := (self._prerequisite_lost(state)
+                         or self._unfinished_hand_in(state))) is not None:
                 self.tracker.enter(lost, state)
                 self._tracker_event = "rejoin_or_skip"
             elif (detour := self._handin_detour(state)) is not None:
@@ -382,6 +383,25 @@ class ClientRuntime:
         # Alternatives of quests all required, as the route reads them (`compile_route`):
         # impossible only when every alternative holds a lost one.
         if not all(any(q in lost for q in group) for group in node.quest_prerequisites):
+            return None
+        step = node
+        while step is not None and step.quest_id == node.quest_id and step.next:
+            step = self.graph.get(step.next[0])
+        return step.id if step is not None and step.quest_id != node.quest_id else None
+
+    def _unfinished_hand_in(self, state: State) -> str | None:
+        """A hand-in for a quest the log reads as not complete, whose objective was passed
+        over, cannot happen: the step past this quest instead. Goldtooth's objective was
+        passed over at the bottom of Fargodeep Mine, and its hand-in came next with the
+        necklace never taken (session 116)."""
+        node = self.graph.get(self.tracker.step_id)
+        if (node is None or node.kind is not StepKind.QUEST_TURNIN or node.quest_id is None
+                or state.quests is None):
+            return None
+        quest = next((q for q in state.quests if q.quest_id == node.quest_id), None)
+        if quest is None or quest.complete is not False or not any(
+                n.id in self._retried for n in self.graph.nodes
+                if n.quest_id == node.quest_id and n.kind is StepKind.QUEST_OBJECTIVE):
             return None
         step = node
         while step is not None and step.quest_id == node.quest_id and step.next:

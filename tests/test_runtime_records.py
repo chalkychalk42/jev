@@ -582,3 +582,37 @@ def test_an_accept_waiting_on_a_lost_hand_in_is_passed_by(tmp_path, retried, exp
     rt.tick(choose=False)
     rt.tick(choose=False)
     assert rt.tracker.step_id == expected
+
+
+def objective_graph():
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    return Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("do",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="do", kind=StepKind.QUEST_OBJECTIVE, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "GRIND_UNTIL"), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("after",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=2,
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+    ))
+
+
+@pytest.mark.parametrize(("complete", "retried", "expected"), [
+    (False, frozenset({"do"}), "after"),       # passed over, never finished: nothing to hand in
+    (True, frozenset({"do"}), "turnin"),       # finished after all: hand it in
+    (False, frozenset(), "turnin"),            # not passed over: the hand-in waits on the log
+])
+def test_a_hand_in_whose_objective_was_passed_over_is_passed_by(tmp_path, complete, retried,
+                                                                  expected):
+    """Goldtooth's objective was passed over at the bottom of Fargodeep Mine, and its
+    hand-in came next with the necklace never taken (session 116)."""
+    from jev.world.state_v1 import Char
+
+    states = [seen(t, char=Char(level=12), quests=(Quest(quest_id=1, complete=complete),))
+              for t in (0, 1)]
+    rt = ClientRuntime("c", objective_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       start_step="turnin", start_retried=retried)
+    rt.tick(choose=False)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == expected
