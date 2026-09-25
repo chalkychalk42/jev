@@ -69,3 +69,37 @@ def test_alternative_prerequisite_and_explicit_rewarded_predecessor_are_honoured
     assert not any(n.quest_id == 147 for n in result.graph.nodes)
     continued = compile_route(graph, available_skills=SKILLS, completed_quests=frozenset({123}))
     assert any(n.quest_id == 147 for n in continued.graph.nodes)
+
+
+def test_a_quest_that_pays_nothing_is_left_out_unless_another_needs_it():
+    """V163: Thunderbrew Lager, the 12-20 guide's first quest, paid no experience and was
+    about 2,600 yards of walking for a keg of lager."""
+    source = Graph.load("content/tbc/ally_human_12_20.json")
+    kept = compile_route(source, available_skills=SKILLS)
+    assert any(n.quest_id == 117 for n in kept.graph.nodes)
+    result = compile_route(source, available_skills=SKILLS, worthless=frozenset({117}))
+    assert not any(n.quest_id == 117 for n in result.graph.nodes)
+    assert result.graph.get(result.graph.entry).quest_id != 117
+    assert any(e.quest_id == 117 and "no experience" in e.reason for e in result.excluded)
+    in_route = {n.quest_id for n in kept.graph.nodes}
+    needed = next(p for n in kept.graph.nodes for group in n.quest_prerequisites for p in group
+                  if p in in_route)
+    assert any(n.quest_id == needed for n in compile_route(
+        source, available_skills=SKILLS, worthless=frozenset({needed})).graph.nodes), \
+        "a quest another needs stays, whatever it pays"
+
+
+def test_the_worthless_quests_are_read_from_the_world_snapshot(tmp_path):
+    import sqlite3
+
+    from jev.run.cli import worthless_quests
+
+    db = tmp_path / "world.sqlite"
+    with sqlite3.connect(db) as connection:
+        connection.execute("CREATE TABLE world_quest_template (entry INTEGER, "
+                           "RewMoneyMaxLevel INTEGER, RewChoiceItemId1 INTEGER)")
+        connection.executemany("INSERT INTO world_quest_template VALUES (?, ?, ?)",
+                               [(117, 0, 0), (102, 780, 0), (9, 0, 2211)])
+    source = Graph.load("content/tbc/ally_human_12_20.json")
+    assert worthless_quests(db, source) == frozenset({117}), "a reward to choose is worth it"
+    assert worthless_quests(tmp_path / "missing.sqlite", source) == frozenset()

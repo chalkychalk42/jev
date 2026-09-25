@@ -134,7 +134,8 @@ def main(argv: list[str] | None = None) -> int:
     graph = Graph.load(args.graph)
     if args.check:
         # Offline there is no character, so nothing is taken as done yet.
-        route = compile_route(graph, available_skills=LiveBody.available)
+        route = compile_route(graph, available_skills=LiveBody.available,
+                              worthless=worthless_quests(args.world_db, graph))
         if args.route_mode == "supported":
             graph = route.graph
         unavailable = sorted({s for n in graph.nodes for s in n.skills} - LiveBody.available)
@@ -195,6 +196,30 @@ OUTGROWN_AT: dict[str, int] = {
 }
 
 
+def worthless_quests(world_db: Path | None, graph: Graph) -> frozenset[int]:
+    """The guide's quests that pay no experience and offer no reward to choose, from the
+    world snapshot (`compile_route`'s `worthless`, V163). Nothing when it cannot be read."""
+    import sqlite3
+
+    from jev.play.world_knowledge import readonly_uri
+
+    quests = sorted({n.quest_id for n in graph.nodes if n.quest_id is not None})
+    if not quests or world_db is None or not Path(world_db).is_file():
+        return frozenset()
+    try:
+        connection = sqlite3.connect(readonly_uri(Path(world_db)), uri=True, timeout=1)
+        try:
+            rows = connection.execute(
+                "SELECT entry FROM world_quest_template WHERE RewMoneyMaxLevel = 0 "
+                f"AND RewChoiceItemId1 = 0 AND entry IN ({','.join('?' * len(quests))})",
+                quests).fetchall()
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return frozenset()
+    return frozenset(row[0] for row in rows)
+
+
 def remembered(args, graph, key: int | None):
     """This character's playhead and route: its own file, found by the key the strip
     paints, so each character keeps its own place in the guide (`playhead`)."""
@@ -209,7 +234,8 @@ def remembered(args, graph, key: int | None):
     for _ in range(len(NEXT_GUIDE) + 1):
         memory = playhead.load(graph.graph_id, path)
         route = compile_route(graph, available_skills=LiveBody.available,
-                              completed_quests=memory.completed)
+                              completed_quests=memory.completed,
+                              worthless=worthless_quests(getattr(args, "world_db", None), graph))
         used = route.graph if args.route_mode == "supported" else graph
         if used is not graph:
             memory = playhead.load(used.graph_id, path)

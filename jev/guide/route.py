@@ -72,13 +72,18 @@ def _gap(node: Node, available_skills: frozenset[str],
 def compile_route(graph: Graph, *, available_skills: frozenset[str],
                   supported_objectives: frozenset[str] = frozenset({"kill", "loot", "delivery",
                                                                     "explore"}),
-                  completed_quests: frozenset[int] = frozenset()) -> RoutePlan:
+                  completed_quests: frozenset[int] = frozenset(),
+                  worthless: frozenset[int] = frozenset()) -> RoutePlan:
     """Retain executable quest chains in source order and report every exclusion.
 
     Prerequisites are alternative groups, as in the server: every member of one group
     must be available earlier in this sequential route, or explicitly already rewarded.
     Unsupported descendants are excluded to a fixed point, including dependencies
     outside this guide. Coordinates, objective targets and failure thresholds stay exact.
+
+    `worthless` quests pay no experience and offer no reward to choose (V163): each is
+    left out unless a quest of this guide needs it first. Thunderbrew Lager, the 12-20
+    guide's first quest, was about 2,600 yards of walking for a keg of lager.
     """
     by_quest: dict[int, list[Node]] = defaultdict(list)
     for node in graph.nodes:
@@ -91,6 +96,11 @@ def compile_route(graph: Graph, *, available_skills: frozenset[str],
                     if (reason := _gap(n, available_skills, supported_objectives))), None)
         if gap:
             reasons[qid] = gap
+    needed = {p for nodes in by_quest.values() for group in nodes[0].quest_prerequisites
+              for p in group}
+    for qid in worthless:
+        if qid in by_quest and qid not in reasons and qid not in needed:
+            reasons[qid] = "pays no experience, offers no reward to choose, and no quest needs it"
 
     changed = True
     while changed:
