@@ -740,3 +740,38 @@ def test_a_routine_taking_over_from_the_tutor_has_only_its_own_walk_taken_off(tm
     finally:
         body.allow_finish.set()
         supervisor.close()
+
+
+def test_a_meal_that_runs_out_of_time_does_not_stop_the_run(tmp_path):
+    """One drink too many for its budget, from low mana on level-1 water, stopped session
+    107 with the run's one retry spent on a meal. A meal is armed again while needed."""
+    from jev.clients.source import ScriptedSource
+    from jev.guide.graph import Graph, Node
+    from jev.learn.episode import Recorder
+    from jev.orch.runtime import ClientRuntime
+    from jev.world.state_v1 import StepKind, Vitals
+
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    g = Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1,
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),))
+    low = Vitals(hp=0.5, power=0.1, combat=False, dead=False, ghost=False)
+    rt = ClientRuntime("c", g, ScriptedSource([seen(t, vitals=low) for t in (0, 60, 121, 122, 123)]),
+                       Recorder(tmp_path))
+    body = Body()
+    body.available = Body.available | {"EAT_DRINK"}
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        worker = supervisor.worker
+        supervisor.step(60)
+        assert not worker.cancelled.is_set(), "a meal's budget covers more than one drink"
+        supervisor.step(121)
+        assert worker.cancelled.is_set() and worker.reason == "skill timeout"
+        assert worker.done.wait(1)
+        supervisor.step(122)
+        assert not supervisor.stopped.is_set() and supervisor.failure is None
+    finally:
+        body.allow_finish.set()
+        supervisor.close()

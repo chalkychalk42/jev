@@ -109,7 +109,9 @@ _SKILLS: tuple[Skill, ...] = (
           success=lambda s: s.ui.loot is False,
           pre=lambda s: _alive(s) and s.ui.loot is True),
 
-    Skill("EAT_DRINK", "sit and recover to a working level", 60.0,
+    # A walk out of the camp's reach, gear and bar upkeep, then the rest's own 45 s: from
+    # low mana on level-1 water that was more than 60 s (session 107).
+    Skill("EAT_DRINK", "sit and recover to a working level", 120.0,
           success=lambda s: (s.vitals.hp or 0) > 0.85 and (s.vitals.power or 1) > 0.7,
           pre=lambda s: _alive(s) and s.vitals.combat is False),
 

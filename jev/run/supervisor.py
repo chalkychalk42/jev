@@ -308,8 +308,10 @@ class Supervisor:
                       # Training is optional: a trainer out of reach waits for the next
                       # level (above), never stops the run. One nameplate Brother Wilhelm
                       # did not answer from inside Goldshire's smithy stopped session 66.
+                      # A meal that runs out of time is armed again while the character is
+                      # still low: one drink too many for its budget stopped session 107.
                       and worker.arm.decision.skill not in ("TRAIN_CLASS", "BIND_HEARTH",
-                                                            "DISCOVER_FLIGHT")
+                                                            "DISCOVER_FLIGHT", "EAT_DRINK")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if self.failures[key] >= self.max_failures:
