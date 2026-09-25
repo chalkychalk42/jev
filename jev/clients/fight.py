@@ -85,6 +85,7 @@ from jev.world.combat import (
     CombatProfile,
     Role,
     for_class,
+    grey_level,
 )
 
 # The radio fraction preserves zero exactly. Low health is still a living target.
@@ -134,20 +135,6 @@ SETTLE_LOOK_S = 0.25
 # six level 3-4 Defias were each last seen at 3-34% and settled "lost", none looted
 # (session 74, run 20260924T133800-b58ab2).
 GREY_KILL_HP = 0.5
-
-
-def grey_level(level: int) -> int:
-    """The highest target level worth no experience to a character of `level`.
-
-    The server's rule (`MaNGOS::XP::GetGrayLevel`); a kill at or below it grants nothing.
-    """
-    if level <= 5:
-        return 0
-    if level <= 39:
-        return level - 5 - level // 10
-    if level <= 59:
-        return level - 1 - level // 5
-    return level - 9
 
 # Tab presses before giving up on finding something attackable. With a humaniser the count
 # is drawn per search, so a camp is not searched with the same burst every time.

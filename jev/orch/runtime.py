@@ -464,8 +464,9 @@ class ClientRuntime:
                         here = ((state.pos.mx, state.pos.my)
                                 if state.pos.mx is not None and state.pos.my is not None
                                 else None)
-                        goto = self.graph.rib_for(state.char.level, preferred=target,
-                                                  near=here).id
+                        goto = self.graph.rib_for(
+                            state.char.level, preferred=target, near=here,
+                            short="deaths" not in (verdict.reason or "")).id
                         if failed not in self._retried:
                             self._retried.add(failed)
                             rejoin = failed

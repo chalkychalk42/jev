@@ -26,6 +26,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from jev.world.combat import grey_level
 from jev.world.state_v1 import StepKind
 
 GRAPH_SCHEMA = 3
@@ -203,9 +204,9 @@ class Graph(BaseModel):
         return tuple(n for n in self.nodes if n.kind is StepKind.GRIND)
 
     def rib_for(self, level: int | None, preferred: Node | None = None,
-                near: tuple[float, float] | None = None) -> Node | None:
+                near: tuple[float, float] | None = None, short: bool = False) -> Node | None:
         """The rib whose mobs suit a character of `level`. See `rib_for`."""
-        return rib_for(self.ribs(), level, preferred, near)
+        return rib_for(self.ribs(), level, preferred, near, short)
 
     def unreachable(self) -> tuple[str, ...]:
         """Nodes no edge leads to. Not an error — a rib is reached only on failure — but
@@ -244,7 +245,7 @@ RIB_LEVELS_BELOW = 2
 
 
 def rib_for(ribs, level: int | None, preferred: Node | None = None,
-            near: tuple[float, float] | None = None) -> Node | None:
+            near: tuple[float, float] | None = None, short: bool = False) -> Node | None:
     """The rib whose mobs suit a character of `level`: of the ribs whose level window
     starts at or below it, the highest; below every window, the lowest. `preferred` wins
     a tie, and is the answer when the level is unknown.
@@ -253,12 +254,23 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
     window starts within `RIB_LEVELS_BELOW` of its level wins instead: a level 5 character
     failed out of Echo Ridge Mine into the level 5-7 wolves 1,200 yards away and was failed
     over again on the way, the level 3-5 kobolds beside the mine passed by (run
-    20260924T015701-2417ae)."""
+    20260924T015701-2417ae).
+
+    A short rib (`short`, `jev.guide.tracker.SHORT_RIB_S`) is a wait for a respawn, and its
+    minutes run from the failure: the nearest rib whose mobs are none above the character
+    and all worth experience to it. At level 11 the only rib in the band above was 1,550
+    yards from Goldshire, where the inn's steps failed: five minutes was four of walking
+    there and four back (sessions 109 to 111)."""
     ribs = tuple(ribs)
     if not ribs:
         return None
     if level is None:
         return preferred or ribs[0]
+    if near is not None and short:
+        worth = [r for r in ribs if r.pos is not None
+                 and grey_level(level) < r.level[0] and r.level[1] <= level]
+        if worth:
+            return min(worth, key=lambda r: (math.dist(r.pos, near), -r.level[0]))
     if near is not None:
         # Mobs never above the character first: a level 6 paladin failed into the level 5-7
         # wolves and died there ten times in three sessions (runs 20260924T035309 to

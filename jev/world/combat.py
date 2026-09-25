@@ -73,6 +73,20 @@ LAST_RESORT_BELOW = 0.15
 a heal would not finish in time."""
 
 
+def grey_level(level: int) -> int:
+    """The highest target level worth no experience to a character of `level`.
+
+    The server's rule (`MaNGOS::XP::GetGrayLevel`); a kill at or below it grants nothing.
+    """
+    if level <= 5:
+        return 0
+    if level <= 39:
+        return level - 5 - level // 10
+    if level <= 59:
+        return level - 1 - level // 5
+    return level - 9
+
+
 # Casting on oneself. With a hostile or dead unit selected, a helpful spell does not fall
 # back to the caster unless the client's auto-self-cast option is on; it waits for a target
 # click, and every click meant to select a unit then tries to cast it there. Measured 23

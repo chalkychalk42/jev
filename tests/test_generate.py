@@ -306,6 +306,25 @@ def test_a_character_fails_into_the_nearest_rib_that_still_suits_it():
     assert rib_for(ribs, 2, near=(0.42, 0.79)) is wolves, "never a window above the level"
 
 
+def test_a_short_rib_is_the_nearest_whose_mobs_all_give_experience():
+    """At level 11 the rib in the band was 1,550 yards from Goldshire, where the inn's steps
+    failed: a five-minute wait was four minutes' walk each way (sessions 109 to 111)."""
+    from jev.guide.graph import Node, rib_for
+
+    def rib(lo, hi, pos):
+        return Node(id=f"r{lo}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi),
+                    pos=pos)
+
+    ribs = (rib(1, 3, (0.432, 0.6)), rib(5, 7, (0.296, 0.725)), rib(7, 9, (0.606, 0.655)),
+            rib(9, 11, (0.739, 0.397)), rib(11, 12, (0.068, 0.965)))
+    goldshire = (0.43, 0.66)
+    assert rib_for(ribs, 11, near=goldshire).id == "r9", "a whole rib: the band's own"
+    assert rib_for(ribs, 11, near=goldshire, short=True).id == "r7", \
+        "the level 5-7 rib is nearer, but level 5 is grey at 11"
+    assert rib_for(ribs, 12, near=(0.07, 0.95), short=True).id == "r11"
+    assert rib_for(ribs, 3, near=goldshire, short=True).id == "r1", "nothing but grey: as before"
+
+
 def test_every_hunt_knows_where_its_target_spawns_without_touching_the_guide():
     """Rings round a cluster's centre stood where Northshire's wolves were not: they spawn
     24 to 170 yards from it, and the rings looked 38 times and found nothing (run
