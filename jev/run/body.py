@@ -134,10 +134,6 @@ FLIGHT_YARDS_PER_S = 10.0
 SELL_ALL = 999
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
-# Facing a world point before an object search (`_face_point`): within this of the bearing
-# the object is in the search grid ahead of the feet, and nearer than this it is underfoot.
-FACE_TOLERANCE = math.radians(12.0)
-FACE_MIN_YARDS = 1.5
 # Walks in a row that ended with the character wedged before it goes home by hearthstone.
 WEDGED_WALKS = 2
 # A walk that failed and brought the character less than this much nearer counts as wedged
@@ -551,7 +547,6 @@ class LiveBody:
         if node.target_kind == "gameobject":
             # A wanted poster or a body: stood at, found by the name its tooltip gives.
             self._approach(node.world)
-            self._face_point(node.world)
             if not self.gather.open(name_id(node.target_name)):
                 return Result(SkillOutcome.ABORTED, f"{node.target_name}: {self.gather.detail}",
                               "not_visible")
@@ -693,7 +688,6 @@ class LiveBody:
                 return Result(SkillOutcome.TIMED_OUT,
                               f"{self.hunt_timeout:.0f}s and the objective is not done", "timeout")
             self._approach(point)
-            self._face_point(point)
             got = self.gather.pick(wanted, progress)
             if got is Gathered.NOT_HERE and self.client.hid.hold("s", GATHER_STEP_BACK_S):
                 # Stood on the spawn point, the character itself hides what lies underfoot.
@@ -705,34 +699,6 @@ class LiveBody:
             return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
         return Result(SkillOutcome.ABORTED, "every spawn point walked and the objective is short",
                       "nothing")
-
-    def _face_point(self, world) -> None:
-        """Turn the character toward a world point, from the heading of the walk that
-        brought it there. 2.4.3 paints no facing (`Helpers.lua`, PLAYER_FACING), and the
-        walk's last straight motion is the character's facing (`Travel._heading_now`). The
-        travel's convention: a positive error turns right, as `Travel._pivot` does.
-
-        An object search looks at the ground ahead of the feet (`gather.SEARCH_ORIGIN`), a
-        grid about 15 degrees either side. At the Eastvale Logging Camp, where all 29
-        Bundles of Wood are live spawns, the walks stopped 3.5 to 5.6 yards from the spawn
-        point with it 23 to 46 degrees off the heading at seven of ten, and nine points in
-        a row were "not_here" (session 118).
-        """
-        travel = self.client.travel
-        heading = getattr(travel, "_heading_now", lambda: None)()
-        here = self._position()
-        there = world_to_map(world[0], world[1], self.client.bounds)
-        if heading is None or here is None or there is None:
-            return
-        if travel.distance(here, there) < FACE_MIN_YARDS:
-            return
-        bearing = travel.bearing(here, there)
-        if bearing is None:
-            return
-        error = (bearing - heading + math.pi) % (2 * math.pi) - math.pi
-        if abs(error) > FACE_TOLERANCE:
-            self.client.hid.hold("d" if error > 0 else "a",
-                                 abs(error) / max(travel.turn_rate, 0.1))
 
     def _service_needed(self) -> str | None:
         self.checkpoint()

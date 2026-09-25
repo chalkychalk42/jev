@@ -947,30 +947,3 @@ def test_a_skill_with_time_to_spare_first_puts_missing_spells_on_the_bar():
     b.execute(Armed(fight, ArmedBy.POLICY, 0, "fight.rotation", "d", "quest"), seen(), lambda: None)
     assert placed == ["ACCEPT_QUEST"], "a fight stopped to put spells on the bar"
 
-
-def test_an_object_search_faces_the_spawn_point_first():
-    """The search looks at the ground ahead of the feet, about 15 degrees either side, and
-    at the Eastvale Logging Camp the walks stopped with the spawn point 23 to 46 degrees
-    off the heading at seven of ten: nine points in a row were "not_here" (session 118)."""
-    import math
-
-    b = body()
-    holds = []
-    b.client.hid.hold = lambda key, seconds, **kw: holds.append((key, round(seconds, 3))) or True
-    b._position = lambda: (0.5, 0.5)
-    b.client.travel = SimpleNamespace(_heading_now=lambda: math.pi / 2, turn_rate=math.pi,
-                                      distance=lambda a, c: 5.0, bearing=lambda a, c: 0.0)
-    b._face_point((60.0, 50.0, 0.0))
-    assert holds == [("a", 0.5)], "a quarter turn, by the travel's own convention"
-    holds.clear()
-    b.client.travel.bearing = lambda a, c: math.pi / 2 + 0.1
-    b._face_point((60.0, 50.0, 0.0))
-    assert holds == [], "near enough ahead already"
-    b.client.travel.bearing = lambda a, c: 0.0
-    b.client.travel._heading_now = lambda: None
-    b._face_point((60.0, 50.0, 0.0))
-    assert holds == [], "no straight motion to take a heading from"
-    b.client.travel._heading_now = lambda: math.pi / 2
-    b.client.travel.distance = lambda a, c: 1.0
-    b._face_point((60.0, 50.0, 0.0))
-    assert holds == [], "underfoot: nothing to face"
