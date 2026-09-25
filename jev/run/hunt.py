@@ -44,6 +44,11 @@ STATIONS = 1 + len(RINGS) * PER_RING
 # Fruitless looks at one station before moving on. Two, because a camp is a moving crowd
 # and one empty look says very little.
 DRY_LOOKS = 2
+# One spawn point is one mob, a named one, and not there it has been killed and is coming
+# back: its spawn is waited at, a look every `LONE_LOOK_S`, until the hunt's own time is up.
+# Goldtooth respawns in six minutes; the hunt looked four times in 90 s, called the disk
+# empty, and the step was passed over (session 115).
+LONE_LOOK_S = 10.0
 
 # What to walk when a node does not say. **Not** the node's `r`: `r` is the tracker's
 # arrival slop in map fractions, and a hunt that borrowed it walked a two-hundred-yard
@@ -170,6 +175,7 @@ class Hunt:
     loot: Loot | None = None
     is_complete: Callable[[], bool | None] | None = None
     service_needed: Callable[[], str | None] | None = None
+    sleep: Callable[[float], None] = time.sleep
 
     kills: int = field(default=0, init=False)
     _outdoors: bool | None = field(default=None, init=False)
@@ -189,6 +195,7 @@ class Hunt:
         deadline = time.monotonic() + timeout_s
         # Where the target spawns when the guide knows it; rings round the centre when not.
         posts = spawn_stations(spawns) or stations(centre, radius_yards)
+        lone = len({tuple(p) for p in spawns}) == 1
         post = 0
         dry = 0
         stood = False
@@ -275,7 +282,9 @@ class Hunt:
                 # Nothing here worth swinging at. Two empty looks and the camp has moved
                 # on without us; go and stand somewhere else.
                 dry += 1
-                if dry >= DRY_LOOKS:
+                if lone:
+                    self.sleep(LONE_LOOK_S)
+                elif dry >= DRY_LOOKS:
                     stood = False
 
         have, need = self.progress()

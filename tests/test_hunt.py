@@ -410,3 +410,24 @@ def test_without_spawns_the_rings_remain():
     h, _ = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
     assert h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5, spawns=()) is Hunted.UNREACHABLE
     assert h.moves == STATIONS
+
+
+def test_a_lone_spawn_is_waited_at_not_walked_away_from():
+    """Goldtooth has one spawn in Fargodeep Mine and six minutes to respawn: the hunt looked
+    four times in 90 s, called the disk empty, and the step was passed over (session 115)."""
+    from jev.run.hunt import LONE_LOOK_S
+
+    h, walked = _hunt([Fought.NO_TARGET] * 5 + [Fought.KILLED], [(0, 1)] * 6 + [(1, 1)])
+    slept = []
+    h.sleep = slept.append
+    assert h.run((0.0, 0.0, 13.0), 30.0, timeout_s=5, spawns=((0.0, 0.0, 13.0),)) is Hunted.DONE
+    assert len(walked) == 1, "stood at its spawn throughout"
+    assert slept == [LONE_LOOK_S] * 5
+
+
+def test_a_camp_of_many_spawns_still_moves_on_when_dry():
+    spawns = ((0.0, 0.0, 80.0), (40.0, 0.0, 80.0))
+    h, walked = _hunt([Fought.NO_TARGET], [(0, 5)])
+    h.sleep = lambda s: pytest.fail("a camp is not waited at")
+    assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=spawns) is Hunted.UNREACHABLE
+    assert len(walked) == 4
