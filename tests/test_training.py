@@ -141,3 +141,12 @@ def test_the_mages_spells_have_roles_and_the_paladins_stay_as_they_were():
                19740: "long_buff", 498: "save", 853: "stun", 633: "last_resort",
                879: "utility", 26573: "utility", 7294: "aura"}
     assert {sid: spell(sid).role for sid in paladin} == paladin
+
+
+def test_a_mage_puts_its_conjures_on_the_bar():
+    """V166: Conjure Water and Food go on free slots like a strike."""
+    from jev.world.training import placements
+
+    bar = {1: 6603, 2: 133, 3: 168, 11: None, 12: None, **{s: 0 for s in range(4, 11)}}
+    placed = {p.spell_id for p in placements(bar, frozenset({6603, 133, 168, 5504, 587, 116}))}
+    assert {5504, 587, 116} <= placed

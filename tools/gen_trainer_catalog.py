@@ -28,7 +28,8 @@ Roles, from the spell's own data, never from its name:
                  periodic missile (Arcane Missiles)
     root         everything round the caster held in place (aura 26: Frost Nova)
     cc           the enemy transformed (aura 56: Polymorph)
-    conjure      an item made for the caster (effect 24: Conjure Water, Conjure Food)
+    conjure      an item made for the caster (effect 24: Conjure Water, Conjure Food), and
+                 which item (`creates`)
     attack       melee auto-attack (78), a toggle
     passive      a passive spell: nothing to press
     utility      anything else (dispels, resurrection, a strike only some creatures take)
@@ -95,12 +96,13 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         "select SpellName, Rank1, Attributes, Effect1, EffectApplyAuraName1, "
         "EffectImplicitTargetA1, DurationIndex, RecoveryTime, CategoryRecoveryTime, "
         "ManaCost, ManaCostPercentage, CasterAuraState, TargetCreatureType, "
-        "EffectApplyAuraName2, EffectApplyAuraName3, Effect2, Effect3 "
+        "EffectApplyAuraName2, EffectApplyAuraName3, Effect2, Effect3, EffectItemType1 "
         "from world_spell_template where Id=?", (spell_id,)).fetchone()
     if row is None:
         return None
     (name, rank, attributes, effect, aura, target, duration_index, recovery, category,
-     mana, mana_pct, caster_state, creature_type, aura2, aura3, effect2, effect3) = row
+     mana, mana_pct, caster_state, creature_type, aura2, aura3, effect2, effect3,
+     item) = row
     # Divine Protection pacifies first and makes immune second: any effect's aura counts.
     auras = {aura, aura2, aura3} - {0, None}
     duration_ms = None
@@ -159,6 +161,7 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         facts["role"] = "cc"
     elif effect == EFFECT_CREATE_ITEM and target == TARGET_SELF:
         facts["role"] = "conjure"
+        facts["creates"] = item
     else:
         facts["role"] = "utility"
     if AURA_SLOW in auras and target == TARGET_ENEMY:

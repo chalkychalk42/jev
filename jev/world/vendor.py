@@ -104,6 +104,34 @@ def supplies_for(class_id: int | None, race_id: int | None) -> tuple[Supply, ...
                  for role, r in sorted(roles.items()))
 
 
+CONSUMABLES = pathlib.Path(__file__).resolve().parents[2] / "content/tbc/consumables.json"
+
+
+@lru_cache(maxsize=1)
+def _consumables() -> dict[int, dict]:
+    try:
+        raw = json.loads(CONSUMABLES.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {int(k): v for k, v in (raw.get("items") or {}).items()}
+
+
+def consumable_role(item_id: int | None) -> str | None:
+    """"food", "drink" or "both" for a food or drink; `None` for anything else."""
+    row = _consumables().get(item_id) if item_id is not None else None
+    return row["role"] if row else None
+
+
+def consumables(role: str, level: int | None) -> tuple[int, ...]:
+    """The foods (`role` "food") or drinks ("drink") a character of `level` can use, best
+    first: conjured before bought (it is free, and gone at logout), then the higher item
+    level (`tools/gen_consumables.py`, V166)."""
+    usable = [(item, row) for item, row in _consumables().items()
+              if row["role"] in (role, "both") and (level is None or row["level"] <= level)]
+    usable.sort(key=lambda pair: (not pair[1]["conjured"], -pair[1]["item_level"], pair[0]))
+    return tuple(item for item, _ in usable)
+
+
 def merchants(map_id: int, *, items: frozenset[int] = frozenset()) -> tuple[Merchant, ...]:
     """All matching spawns on the current world map; caller ranks by world-yard distance.
 

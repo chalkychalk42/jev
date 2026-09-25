@@ -52,6 +52,9 @@ class Rest:
     hid: object
     read: Callable[[], dict | None]
     profile: CombatProfile | None = None
+    # When the bar's slot for the role is empty: eat or drink from the bags instead, `True`
+    # if something was taken (a caster's conjured water, V166).
+    use_item: Callable[[Role], bool] | None = None
 
     slot: int | None = field(default=None, init=False)
     started_at: float | None = field(default=None, init=False)
@@ -69,6 +72,7 @@ class Rest:
         self.detail = ""
         deadline = time.monotonic() + timeout_s
         eating = False
+        from_bags = False
         gauge = "vitals.power" if role is Role.DRINK else "vitals.hp"
         event("rest.request", data={"role": role.value, "gauge": gauge,
                                     "fraction": fraction, "timeout_s": timeout_s})
@@ -96,7 +100,13 @@ class Rest:
             self.slot = ability.slot
 
             usable = v.get("bars.usable")
-            if usable is not None and not (usable & (1 << (ability.slot - 1))):
+            if usable is not None and not (usable & (1 << (ability.slot - 1))) and not from_bags:
+                if self.use_item is not None and not eating:
+                    from_bags = True
+                    if self.use_item(role):
+                        eating = True
+                        self.started_at = time.monotonic()
+                        continue
                 self.detail = (f"slot {ability.slot} ({ability.name or role.value}) "
                                f"is not usable; out of {role.value}")
                 return Rested.NO_FOOD

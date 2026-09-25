@@ -247,3 +247,18 @@ def test_the_body_drinks_to_the_policys_line_so_a_rest_is_not_armed_again():
 
     assert rest_mana(True) > 0.45 > rest_mana(False)
     assert drink_to(True) > rest_mana(True) and drink_to(False) > rest_mana(False)
+
+
+def test_a_restock_does_not_buy_what_the_character_conjures():
+    """V166: the bar's starting water runs out, and the conjured water is in the bags."""
+    from jev.coach.policy import Context, service
+    from jev.world.state_v1 import Bags, State, Vitals
+
+    empty = State(t=0, client_id="c", vitals=Vitals(hp=1.0, combat=False),
+                  bags=Bags(free=10, durability_min=1.0, money_copper=500, drink_id=159,
+                            drink_count=0, food_id=2070, food_count=5))
+    assert service(empty, context=Context()).decision.skill == "BUY_AMMO_REAGENT_FOOD"
+    conjuring = Context()
+    conjuring.conjures = lambda: frozenset({"drink"})
+    plan = service(empty, context=conjuring)
+    assert plan is None or plan.decision.skill != "BUY_AMMO_REAGENT_FOOD"

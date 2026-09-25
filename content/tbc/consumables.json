@@ -1,0 +1,1679 @@
+{
+ "format": 1,
+ "items": {
+  "117": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "159": {
+   "role": "drink",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "414": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "422": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "724": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "733": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "787": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "961": {
+   "role": "food",
+   "level": 0,
+   "item_level": 5,
+   "conjured": false
+  },
+  "1017": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "1082": {
+   "role": "food",
+   "level": 10,
+   "item_level": 20,
+   "conjured": false
+  },
+  "1113": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": true
+  },
+  "1114": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": true
+  },
+  "1119": {
+   "role": "food",
+   "level": 0,
+   "item_level": 25,
+   "conjured": false
+  },
+  "1179": {
+   "role": "drink",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "1205": {
+   "role": "drink",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "1326": {
+   "role": "food",
+   "level": 0,
+   "item_level": 15,
+   "conjured": false
+  },
+  "1401": {
+   "role": "drink",
+   "level": 4,
+   "item_level": 14,
+   "conjured": false
+  },
+  "1487": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": true
+  },
+  "1645": {
+   "role": "drink",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "1707": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "1708": {
+   "role": "drink",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "2070": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "2136": {
+   "role": "drink",
+   "level": 15,
+   "item_level": 25,
+   "conjured": true
+  },
+  "2287": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "2288": {
+   "role": "drink",
+   "level": 5,
+   "item_level": 15,
+   "conjured": true
+  },
+  "2679": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "2680": {
+   "role": "food",
+   "level": 1,
+   "item_level": 7,
+   "conjured": false
+  },
+  "2681": {
+   "role": "food",
+   "level": 1,
+   "item_level": 7,
+   "conjured": false
+  },
+  "2682": {
+   "role": "both",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "2683": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "2684": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "2685": {
+   "role": "food",
+   "level": 10,
+   "item_level": 20,
+   "conjured": false
+  },
+  "2687": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "2888": {
+   "role": "food",
+   "level": 1,
+   "item_level": 8,
+   "conjured": false
+  },
+  "3220": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "3448": {
+   "role": "both",
+   "level": 0,
+   "item_level": 15,
+   "conjured": false
+  },
+  "3662": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "3663": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "3664": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "3665": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "3666": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "3726": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "3727": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "3728": {
+   "role": "food",
+   "level": 20,
+   "item_level": 30,
+   "conjured": false
+  },
+  "3729": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "3770": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "3771": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "3772": {
+   "role": "drink",
+   "level": 25,
+   "item_level": 35,
+   "conjured": true
+  },
+  "3927": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "4418": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "4457": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "4536": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "4537": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "4538": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "4539": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "4540": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "4541": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "4542": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "4544": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "4592": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "4593": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "4594": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "4599": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "4601": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "4602": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "4604": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "4605": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "4606": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "4607": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "4608": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "4656": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "4791": {
+   "role": "drink",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "5057": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "5066": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "5095": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "5349": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": true
+  },
+  "5350": {
+   "role": "drink",
+   "level": 1,
+   "item_level": 5,
+   "conjured": true
+  },
+  "5472": {
+   "role": "food",
+   "level": 1,
+   "item_level": 7,
+   "conjured": false
+  },
+  "5473": {
+   "role": "food",
+   "level": 1,
+   "item_level": 8,
+   "conjured": false
+  },
+  "5474": {
+   "role": "food",
+   "level": 1,
+   "item_level": 10,
+   "conjured": false
+  },
+  "5476": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "5477": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "5478": {
+   "role": "food",
+   "level": 10,
+   "item_level": 20,
+   "conjured": false
+  },
+  "5479": {
+   "role": "food",
+   "level": 12,
+   "item_level": 22,
+   "conjured": false
+  },
+  "5480": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "5525": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "5526": {
+   "role": "food",
+   "level": 10,
+   "item_level": 20,
+   "conjured": false
+  },
+  "5527": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "6038": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "6290": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "6299": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "6316": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "6807": {
+   "role": "food",
+   "level": 0,
+   "item_level": 35,
+   "conjured": false
+  },
+  "6887": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "6888": {
+   "role": "food",
+   "level": 1,
+   "item_level": 7,
+   "conjured": false
+  },
+  "6890": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "7097": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "7228": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "7806": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "7807": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "7808": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "8075": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": true
+  },
+  "8076": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": true
+  },
+  "8077": {
+   "role": "drink",
+   "level": 35,
+   "item_level": 45,
+   "conjured": true
+  },
+  "8078": {
+   "role": "drink",
+   "level": 45,
+   "item_level": 55,
+   "conjured": true
+  },
+  "8079": {
+   "role": "drink",
+   "level": 55,
+   "item_level": 65,
+   "conjured": true
+  },
+  "8364": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "8543": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "8766": {
+   "role": "drink",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "8932": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "8948": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "8950": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "8952": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "8953": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "8957": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "9451": {
+   "role": "drink",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "9681": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "10841": {
+   "role": "drink",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "11109": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "11415": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "11444": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "11584": {
+   "role": "food",
+   "level": 0,
+   "item_level": 5,
+   "conjured": false
+  },
+  "12209": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "12210": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "12211": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "12212": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "12213": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "12214": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "12215": {
+   "role": "food",
+   "level": 35,
+   "item_level": 40,
+   "conjured": false
+  },
+  "12216": {
+   "role": "food",
+   "level": 40,
+   "item_level": 45,
+   "conjured": false
+  },
+  "12218": {
+   "role": "food",
+   "level": 40,
+   "item_level": 45,
+   "conjured": false
+  },
+  "12224": {
+   "role": "food",
+   "level": 1,
+   "item_level": 7,
+   "conjured": false
+  },
+  "12238": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "12763": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "13546": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "13755": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "13810": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "13851": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "13893": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "13927": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "13928": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "13929": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "13930": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "13931": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "13932": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "13933": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "13934": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "13935": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "16166": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "16167": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "16168": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "16169": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "16170": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "16171": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "16766": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "16971": {
+   "role": "food",
+   "level": 40,
+   "item_level": 45,
+   "conjured": false
+  },
+  "17119": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "17197": {
+   "role": "food",
+   "level": 1,
+   "item_level": 7,
+   "conjured": false
+  },
+  "17198": {
+   "role": "food",
+   "level": 1,
+   "item_level": 10,
+   "conjured": false
+  },
+  "17199": {
+   "role": "food",
+   "level": 1,
+   "item_level": 10,
+   "conjured": false
+  },
+  "17222": {
+   "role": "food",
+   "level": 35,
+   "item_level": 40,
+   "conjured": false
+  },
+  "17344": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "17404": {
+   "role": "drink",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "17406": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "17407": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "17408": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "18045": {
+   "role": "food",
+   "level": 40,
+   "item_level": 45,
+   "conjured": false
+  },
+  "18254": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "18255": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "18300": {
+   "role": "drink",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "18632": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "18633": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "18635": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "19223": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "19224": {
+   "role": "food",
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "19225": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "19299": {
+   "role": "drink",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "19300": {
+   "role": "drink",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "19304": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "19305": {
+   "role": "food",
+   "level": 15,
+   "item_level": 25,
+   "conjured": false
+  },
+  "19306": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "20074": {
+   "role": "food",
+   "level": 20,
+   "item_level": 30,
+   "conjured": false
+  },
+  "20452": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "20857": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "21023": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "21030": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "21031": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "21033": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "21552": {
+   "role": "food",
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "22018": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": true
+  },
+  "22019": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": true
+  },
+  "22324": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "22645": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "22895": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": true
+  },
+  "23160": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "23495": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "23756": {
+   "role": "food",
+   "level": 1,
+   "item_level": 8,
+   "conjured": false
+  },
+  "24008": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "24009": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "24072": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "24105": {
+   "role": "food",
+   "level": 0,
+   "item_level": 8,
+   "conjured": false
+  },
+  "24338": {
+   "role": "food",
+   "level": 55,
+   "item_level": 55,
+   "conjured": false
+  },
+  "24539": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27635": {
+   "role": "food",
+   "level": 0,
+   "item_level": 8,
+   "conjured": false
+  },
+  "27636": {
+   "role": "food",
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "27651": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27655": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27657": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27658": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27659": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27660": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27661": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27662": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27663": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27664": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27665": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27666": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27667": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27854": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27855": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27856": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27857": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27858": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27859": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "27860": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "28399": {
+   "role": "drink",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "28486": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "28501": {
+   "role": "food",
+   "level": 55,
+   "item_level": 55,
+   "conjured": false
+  },
+  "29292": {
+   "role": "food",
+   "level": 55,
+   "item_level": 55,
+   "conjured": false
+  },
+  "29293": {
+   "role": "food",
+   "level": 55,
+   "item_level": 55,
+   "conjured": false
+  },
+  "29393": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "29394": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29395": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29401": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29402": {
+   "role": "food",
+   "level": 50,
+   "item_level": 60,
+   "conjured": false
+  },
+  "29412": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "29448": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29449": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29450": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29451": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29452": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29453": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "29454": {
+   "role": "drink",
+   "level": 60,
+   "item_level": 70,
+   "conjured": false
+  },
+  "30155": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "30355": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "30357": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "30358": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "30359": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "30361": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "30457": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "30458": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "30610": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "30703": {
+   "role": "drink",
+   "level": 60,
+   "item_level": 70,
+   "conjured": true
+  },
+  "30816": {
+   "role": "food",
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "31672": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "31673": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "32453": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "32455": {
+   "role": "drink",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "32668": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "32685": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "32686": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "32721": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "33004": {
+   "role": "food",
+   "level": 40,
+   "item_level": 45,
+   "conjured": false
+  },
+  "33042": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "33048": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "33052": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "33822": {
+   "role": "food",
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "33825": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 70,
+   "conjured": false
+  },
+  "33867": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "33872": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "34411": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "35563": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "35565": {
+   "role": "food",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "35710": {
+   "role": "food",
+   "level": 65,
+   "item_level": 80,
+   "conjured": false
+  },
+  "38427": {
+   "role": "food",
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "38428": {
+   "role": "food",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  },
+  "38429": {
+   "role": "drink",
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "38430": {
+   "role": "drink",
+   "level": 60,
+   "item_level": 70,
+   "conjured": false
+  },
+  "38431": {
+   "role": "drink",
+   "level": 65,
+   "item_level": 75,
+   "conjured": false
+  }
+ }
+}

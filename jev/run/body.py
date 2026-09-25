@@ -22,6 +22,7 @@ from jev.clients.interact import Result as Interacted
 from jev.clients.loot import Loot, Looted
 from jev.clients.recover import Recover, Recovered
 from jev.clients.repair import Repair
+from jev.clients.rest import SLOT_KEYS as REST_KEYS
 from jev.clients.rest import Rest
 from jev.clients.spellbook import Spellbook
 from jev.clients.targeting import FaceCode, Targeting
@@ -41,6 +42,7 @@ from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FOCUS_QUICK_S, Client
+from jev.run.evidence import event
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
@@ -57,6 +59,8 @@ from jev.world.training import placements as spell_placements
 from jev.world.training import trainer_due
 from jev.world.vendor import (
     bag_slots,
+    consumable_role,
+    consumables,
     flightmasters,
     innkeepers,
     junk_prices,
@@ -176,6 +180,13 @@ def _tour(points, start) -> list[tuple[float, float, float]]:
     return tour
 
 
+
+# After a meal a caster conjures when the bags hold fewer than this of what a conjure makes,
+# this many casts at most, each waited out (V166). Conjure Water makes two a cast at rank 1.
+CONJURE_BELOW = 4
+CONJURE_CASTS = 2
+CONJURE_CAST_WAIT_S = 5.0
+
 class LiveBody:
     # Every entry has an executor. The verifier receives exactly this capability set.
     HANDLERS: ClassVar[dict[str, str]] = {
@@ -218,6 +229,7 @@ class LiveBody:
         self._side: str | None = None
         self._flying = False
         self._gear_checked: object = object()     # the bags' revision last looked through
+        self._conjure_checked: object = object()  # and for what the conjures make (V166)
         self._placing_checked: object = object()  # the bar and spellbook last planned from
         self.travelling = False
         self.policy_context = Context()
@@ -241,7 +253,7 @@ class LiveBody:
         self.fight = Fight(hid=client.hid, read=self._read, read_frame=self._frame,
                            window_origin=client.origin, window_centre_x=w // 2,
                            targeting=self.targeting, bounds=client.bounds)
-        self.rest = Rest(hid=client.hid, read=self._read)
+        self.rest = Rest(hid=client.hid, read=self._read, use_item=self._use_consumable)
         self.loot = Loot(hid=client.hid, read=self._read, read_frame=self._frame,
                          window_origin=client.origin, targeting=self.targeting)
         self.gather = Gather(hid=client.hid, read=self._read, targeting=self.targeting,
@@ -798,11 +810,74 @@ class LiveBody:
         caster = is_caster(state.char.cls)
         if (state.vitals.power_type is PowerType.MANA and state.vitals.power is not None
                 and state.vitals.power < rest_mana(caster)):
-            return self._result(self.rest.until(drink_to(caster), role=Role.DRINK),
-                                self.rest.detail)
+            rested = self._result(self.rest.until(drink_to(caster), role=Role.DRINK),
+                                  self.rest.detail)
+            self._conjure()
+            return rested
         if self.fight.top_up():
             return Result(SkillOutcome.SUCCEEDED, "health topped up", "healthy")
-        return self._result(self.rest.until(0.9), self.rest.detail)
+        rested = self._result(self.rest.until(0.9), self.rest.detail)
+        self._conjure()
+        return rested
+
+    def _use_consumable(self, role: Role) -> bool:
+        """Eat or drink the best of `role` the bags hold, for a meal whose bar slot is empty:
+        a caster's conjured water, when the water it started with has run out (V166)."""
+        values = self._read() or {}
+        kind = "drink" if role is Role.DRINK else "food"
+        user = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
+                      self.client.size)
+        used = user.use_item(consumables(kind, values.get("char.level")))
+        self.say(f"    {kind} from the bags: {used}" if used is not None
+                 else f"    no {kind} in the bags - {user.detail}")
+        return used is not None
+
+    def _conjure(self) -> None:
+        """After a meal, out of combat: a caster makes its water and food when the bags hold
+        fewer than `CONJURE_BELOW` of what its conjures make, `CONJURE_CASTS` casts each at
+        most (V166). Looked at only when the bags have changed since."""
+        values = self._read()
+        profile = self.fight.profile or (for_class(values.get("char.class_id"),
+                                                   values.get("char.race_id"))
+                                         if values else None)
+        rows = [r for r in (profile.by_role(Role.CONJURE) if profile else ()) if r.creates]
+        if not rows or not values or values.get("vitals.combat") is not False:
+            return
+        revision = values.get("inventory.revision")
+        if revision is None or revision == self._conjure_checked:
+            return
+        counter = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
+                         self.client.size)
+        slots = counter.census()
+        if not slots:
+            return
+        for row in rows:
+            have = sum(count for item, count in slots.values() if item == row.creates)
+            for _ in range(CONJURE_CASTS if have < CONJURE_BELOW else 0):
+                values = self._read()
+                if (not values or values.get("vitals.combat") is not False
+                        or (values.get("vitals.power") or 0) * (values.get("vitals.power_max") or 0)
+                        < row.mana):
+                    break
+                event("conjure.request", data={"slot": row.slot, "spell": row.spell_id,
+                                               "creates": row.creates, "have": have})
+                self.client.hid.tap(REST_KEYS.get(row.slot, str(row.slot)))
+                self._await_cast()
+            self.say(f"    conjured {row.name}: had {have}")
+        after = self._read()
+        self._conjure_checked = after.get("inventory.revision") if after else None
+
+    def _await_cast(self, timeout_s: float = CONJURE_CAST_WAIT_S) -> None:
+        """Until a cast begun ends: it starts within a look, then runs its cast time."""
+        began = time.monotonic()
+        seen = False
+        while time.monotonic() - began < timeout_s:
+            values = self._read() or {}
+            casting = values.get("bars.casting") is True
+            seen = seen or casting
+            if (seen and not casting) or (not seen and time.monotonic() - began > 1.0):
+                return
+            time.sleep(0.1)
 
     def _wear_upgrades(self) -> None:
         """Put on anything in the bags better than what this character wears (`jev.world.gear`).
@@ -912,6 +987,18 @@ class LiveBody:
         context.trainable = self.trainable
         context.bindable = self.bindable
         context.discoverable = self.discoverable
+        context.conjures = self.conjured_roles
+
+    def conjured_roles(self) -> frozenset[str]:
+        """What this character's bar makes for itself: "drink", "food" (V166)."""
+        profile = self.fight.profile
+        if profile is None:
+            return frozenset()
+        roles: set[str] = set()
+        for row in profile.by_role(Role.CONJURE):
+            kind = consumable_role(row.creates)
+            roles |= {"food", "drink"} if kind == "both" else {kind} if kind else set()
+        return frozenset(roles)
 
     def _train(self, state) -> Result:
         trainer = self._trainer()

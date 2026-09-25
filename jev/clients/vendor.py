@@ -211,21 +211,8 @@ class Vendor:
     @traced("vendor.bag_items")
     def bag_items(self, *, timeout_s: float = 10.0) -> set[int] | None:
         """Every item id in the bags, from one full census; `None` if it did not complete."""
-        self._deadline = self.clock() + timeout_s
-        seen: dict[int, int] = {}
-        try:
-            while self.clock() < self._deadline:
-                values = self._read(merchant=False)
-                total, ordinal = values.get("inventory.total"), values.get("inventory.ordinal")
-                if total is None or ordinal is None:
-                    return None
-                seen[ordinal] = values.get("inventory.item_id") or 0
-                if len(seen) >= total:
-                    return {item for item in seen.values() if item}
-                self.sleep(0.05)
-        except _Stop:
-            return None
-        return None
+        slots = self.census(timeout_s=timeout_s)
+        return {item for item, _ in slots.values() if item} if slots else None
 
     @traced("vendor.equip_items")
     def equip_items(self, items: set[int], *, timeout_s: float = 30.0) -> list[int]:
@@ -269,6 +256,75 @@ class Vendor:
         except _Stop as stop:
             self.detail = stop.detail
         return done
+
+    def census(self, *, timeout_s: float = 20.0) -> dict[tuple[int, int], tuple[int, int]]:
+        """One pass of the strip's bag census: (bag, slot) -> (item id, count), every slot.
+        The census paints one slot a look, so a pass takes as many looks as there are
+        slots. Empty when it cannot finish (a fight, a dialog, the deadline)."""
+        self.detail = ""
+        self._deadline = self.clock() + timeout_s
+        slots: dict[tuple[int, int], tuple[int, int]] = {}
+        seen: set[int] = set()
+        try:
+            while True:
+                values = self._read(merchant=False)
+                total, ordinal = values.get("inventory.total"), values.get("inventory.ordinal")
+                if total is None or ordinal is None:
+                    raise _Stop(Vended.BLIND, "bag slot census unreadable")
+                if ordinal not in seen:
+                    seen.add(ordinal)
+                    slots[(values.get("inventory.bag"), values.get("inventory.slot"))] = (
+                        values.get("inventory.item_id") or 0, values.get("inventory.count") or 0)
+                if len(seen) >= total:
+                    return slots
+                self.sleep(0.05)
+        except _Stop as stop:
+            self.detail = stop.detail
+            return {}
+
+    def count_items(self, items: set[int], *, timeout_s: float = 20.0) -> int | None:
+        """How many of these items the bags hold; `None` when the census did not finish."""
+        slots = self.census(timeout_s=timeout_s)
+        if not slots:
+            return None
+        return sum(count for item, count in slots.values() if item in items)
+
+    @traced("vendor.use_item")
+    def use_item(self, candidates: tuple[int, ...], *, timeout_s: float = 30.0) -> int | None:
+        """Use the best of `candidates` the bags hold (best first): a right-click, as
+        equipping is, and only with no shop open. The item used, or `None` (V166).
+
+        A caster's conjured water is not on the bar, whose drink slot holds the water it
+        started with; when that runs out, the meal takes the conjured one from the bags.
+        Used is the bags changing after the click: a stack one shorter."""
+        slots = self.census(timeout_s=timeout_s / 2)
+        present = {item for item, count in slots.values() if count}
+        best = next((item for item in candidates if item in present), None)
+        if best is None:
+            self.detail = self.detail or "none of these in the bags"
+            return None
+        self._deadline = self.clock() + timeout_s / 2
+        try:
+            while True:
+                values = self._read(merchant=False)
+                if values.get("ui.vendor") is not False:
+                    raise _Stop(Vended.REFUSED, "a shop is open: a right-click would sell")
+                if (values.get("inventory.item_id") == best and values.get("inventory.count")
+                        and values.get("inventory.locked") is False):
+                    if values.get("inventory.x") is None:
+                        self._click(values, "inventory.open_")
+                        bag = values.get("inventory.bag")
+                        self._await(lambda r, bag=bag: r.get("inventory.bag") == bag
+                                    and r.get("inventory.x") is not None, 4.0, merchant=False)
+                        continue
+                    revision = values.get("inventory.revision")
+                    self._click(values, "inventory.", right=True)
+                    self._await_worn(revision)
+                    return best
+                self.sleep(0.05)
+        except _Stop as stop:
+            self.detail = stop.detail
+            return None
 
     def _await_worn(self, revision, seconds: float = 4.0) -> None:
         """The bags changing after an equip click, answering "will bind it to you" on the

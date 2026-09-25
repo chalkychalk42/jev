@@ -967,3 +967,45 @@ def test_where_the_character_died_is_remembered_for_walks_to_keep_clear_of(dead,
     assert len(dangers) == kept
     if kept:
         assert (dangers[0].x, dangers[0].y) == (50.0, 50.0)
+
+
+def test_a_caster_conjures_what_it_is_short_of_after_a_meal(monkeypatch):
+    """V166: fewer than four Conjured Water in the bags, two casts; enough, none; and a
+    paladin, with no conjure on its bar, never takes a census."""
+    from dataclasses import replace
+
+    from jev.run import body as module
+    from jev.world.combat import Ability, Role, for_class
+
+    conjure = Ability(slot=5, role=Role.CONJURE, name="Conjure Water", mana=60,
+                      spell_id=5504, creates=5350)
+    censuses = []
+
+    class Counter:
+        def __init__(self, *a, **k):
+            pass
+
+        def census(self):
+            censuses.append(1)
+            return {(0, 1): (5350, have[0]), (0, 2): (159, 0)}
+
+    monkeypatch.setattr(module, "Vendor", Counter)
+    for class_id, water, casts in ((8, 2, 2), (8, 6, 0), (2, 0, 0)):
+        have = [water]
+        b = body()
+        taps = []
+        b.client.hid.tap = lambda key: taps.append(key) or True
+        b._await_cast = lambda: None
+        values = {"vitals.combat": False, "vitals.power": 1.0, "vitals.power_max": 300,
+                  "char.class_id": class_id, "char.race_id": 1, "inventory.revision": 7}
+        b._read = lambda values=values: values
+        base = for_class(class_id, 1)
+        b.fight.profile = (replace(base, abilities=(*base.abilities, conjure))
+                           if class_id == 8 else base)
+        censuses.clear()
+        b._conjure()
+        assert taps == ["5"] * casts, (class_id, water)
+        assert len(censuses) == (1 if class_id == 8 else 0)
+        censuses.clear()
+        b._conjure()
+        assert not censuses, "the bags unchanged since: not looked at again"

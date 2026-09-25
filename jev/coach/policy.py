@@ -122,6 +122,15 @@ class Context:
     # the spellbook census and the trainer catalog (`LiveBody.trainable`). Absent, no
     # training is ever asked for.
     trainable: Callable[[State], bool] | None = None
+    # What the character makes for itself ("drink", "food"): a caster's conjures, which
+    # a restock need not buy (`LiveBody.conjured_roles`, V166).
+    conjures: Callable[[], frozenset[str]] | None = None
+
+    def conjured(self) -> frozenset[str]:
+        try:
+            return self.conjures() if self.conjures is not None else frozenset()
+        except Exception:
+            return frozenset()
     train_blocked_level: int | None = None
 
     def train_failed(self, level: int | None) -> None:
@@ -244,9 +253,11 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is low", 0.65,
                        ("dead", "combat"), service="repair"), True, "service.durability")
 
+    conjured = context.conjured() if context is not None else frozenset()
     if ((context is None or context.can_restock(b.money_copper))
-            and ((b.food_id is not None and b.food_count == 0)
-                 or (b.drink_id is not None and b.drink_count == 0))):
+            and ((b.food_id is not None and b.food_count == 0 and "food" not in conjured)
+                 or (b.drink_id is not None and b.drink_count == 0
+                     and "drink" not in conjured))):
         return Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD", "confirmed food or drink is empty",
                        0.8, ("dead", "combat"), service="supplies"), True, "service.supplies")
 

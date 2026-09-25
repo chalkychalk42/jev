@@ -17,6 +17,7 @@ here, by role, so a class needs no list of its own:
   exclusive, and a second save shares the first one's cooldown;
 - one long buff per kind of aura it applies (a blessing of attack power, one of mana);
 - every strike;
+- every conjure (a caster's water and food, V166);
 - no new heal and no new short buff: the starting bar has its heal and its seal already,
   and a second seal would only replace the first.
 """
@@ -41,7 +42,7 @@ MAX_TRAINER_YARDS = 1500.0
 
 # Roles worth a new bar slot, in the order free slots are handed out.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
-NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort")
+NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort", "conjure")
 BAR_SLOTS = 12
 
 
@@ -59,6 +60,8 @@ class SpellFacts:
     aura: int | None = None
     # A spell that slows the enemy it hits (Frostbolt): a caster's opener (V165).
     slows: bool = False
+    # The item a conjure makes (V166).
+    creates: int | None = None
 
     @property
     def self_cast(self) -> bool:
@@ -112,7 +115,8 @@ def spell(spell_id: int | None, facts: dict | None = None) -> SpellFacts | None:
                       every_s=float(raw.get("every_s", 0.0)),
                       cooldown_s=float(raw.get("cooldown_s", 0.0)),
                       target=raw.get("target", "other"), spends=bool(raw.get("spends")),
-                      aura=raw.get("aura"), slows=bool(raw.get("slows")))
+                      aura=raw.get("aura"), slows=bool(raw.get("slows")),
+                      creates=raw.get("creates"))
 
 
 def side(race_id: int | None) -> str | None:

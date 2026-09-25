@@ -430,3 +430,53 @@ def test_a_merchant_that_failed_is_remembered_until_a_sale_with_it(tmp_path):
     note_merchant(memory, 66, failed=False)
     assert load_merchant_failures(memory) == {3937: 2}
     assert load_merchant_failures(None) == {}
+
+
+class _Bags(Shop):
+    """A census that paints one bag slot a look, round and round."""
+
+    def __init__(self, slots):
+        super().__init__()
+        self.slots, self.look = list(slots), 0
+        self.v.update({"ui.vendor": False, "inventory.total": len(self.slots)})
+
+    def read(self):
+        bag, slot, item, count = self.slots[self.look % len(self.slots)]
+        self.look += 1
+        self.v.update({"inventory.ordinal": (self.look - 1) % len(self.slots) + 1,
+                       "inventory.bag": bag, "inventory.slot": slot,
+                       "inventory.item_id": item, "inventory.count": count})
+        return self.v.copy()
+
+    def click(self, x, y, right=False):
+        self.clicks.append((x, y, right))
+        if right:
+            self.v["inventory.revision"] += 1              # a stack one shorter
+        return True
+
+
+def test_a_census_counts_the_bags_and_the_best_drink_is_used():
+    """V166: the conjured water is in the bags, the bar's slot holds the starting water."""
+    bags = _Bags([(0, 1, 2070, 5), (0, 2, 5350, 4), (0, 3, 0, 0), (0, 4, 159, 0)])
+    body = Vendor(bags, bags.read, bags.visit, clock=lambda: bags.now, sleep=bags.sleep)
+    assert body.count_items({5350}) == 4 and body.count_items({159}) == 0
+    assert body.use_item((5350, 159)) == 5350
+    assert [right for *_, right in bags.clicks] == [True], "one right-click, the water's"
+    assert body.use_item((1179,)) is None and "none of these" in body.detail
+
+
+def test_nothing_is_used_while_a_shop_is_open():
+    bags = _Bags([(0, 1, 5350, 4)])
+    bags.v["ui.vendor"] = True
+    body = Vendor(bags, bags.read, bags.visit, clock=lambda: bags.now, sleep=bags.sleep)
+    assert body.use_item((5350,)) is None
+    assert bags.clicks == []
+
+
+def test_conjured_drinks_come_first_then_the_better_ones():
+    from jev.world.vendor import consumables
+
+    drinks = consumables("drink", 10)
+    assert drinks[0] in (5350, 2288) and drinks.index(2288) < drinks.index(5350)
+    assert drinks.index(5350) < drinks.index(159), "free, and gone at logout"
+    assert 2288 not in consumables("drink", 4), "Conjured Fresh Water needs level 5"

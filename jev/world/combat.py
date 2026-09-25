@@ -41,6 +41,7 @@ class Role(StrEnum):
     SAVE = "save"                  # immune for a few seconds: pressed before a heal
     STUN = "stun"                  # the attacker held still: pressed before a heal
     LAST_RESORT = "last_resort"    # a full heal on a long cooldown, at the very end
+    CONJURE = "conjure"            # makes an item: pressed out of combat, never in a fight
 
 
 # -- policy -------------------------------------------------------------------------
@@ -145,6 +146,8 @@ class Ability:
     # Usable only in a state a buff sets, and spends it: Judgement releases the seal.
     spends: bool = False
     spell_id: int | None = None
+    # The item a conjure makes (Conjured Water, 5350).
+    creates: int | None = None
 
     @property
     def self_cast(self) -> bool:
@@ -250,7 +253,8 @@ PROFILES: dict[str, CombatProfile] = _load()
 # A trained spell's role (`jev.world.training`) as a bar row's.
 TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL,
                  "short_buff": Role.BUFF, "long_buff": Role.BUFF, "aura": Role.AURA,
-                 "save": Role.SAVE, "stun": Role.STUN, "last_resort": Role.LAST_RESORT}
+                 "save": Role.SAVE, "stun": Role.STUN, "last_resort": Role.LAST_RESORT,
+                 "conjure": Role.CONJURE}
 
 
 def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatProfile:
@@ -302,7 +306,8 @@ def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatPr
         rows.append(Ability(slot=slot, role=role, name=facts.name, mana=facts.mana,
                             every_s=(float("inf") if role is Role.AURA else facts.every_s),
                             toggle=facts.role == "attack", friendly=facts.self_cast,
-                            lasting=lasting, spends=facts.spends, spell_id=facts.spell_id))
+                            lasting=lasting, spends=facts.spends, spell_id=facts.spell_id,
+                            creates=facts.creates))
     return CombatProfile(name=base.name, abilities=tuple(rows), caster=base.caster)
 
 
