@@ -100,6 +100,9 @@ TRACK_EVERY_S = 0.5
 TRAIL_STEP_YARDS = 3.0
 TRAIL_JUMP_YARDS = 25.0
 TRAIL_POINTS = 400
+# Outdoor points kept at the trail's head, and how near its end a walk back has arrived.
+TRAIL_OUTSIDE_POINTS = 3
+TRAIL_DONE_YARDS = 5.0
 # Two points of a trail this far apart in height are on different floors.
 TRAIL_FLOOR_YARDS = 2.0
 UNDER_YARDS = 1.0
@@ -193,6 +196,7 @@ class Client:
     # World x and y from the last point read outdoors (`_trail_anchored`), and the way in.
     _trail: list = field(default_factory=list, init=False)
     _trail_anchored: bool = field(default=False, init=False)
+    _outside: bool = field(default=False, init=False)     # the last read was outdoors
     # The way in outlives the session (V232): saved at close, and taken up by the next
     # session if its first read is where the last one ended.
     trail_memory: Path | None = field(default=None, init=False)
@@ -312,8 +316,14 @@ class Client:
                 and math.dist(pending[-1][:2], (x, y)) <= 2 * TRAIL_STEP_YARDS):
             self._trail, self._trail_anchored = pending, True   # where the last session ended
         if indoors is False:
-            self._trail, self._trail_anchored = [point], True
+            # A few yards of the way to the door as well, so walking the way in back ends
+            # clear of the doorway rather than at its threshold (V236).
+            tail = self._trail if self._trail_anchored and self._outside else []
+            if not tail or math.dist(tail[-1][:2], (x, y)) >= TRAIL_STEP_YARDS:
+                tail = [*tail, point][-TRAIL_OUTSIDE_POINTS:]
+            self._trail, self._trail_anchored, self._outside = tail, True, True
             return
+        self._outside = False
         if self._trail and math.dist(self._trail[-1][:2], (x, y)) > TRAIL_JUMP_YARDS:
             self._trail, self._trail_anchored = [], False
         if not self._trail:
@@ -351,14 +361,22 @@ class Client:
         route = Route(PathStatus.COMPLETE, tuple(points), source="trail")
         self._following = tuple(route.points)
         try:
-            self.travel.follow(route, timeout_s=timeout_s)
+            result = self.travel.follow(route, timeout_s=timeout_s)
         finally:
             self._following = ()
         after = self.read()
-        out = after is not None and after.get("pos.indoors") is False
-        if not out:
-            self._say("  backing out ended indoors")
-        return out
+        if after is not None and after.get("pos.indoors") is False:
+            return True
+        # At the door, if not through it: the plan from there is worth walking (V236).
+        here = self.position()
+        near = here is not None and math.dist(
+            map_to_world(*here, self.bounds)[:2], points[-1][:2]) <= TRAIL_DONE_YARDS
+        outcome = getattr(getattr(result, "outcome", None), "value", "?")
+        left = getattr(result, "remaining_yards", None)
+        self._say(f"  backing out ended indoors ({outcome}"
+                  + (f", {left:.1f} yards from the door" if isinstance(left, float) else "")
+                  + ("; at the door, planning again" if near else "") + ")")
+        return near
 
     def _track_height(self, values: dict) -> None:
         """Keep `_ground` on the floor the character is on (`TRACK_EVERY_S`)."""

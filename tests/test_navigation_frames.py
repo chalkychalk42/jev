@@ -522,3 +522,29 @@ def test_the_way_in_outlives_the_session(tmp_path):
     there["pos.indoors"] = True
     elsewhere.position()
     assert not elsewhere._trail_anchored, "not where the last session ended"
+
+
+def test_the_way_back_ends_clear_of_the_door_or_at_it():
+    """V236: the walk back ended at the doorway's threshold, still read indoors, and no plan
+    was tried from there (sessions 202-204: "backing out ended indoors")."""
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    door = map_to_world(0.49, 0.42, ELWYNN)
+    values["pos.indoors"] = False
+    for dx in (-9, -6, -3, -2, 0):                 # up to the door from outside
+        values["pos.mx"], values["pos.my"] = world_to_map(door[0] + dx, door[1], ELWYNN)
+        client.position()
+    assert [round(p[0] - door[0]) for p in client._trail] == [-6, -3, 0], "the last three, 3 yards apart"
+    values["pos.indoors"] = True
+    for dy in (4, 8):
+        values["pos.mx"], values["pos.my"] = world_to_map(door[0], door[1] + dy, ELWYNN)
+        client.position()
+    ends = []
+
+    def follow(route, **kw):
+        ends.append(route.points[-1])
+        values["pos.mx"], values["pos.my"] = world_to_map(door[0] - 4, door[1], ELWYNN)
+        return SimpleNamespace(outcome=None, remaining_yards=2.0)
+
+    client.travel.follow = follow
+    assert client.back_out() is True, "at the door, if not through it"
+    assert ends[0][0] == pytest.approx(door[0] - 6), "the walk back ends outside the door"
