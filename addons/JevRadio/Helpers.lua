@@ -1030,10 +1030,10 @@ local function TAXI_CENSUS(key) return taxiSnapshot[key] end
 -- rows' own IDs and positions and the frame's own `selectedService`. Choosing a row,
 -- scrolling to it and pressing Train are clicks the body makes.
 --
--- The window lists every service the trainer has for the class, learnable or not, so the
--- whole list is close to two hundred rows at a city trainer. Every other paint describes
--- a header or a service learnable now, in turn, and `short` counts those: a reader has
--- them all within a second or two. A header click folds its group away or opens it, so a
+-- The window lists every service the trainer has for the class, learnable or not, so a
+-- mage's list in Goldshire is close to two hundred rows. Every other paint describes a
+-- header or a service learnable now, in turn, and `short` counts those: a reader has them
+-- all within a second or two. A header click folds its group away or opens it, so a
 -- folded one is its own type.
 --
 -- The stock window (Blizzard_TrainerUI 2.4.3) shows eleven rows, ClassTrainerSkill1-11,

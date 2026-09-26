@@ -107,6 +107,28 @@ Never edit the live checkout while a session runs: the running process imports f
 Three tests are known to fail now and then under the full suite's load (listed in the
 ledger). Rerun the suite before calling a change broken.
 
+### A change to what the strip paints
+
+A new schema changes the addon as well as the decoder: schema 18 (V237) paints the class
+trainer's list, which the trainer desk needs to buy by value. The client paints the schema
+that is installed until the addon is installed again. So the two go live in this order, each
+at a session boundary with the loop held:
+1. **The decoder**, merged as above. It reads the installed schema 17 as it did, with the new
+   fields unknown, so sessions play on unchanged; the desk still presses Train on the stock
+   window's own choice.
+2. **The addon**, from the live checkout after the merge: `tools/gen_addon_fields.py --install`
+   (it moves the old install to `captures/addon-backup/`). Then restart the client:
+   `tools/keep.sh client-restart`, at an idle desk. The addon loads at login, so nothing
+   changes until the restart.
+3. Check the strip reads as the new schema: Windows Python `tools/observe.py` shows `schema`
+   18. Then release the hold.
+
+The other order would leave every session in between blind: a decoder that does not know the
+new schema refuses the strip, as a checksum or schema fault. To go back, put the backup
+(`captures/addon-backup/<time>-StatusStrip`) back as `Interface/AddOns/StatusStrip` and restart
+the client; the new decoder still reads the old strip. The grid kept in `var/radio-grid.json` (eleven rows) needs no change: the
+decoder reads the twelve-row strip on its position.
+
 ## When something is wrong
 
 - **Red status**: `tools/keep.sh status` gives the reasons, for example no XP in two runs, a

@@ -610,11 +610,12 @@ FIELDS: tuple[Field, ...] = (
     # learnable row to the top, a row a hundred further down is twenty scroll clicks of
     # about five rows, and each click is seen in the next paint, not the chosen row's.
     #
-    # The window lists every service the trainer has for the class, learnable or not: a
-    # level 8 mage at a city trainer sees close to two hundred rows, most of them red. So
-    # every other paint describes a header or a service learnable now, in turn, and
-    # `short` says how many of those there are: a reader has them all within a second or
-    # two, where the whole list takes twenty. Nothing here selects, scrolls or buys.
+    # The window lists every service the trainer has for the class, learnable or not:
+    # Zaldimar Wefhellt in Goldshire teaches a mage 193 spells, so a level 8 mage sees
+    # close to two hundred rows, most of them red. So every other paint describes a header
+    # or a service learnable now, in turn, and `short` says how many of those there are: a
+    # reader has them all within a second or two, where the whole list takes twenty.
+    # Nothing here selects, scrolls or buys.
     Field("trainer.revision", 8, Kind.UINT, "return TRAINER_CENSUS('revision')",
           "changes when the trainer's list does (TRAINER_UPDATE); a census across it is void"),
     Field("trainer.total", 8, Kind.UINT, "return TRAINER_CENSUS('total')",
