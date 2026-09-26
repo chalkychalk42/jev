@@ -134,6 +134,19 @@ Now
     died twice in a Defias pack at the Furlbrow farm (The Forgotten Heirloom), 581 XP; 168 died
     twice to a level 19 Dust Devil north of Sentinel Hill, the first time fighting a Young
     Goretusk it had chosen instead (V209), and got up at the body beside it. Testvvi 14.9.
+  - Sessions 169-178 (09:57-11:54):
+    - Testvvi reached level 15 at 10:30.
+    - 172 made the run's best, 2,517 XP (9,440/h).
+    - V209 alone made worse an attacker found nowhere by Jangolode Mine: 33 turns round in
+      four minutes. V210 followed within the session.
+    - Sessions 173-177 were pinned about 45 minutes by a Defias Smuggler at 6% health throwing
+      knives from out of sight on a slope: 74, 41 and more fights "not visible". V211 (a plate
+      under our strip) did not free it.
+    - V212's first deploy met the body's "combat before travel" and re-armed the hunt about
+      once a second. Its `choices.json` rename then failed ("Access is denied" over the WSL
+      share) and ended sessions 176 and 177 (exit 1).
+    - The body's leg start and a retried rename followed. Session 178 began after a death,
+      which freed it.
   - Session 148: started a ghost; two deaths to Fleshrippers, one 23 s after getting up at
     half health, one under resurrection sickness after the Spirit Healer.
   - 02:06-02:30, the mage's check (Itheamar, `captures/live-mage-check-1.log`): A Threat
@@ -316,6 +329,9 @@ Trials
 | V207 blind melee steps in on "too far away" | session 164 | no fight lost standing out of reach of a flyer (session 163's death) | an `approach.request` with mode `blind_melee` | | |
 | V208 a cast "not in front" with the plate centred turns round | after the mage's sixth visit | no caster death at full mana with the attacker behind | `engage.realign` then `engage.turn_round` in a caster's fight | | |
 | V209 self-defence with no name wanted takes only attackers | session 169 | no death fighting a bystander while attacked from behind | `selection.expected` with `attackers_only` true and no second pass in self-defence | | |
+| V210 an attacker found nowhere leaves Tab's pick as the fight | session 171 | no fight loop turning round with nothing taken (33 turns in four minutes, session 169) | `acquire.anything` | | |
+| V211 a plate turned under the radio strip is on the centre line | session 175 | fewer "time to face ran out" fights at units up a slope | `target.face` faced "under the radio strip" | | |
+| V212 fights that never engage pause combat and the walk goes on | session 176 (policy, supervisor), 178 (body) | no half hour pinned by an unreachable attacker (sessions 173-177) | `fights that never engaged: combat paused, walking on`, then a walk | | |
 
 Issues
 ------
