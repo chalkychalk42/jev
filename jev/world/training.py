@@ -20,6 +20,12 @@ here, by role, so a class needs no list of its own:
 - every conjure (a caster's water and food, V166), and a root (Frost Nova, V169);
 - no new heal and no new short buff: the starting bar has its heal and its seal already,
   and a second seal would only replace the first.
+
+What is worth buying follows from the same rules (V237): a spell whose role the fight code
+presses, which would go on the bar - a new rank where the old one is, or a new spell the
+bar takes. Polymorph, a dispel, Slow Fall or a second save is never bought, and a trainer
+is not walked to, nor copper kept back, for one. Among the spells worth buying, what acts
+in a fight comes before what is kept up or made between fights (`buy_order`).
 """
 
 from __future__ import annotations
@@ -49,6 +55,18 @@ ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
 NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort", "conjure",
                   "root")
 BAR_SLOTS = 12
+
+# The roles the fight code presses (`jev.world.combat.TRAINED_ROLES`), in the order a spell
+# is worth buying (V237). First what a fight is won with: damage (a strike, a seal), then
+# control of what is fought (a root, a stun), then what keeps the character standing in one
+# (a save, a last resort, a heal, an aura). Then what is kept up or made between fights: a
+# conjure, then a long buff. A spell of any other role - Polymorph, a dispel, a passive -
+# is pressed by nothing. The mage with a spell's money a visit bought Conjure Water before
+# Frostbolt at level 5 and Conjure Food before Fire Blast at 6, in the stock window's order.
+FIGHT_ROLES = ("strike", "short_buff", "root", "stun", "save", "last_resort", "heal", "aura",
+               "attack")
+BETWEEN_ROLES = ("conjure", "long_buff")
+BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
 
 
 @dataclass(frozen=True)
@@ -160,9 +178,54 @@ def _find_trainers(class_id: int | None, race_id: int | None, map_id: int | None
     return out
 
 
+def starting_bar(class_id: int | None, race_id: int | None = None) -> dict[int, int | None]:
+    """The main bar a character of this class starts with (`jev.world.combat.for_class`): a
+    spell id per slot, 0 for an empty one and `None` for an item. What the bar is taken to
+    hold while its census is unread."""
+    from jev.world.combat import for_class
+
+    bar: dict[int, int | None] = {slot: 0 for slot in range(1, BAR_SLOTS + 1)}
+    for ability in for_class(class_id, race_id).abilities:
+        bar[(ability.slot - 1) % BAR_SLOTS + 1] = ability.spell_id or None
+    return bar
+
+
+def worth_buying(spell_id: int, known: Iterable[int], bar: Mapping[int, int | None], *,
+                 facts: dict | None = None) -> bool:
+    """Whether the bot would use this spell once it knows it (V237): the fight code presses
+    its role (`BUY_ORDER`), and `placements` would put it on the bar - a new rank where the
+    old one is, or a new spell the bar takes. So an aura, a save, a stun or a last resort is
+    worth buying only as the first of its kind, a long buff only for an aura the bar lacks,
+    and a heal or a short buff only as a new rank of one on the bar: at level 12 a mage's
+    Slow Fall, a new short buff, is never bought, and Fireball rank 3 is."""
+    facts_of = spell(spell_id, facts)
+    if facts_of is None or facts_of.role not in BUY_ORDER:
+        return False
+    after = {*known, spell_id}
+    return any(p.spell_id == spell_id for p in placements(bar, after, facts=facts))
+
+
+def buy_order(offer: Offer, known: Iterable[int] = (), facts: dict | None = None) -> tuple:
+    """Where an offer worth buying ranks, best first (V237): a spell that acts in a fight
+    before one kept up or made between fights; then the lowest level taught, the gap the
+    character has gone longest without and the cheapest; then damage before control
+    before what keeps it standing (`BUY_ORDER`); then a new rank of a spell it knows, a
+    button every fight presses already, before a new spell; then the price and the id.
+    At level 8 a mage with a spell's money buys Frostbolt rank 2 before Arcane Missiles,
+    which a caster presses only when its Fireball cannot be (`Fight._caster_order`)."""
+    facts_of = spell(offer.spell_id, facts)
+    role = facts_of.role if facts_of is not None else ""
+    order = BUY_ORDER.index(role) if role in BUY_ORDER else len(BUY_ORDER)
+    new_line = facts_of is None or facts_of.name not in _lines(known, facts)
+    return (role not in FIGHT_ROLES, offer.level, order, new_line, offer.cost, offer.spell_id)
+
+
 def learnable(trainer: Trainer, level: int, known: Iterable[int], *,
+              bar: Mapping[int, int | None] | None = None, race_id: int | None = None,
               facts: dict | None = None) -> list[Offer]:
-    """What this trainer would teach a character of this level knowing `known`.
+    """What this trainer would teach a character of this level knowing `known`, and worth
+    buying (`worth_buying`, V237), judged against `bar` (the bar's census; without one, the
+    class's starting bar).
 
     A rank below one the spellbook holds is known too: learning Devotion Aura rank 2 takes
     rank 1 out of the spellbook, and the rank 1 the census then lacked sent a level 10
@@ -182,19 +245,24 @@ def learnable(trainer: Trainer, level: int, known: Iterable[int], *,
         return (facts_of is not None and bool(facts_of.rank)
                 and ranks.get(facts_of.name, 0) >= facts_of.rank)
 
-    return [o for o in trainer.offers if o.level <= level and not held(o)]
+    if bar is None:
+        bar = starting_bar(trainer.class_id, race_id)
+    return [o for o in trainer.offers if o.level <= level and not held(o)
+            and worth_buying(o.spell_id, have, bar, facts=facts)]
 
 
 def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
                 known: Iterable[int] | None, money: int | None, map_id: int | None,
-                here: tuple[float, float] | None, *, facts: dict | None = None,
+                here: tuple[float, float] | None, *, bar: Mapping[int, int | None] | None = None,
+                facts: dict | None = None,
                 max_yards: float = MAX_TRAINER_YARDS) -> Trainer | None:
     """The trainer worth visiting now, or `None`.
 
-    One that teaches something the character can afford, the most the purse can buy
-    there first (counted cheapest first), and the nearer of two that sell as many. Every
-    input unknown is `None`: an unread spellbook is not an empty one, and would send the
-    character to train what it knows.
+    One that teaches something worth buying (`learnable`) the character can afford, the
+    most the purse can buy there first (counted cheapest first), and the nearer of two that
+    sell as many. Every input unknown is `None`: an unread spellbook is not an empty one,
+    and would send the character to train what it knows. An unread bar is taken to be the
+    class's starting one.
     """
     if None in (class_id, race_id, level, known, money, map_id, here):
         return None
@@ -205,7 +273,8 @@ def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
         if yards > max_yards * TRAINER_REACH_SPELLS:
             continue
         bought, left = 0, money
-        for offer in sorted(learnable(trainer, level, known, facts=facts), key=lambda o: o.cost):
+        for offer in sorted(learnable(trainer, level, known, bar=bar, race_id=race_id,
+                                      facts=facts), key=lambda o: o.cost):
             if offer.cost > left:
                 break
             bought, left = bought + 1, left - offer.cost
@@ -219,16 +288,18 @@ def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
 
 def training_cost(class_id: int | None, race_id: int | None, level: int | None,
                   known: Iterable[int] | None, map_id: int | None,
-                  here: tuple[float, float] | None, *, facts: dict | None = None,
+                  here: tuple[float, float] | None, *,
+                  bar: Mapping[int, int | None] | None = None, facts: dict | None = None,
                   max_yards: float = MAX_TRAINER_YARDS) -> int:
     """The least purse that makes a trainer visit due (`trainer_due`): the cheapest spell
-    the character could learn from a trainer within `max_yards`, or the two cheapest from
-    one within twice that. 0 when no trainer in reach has anything to teach, or anything
-    is unknown.
+    worth buying the character could learn from a trainer within `max_yards`, or the two
+    cheapest from one within twice that. 0 when no trainer in reach has anything worth
+    teaching, or anything is unknown.
 
     What a restock keeps back (V215). The level 5 mage sold its bags for 134 copper, 34 more
     than Frostbolt or Conjure Water, and spent it on a repair and 15 waters: it had trained
     once in five levels, and the water it bought was what Conjure Water would have made.
+    Nothing is kept back for a spell the bot would not buy (V237): at level 8, Polymorph.
     """
     if None in (class_id, race_id, level, known, map_id, here):
         return 0
@@ -237,8 +308,11 @@ def training_cost(class_id: int | None, race_id: int | None, level: int | None,
     for trainer in trainers(class_id, race_id, map_id, facts):
         yards = math.dist(trainer.world[:2], here)
         spells = 1 if yards <= max_yards else TRAINER_REACH_SPELLS
-        costs = sorted(o.cost for o in learnable(trainer, level, known, facts=facts))
-        if yards > max_yards * TRAINER_REACH_SPELLS or len(costs) < spells:
+        if yards > max_yards * TRAINER_REACH_SPELLS:
+            continue
+        costs = sorted(o.cost for o in learnable(trainer, level, known, bar=bar,
+                                                 race_id=race_id, facts=facts))
+        if len(costs) < spells:
             continue
         cost = sum(costs[:spells])
         least = cost if least is None else min(least, cost)
@@ -305,8 +379,20 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
 
 
 def _first_levels(facts: dict | None) -> dict[str, int]:
-    """The level each line is first taught at, by any trainer: earlier lines come first."""
-    facts = facts if facts is not None else catalog()
+    """The level each line is first taught at, by any trainer: earlier lines come first.
+
+    The catalog's own is worked out once: `worth_buying` asks `placements` about each
+    offer at every policy look, and going over all 1,854 offers each time made a look at a
+    trainer 30 ms (V237). Read only."""
+    return _catalog_first_levels() if facts is None else _find_first_levels(facts)
+
+
+@cache
+def _catalog_first_levels() -> dict[str, int]:
+    return _find_first_levels(catalog())
+
+
+def _find_first_levels(facts: dict) -> dict[str, int]:
     first: dict[str, int] = {}
     for offers in facts["offers"].values():
         for o in offers:

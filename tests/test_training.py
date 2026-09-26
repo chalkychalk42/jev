@@ -52,9 +52,11 @@ def test_the_trainer_teaching_most_of_what_is_affordable_is_chosen():
     assert trainer_due(2, 1, 8, everything, 626, 0, NORTHSHIRE) is None
     assert trainer_due(2, 1, 8, None, 626, 0, NORTHSHIRE) is None     # spellbook unread
     assert trainer_due(2, 1, 8, known, 626, 0, NORTHSHIRE, max_yards=100).name == "Brother Sammuel"
-    # What the purse buys, not what it could buy one at a time: 510 copper is all six of
-    # Brother Sammuel's and six of Brother Wilhelm's nine, so the nearer one.
-    assert trainer_due(2, 1, 8, known, 510, 0, NORTHSHIRE).name == "Brother Sammuel"
+    # What the purse buys, not what it could buy one at a time: 410 copper is all five of
+    # Brother Sammuel's spells worth buying and five of Brother Wilhelm's six, so the nearer
+    # one. Seal of the Crusader, Purify and Parry are not worth buying (V237).
+    assert trainer_due(2, 1, 8, known, 410, 0, NORTHSHIRE).name == "Brother Sammuel"
+    assert trainer_due(2, 1, 8, known, 510, 0, NORTHSHIRE).name == "Brother Wilhelm"
 
 
 def test_a_new_rank_goes_where_the_old_one_is_and_new_spells_on_free_slots():
@@ -179,3 +181,159 @@ def test_a_restock_keeps_the_least_purse_that_makes_a_trainer_visit_due():
     kept = training_cost(2, 1, 14, known, 0, moonbrook)
     assert trainer_due(2, 1, 14, known, kept, 0, moonbrook) is not None
     assert trainer_due(2, 1, 14, known, kept - 1, 0, moonbrook) is None
+
+
+# --- what is worth buying, and in what order (V237) --------------------------------------
+
+from collections import defaultdict  # noqa: E402
+
+from jev.world.training import buy_order, starting_bar, worth_buying  # noqa: E402
+
+ZALDIMAR = next(t for t in training.trainers(8, 1, 0) if t.name == "Zaldimar Wefhellt")
+MAGE_START = frozenset({6603, 133, 168})
+# The mage as it stood on 26 September, one spell bought a visit in the window's order.
+MAGE_LIVE = frozenset({6603, 133, 168, 1459, 5504, 587, 2136})
+MAGE_LIVE_BAR = {1: 6603, 2: 133, 3: 168, 4: 1459, 5: 5504, 6: 587, 7: 2136, 8: 0, 9: 0,
+                 10: 0, 11: None, 12: None}
+
+
+def _names(spell_ids):
+    return [f"{spell(s).name} {spell(s).rank}" if spell(s).rank else spell(s).name
+            for s in spell_ids]
+
+
+def test_a_spell_nothing_presses_or_the_bar_will_not_hold_is_not_worth_buying():
+    """Polymorph (cc), Arcane Explosion (utility), Parry (passive), Slow Fall (a new short
+    buff), Flash of Light (a new heal) and Blessing of Protection beside Divine Protection
+    (a second save) are never pressed: not worth a copper. A new rank of a spell on the
+    bar, a strike, a root or a conjure is."""
+    mage_bar = starting_bar(8, 1)
+    for spell_id in (118, 1449, 130):
+        assert not worth_buying(spell_id, MAGE_START, mage_bar), spell(spell_id).name
+    for spell_id in (116, 143, 122, 5504, 7300, 5143):
+        assert worth_buying(spell_id, MAGE_START, mage_bar), spell(spell_id).name
+    assert worth_buying(5505, MAGE_START | {5504}, mage_bar), "Conjure Water rank 2"
+    paladin_bar = starting_bar(2, 1)
+    paladin = frozenset({6603, 20154, 635, 498})
+    for spell_id in (3127, 19750, 1022, 21082):
+        assert not worth_buying(spell_id, paladin, paladin_bar), spell(spell_id).name
+    for spell_id in (639, 20287, 853, 633, 465):
+        assert worth_buying(spell_id, paladin, paladin_bar), spell(spell_id).name
+
+
+def test_a_rank_of_a_spell_off_the_bar_or_a_spell_with_no_slot_left_is_not_worth_buying():
+    """Seal of the Crusader, bought in the window's order, never went on the bar: its rank 2
+    (10 silver at level 12) would not either. A new spell with no slot left for it is as
+    unused as Polymorph: the mage's full bar at 12 takes no Dampen Magic, and its Fireball
+    rank 3 still goes over rank 2."""
+    paladin = frozenset({6603, 20154, 635, 21082})
+    assert not worth_buying(20162, paladin, starting_bar(2, 1)), "Seal of the Crusader 2"
+    full = {1: 6603, 2: 143, 3: 7300, 4: 1459, 5: 205, 6: 5505, 7: 2136, 8: 587, 9: 5143,
+            10: 122, 11: None, 12: None}
+    known = set(full.values()) - {None}
+    assert not worth_buying(604, known, full), "Dampen Magic: no slot"
+    assert worth_buying(145, known, full), "Fireball 3 over Fireball 2"
+
+
+def test_polymorph_neither_sends_the_mage_to_a_trainer_nor_keeps_copper_back():
+    """V215's reserve and the visit itself count only what would be bought: a level 8 mage
+    with everything else learned is not walked to Zaldimar, nor keeps 200 copper, for
+    Polymorph."""
+    goldshire = (-9460.0, 60.0)
+    known = MAGE_START | {1459, 116, 205, 5504, 587, 2136, 143, 5143}
+    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known)] == []
+    assert trainer_due(8, 1, 8, known, 10_000, 0, goldshire) is None
+    assert training_cost(8, 1, 8, known, 0, goldshire) == 0
+    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known - {5143})] == [5143]
+
+
+def test_what_acts_in_a_fight_is_bought_before_what_is_kept_up_between_fights():
+    """At 10: Frost Nova before Conjure Water 2 and Frost Armor 2, which the window sells
+    first. At 12: Fireball 3 before Conjure Food 2. At 8, a new rank of a strike the bar
+    holds before a new strike, and at any level the oldest gap before a newer spell."""
+    def ordered(level, known):
+        offers = [o for o in ZALDIMAR.offers if o.level == level
+                  and worth_buying(o.spell_id, known, starting_bar(8, 1))]
+        return _names(o.spell_id for o in sorted(offers, key=lambda o: buy_order(o, known)))
+
+    steady = MAGE_START | {1459, 116, 5504, 143, 587, 2136, 205, 5143}
+    assert ordered(10, steady) == ["Frost Nova 1", "Conjure Water 2", "Frost Armor 2"]
+    assert ordered(12, steady | {122, 5505, 7300})[:2] == ["Fireball 3", "Conjure Food 2"]
+    assert ordered(8, MAGE_START | {116, 1459}) == ["Frostbolt 2", "Arcane Missiles 1"]
+    frostbolt, fireball = (next(o for o in ZALDIMAR.offers if o.spell_id == s)
+                           for s in (116, 143))
+    assert buy_order(frostbolt, MAGE_LIVE) < buy_order(fireball, MAGE_LIVE)
+
+
+def test_every_role_the_fight_code_presses_is_ranked_for_buying():
+    from jev.world.combat import TRAINED_ROLES
+
+    assert set(training.BUY_ORDER) == set(TRAINED_ROLES)
+    assert {"cc", "utility", "passive"}.isdisjoint(training.BUY_ORDER)
+
+
+def _visit(level, known, bar, money):
+    """What the desk buys at Zaldimar with `money`, best first, of the rows the stock window
+    marks learnable now: a rank only once the rank before it is known."""
+    known, bought = set(known), []
+
+    def learnable_now(offer):
+        facts = spell(offer.spell_id)
+        before = [o for o in ZALDIMAR.offers if (f := spell(o.spell_id)) is not None
+                  and f.name == facts.name and f.rank == facts.rank - 1]
+        return not before or any(o.spell_id in known for o in before)
+
+    while True:
+        rows = [o for o in ZALDIMAR.offers if o.level <= level and o.spell_id not in known
+                and learnable_now(o) and o.cost <= money
+                and worth_buying(o.spell_id, known, bar)]
+        if not rows:
+            return bought, known, money
+        best = min(rows, key=lambda o: buy_order(o, known))
+        bought.append(best.spell_id)
+        known.add(best.spell_id)
+        money -= best.cost
+
+
+def _placed(bar, known):
+    bar = dict(bar)
+    for p in placements(bar, known):
+        bar[p.slot] = p.spell_id
+    return bar
+
+
+def test_a_mage_with_one_spell_s_money_buys_what_it_fights_with():
+    """A mage that kept up, with one spell's money at 8, 10, 12 and 14: Frostbolt 2, Frost
+    Nova, Fireball 3, Frostbolt 3. In the window's order (skill line, then name) the Arcane
+    rows come first: Arcane Missiles and Polymorph at 8, Conjure Water 2 at 10, Conjure Food
+    2, Dampen Magic and Slow Fall at 12, Arcane Explosion at 14. The mage as it stood on 26
+    September buys Frostbolt and Fireball rank 2 at 8 with 200 copper, the two it lacked."""
+    known, bar, first = set(MAGE_START), starting_bar(8, 1), {}
+    for level in range(2, 16, 2):
+        price = max((o.cost for o in ZALDIMAR.offers if o.level == level), default=0)
+        if level in (8, 10, 12, 14):
+            first[level] = _names(_visit(level, known, bar, price)[0][:1])
+        _, known, _ = _visit(level, known, bar, 10**7)
+        bar = _placed(bar, known)
+    assert first == {8: ["Frostbolt 2"], 10: ["Frost Nova 1"], 12: ["Fireball 3"],
+                     14: ["Frostbolt 3"]}
+    bought, _, left = _visit(8, MAGE_LIVE, MAGE_LIVE_BAR, 200)
+    assert (_names(bought), left) == (["Frostbolt 1", "Fireball 2"], 0)
+
+
+def test_every_trainer_s_offers_are_told_apart_by_name_and_rank():
+    """The desk knows a row by its name hash and rank. Across every trainer, the only two
+    offers alike in both are two spells of one name (a Shattrath portal and teleport for
+    each side, two Cure Diseases), none of them worth buying."""
+    from jev.perceive.radio_frame import name_id
+
+    alike = []
+    for offers in training.catalog()["offers"].values():
+        by_row = defaultdict(set)
+        for o in offers:
+            if (f := spell(o["spell"])) is not None:
+                by_row[(name_id(f.name), f.rank)].add(o["spell"])
+        alike += [ids for ids in by_row.values() if len(ids) > 1]
+    assert len(alike) == 3
+    assert all(len({spell(s).name for s in ids}) == 1 for ids in alike), "a hash collision"
+    assert all(spell(s).role == "utility" for ids in alike for s in ids)

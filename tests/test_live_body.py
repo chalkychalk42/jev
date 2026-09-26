@@ -1097,16 +1097,20 @@ def test_training_visits_the_trainer_once_a_level_and_puts_the_spells_on_the_bar
     b.client.read = lambda: dict(values)
     here = (0.4789, 0.4115)
     b.client.position = lambda: here
-    visits, plans = [], []
+    visits, plans, handed, said = [], [], {}, []
+    b.say = said.append
 
     class Desk:
-        def __init__(self, hid, read, visit, *args):
+        def __init__(self, hid, read, visit, *args, **kwargs):
             self.visit, self.bought, self.spent, self.detail = visit, 0, 0, ""
+            self.learned = []
+            handed.update(kwargs)
 
         def run(self, *, timeout_s):
             self.visit()
             b.client.spells = _census(bar, {6603, 20154, 635, 639, 465, 20271, 19740, 498, 853})
             self.bought, self.spent = 6, 510
+            self.learned = [465, 20271, 19740, 498, 639, 853]
             return Trained.DONE
 
     class Book:
@@ -1128,6 +1132,11 @@ def test_training_visits_the_trainer_once_a_level_and_puts_the_spells_on_the_bar
     result = b._train(state)
     assert result.outcome is SkillOutcome.SUCCEEDED, result.detail
     assert visits == ["Brother Wilhelm"]
+    # V237: the desk is told what is worth buying there - the trainer's offers, the
+    # spellbook and the bar - and says what it bought.
+    assert handed["trainer"].name == "Brother Wilhelm" and handed["race_id"] == 1
+    assert handed["known"] == {6603, 20154, 635} and handed["bar"] == bar
+    assert any("Hammer of Justice 1" in line and "Judgement" in line for line in said)
     assert [(p.spell_id, p.slot) for p in plans[0]] == [
         (639, 3), (465, 4), (19740, 5), (20271, 6), (498, 7), (853, 8)]
     assert not b.policy_context.can_train(state), "a second visit at the same level"

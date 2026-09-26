@@ -59,6 +59,7 @@ from jev.world.taxi import Node as TaxiNode
 from jev.world.taxi import flight as flight_plan
 from jev.world.taxi import load_nodes, save_node, visited
 from jev.world.training import placements as spell_placements
+from jev.world.training import spell as spell_facts
 from jev.world.training import trainer_due, training_cost
 from jev.world.vendor import (
     bag_slots,
@@ -1065,8 +1066,8 @@ class LiveBody:
             class_id = CLASS_IDS.get(state.char.cls)
             race_id = RACE_IDS.get(state.char.race)
         with self.client._capturing:
-            known = census.known
-        return (dict(class_id=class_id, race_id=race_id, level=level, known=known,
+            known, bar = census.known, census.bar
+        return (dict(class_id=class_id, race_id=race_id, level=level, known=known, bar=bar,
                      map_id=self.client.bounds.map_id,
                      here=map_to_world(*here, self.client.bounds)[:2]), money)
 
@@ -1123,15 +1124,22 @@ class LiveBody:
         census = self.client.spells
         with self.client._capturing:
             before = census.book_revision
+            known, bar = census.known, census.bar
+        values = self._read() or {}
+        # What is worth buying there, best first, by the list the strip paints (V237).
         desk = TrainerDesk(self.client.hid, self._read, visit, self.client.origin,
-                           self.client.size)
+                           self.client.size, trainer=trainer, known=known, bar=bar,
+                           race_id=values.get("char.race_id"))
         outcome = desk.run(timeout_s=self.travel_timeout + 180)
         # One visit a level, however it went: a spell a trainer lists and will not teach
         # (a talent's rank) would otherwise bring the character back at every look. A
         # visit cut short by a fight never gets here, and is asked for again after it.
         self.policy_context.train_failed(state.char.level if state is not None else None)
+        names = [f"{f.name} {f.rank}" if f.rank else f.name
+                 for f in map(spell_facts, desk.learned) if f is not None]
         self.say(f"  {trainer.name}: {outcome.value}, {desk.bought} bought for "
-                 f"{desk.spent} copper" + (f" ({desk.detail})" if desk.detail else ""))
+                 f"{desk.spent} copper" + (f" [{', '.join(names)}]" if names else "")
+                 + (f" ({desk.detail})" if desk.detail else ""))
         if desk.bought:
             self._await_census(before)
         placed = self._place_spells(force=True)
