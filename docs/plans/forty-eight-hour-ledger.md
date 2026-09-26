@@ -90,7 +90,20 @@ Now
     The grind then stopped for "durability is low" 17 times (V194). The hearthstone is out
     until about 05:37; the wedged-walks rule takes it home then.
   - 04:53-05:45: three mage sessions (`captures/live-mage-check-3.log.1-3`) while the
-    paladin's hearthstone cools.
+    paladin's hearthstone cools. Level 2.4 to 3.48; deaths 1, 5 and 3. Restock walks for
+    water it could not pay (V195), repair walks after each copper (V196), and five deaths
+    getting up at the body among level 5-6 units (V197).
+  - Session 158 (05:41-05:57, V197): the wedged-walks rule took the hearthstone at 05:45 and
+    the character came down to Innkeeper Heather. The first leg out, 37 yards through the
+    inn's door, met the wall four yards west of it (V198); the re-plans drifted into the
+    corner by the stove, then out and back onto the crate behind the inn. Both spots are
+    blocked in route memory now (9 and 2 hits). Session 159 started 4 s before the hold and
+    was stopped at 65 s (`captures/teaching/STOP`).
+  - 05:58-06:48, the mage's fourth visit (`captures/live-mage-4.log.1-3`) while the
+    paladin's stone cools again: session 1's restock passed Brother Danil for Ben Trias in
+    Stormwind, 1,030 yards, since every merchant near had one failure (V199); the walk
+    back from Stormwind timed out its repair (V201) and died twice; too poor to repair at
+    Goldshire. Level 3.48 to 3.83 by 06:19.
   - Session 148: started a ghost; two deaths to Fleshrippers, one 23 s after getting up at
     half health, one under resurrection sickness after the Spirit Healer.
   - 02:06-02:30, the mage's check (Itheamar, `captures/live-mage-check-1.log`): A Threat
@@ -236,6 +249,7 @@ Blocks
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 (sessions 134-143, 1.65 h played) | 0-2 | Testvvi | 13.0-13.45 | 2,682 | 4.25 | 52.8 | 2.4 guide steps/h | 0 | V175-V177 at T-0; V178-V181 from 142, V182 from 143 | XP/h above the nine-hour 2,108. Deaths high: two at the Taskmasters (V179), one standing through a restart (V182), two on the road in fights with more than one attacker (next) |
 | 2 (sessions 144-150, about 1.8 h played) | 2-4 | Testvvi | 13.45-13.78 | 2,466 (145-150) | 10.1 | 11.4 | 0 guide steps/h | 0 | V178-V189 | Deaths: Westfall's units two to five levels up (Brutes, Bandits, Dust Devils), and faults fixed as found (V182-V184, V188, V189). Stuck events down about fivefold (V178). Hour-4 checkpoint: deaths missed |
+| 3 (sessions 151-159, 1.83 h played) | 4-7 | Testvvi | 13.78-14.23 | 2,768 (3,973 in 151-155) | 2.7 | 56 (41 of the 103 in 156-159, wedged) | 0 guide steps/h | 0 | V188-V197 | 151-155 the best XP/h of the run with deaths at 2.4/h; 156-159 lost to the Sentinel Hill inn: a repair walk's hearth, the door missed (V198), the corner by the stove and the crate behind the inn |
 
 Trials
 ------
@@ -254,6 +268,16 @@ Trials
 | V189 resurrection sickness is waited out | session 151 | no death within 3 min of a Spirit Healer revive | `resurrection sickness: waiting` | | |
 | V190 every reader shares the strip's last good grid | session 152 | no `target observation: checksum` | none in the log | | |
 | V191 blind melee is decided on a fresh reading | session 153 | fewer fights ending `not_visible ... time to face` (6 in session 151) | `engage.blind_melee` events | | |
+| V192 a caster's kill at range is looted where it fell | the mage's second check | caster loot misses fall | a loot walk after a kill `ended_far` | | |
+| V193 no rib beside units above the band's top | guides regenerated, session 154 | deaths at ribs fall | the rib chosen on the level 2 mage's failover | | |
+| V194 a service blocked for the step is not armed again | session 157 | no "durability is low" loop | one VENDOR_REPAIR a step after it is blocked | | |
+| V195 no restock walk without one purchase in the purse | the mage's third check | no merchant walk too poor to buy | `service.supplies` only with the price in the purse | | |
+| V196 a too-poor repair waits for the purse to grow | the mage's third check | no repair walk after each copper | `too_poor` once a purse | | |
+| V197 killed by a unit 3+ levels up: the Spirit Healer | session 158 | no second death getting up at the body | `up at the Spirit Healer` after such a death (mage, 26 Sep 06:05 and 06:16) | | |
+| V198 a planned leg is walked along its line | session 160 | stuck events a walk fall (door sim 108 to 6 in 189); open-ground time holds | Sentinel Hill: hearth to the door without a stuck event | | |
+| V199 a merchant's failures cost it walk | the mage's fourth visit, session 2 | no restock past a near merchant | the chosen merchant's walk against the nearest's | | |
+| V200 NPC body probes to 290 px | with V199 | "world focus without a mouseover unit" interact failures fall | a `target.proposal` 160+ px under the bar that opens a window | | |
+| V201 a repairer is chosen as a merchant is | the mage's fourth visit, session 3 | repairs at the nearest repairer; no repair walk over 1,000 yards | `trying the next repairer`, or a repair at a smith the guide does not name | | |
 
 Issues
 ------
