@@ -332,6 +332,7 @@ Trials
 | V210 an attacker found nowhere leaves Tab's pick as the fight | session 171 | no fight loop turning round with nothing taken (33 turns in four minutes, session 169) | `acquire.anything` | | |
 | V211 a plate turned under the radio strip is on the centre line | session 175 | fewer "time to face ran out" fights at units up a slope | `target.face` faced "under the radio strip" | | |
 | V212 fights that never engage pause combat and the walk goes on | session 176 (policy, supervisor), 178 (body) | no half hour pinned by an unreachable attacker (sessions 173-177) | `fights that never engaged: combat paused, walking on`, then a walk | | |
+| V213 a ghost that does not get up short of the body goes closer | session 179 | no corpse run repeated "still a ghost" | session 179: still a ghost at 25 yards, then alive at 12.5 (11:57) | | |
 
 Issues
 ------
