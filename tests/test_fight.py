@@ -1437,7 +1437,8 @@ def test_blind_melee_turns_quarters_the_same_way_until_the_errors_stop(combat_cl
            "target.hp": 0.05, "ui.error_count": 3, "ui.error_last": 0, "bars.attacking": True}
     wrong = [{**hit, "ui.error_count": 4 + i, "ui.error_last": 3} for i in range(3)]
     dead = {**wrong[-1], "target.hp": 0.0}
-    f = _fight([hit, hit, wrong[0], wrong[1], wrong[2], dead])
+    # One reading more at the start: blind melee is decided on a fresh one (V191).
+    f = _fight([hit, hit, hit, wrong[0], wrong[1], wrong[2], dead])
     f.targeting.face = NOT_VISIBLE
     assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
     quarter = (math.pi / 2) / TURN_RATE_SEED
@@ -1491,6 +1492,22 @@ def test_wrong_way_with_a_centred_plate_first_faces_the_camera_then_turns_round(
     assert realigned == [True], "faced the camera first"
     turns = [h for h in f.hid.holds if h[0] == "d" and h[1] > 1.0]
     assert len(turns) == 1, "then, still the wrong way, turned round"
+
+
+def test_blind_melee_is_decided_on_what_the_client_says_after_the_look(combat_clock):
+    """V191, session 151: a Fleshripper hovering over the character has its plate above the
+    top of the screen. Tab picked it, and the look for the plate ran out with it biting;
+    the reading from before the look (not yet in melee, not attacking) refused blind melee,
+    and six fights gave up "not visible"."""
+    tabbed = {**ALIVE, "vitals.combat": True, "target.attacking_me": False,
+              "target.in_melee": False, "target.hp": 1.0}
+    biting = {**tabbed, "target.attacking_me": True, "target.in_melee": True,
+              "bars.attacking": True, "target.hp": 0.6}
+    dead = {**biting, "target.hp": 0.0}
+    f = _fight([tabbed, biting, biting, biting, dead])
+    f.acquire = lambda name_id, **_: None
+    f.targeting.face = NOT_VISIBLE
+    assert f.run(1921, timeout_s=10.0) is Fought.KILLED, f.detail
 
 
 def test_an_unproved_plate_is_still_not_fought_blind_out_of_melee():

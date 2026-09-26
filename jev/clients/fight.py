@@ -609,7 +609,9 @@ class Fight:
             self._selected_guid = v.get("target.guid")
             self._damage_mark = v.get("target.hp")
             self.selected_plate = None
-        if not self.engage(v) and not self._fight_blind(v):
+        # Blind melee on what the client says now, not before the look: a Tab pick is not
+        # yet in melee or attacking, and the look can take seconds (V191).
+        if not self.engage(v) and not self._fight_blind(self.read() or v):
             if self._aim_code is not FaceCode.NOT_VISIBLE:
                 return self._aim_failure()
             # Kept from before this fight and not on screen: nothing says it is ahead or
@@ -787,7 +789,8 @@ class Fight:
                     return Fought.REFUSED
             elif in_reach:
                 # Stand and swing. Turn back only on evidence the swings are not landing.
-                if (wrong_way or stalled) and not self.engage(v) and not self._fight_blind(v):
+                if ((wrong_way or stalled) and not self.engage(v)
+                        and not self._fight_blind(self.read() or v)):
                     return self._aim_failure()
             elif self._strides < MAX_CLOSE_BURSTS and self._approach_s < MAX_APPROACH_S:
                 # Not while casting: movement cancels a cast, and the only thing being
@@ -1489,6 +1492,11 @@ class Fight:
 
     def _fight_blind(self, values: dict) -> bool:
         """Fight an attacker in melee whose plate could not be proved. `True` if taken up.
+
+        Asked with a fresh reading (V191). A Fleshripper hovers over the character, its
+        plate above the top of the screen: Tab picked it, the look for the plate ran out
+        3.5 s later with it biting, and the reading from before the look - not yet in melee,
+        not yet attacking - refused this: six fights in session 151 gave up "not visible".
 
         A plate is proved by hovering the body beneath it, and two of a kind side by side
         answer for each other: two Defias Thugs, one hover landing on the other, three
