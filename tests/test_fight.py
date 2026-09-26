@@ -2372,6 +2372,30 @@ def _unseen_tab_pick(f):
 PULL = {**AT_RANGE, "vitals.combat": False, "target.attacking_me": False}
 
 
+def test_a_cast_not_in_front_with_the_plate_centred_turns_round(combat_clock):
+    """V208: a Defias Cutpurse behind the level 5 mage, between it and the camera, its plate
+    on the centre line; Fireball pressed 40 times, every one "Target needs to be in front of
+    you", and the mage died at full mana. As in melee: face the camera, then turn round."""
+    hit = {**AT_RANGE, "target.in_melee": True, "target.attacking_me": True,
+           "ui.error_count": 3, "ui.error_last": 0}
+    behind = {**hit, "ui.error_count": 4, "ui.error_last": 3}          # 3 = not_facing
+    again = {**hit, "ui.error_count": 5, "ui.error_last": 3}
+    still = {**hit, "ui.error_count": 6, "ui.error_last": 3}
+    dead = {**still, "target.hp": 0.0, "char.xp_pct": 0.2}
+    hid = _Hid()
+    # As in melee: the camera first, the plate proved again, then round.
+    f = _mage([hit, hit, behind, behind, again, again, still, still, dead], hid=hid)
+    f._lasting["Frost Armor"] = 0.0
+    f.acquire = lambda name_id, **_: None
+    f.targeting.face = FACED
+    realigned = []
+    f.realign = lambda: realigned.append(True) or True
+    assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
+    assert realigned == [True], "faced the camera first"
+    turns = [h for h in hid.holds if h[0] == "d" and h[1] > 1.0]
+    assert len(turns) == 1, "then, still not in front, turned round"
+
+
 def test_a_casters_unseen_tab_pick_is_cast_at_from_where_it_stands(combat_clock):
     """V204: the mage's ten Tab picks among Northshire's wolves were given up "no plate
     proved", nothing pressed (26 September 06:24). Tab picks ahead, and a spell needs only

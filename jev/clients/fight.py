@@ -728,7 +728,15 @@ class Fight:
                 error = self._new_error(v)
                 casting = v.get("bars.casting") is True
                 if error == "not_facing" and not casting:
-                    if not self.engage(v):
+                    if self._aim_code is FaceCode.FACED and not self._blind_cast:
+                        # Its plate on the centre line and the spell "not in front": the unit
+                        # stands behind the caster, between it and the camera. Facing by the
+                        # plate never turned: a Defias Cutpurse behind the level 5 mage took
+                        # it from 95% to dead in 44 s while Fireball was pressed 40 times,
+                        # every one "Target needs to be in front of you" (V208).
+                        if not self._face_behind():
+                            return Fought.REFUSED
+                    elif not self.engage(v):
                         if not self._blind_cast or self._input_refused:
                             return Fought.REFUSED if self._input_refused else self._aim_failure()
                         if not self._turn_quarter():     # a blind cast turns as blind melee does
@@ -786,19 +794,8 @@ class Fight:
                 # one "centred, wrong way" to the next, 16 s without a hit (run ...0436).
                 # First make the character face where the camera looks; if the client still
                 # says "wrong way", the unit is behind, and it turns round.
-                if self.realign is not None and not self._realigned:
-                    self._realigned = True
-                    event("engage.realign")
-                    if self.realign() is False:
-                        self._input_refused = True
-                        self.detail = "camera realign refused"
-                        return Fought.REFUSED
-                elif not self._turn_round():
+                if not self._face_behind():
                     return Fought.REFUSED
-                else:
-                    self._realigned = False
-                self._reach_at = time.monotonic()
-                self._aim_code = None              # the next aim proves the plate afresh
                 wrong_way = False
             if self._blind_melee and v.get("target.in_melee") is not True:
                 self._blind_melee = False          # it left reach: aim by its plate again
@@ -1555,6 +1552,25 @@ class Fight:
         self._blind_melee = True
         self._last_aim_at = time.monotonic()
         return self._ensure_attacking()
+
+    def _face_behind(self) -> bool:
+        """Not in front, says the client, while the plate stands on the centre line: face
+        where the camera looks, and if it still says so, turn round, the unit being behind.
+        `False` if an input was refused."""
+        if self.realign is not None and not self._realigned:
+            self._realigned = True
+            event("engage.realign")
+            if self.realign() is False:
+                self._input_refused = True
+                self.detail = "camera realign refused"
+                return False
+        elif not self._turn_round():
+            return False
+        else:
+            self._realigned = False
+        self._reach_at = time.monotonic()
+        self._aim_code = None                  # the next aim proves the plate afresh
+        return True
 
     def _cast_blind(self, values: dict) -> bool:
         """Cast at a caster's Tab pick whose plate could not be proved. `True` if taken up.
