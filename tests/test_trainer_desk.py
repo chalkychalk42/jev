@@ -330,6 +330,23 @@ def test_a_list_rebuilt_under_the_click_is_read_again_before_train():
     assert window.bought == [116]
 
 
+def test_a_window_shut_before_its_list_is_read_ends_the_visit():
+    window = TrainerWindow()
+    real = window.read
+
+    def read():
+        v = real()
+        v.pop("trainer.short", None)
+        if window.tick >= 3:
+            window.open = False                      # shut by a hand at the desk
+        return v
+
+    trained = TrainerDesk(window, read, window.visit, clock=lambda: window.now,
+                          sleep=window.sleep, trainer=ZALDIMAR, known=MAGE_KNOWN, bar=MAGE_BAR)
+    assert trained.run() is Trained.NO_TRAINER
+    assert window.now < 1.0 and window.clicks == []
+
+
 def test_the_list_unread_whole_is_no_purchase():
     window = TrainerWindow()
     real = window.read

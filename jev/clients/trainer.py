@@ -236,14 +236,10 @@ class TrainerDesk:
 
     def _whole_list(self) -> tuple[TrainerRow, ...]:
         """Every header and every service learnable now, read under one list."""
-        until = min(self._deadline, self.clock() + LIST_S)
-        while self.clock() < until:
-            self._look()
-            rows = self._census.short
-            if rows is not None:
-                return rows
-            self.sleep(0.05)
-        raise _Stop(Trained.TIMEOUT, f"the trainer's list not read whole in {LIST_S:.0f} s")
+        if self._await_optional(lambda v: self._census.short is not None, LIST_S,
+                                window=True) is None:
+            raise _Stop(Trained.TIMEOUT, f"the trainer's list not read whole in {LIST_S:.0f} s")
+        return self._census.short
 
     def _select(self, row: TrainerRow) -> dict:
         """Bring `row` into view, click it, and see the window select it with Train enabled:
