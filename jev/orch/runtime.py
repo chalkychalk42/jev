@@ -271,8 +271,13 @@ class ClientRuntime:
         # re-reports ARRIVED, never NONE.
         if (not self.finished and self.tracker.step_id == before
                 and verdict.event not in (Event.ADVANCE, Event.FAIL, Event.DEATH)):
-            if (lost := (self._prerequisite_lost(state)
-                         or self._unfinished_hand_in(state))) is not None:
+            # On a rib waiting to retry a step, that step is the one asked about (V220).
+            here = self.graph.get(self.tracker.step_id)
+            step = (self.tracker.memory.rejoin_to
+                    if here is not None and here.kind is StepKind.GRIND
+                    and self.tracker.memory.rejoin_to else self.tracker.step_id)
+            if (lost := (self._prerequisite_lost(state, step)
+                         or self._unfinished_hand_in(state, step))) is not None:
                 self.tracker.enter(lost, state)
                 self._tracker_event = "rejoin_or_skip"
             elif (detour := self._handin_detour(state)) is not None:
@@ -392,12 +397,15 @@ class ClientRuntime:
         return any(r == DETOUR + step_id or r.startswith(f"{DETOUR}{step_id}@")
                    for r in self._retried)
 
-    def _prerequisite_lost(self, state: State) -> str | None:
+    def _prerequisite_lost(self, state: State, step_id: str | None = None) -> str | None:
         """An accept whose prerequisite's hand-in is lost - passed over, and its detour for
         the level spent - cannot be offered: the step past this quest instead. The Escape
         waits on Collecting Kelp's hand-in, lost in the Lion's Pride Inn (session 109), and
-        trying it anyway costs a rib, a retry and a pass-over."""
-        node = self.graph.get(self.tracker.step_id)
+        trying it anyway costs a rib, a retry and a pass-over. `step_id`: the step asked
+        about, the current one by default; a rib asks about the step it will retry (V220):
+        the mage ground level 1-3 kobolds for Milly's Harvest and the Grape Manifest, which
+        need a quest it had given up (sessions 190-191)."""
+        node = self.graph.get(step_id or self.tracker.step_id)
         if (node is None or node.kind is not StepKind.QUEST_ACCEPT or node.quest_id is None
                 or not node.quest_prerequisites or node.quest_id in self.completed):
             return None
@@ -444,12 +452,12 @@ class ClientRuntime:
                     grew = True
         return lost
 
-    def _unfinished_hand_in(self, state: State) -> str | None:
+    def _unfinished_hand_in(self, state: State, step_id: str | None = None) -> str | None:
         """A hand-in for a quest the log reads as not complete, whose objective was passed
         over, cannot happen: the step past this quest instead. Goldtooth's objective was
         passed over at the bottom of Fargodeep Mine, and its hand-in came next with the
-        necklace never taken (session 116)."""
-        node = self.graph.get(self.tracker.step_id)
+        necklace never taken (session 116). `step_id` as for `_prerequisite_lost`."""
+        node = self.graph.get(step_id or self.tracker.step_id)
         if (node is None or node.kind is not StepKind.QUEST_TURNIN or node.quest_id is None
                 or state.quests is None):
             return None

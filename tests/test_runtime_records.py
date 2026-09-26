@@ -646,6 +646,30 @@ def test_an_accept_needing_a_quest_whose_objective_was_passed_over_is_passed_by(
     assert rt.tracker.step_id == expected
 
 
+def test_a_rib_waiting_to_retry_an_accept_that_cannot_happen_ends(tmp_path):
+    """V220: the mage ground level 1-3 kobolds on a rib to retry Milly's Harvest and the Grape
+    Manifest, which need Milly Osworth, itself waiting on a quest given up (sessions 190-191)."""
+    from jev.guide.graph import Graph as G
+
+    graph = blocked_chain_graph()
+    rib = Node(id="rib", kind=StepKind.GRIND, level=(1, 10), skills=("TRAVEL_TO", "GRIND_UNTIL"),
+               zone="zone", zone_id=1, pos=(0.5, 0.5))
+    graph = G(graph_id=graph.graph_id, faction=graph.faction, entry=graph.entry,
+              nodes=graph.nodes + (rib,))
+    states = [seen(t, quests=(Quest(quest_id=1, complete=False),)) for t in range(3)]
+    rt = ClientRuntime("c", graph, ScriptedSource(states), Recorder(tmp_path),
+                       start_step="rib", start_rejoin="chain_accept",
+                       start_retried=frozenset({"do"}))
+    for _ in states:
+        rt.tick(choose=False)
+    assert rt.tracker.step_id == "after"
+    still = ClientRuntime("c", graph, ScriptedSource(states), Recorder(tmp_path / "b"),
+                          start_step="rib", start_rejoin="chain_accept")
+    for _ in states:
+        still.tick(choose=False)
+    assert still.tracker.step_id == "rib", "a retry that can happen waits for the rib"
+
+
 def objective_graph():
     base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
     return Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
