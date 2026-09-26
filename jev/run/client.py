@@ -536,7 +536,12 @@ class Client:
                           if all(abs(f - t) > FLOOR_GAP for t in tried)
                           and abs(f - z) <= FLOOR_SWITCH_YARDS]
                 if others:
-                    z = min(others, key=lambda f: abs(f - z))
+                    # The floor below first: a walk blocked indoors has fallen or come down
+                    # more often than it has climbed, and above the top storey is a roof. From
+                    # the inn's upper floor the nearer surface was its roof, 4 yards up, and
+                    # the plans from there ended 600 yards short (session 209, V239).
+                    below = [f for f in others if f < z]
+                    z = max(below) if below else min(others, key=lambda f: abs(f - z))
                     self._say(f"  blocked again here: planning from the floor at {z:.1f}")
             starts.append((w[0], w[1], z))
             planned = self.query.path(self.bounds.map_id, (w[0], w[1], z), world)

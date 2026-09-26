@@ -564,3 +564,34 @@ def test_no_blocked_spot_is_learned_by_a_doorway():
     assert client.travel._inside(), "what the walk asks before it learns a blocked spot"
     values["pos.mx"], values["pos.my"] = world_to_map(hall[0] + 40, hall[1], ELWYNN)
     assert not client.near_indoors(), "forty yards off, out in the open"
+
+
+def test_blocked_again_upstairs_the_re_plan_tries_the_floor_below_before_the_roof(monkeypatch):
+    """V239: from the inn's upper floor (64) the nearer surface was its roof (68), 4 yards up,
+    and the plans from there ended 600 yards short (session 209)."""
+    import jev.run.client as client_module
+    from jev.clients.travel import Outcome
+    from jev.guide.path import Path, PathStatus
+
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    values["pos.indoors"] = True
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    client._ground = (here[0], here[1], 64.0)
+    monkeypatch.setattr(client_module, "surfaces_under", lambda q, m, x, y: [57.0, 64.0, 68.0])
+    starts = []
+
+    def path(map_id, start, end):
+        starts.append(round(start[2], 1))
+        return Path(PathStatus.COMPLETE, (start, end))
+
+    client.query.path = path
+    client.travel.position = lambda: (0.49, 0.42)
+
+    def follow(route, *, timeout_s, replan, memory=None, **kw):
+        replan((0.49, 0.42))
+        return SimpleNamespace(outcome=Outcome.STUCK, remaining_yards=40.0, turns=0,
+                               stuck_events=9, detail="")
+
+    client.travel.follow = follow
+    client.approach((here[0] - 40.0, here[1] + 5.0, 57.0))
+    assert starts[0] == 64.0 and starts[-1] == 57.0, starts
