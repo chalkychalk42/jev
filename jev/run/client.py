@@ -193,6 +193,10 @@ class Client:
     # World x and y from the last point read outdoors (`_trail_anchored`), and the way in.
     _trail: list = field(default_factory=list, init=False)
     _trail_anchored: bool = field(default=False, init=False)
+    # The way in outlives the session (V232): saved at close, and taken up by the next
+    # session if its first read is where the last one ended.
+    trail_memory: Path | None = field(default=None, init=False)
+    _trail_pending: list | None = field(default=None, init=False)
     # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
     # context and bitmap once and reuses them, so two threads grabbing at the same time
     # tear each other's frame in half. The heartbeat samples on its own thread, so every
@@ -303,6 +307,10 @@ class Client:
         x, y = map_to_world(values["pos.mx"], values["pos.my"], self.bounds)[:2]
         # With the height tracked there, so the way back down a stair is walked on its floors.
         point = (x, y, self._height_near((x, y)))
+        pending, self._trail_pending = self._trail_pending, None
+        if (pending and indoors is True
+                and math.dist(pending[-1][:2], (x, y)) <= 2 * TRAIL_STEP_YARDS):
+            self._trail, self._trail_anchored = pending, True   # where the last session ended
         if indoors is False:
             self._trail, self._trail_anchored = [point], True
             return
@@ -601,10 +609,37 @@ class Client:
                     time.sleep(min(0.05, max(0.0, wake - time.monotonic())))
             wait = min(FOCUS_MAX_WAIT_S, wait * 2)
 
+    def restore_trail(self) -> None:
+        """The way in the last session kept, to be taken up at the first read if the
+        character stands where that session ended (V232)."""
+        if self.trail_memory is None:
+            return
+        try:
+            raw = json.loads(Path(self.trail_memory).read_text())
+        except (OSError, ValueError):
+            return
+        trail = raw.get("trail") if isinstance(raw, dict) and raw.get("anchored") is True else None
+        if isinstance(trail, list) and len(trail) >= 2 and all(
+                isinstance(p, list) and len(p) == 3 for p in trail):
+            self._trail_pending = [tuple(p) for p in trail]
+
+    def save_trail(self) -> None:
+        """Keep the way in for the next session: a session that ended in the Lion's Pride
+        Inn left the next one inside with no way in known (session 199)."""
+        if self.trail_memory is None:
+            return
+        with contextlib.suppress(OSError):
+            atomic_json(Path(self.trail_memory),
+                        {"format": 1, "anchored": self._trail_anchored,
+                         "trail": [list(p) for p in self._trail]})
+
     def close(self) -> None:
-        if self.query is not None:
-            self.query.close()
-        self.cap.close()
+        try:
+            self.save_trail()
+        finally:
+            if self.query is not None:
+                self.query.close()
+            self.cap.close()
 
     def _say(self, line: str) -> None:
         if self.on_path is not None:

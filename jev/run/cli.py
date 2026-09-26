@@ -350,6 +350,10 @@ def _live(args, graph) -> int:
         route_memory = RouteMemory(ROOT / "var/route-memory.json")
         print(f"route memory: {len(route_memory.blocks(bounds.map_id))} blocked spots kept "
               f"clear of; {len(route_memory.passages)} old passages not taken")
+        # The way in from the door, when the last session ended inside (V232).
+        if hasattr(client, "restore_trail"):
+            client.trail_memory = path.with_name(path.stem + ".trail.json")
+            client.restore_trail()
         with_travel(client, bounds, MmapQuery(args.jevpath, args.mmaps, launcher=launcher,
                     checkpoint=lambda: client.hid.checkpoint() if client.hid.checkpoint else None),
                     arrival_yards=GOSSIP_YARDS, say=print, zones=zones,

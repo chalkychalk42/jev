@@ -493,3 +493,32 @@ def test_the_way_in_is_kept_without_its_loops():
     assert client._trail_anchored
     assert [p[:2] for p in client._trail] == pytest.approx(
         [door] + [(door[0], door[1] + dy) for dy in (4, 8, 12)])
+
+
+def test_the_way_in_outlives_the_session(tmp_path):
+    """V232: a session that ended in the Lion's Pride Inn left the next one inside with no
+    way in known (session 199)."""
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    client.trail_memory = tmp_path / "character-1.trail.json"
+    door = map_to_world(0.49, 0.42, ELWYNN)
+    values["pos.indoors"] = False
+    client.position()
+    values["pos.indoors"] = True
+    for dy in (4, 8, 12):
+        values["pos.mx"], values["pos.my"] = world_to_map(door[0], door[1] + dy, ELWYNN)
+        client.position()
+    client.save_trail()
+
+    later, again = client_in("Elwynn", world_to_map(door[0], door[1] + 12, ELWYNN))
+    later.trail_memory = client.trail_memory
+    later.restore_trail()
+    again["pos.indoors"] = True
+    later.position()
+    assert later._trail_anchored and len(later._trail) == 4, "taken up where it ended"
+
+    elsewhere, there = client_in("Elwynn", world_to_map(door[0] + 60, door[1], ELWYNN))
+    elsewhere.trail_memory = client.trail_memory
+    elsewhere.restore_trail()
+    there["pos.indoors"] = True
+    elsewhere.position()
+    assert not elsewhere._trail_anchored, "not where the last session ended"
