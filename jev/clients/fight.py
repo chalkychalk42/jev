@@ -436,8 +436,12 @@ class Fight:
     _look_at: float | None = field(default=None, init=False)
     # The lowest health this fight saw, for how it went.
     _low_hp: float | None = field(default=None, init=False)
-    # A caster's fight cast from range (V164): its last look was cast from where the unit
-    # was found, not in melee, so a kill lies out there (`ended_far`) and the loot walks to it.
+    # A caster's fight cast from range (V164): a kill lies out there (`ended_far`), and the
+    # loot walks to it when the client says it is too far or the corpse is not found. Not
+    # only a kill made with the unit out of melee: the client's melee is ten yards and a
+    # corpse is looted from five, and a mage's wolves, charging in, died at six to ten
+    # yards and went unlooted - no Tough Wolf Meat in four kills (the mage's second check,
+    # V192).
     ended_far: bool = field(default=False, init=False)
     _from_range: bool = field(default=False, init=False)
     # What each recent kill cost, as a share of the mana pool, and the mana this fight saw
@@ -474,8 +478,7 @@ class Fight:
         result = None
         try:
             result = self._fight(name_id, timeout_s)
-            self.ended_far = (result is Fought.KILLED and self._from_range
-                              and not self._last_near)
+            self.ended_far = result is Fought.KILLED and self._from_range
             first, last = self._mana_seen
             if result is Fought.KILLED and first is not None and last is not None:
                 self.mana_costs.append(max(0.0, first - last))

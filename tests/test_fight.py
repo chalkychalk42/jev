@@ -2206,6 +2206,20 @@ def test_a_caster_fight_is_cast_from_where_it_stands(combat_clock):
     assert f.ended_far, "the corpse lies out there: the loot walks to it"
 
 
+def test_a_caster_kill_that_came_into_melee_still_lies_beyond_the_loot(combat_clock):
+    """V192: the client's melee is ten yards and a corpse is looted from five. The mage's
+    wolves charged in and died at six to ten yards, read as near; the loot clicked from
+    where the mage stood, or found no corpse, and four kills gave no Tough Wolf Meat."""
+    charged = {**AT_RANGE, "target.in_melee": True, "target.hp": 0.4}
+    dead = {**charged, "target.hp": 0.0, "char.xp_pct": 0.2}
+    f = _mage([AT_RANGE, AT_RANGE, charged, charged, dead])
+    f._lasting["Frost Armor"] = 0.0
+    f.acquire = lambda name_id, **_: None
+    f.engage = lambda *_: True
+    assert f.run(1161) is Fought.KILLED
+    assert f.ended_far, "the loot asks the client how far, and walks when it says too far"
+
+
 def test_a_spell_that_does_not_reach_steps_in_and_one_out_of_sight_steps_aside(combat_clock):
     far = {**AT_RANGE, "ui.error_count": 1, "ui.error_last": 2}          # out of range
     unseen = {**AT_RANGE, "ui.error_count": 2, "ui.error_last": 4}       # no line of sight
