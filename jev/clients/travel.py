@@ -37,6 +37,7 @@ from jev.guide.coords import (
     distance_yards,
     heading_yards,
     map_to_world,
+    to_yards,
     world_to_map,
 )
 
@@ -83,6 +84,11 @@ PIVOT_ERROR = math.radians(60.0)
 
 # A detour whose own walk covered less than this found a dead end on its side.
 DETOUR_BLOCKED_YARDS = 3.0
+
+# Farther than this off a planned leg's line, the leg is steered back onto the line rather
+# than at its end (`_aim`), at a point this far along the line ahead of the character.
+LINE_YARDS = 1.0
+LOOKAHEAD_YARDS = 4.0
 
 
 class Outcome(StrEnum):
@@ -262,6 +268,7 @@ class Travel:
            allow_detour: bool = True, destination=None,
            destination_yards: float | None = None,
            destination_reach: Callable[[tuple[float, float]], float | None] | None = None,
+           line_from: tuple[float, float] | None = None,
            ) -> TravelResult:
         """Walk at a point.
 
@@ -272,6 +279,9 @@ class Travel:
         — but a blocked leg is reported so the caller can ask the planner again from
         where the character actually is. That is the engine; detour-as-router is the
         band-aid it replaced.
+
+        `line_from`, a planned leg's start, holds the walk to the line from there to
+        `target` (`_aim`).
         """
         t0 = time.perf_counter()
         refused_at_start = getattr(self.hid, "refused", 0)
@@ -395,13 +405,15 @@ class Travel:
                 if pulse_key is None:
                     heading = self._heading_now()
                     if heading is not None:
-                        want = self.bearing(here, target)
+                        aim = target if line_from is None else self._aim(here, line_from,
+                                                                          target)
+                        want = self.bearing(here, aim)
                         if want is not None:
                             error = _wrap(want - heading)
                             if abs(error) > PIVOT_ERROR and remaining < PIVOT_YARDS:
                                 self._pivot(error)
                                 continue
-                            if abs(error) > self._deadband(self.distance(here, target)):
+                            if abs(error) > self._deadband(self.distance(here, aim)):
                                 pulse_len = min(MAX_PULSE_S,
                                                 abs(error) / max(self.turn_rate, 0.1))
                                 if pulse_len >= MIN_PULSE_S:
@@ -483,7 +495,8 @@ class Travel:
                         for end in (legs[i - 1], leg))
             last = self.to(leg, timeout_s=remaining, abort=abort, allow_detour=False,
                            destination=None if final or not level else legs[-1],
-                           destination_yards=exact, destination_reach=reach)
+                           destination_yards=exact, destination_reach=reach,
+                           line_from=legs[i - 1])
             if last.outcome is Outcome.ARRIVED and last.detail == EARLY:
                 self.arrival_yards = exact
                 return self._result(Outcome.ARRIVED, legs[0], self.position(), legs[-1],
@@ -689,6 +702,33 @@ class Travel:
             self._detour_side *= -1
             self._sweep *= 2
             self._sweep_left = self._sweep
+
+    def _aim(self, here, line_from, target) -> tuple[float, float]:
+        """Where to steer on a planned leg: at its end while within `LINE_YARDS` of the line
+        from `line_from`, else back onto the line `LOOKAHEAD_YARDS` ahead.
+
+        The heading may be `cruise_tolerance` (22 degrees) off at the end of a long leg, so
+        aimed only at the end a walk drifts aside by a third of the distance it goes. The
+        planner's line goes through the door; the drift meets the wall beside it. After the
+        hearthstone at Sentinel Hill the first leg, 37 yards out through the inn's door, came
+        to the wall four yards west of it; re-planned inside, the walks drifted on into the
+        corner by the stove, and the session ended there (session 158). Simulated through a
+        door at 6 to 14 yards, walks set off 15 to 40 degrees wrong met the wall 108 times
+        in 189.
+        """
+        dx, dy = to_yards(target[0] - line_from[0], target[1] - line_from[1], self.bounds)
+        length = math.hypot(dx, dy)
+        if length <= LOOKAHEAD_YARDS:
+            return target
+        px, py = to_yards(here[0] - line_from[0], here[1] - line_from[1], self.bounds)
+        if abs(px * dy - py * dx) / length <= LINE_YARDS:
+            return target
+        ahead = max(0.0, (px * dx + py * dy) / length) + LOOKAHEAD_YARDS
+        if ahead >= length:
+            return target
+        f = ahead / length
+        return (line_from[0] + f * (target[0] - line_from[0]),
+                line_from[1] + f * (target[1] - line_from[1]))
 
     def _pivot(self, error: float) -> None:
         """Stop, turn the whole error standing still, and walk on to measure it afresh."""

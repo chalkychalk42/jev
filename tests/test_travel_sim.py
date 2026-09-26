@@ -127,6 +127,19 @@ def test_with_drawn_holds_and_waits_every_spot_is_still_rounded(
         assert result.outcome is Outcome.ARRIVED, result.detail
 
 
+DOOR = [Segment(-30, -10, -1.2, -10), Segment(1.2, -10, 30, -10)]    # 2.4 yards wide
+
+
+@pytest.mark.parametrize("off", [-15, 15])
+def test_a_planned_leg_through_a_door_goes_through_it(off, monkeypatch):
+    """Set off 15 degrees wrong, inside the 22 a long leg lets pass, the walk met the wall
+    beside the door ten yards on: after the hearthstone at Sentinel Hill the inn's door
+    was missed by four yards (session 158). Held to the line, it goes through."""
+    result, _ = walk([(0, 0), (0, -37)], DOOR, -math.pi / 2 + math.radians(off),
+                     monkeypatch=monkeypatch)
+    assert result.outcome is Outcome.ARRIVED and result.stuck_events == 0
+
+
 def test_open_ground_is_walked_without_any_recovery(monkeypatch):
     result, _ = walk([(0, 0), (40, 0), (40, 20)], [], 0.0, memory=RouteMemory(),
                      monkeypatch=monkeypatch)
