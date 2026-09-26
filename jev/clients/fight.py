@@ -883,8 +883,15 @@ class Fight:
                 # reach: run 20260923T175710-b5044f pressed Tab three times, found nothing,
                 # and was hit from behind. Turn round once and look again.
                 chosen = self.select(name_id, defend=True)
-                if chosen is not Fought.NO_TARGET or turned_round:
+                if chosen is not Fought.NO_TARGET:
                     return chosen
+                if turned_round:
+                    # Nothing attacking could be found either side, only what is in view:
+                    # fight that. A Kobold Geomancer casting from inside Jangolode Mine went
+                    # unfound, and with nothing else taken the paladin turned round 33
+                    # times in four minutes, healing, and fought nothing (session 169).
+                    last = self._pick_plate(name_id, defend, any_plate=True)
+                    return chosen if last is False else last
                 turned_round = True
                 seconds = math.pi / TURN_RATE_SEED
                 event("acquire.turn_round", data={"key": turn, "seconds": round(seconds, 3)})
@@ -910,7 +917,8 @@ class Fight:
                 self.detail = "radio lost while looking round"
                 return Fought.BLIND
 
-    def _pick_plate(self, name_id: int | None, defend: bool) -> Fought | bool | None:
+    def _pick_plate(self, name_id: int | None, defend: bool,
+                    any_plate: bool = False) -> Fought | bool | None:
         """Select a plate in the current view: `None` selected, `False` none acceptable.
 
         Defending, whatever is attacking us is chosen before anything of the wanted name
@@ -925,7 +933,8 @@ class Fight:
         # Goretusk minding its own business was chosen while something behind the paladin
         # took it from full health to dead (session 168, V209). Tab, attackers only in
         # self-defence, and the turn round find what is behind.
-        passes = ((True, False) if name_id is not None else (True,)) if defend else (False,)
+        passes = (((True, False) if name_id is not None or any_plate else (True,))
+                  if defend else (False,))
         for attackers_only in passes:
             for plate in candidates:
                 point = (self.window_origin[0] + round(plate.cx),

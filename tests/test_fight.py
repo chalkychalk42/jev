@@ -1811,6 +1811,27 @@ def test_defending_with_no_name_wanted_never_settles_on_a_bystander():
     assert f._pick_plate(None, defend=False) is None, "out of it, any plate still serves"
 
 
+def test_an_attacker_found_nowhere_leaves_the_plate_in_view_as_the_fight():
+    """V209's search turns round once for what attacks; when neither side shows it (a
+    Kobold Geomancer casting from inside Jangolode Mine), the plate in view is the fight,
+    not 33 turns round in four minutes (session 169)."""
+    import numpy as np
+
+    frame = np.zeros((900, 1600, 3), dtype=np.uint8)
+    frame[380:387, 727:874] = (230, 200, 10)          # a kobold in view, not attacking
+    hid = _Hid()
+    base = {**ALIVE, "vitals.combat": True, "target.name_id": 2044}
+    bystander = {**base, "target.attacking_me": False, "target.in_melee": False}
+
+    def read():
+        return bystander if hid.clicks else {**base, "target.has": False}
+
+    f = Fight(hid=hid, read=read, read_frame=lambda: frame, window_origin=(10, 38),
+              targeting=_Targeting(read, hid))
+    assert f.acquire(None, defend=True) is None, "the kobold in view, after the search"
+    assert [key for key, _ in hid.holds] == ["d"], "turned round once first"
+
+
 # -- trained spells (`jev.world.training`, `jev.world.combat.from_bar`) --------------
 
 TRAINED_BAR = {1: 6603, 2: 20154, 3: 639, 4: 465, 5: 19740, 6: 20271, 7: 498, 8: 853,
