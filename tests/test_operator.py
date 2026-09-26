@@ -205,6 +205,22 @@ def test_stray_inputs_are_not_a_person():
     assert op.active() and "a person" in said[-1]
 
 
+def test_strays_seconds_apart_are_not_a_person():
+    """V216: while the bot tapped keys fast, the machine's strays came 3 to 9 s apart and
+    twice reached "2 of 3" inside ten seconds (sessions 174-175). A hand makes several a
+    second."""
+    desk = Desk()
+    said = []
+    op = watch(desk, say=said.append)
+    for gap in (0, 4_000, 4_000, 4_000):
+        desk.now += gap
+        op.stamp("key 0x1e up")
+        desk.input(500)
+        assert not op.active(), "strays seconds apart"
+    assert all("1 of 3" in line for line in said)
+    assert person(desk, op, 500)
+
+
 def test_one_stray_is_reason_enough_not_to_take_the_window_for_a_while():
     """A click into another window is one or two inputs; raising the game over it takes the
     window from whoever clicked (review, 25 September)."""

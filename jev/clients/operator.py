@@ -31,8 +31,10 @@ STAMP_EVERY_S = 0.5
 # alone can be the machine's: a lone input 391 ms after the bot's own, then nothing for
 # minutes with nobody at the desk, paused session 91 mid-fight and the character died
 # (24 September), and session 102 saw three more, 650-750 ms after the bot's own, each
-# alone. A hand on a mouse or a keyboard makes many.
-CONFIRM_MS = 10_000
+# alone. A hand on a mouse or a keyboard makes many, several a second. The machine's come
+# at least 3 s apart: 50 from session 100 to 182, twice two inside ten seconds while the
+# bot tapped keys fast (sessions 174-175), never two inside two (V216).
+CONFIRM_MS = 3_000
 CONFIRM_INPUTS = 3
 # An input that is not the bot's, not yet a person, is still reason enough not to take the
 # window back for this long: a click into another window is one or two inputs, and raising
