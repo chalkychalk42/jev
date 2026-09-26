@@ -7,6 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
+import keep_status
+import session_report
 from session_report import Session, blocks
 
 
@@ -21,3 +23,16 @@ def test_sessions_are_gathered_into_blocks_of_play_and_rated_per_hour():
     assert (first["kills_h"], first["deaths_h"], first["stuck_h"]) == (40.0, 0.5, 8.0)
     assert (first["tutor_h"], first["stations"]) == (16.0, "8/24")
     assert board[1]["hours"] == 0.5, "the last block is what there is"
+
+
+def test_the_report_reads_the_loops_log_as_the_status_screen_does(tmp_path, monkeypatch):
+    """One reader of the loop's log and of the sessions' own (V228): a session that has
+    started but not ended is listed without an exit code."""
+    log = tmp_path / "session-loop.log"
+    log.write_text("session 6 start 2026-09-25T19:30:00+01:00 arm=hybrid quiet=600\n"
+                   "session 6 exit=0 after 904s 2026-09-25T19:45:04+01:00\n"
+                   "session 7 start 2026-09-25T19:45:04+01:00 quiet=600\n")
+    monkeypatch.setattr(session_report, "LOOP_LOG", log)
+    assert session_report._sessions_from_loop(6) == {6: 0, 7: None}
+    assert session_report._sessions_from_loop(7) == {7: None}
+    assert session_report.session_log is keep_status.session_log

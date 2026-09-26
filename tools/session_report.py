@@ -26,11 +26,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tools"))
+
+# The loop's log and the sessions' own logs have one reader, the status screen's (V228).
+from keep_status import CAPTURES, LOOP_LOG, RUNS, session_log, sessions, starts  # noqa: E402
 
 DB = ROOT / "data/knowledge/tbc-243.sqlite"
-CAPTURES = ROOT / "captures"
-RUNS = ROOT / "runs"
-LOOP_LOG = CAPTURES / "session-loop.log"
 # Ticks further apart than this are a pause, not play.
 MAX_TICK_GAP_S = 5.0
 
@@ -74,17 +75,10 @@ class Session:
 
 
 def _sessions_from_loop(since: int) -> dict[int, int | None]:
-    """Session number -> its exit code, from the loop's own log."""
-    exits: dict[int, int | None] = {}
-    if not LOOP_LOG.exists():
-        return exits
-    for line in LOOP_LOG.read_text(encoding="utf-8", errors="replace").splitlines():
-        start = re.match(r"session (\d+) start", line)
-        if start and int(start.group(1)) >= since:
-            exits.setdefault(int(start.group(1)), None)
-        done = re.match(r"session (\d+) exit=(\d+)", line)
-        if done and int(done.group(1)) >= since:
-            exits[int(done.group(1))] = int(done.group(2))
+    """Session number -> its exit code (`None` while it runs), from the loop's own log."""
+    text = LOOP_LOG.read_text(encoding="utf-8", errors="replace") if LOOP_LOG.exists() else ""
+    exits: dict[int, int | None] = {n: None for n, _ in starts(text) if n >= since}
+    exits.update({n: code for n, code, _ in sessions(text) if n >= since})
     return exits
 
 
@@ -107,13 +101,6 @@ def _jsonl(path: Path):
                     yield json.loads(line)
                 except ValueError:
                     continue
-
-
-def session_log(number: int) -> Path:
-    """A session's own log: `live-N.log` from `tools/session_loop.sh`, `live-testvvi-N.log`
-    from the loops before it."""
-    ours = CAPTURES / f"live-{number}.log"
-    return ours if ours.exists() else CAPTURES / f"live-testvvi-{number}.log"
 
 
 def measure(number: int, table: dict[int, int], exit_code: int | None = None) -> Session | None:

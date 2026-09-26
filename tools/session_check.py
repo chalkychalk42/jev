@@ -23,7 +23,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from keep_status import LOOP_LOG, RUNS, deaths, run_summary, session_log, sessions  # noqa: E402
+from keep_status import (  # noqa: E402
+    LOOP_LOG,
+    RUNS,
+    deaths,
+    run_summary,
+    session_log,
+    sessions,
+    starts,
+)
 
 PROOFS = (("danger", r"^danger: .*cells learned"),
           ("route memory", r"^route memory: .*not taken"),
@@ -123,11 +131,11 @@ def main(argv: list[str] | None = None) -> int:
         number = int(args[0])
     else:
         text = LOOP_LOG.read_text(encoding="utf-8", errors="replace") if LOOP_LOG.exists() else ""
-        started = re.findall(r"^session (\d+) start", text, re.MULTILINE)
+        started = starts(text)
         if not started:
             print("no session in the loop's log")
             return 1
-        number = int(started[-1])
+        number = started[-1][0]
     print("\n".join(check(number)))
     return 0
 

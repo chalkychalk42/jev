@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import desk  # noqa: E402
 import keep_status  # noqa: E402
-from keep_status import Facts, deaths, run_summary, sessions, verdict  # noqa: E402
+from keep_status import Facts, deaths, run_summary, sessions, starts, verdict  # noqa: E402
 
 needs_bash = pytest.mark.skipif(shutil.which("bash") is None or shutil.which("flock") is None,
                                 reason="needs bash and flock")
@@ -28,8 +28,11 @@ def test_the_loop_log_gives_each_finished_session():
     text = ("session 6 start 2026-09-25T19:30:00+01:00 arm=hybrid quiet=600\n"
             "session 6 exit=0 after 904s 2026-09-25T19:45:04+01:00\n"
             "session 7 start 2026-09-25T19:45:04+01:00 arm=hybrid quiet=600\n"
-            "session 7 exit=130 after 31s 2026-09-25T19:45:35+01:00\n")
+            "session 7 exit=130 after 31s 2026-09-25T19:45:35+01:00\n"
+            "session 8 start 2026-09-25T19:46:35+01:00 quiet=600\n")
     assert sessions(text) == [(6, 0, 904), (7, 130, 31)]
+    assert starts(text) == [(6, "2026-09-25T19:30:00+01:00"), (7, "2026-09-25T19:45:04+01:00"),
+                            (8, "2026-09-25T19:46:35+01:00")], "with the arm (before V223) or not"
 
 
 def _green() -> Facts:

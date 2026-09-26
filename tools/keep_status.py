@@ -58,10 +58,18 @@ class Facts:
     switch_tried: float | None = None
 
 
+# The loop's log and each session's own log are read here and only here: `session_report.py`
+# and `session_check.py` import these (V228).
 def sessions(text: str) -> list[tuple[int, int, int]]:
     """(number, exit code, seconds) of each finished session in the loop's log, oldest first."""
     return [(int(n), int(c), int(s)) for n, c, s in
             re.findall(r"^session (\d+) exit=(\d+) after (\d+)s", text, re.MULTILINE)]
+
+
+def starts(text: str) -> list[tuple[int, str]]:
+    """(number, start time as written) of each session the loop's log started, oldest first."""
+    return [(int(n), when) for n, when in
+            re.findall(r"^session (\d+) start (\S+)", text, re.MULTILINE)]
 
 
 def session_log(number: int) -> Path:
@@ -190,10 +198,10 @@ def collect() -> Facts:
     if LOOP_LOG.exists():
         text = LOOP_LOG.read_text(encoding="utf-8", errors="replace")
         facts.sessions = sessions(text)
-        started = re.findall(r"^session \d+ start (\S+)", text, re.MULTILINE)
+        started = starts(text)
         if started:
             with suppress(ValueError):
-                facts.last_start = datetime.fromisoformat(started[-1]).timestamp()
+                facts.last_start = datetime.fromisoformat(started[-1][1]).timestamp()
     hold = loop_dir / "hold"
     if hold.exists():
         facts.hold_age_s = facts.now - hold.stat().st_mtime
