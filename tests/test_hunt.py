@@ -485,6 +485,26 @@ def test_the_hunt_stands_first_where_its_target_has_been_found_and_records_the_v
     assert (arm.tries, arm.wins) == (7, 7), "the visit and its kill were learned"
 
 
+def test_a_station_never_reached_is_not_scored():
+    """V252: 42 of 49 station visits were scored lost in sessions 205-217, most of them walks
+    cut short on the way, which say nothing of what stands at the station."""
+    import random
+
+    from jev.learn.choices import ChoiceMemory, Stations, station_key
+
+    memory = ChoiceMemory()
+    far, near = (60.0, 0.0, 80.0), (0.0, 0.0, 80.0)
+    blocked = {far}
+    walked = []
+    h, _ = _hunt([Fought.NO_TARGET, Fought.KILLED], [(0, 1), (0, 1), (0, 1), (1, 1)],
+                 approach=lambda p, **kw: walked.append(p) or tuple(p) not in blocked)
+    h.stations = Stations(memory, "hunt.station", "creature:9", rng=random.Random(3))
+    h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=(near, far))
+    arms = memory.arms("hunt.station")
+    assert far in [tuple(w) for w in walked], "the walk there was tried"
+    assert station_key("creature:9", far) not in arms, "never reached: never scored"
+
+
 def test_a_caster_drinks_before_the_pull_and_a_paladin_does_not():
     """V164: a mage's mana is its damage; below 55% it drinks, to 95%, before pulling."""
     from jev.world.combat import CASTER_DRINK_TO, Role

@@ -36,6 +36,12 @@ FORMAT = 1
 # How many visits' worth of the pooled rate an option starts with: enough that one lucky or
 # unlucky visit does not decide it, few enough that its own record soon does.
 PRIOR_VISITS = 2.0
+# A lap keeps the tour's own order as its prior (`jev.run.hunt.spawn_tour`: lone spawns before
+# packs, each to the nearest left): a station further along it leads only on a draw this much
+# better a place (V252). Ordered by draws alone, the mage's first station was on average 90
+# yards further than the nearest (sessions 205-217), on records that were mostly walks cut
+# short, not visits.
+TOUR_DECAY = 0.85
 
 
 @dataclass
@@ -147,13 +153,13 @@ class Stations:
         self._open: tuple[tuple, float] | None = None
 
     def order(self, stations: Sequence[Sequence[float]]) -> list[tuple]:
-        """One lap of `stations`, the most likely to pay off first; ties keep the tour's
-        own order, which walks them nearest first."""
+        """One lap of `stations`, the most likely to pay off first, each a little less likely
+        the further along the tour's own order it stands (`TOUR_DECAY`)."""
         stations = [tuple(s) for s in stations]
         arms = self.memory.arms(self.point, f"{self.objective}@")
         rate = pooled(arms.values())
         draws = [draw(arms.get(station_key(self.objective, s)), rate, self.rng) for s in stations]
-        order = sorted(range(len(stations)), key=lambda i: -draws[i])
+        order = sorted(range(len(stations)), key=lambda i: -draws[i] * TOUR_DECAY ** i)
         if self.log is not None:
             self.log.write({"event": "choice", "point": self.point, "objective": self.objective,
                             "rate": round(rate, 4),

@@ -272,7 +272,6 @@ class Hunt:
                 self.moves += 1
                 if chooser is not None:
                     chooser.leave(self._found)       # the last station's visit, as it went
-                    chooser.arrive(target)
                     self._found = False
                 with operation("hunt.approach", data={"destination": target}) as span:
                     standoff = 0.0 if close else self.standoff_yards
@@ -283,6 +282,11 @@ class Hunt:
                     continue          # a station we cannot stand on is not a dead end
                 if self._wrong_side_of_a_door():
                     continue
+                if chooser is not None:
+                    # A visit counts from the station itself: a walk cut short on the way -
+                    # a fight, a wall - says nothing of what stands there. 42 of 49 visits
+                    # were scored lost in sessions 205-217, most of them never arrived (V252).
+                    chooser.arrive(target)
                 stood = True
                 dry = 0
 

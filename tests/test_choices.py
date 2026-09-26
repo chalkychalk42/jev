@@ -71,6 +71,25 @@ def test_stations_that_paid_off_come_first_and_the_barren_sink():
     assert firsts.count(fresh) > 10, "an unproven station still gets its turn"
 
 
+def test_a_lap_keeps_the_tours_order_unless_a_record_says_otherwise():
+    """V252: ordered by draws alone, the mage's first station was on average 90 yards further
+    than the nearest, on records that were noise."""
+    memory = ChoiceMemory(clock=Clock())
+    tour = [(float(40 * i), 0.0) for i in range(6)]
+    firsts = [Stations(memory, "hunt.station", "creature:9",
+                       rng=random.Random(seed)).order(tour)[0] for seed in range(300)]
+    assert firsts.count(tour[0]) > firsts.count(tour[5]) * 3, "the tour's first leads"
+    for _ in range(8):
+        memory.record("hunt.station", station_key("creature:9", tour[4]), True, 20.0)
+    for _ in range(4):
+        for barren in tour[:2]:
+            memory.record("hunt.station", station_key("creature:9", barren), False, 20.0)
+    firsts = [Stations(memory, "hunt.station", "creature:9",
+                       rng=random.Random(seed)).order(tour)[0] for seed in range(300)]
+    assert firsts.count(tour[4]) > 100, "a proven station leads from further along"
+    assert firsts.count(tour[0]) < firsts.count(tour[4]) / 3, "the barren first one does not"
+
+
 def test_a_visit_is_timed_and_recorded_as_it_went(tmp_path):
     clock = Clock(10.0)
     memory = ChoiceMemory(clock=Clock())

@@ -372,6 +372,7 @@ Trials
 | V249 self-defence takes no bystander while something attacks, nothing once combat has ended | session 222 (with V247, V248) | no `acquire.anything` out of combat; no idle unit taken while defending | `acquire.anything` events only with `vitals.combat` true | | |
 | V250 a walk for bag space only when the sale pays | session 223 | BAG_MAKE_SPACE's share of time (12% in 205-217) falls | `not worth the walk` with slots free; no BAG_MAKE_SPACE armed again at the counter | | |
 | V251 a spell refused as not ready is left 4 s | session 223 (with V250) | no run of unanswered presses of one slot with `not_ready` | `ability.unanswered` with `not_ready` followed by another slot's press | | |
+| V252 hunt stations scored only when reached; the tour's order a prior | session 224 | hunt walks to a first station shorter; station records won/lost nearer the truth | `hunt.station` outcomes only after arrival; the first station's distance against the nearest | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
