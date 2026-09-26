@@ -217,6 +217,34 @@ def trainer_due(class_id: int | None, race_id: int | None, level: int | None,
     return best
 
 
+def training_cost(class_id: int | None, race_id: int | None, level: int | None,
+                  known: Iterable[int] | None, map_id: int | None,
+                  here: tuple[float, float] | None, *, facts: dict | None = None,
+                  max_yards: float = MAX_TRAINER_YARDS) -> int:
+    """The least purse that makes a trainer visit due (`trainer_due`): the cheapest spell
+    the character could learn from a trainer within `max_yards`, or the two cheapest from
+    one within twice that. 0 when no trainer in reach has anything to teach, or anything
+    is unknown.
+
+    What a restock keeps back (V215). The level 5 mage sold its bags for 134 copper, 34 more
+    than Frostbolt or Conjure Water, and spent it on a repair and 15 waters: it had trained
+    once in five levels, and the water it bought was what Conjure Water would have made.
+    """
+    if None in (class_id, race_id, level, known, map_id, here):
+        return 0
+    known = set(known)
+    least = None
+    for trainer in trainers(class_id, race_id, map_id, facts):
+        yards = math.dist(trainer.world[:2], here)
+        spells = 1 if yards <= max_yards else TRAINER_REACH_SPELLS
+        costs = sorted(o.cost for o in learnable(trainer, level, known, facts=facts))
+        if yards > max_yards * TRAINER_REACH_SPELLS or len(costs) < spells:
+            continue
+        cost = sum(costs[:spells])
+        least = cost if least is None else min(least, cost)
+    return least or 0
+
+
 def _lines(spells: Iterable[int], facts: dict | None) -> dict[str, SpellFacts]:
     """The highest known rank of each spell, by name."""
     best: dict[str, SpellFacts] = {}

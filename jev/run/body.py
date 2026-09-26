@@ -59,7 +59,7 @@ from jev.world.taxi import Node as TaxiNode
 from jev.world.taxi import flight as flight_plan
 from jev.world.taxi import load_nodes, save_node, visited
 from jev.world.training import placements as spell_placements
-from jev.world.training import trainer_due
+from jev.world.training import trainer_due, training_cost
 from jev.world.vendor import (
     bag_slots,
     consumable_role,
@@ -1015,7 +1015,21 @@ class LiveBody:
         self.fight.profile = profile_from_bar(bar, base) if bar else None
 
     def _trainer(self, state: State | None = None):
-        """The class trainer worth a visit now (`jev.world.training.trainer_due`), or None.
+        """The class trainer worth a visit now (`jev.world.training.trainer_due`), or None."""
+        look = self._training_look(state)
+        return trainer_due(money=look[1], **look[0]) if look is not None else None
+
+    def training_reserve(self, state: State | None = None) -> int:
+        """What the purse keeps for the class trainer (`jev.world.training.training_cost`,
+        V215): 0 without a census, a position or anything to learn."""
+        try:
+            look = self._training_look(state)
+            return training_cost(**look[0]) if look is not None else 0
+        except Exception:
+            return 0
+
+    def _training_look(self, state: State | None = None) -> tuple[dict, int | None] | None:
+        """What the trainer rules ask, and the purse.
 
         From `state` when given: the policy asks from the supervisor's thread, where the
         body's own readers (and the running skill's checkpoint) are not to be touched.
@@ -1038,8 +1052,9 @@ class LiveBody:
             race_id = RACE_IDS.get(state.char.race)
         with self.client._capturing:
             known = census.known
-        return trainer_due(class_id, race_id, level, known, money, self.client.bounds.map_id,
-                           map_to_world(*here, self.client.bounds)[:2])
+        return (dict(class_id=class_id, race_id=race_id, level=level, known=known,
+                     map_id=self.client.bounds.map_id,
+                     here=map_to_world(*here, self.client.bounds)[:2]), money)
 
     def trainable(self, state: State) -> bool:
         """Whether a class trainer has something to teach that the purse can pay for."""
@@ -1061,6 +1076,7 @@ class LiveBody:
                 context.restore_purse(json.loads(Path(self.purse_memory).read_text()))
             context.saved = self._save_purse
         context.trainable = self.trainable
+        context.reserve = self.training_reserve
         context.bindable = self.bindable
         context.discoverable = self.discoverable
         context.conjures = self.conjured_roles
@@ -1352,6 +1368,8 @@ class LiveBody:
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
         world = map_to_world(*here, self.client.bounds)
         ranked = self._ranked(candidates, world)
+        # A purchase keeps what the trainer is owed (V215).
+        reserve = self.training_reserve() if supplies else 0
         if supplies:
             walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
             if walk > SUPPLY_WALK_MAX_YARDS:
@@ -1367,7 +1385,7 @@ class LiveBody:
             try:
                 outcome = vendor.run(expected_name=merchant.name,
                                      supplies=tuple(s for s in supplies if s.item_id in merchant.items),
-                                     min_free=min_free,
+                                     min_free=min_free, reserve_copper=reserve,
                                      timeout_s=self.travel_timeout + 120)
             except BodyFailure as failure:
                 if failure.result.code in MERCHANT_UNREACHABLE:

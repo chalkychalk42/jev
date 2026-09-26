@@ -215,6 +215,10 @@ class Context:
     # the spellbook census and the trainer catalog (`LiveBody.trainable`). Absent, no
     # training is ever asked for.
     trainable: Callable[[State], bool] | None = None
+    # What the purse keeps for the trainer while there are spells to learn in reach: the
+    # least that makes a visit due (`LiveBody.training_reserve`, V215). A restock buys only
+    # with what is above it. Absent, nothing is kept.
+    reserve: Callable[[State], int] | None = None
     # What the character makes for itself ("drink", "food"): a caster's conjures, which
     # a restock need not buy (`LiveBody.conjured_roles`, V166).
     conjures: Callable[[], frozenset[str]] | None = None
@@ -226,6 +230,12 @@ class Context:
             return self.conjures() if self.conjures is not None else frozenset()
         except Exception:
             return frozenset()
+
+    def kept(self, state: State) -> int:
+        try:
+            return max(0, int(self.reserve(state))) if self.reserve is not None else 0
+        except Exception:
+            return 0
     train_blocked_level: int | None = None
 
     def train_failed(self, level: int | None) -> None:
@@ -367,11 +377,14 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
                        ("dead", "combat"), service="repair"), True, "service.durability")
 
     conjured = context.conjured() if context is not None else frozenset()
+    # What is above the trainer's due (V215).
+    spare = (b.money_copper - context.kept(state)
+             if context is not None and b.money_copper is not None else b.money_copper)
     if ((context is None or context.can_restock(b.money_copper, state.guide.step_id))
             and ((b.food_id is not None and b.food_count == 0 and "food" not in conjured
-                  and _affordable(b.food_id, b.money_copper))
+                  and _affordable(b.food_id, spare))
                  or (b.drink_id is not None and b.drink_count == 0
-                     and "drink" not in conjured and _affordable(b.drink_id, b.money_copper)))):
+                     and "drink" not in conjured and _affordable(b.drink_id, spare)))):
         return Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD", "confirmed food or drink is empty",
                        0.8, ("dead", "combat"), service="supplies"), True, "service.supplies")
 

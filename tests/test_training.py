@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from jev.world import training
-from jev.world.training import Placement, placements, spell, trainer_due
+from jev.world.training import Placement, placements, spell, trainer_due, training_cost
 
 # Northshire Abbey's door, and Testvvi's purse at level 8 (6 silver 26 copper).
 NORTHSHIRE = (-8914.0, -210.0)
@@ -161,3 +161,21 @@ def test_a_trainer_teaching_more_is_worth_a_longer_walk():
     cheapest = min(o.cost for t in training.trainers(2, 1, 0) if t.name == "Brother Wilhelm"
                    for o in training.learnable(t, 14, known))
     assert trainer_due(2, 1, 14, known, cheapest, 0, moonbrook) is None
+
+
+def test_a_restock_keeps_the_least_purse_that_makes_a_trainer_visit_due():
+    """V215: the level 5 mage in Northshire keeps 100 copper, Frostbolt's or Conjure Water's
+    price; from Moonbrook, where one spell is not worth the walk, a paladin keeps two."""
+    mage = {6603, 133, 168, 1459}
+    kept = training_cost(8, 1, 5, mage, 0, NORTHSHIRE)
+    assert kept == 100
+    assert trainer_due(8, 1, 5, mage, kept, 0, NORTHSHIRE) is not None
+    assert trainer_due(8, 1, 5, mage, kept - 1, 0, NORTHSHIRE) is None
+    assert training_cost(8, 1, 5, mage | {116, 5504}, 0, NORTHSHIRE) == 0, "all learned"
+    assert training_cost(8, 1, 5, None, 0, NORTHSHIRE) == 0, "spellbook unread"
+    assert training_cost(8, 1, 5, mage, 0, None) == 0, "position unknown"
+    moonbrook = (-11000.0, 1500.0)
+    known = {6603, 20154, 635}
+    kept = training_cost(2, 1, 14, known, 0, moonbrook)
+    assert trainer_due(2, 1, 14, known, kept, 0, moonbrook) is not None
+    assert trainer_due(2, 1, 14, known, kept - 1, 0, moonbrook) is None

@@ -309,6 +309,28 @@ def test_a_restock_is_not_walked_to_without_one_purchase_in_the_purse():
     assert service(with_purse(None)) is not None, "a purse not read is not a reason to stay"
 
 
+def test_a_restock_buys_only_with_what_is_above_the_trainers_due():
+    """V215: the level 5 mage sold its bags for 134 copper and spent the 82 left after a
+    repair on water, while Conjure Water, 100 copper, went untrained."""
+    from test_runtime_records import seen
+
+    from jev.coach.policy import Context, service
+    from jev.world.state_v1 import Bags
+
+    def with_purse(copper):
+        return seen(bags=Bags(free=10, durability_min=1.0, money_copper=copper, food_id=2070,
+                              food_count=5, drink_id=159, drink_count=0))
+
+    saving = Context()
+    saving.reserve = lambda state: 100
+    assert service(with_purse(82), context=saving) is None
+    assert service(with_purse(125), context=saving).decision.skill == "BUY_AMMO_REAGENT_FOOD"
+    assert service(with_purse(82), context=Context()).decision.skill == "BUY_AMMO_REAGENT_FOOD"
+    saving.reserve = lambda state: 1 // 0
+    assert service(with_purse(82), context=saving).decision.skill == "BUY_AMMO_REAGENT_FOOD", \
+        "a reserve that cannot be worked out keeps nothing"
+
+
 def test_a_repair_the_purse_could_not_pay_waits_for_the_purse_to_grow():
     """V196: after a repair the purse could not pay, any copper more walked a broke level 2
     mage back to the smith after every kill."""

@@ -1080,6 +1080,29 @@ def test_training_visits_the_trainer_once_a_level_and_puts_the_spells_on_the_bar
     assert not b.policy_context.can_train(state), "a second visit at the same level"
 
 
+def test_the_policy_is_told_what_the_purse_keeps_for_the_trainer():
+    """V215: the least purse that makes a trainer visit due, from the census and the
+    position, and nothing once the trainers in reach have nothing left to teach."""
+    from jev.coach.policy import Context
+    from jev.world.state_v1 import Bags, Char, Pos
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4166, -1935.4166, -7939.583, -10254.166)
+    bar = {1: 6603, 2: 20154, 3: 635, **{s: 0 for s in range(4, 11)}, 11: None, 12: None}
+    b.client.spells = _census(bar, {6603, 20154, 635})
+    here = (0.4789, 0.4115)
+    state = seen(char=Char(level=8, cls="paladin", race="human"), bags=Bags(money_copper=5),
+                 pos=Pos(zone="Elwynn Forest", zone_id=12, mx=here[0], my=here[1]))
+    context = Context()
+    b.policy_context = context
+    assert context.kept(state) == 10, "Devotion Aura"
+    b.client.spells = _census(bar, {6603, 20154, 635, 465, 20271, 19740, 498, 639, 21082,
+                                    853, 1152, 3127})
+    assert context.kept(state) == 0
+    b.client.spells = None
+    assert context.kept(state) == 0
+
+
 def test_the_trainer_s_gossip_line_is_chosen_by_its_text():
     from jev.world.training import trainers
 

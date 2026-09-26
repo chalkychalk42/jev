@@ -53,6 +53,11 @@ def test_body_buys_exact_empty_profile_supplies_at_nearest_matching_generated_sh
     assert visit.call_args.kwargs["node_world"] == (51, 50, 0)
     assert calls[0]["expected_name"] == "Water" and calls[0]["min_free"] == 1
     assert [(s.role, s.item_id) for s in calls[0]["supplies"]] == [("drink", 159)]
+    assert calls[0]["reserve_copper"] == 0
+    # What the trainer is owed stays in the purse (V215).
+    b.training_reserve = lambda state=None: 100
+    b.execute(b.arm, state, lambda: None)
+    assert calls[1]["reserve_copper"] == 100
 
 
 @pytest.mark.parametrize(("walk", "visited"), [(675.0, False), (200.0, True)])
