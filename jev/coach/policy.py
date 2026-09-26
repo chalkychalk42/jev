@@ -155,7 +155,7 @@ class Context:
     # and the level 4 mage's first act every session was its hearthstone and a walk to a
     # smith it still could not pay, 45 copper against broken gear (26 September, V206).
     PURSE = ("repair_blocked", "repair_money", "supplies_blocked", "supplies_money",
-             "supplies_needed")
+             "supplies_needed", "train_blocked_level", "train_blocked_until")
 
     def purse(self) -> dict:
         return {name: getattr(self, name) for name in self.PURSE}
@@ -237,15 +237,24 @@ class Context:
         except Exception:
             return 0
     train_blocked_level: int | None = None
+    # A trainer not reached is asked for again from this wall time; a visit made, only at the
+    # next level (`None`). Both kept in the purse file (V254): the level 7 mage's walk to its
+    # trainer failed the same way in sessions 205, 206, 207 and 208, each session a new try.
+    train_blocked_until: int | None = None
 
-    def train_failed(self, level: int | None) -> None:
+    def train_failed(self, level: int | None, *, retry_at: float | None = None) -> None:
         # One visit a level: the next level brings new spells, and a trainer that could not
         # be reached, or would not teach what it lists, may from there.
         self.train_blocked_level = level
+        self.train_blocked_until = None if retry_at is None else int(retry_at)
+        self._save()
 
     def can_train(self, state: State) -> bool:
         level = state.char.level
-        if self.trainable is None or level is None or level == self.train_blocked_level:
+        if self.trainable is None or level is None:
+            return False
+        if level == self.train_blocked_level and (self.train_blocked_until is None
+                                                  or state.t < self.train_blocked_until):
             return False
         return self.trainable(state)
 

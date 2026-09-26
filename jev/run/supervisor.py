@@ -35,6 +35,8 @@ FALL_GRACE_S = 2.5
 # finished as a fight began, the run ended at once, and the character stood in the fight
 # through the restart and died (session 142 began by releasing its spirit).
 DEADLINE_COMBAT_GRACE_S = 60.0
+# How long a trainer not reached is left before it is walked to again at the same level (V254).
+TRAIN_RETRY_S = 1800.0
 
 
 class Cancelled(Exception):
@@ -302,9 +304,11 @@ class Supervisor:
                         state.guide.step_id if state is not None else None)
                 if (worker.arm.decision.skill == "TRAIN_CLASS"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
-                    # A trainer out of reach is not walked to again this level; a visit a
-                    # fight cut short (preempted) is.
-                    self.runtime.policy_context.train_failed(state.char.level)
+                    # A trainer out of reach is not walked to again for half an hour at this
+                    # level, across sessions (V254); a visit a fight cut short (preempted) is.
+                    self.runtime.policy_context.train_failed(
+                        state.char.level if state is not None else None,
+                        retry_at=(state.t if state is not None else time.time()) + TRAIN_RETRY_S)
                 if (worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                         and result.code not in ("too_poor",)):

@@ -195,6 +195,29 @@ def test_a_trainer_with_something_to_teach_is_a_service_and_a_failed_visit_waits
     assert service(fighting, context=context) is None
 
 
+def test_a_trainer_not_reached_is_tried_again_after_half_an_hour_and_the_next_session_knows():
+    """V254: the level 7 mage's walk to its trainer failed the same way in sessions 205-208,
+    each session a new try."""
+    from jev.coach.policy import Context, service
+    from jev.world.state_v1 import Char
+
+    context = Context()
+    context.trainable = lambda state: True
+    at = _s(char=Char(level=7)).t
+    context.train_failed(7, retry_at=at + 1800)
+    soon = _s(char=Char(level=7)).model_copy(update={"t": at + 600})
+    later = _s(char=Char(level=7)).model_copy(update={"t": at + 1900})
+    assert service(soon, context=context) is None
+    assert service(later, context=context).decision.skill == "TRAIN_CLASS"
+    restored = Context()
+    restored.trainable = lambda state: True
+    restored.restore_purse(context.purse())
+    assert service(soon, context=restored) is None, "the next session knows"
+    restored.train_failed(7)                        # a visit made: not again this level
+    assert service(later, context=restored) is None
+    assert service(_s(char=Char(level=8)), context=restored).decision.skill == "TRAIN_CLASS"
+
+
 def test_training_waits_for_a_meal():
     from jev.coach.policy import Context, service
     from jev.world.state_v1 import Char
