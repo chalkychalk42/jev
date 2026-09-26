@@ -5,7 +5,7 @@ deliberate: it means the whole brain — tracker, coach, verifier, recorder, tea
 runs with no game, no capture and no Windows, which is the difference between a project
 you can work on and one you can only work on at the machine with the client open.
 
-    LiveSource      capture -> radio decode + vision -> fuse        (needs the game)
+    ClientSource    capture -> radio decode (`jev.run.client`)      (needs the game)
     ReplaySource    a recorded run, played back                     (needs a run)
     ScriptedSource  a hand-written sequence of states               (needs nothing)
 

@@ -196,9 +196,6 @@ class Graph(BaseModel):
     def get(self, node_id: str) -> Node | None:
         return self.by_id().get(node_id)
 
-    def for_level(self, level: int) -> tuple[Node, ...]:
-        return tuple(n for n in self.nodes if n.level[0] <= level <= n.level[1])
-
     def ribs(self) -> tuple[Node, ...]:
         """Grind loops hanging off the spine — what `on_fail` falls back to."""
         return tuple(n for n in self.nodes if n.kind is StepKind.GRIND)

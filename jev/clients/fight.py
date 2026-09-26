@@ -156,7 +156,6 @@ SELECTS_DRAWN = (3, 5)
 # three yards, stood, walked three yards, stood, and shuffled in nudges until a swing
 # landed - watched by the operator on 23 September: "4 paces, then 4 paces, then a couple
 # tiny steps until it swings". Forward is now held while the plate is steered on.
-ENGAGE_LOOKS = 5
 CLOSE_LOOK_S = 0.1              # how often the walk reads the radio
 CLOSE_STEER_S = 0.3             # how often it looks at the plate to steer
 CLOSE_STEER_TOLERANCE = 0.04    # of the width off centre before a correcting turn

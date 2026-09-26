@@ -351,10 +351,6 @@ class TeacherQueue:
     def depth(self) -> int:
         return self._q.qsize()
 
-    @property
-    def inflight_keys(self) -> list[str]:
-        return list(self._pending)
-
     # ------------------------------------------------------------------ the ask
 
     async def ask(

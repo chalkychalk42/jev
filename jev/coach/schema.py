@@ -106,11 +106,6 @@ class Verdict(Strict):
         return Verdict(ok=False, rule=rule, reason=reason)
 
 
-def decision_json_schema() -> dict:
-    """The schema handed to the teacher. Small on purpose — PLAN §9.3."""
-    return Decision.model_json_schema()
-
-
 def teacher_json_schema() -> dict:
     return TeacherReply.model_json_schema()
 

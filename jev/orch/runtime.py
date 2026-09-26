@@ -917,7 +917,3 @@ class ClientRuntime:
             if period_s:
                 sleep(period_s)
         return self.counters
-
-
-def verdict_summary(v: Verdict) -> str:
-    return "ok" if v.ok else f"{v.rule}: {v.reason}"

@@ -51,7 +51,8 @@ TO_THE_STOP_PX = 2000
 # `tools/calibrate_camera.py` at Dermot Johns' stall: 400 still looks at the ground, 600
 # looks into the canopy, 500 is level. That the arithmetic (400 x 1.25) and the
 # measurement agree is the answer to whether the client reads the scaled cursor or the
-# raw device - it reads the scaled one, so pointer speed matters and is pinned.
+# raw device - it reads the scaled one, so pointer speed matters and is pinned. Both tools
+# went with V226; `git show 845f880:tools/env_lock.py` still checks and pins the pointer.
 LEVEL_PX = 500
 
 # Mouse-look has to be held across the movement, and the client needs a moment either side

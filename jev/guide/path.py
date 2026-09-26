@@ -298,13 +298,3 @@ class FirstAvailable:
     def close(self) -> None:
         for backend in self.backends:
             backend.close()
-
-
-def default_query(root: str | pathlib.Path = ".",
-                  mmaps_dir: str | pathlib.Path = "~/cmangos/run/bin/mmaps") -> FirstAvailable:
-    root = pathlib.Path(root)
-    return FirstAvailable(
-        MmapQuery(root / "tools" / "jevpath" / "jevpath",
-                  pathlib.Path(mmaps_dir).expanduser()),
-        RecordedQuery(root / "content" / "routes"),
-    )

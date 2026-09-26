@@ -227,11 +227,6 @@ class Plate:
     h: int = 1
     bounds: Bounds | None = None
 
-    def unit_below(self, drop: float = 0.55) -> tuple[int, int]:
-        """Roughly where the unit is, below its plate. Bars are wider than rings for the
-        same unit, so the ratio differs."""
-        return (round(self.cx), round(self.cy + self.w * drop))
-
 
 @dataclass(frozen=True)
 class Sighting:

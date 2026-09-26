@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from jev.clients import capture, live, win32
+from jev.clients import capture, win32
 from jev.run import client
 
 
@@ -86,19 +86,17 @@ def test_runtime_attach_refuses_before_constructing_hid_or_capture(monkeypatch, 
         client.attach()
 
 
-def test_runtime_attach_and_live_bind_use_the_identified_handle(windows, monkeypatch):
+def test_runtime_attach_uses_the_identified_handle_and_never_guesses_between_two(windows,
+                                                                                 monkeypatch):
     monkeypatch.setattr(win32, "available", lambda: True)
     monkeypatch.setattr(win32, "client_rect", lambda hwnd: (10, 20, 1600, 900))
     monkeypatch.setattr(client, "Hid", lambda **kwargs: SimpleNamespace(**kwargs))
     monkeypatch.setattr(client, "WindowCapture", lambda hwnd, **kwargs: SimpleNamespace(hwnd=hwnd))
-    monkeypatch.setattr(live, "LiveSource", lambda **kwargs: SimpleNamespace(**kwargs))
     attached = client.attach("verified")
     assert attached.hwnd == attached.hid.hwnd == attached.cap.hwnd == 22
-    assert live.bind().hwnd == 22
     windows[66] = ("World of Warcraft", "GxWindowClassD3d", 606, "Wow.exe")
-    with pytest.raises(win32.GameWindowError, match="select one explicitly"):
-        live.bind()
-    assert live.bind(index=1).hwnd == 66
+    with pytest.raises(client.NotRunning, match="select one explicitly"):
+        client.attach("verified")
 
 
 def test_process_snapshot_reads_names_and_always_closes_its_handle(monkeypatch):

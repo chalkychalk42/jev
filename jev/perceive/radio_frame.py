@@ -425,9 +425,7 @@ def _score_row0(img: np.ndarray, grid: Grid) -> tuple[float | None, float]:
 
 
 MAX_CANDIDATES = 24
-MIN_FILL = 0.7          # a marker cell is solid, not an outline
 MAX_CELL_PX = 64.0      # past this the 'strip' spans half the screen
-ASPECT_TOLERANCE = 1.8  # generous: a scaled capture is not exactly square
 
 
 def _runs(row: np.ndarray) -> list[tuple[int, int]]:
@@ -517,49 +515,6 @@ def _strip_candidates(left: np.ndarray, right: np.ndarray,
                 if len(out) >= limit:
                     return out
     return out
-
-
-def _marker_candidates(mask: np.ndarray, limit: int = MAX_CANDIDATES) -> list[_Blob]:
-    """Blobs that could be a marker cell: square, solid, big enough — or *inside* one.
-
-    Filtering on **shape before size** is what makes this work on a real screen. The
-    markers are square filled cells; the rest of the magenta and cyan on a WoW screen is
-    text, bar fill, spell glow and icon edging, none of which is square. Measured live:
-    the cyan mask held 3,798 pixels against the marker's 196, and ranking by area put five
-    57x7 slivers of interface ahead of the real marker.
-
-    But a square-only filter is brittle in the other direction, and that cost a live run
-    too. A payload cell next to a marker can carry the *same* colour — magenta is nibbles
-    (15,0,15), cyan is (0,15,15), and payload reaches both — so the two merge into one
-    blob twice as wide as it is tall, and the marker disappears from the candidate list
-    entirely while sitting in plain sight. So a wide blob is not discarded: it is split at
-    its ends, because whichever cell in it is the real marker, the marker is flush with
-    one edge of the run.
-    """
-    out: list[_Blob] = []
-    for b in _blobs(mask):
-        if b.w < MIN_CELL_PX or b.h < MIN_CELL_PX:
-            continue
-        if b.area < MIN_FILL * b.w * b.h:
-            continue
-
-        aspect = b.w / max(1.0, b.h)
-        if (1 / ASPECT_TOLERANCE) <= aspect <= ASPECT_TOLERANCE:
-            out.append(b)
-            continue
-
-        # Too wide to be one cell: offer the cell at each end of the run. A marker is
-        # always at an edge of the merge, because it is at an edge of the strip.
-        if aspect > ASPECT_TOLERANCE:
-            half = b.h / 2.0
-            left_edge = b.cx - b.w / 2.0
-            right_edge = b.cx + b.w / 2.0
-            for cx in (left_edge + half, right_edge - half):
-                out.append(_Blob(area=int(b.h * b.h), cx=cx, cy=b.cy,
-                                 w=b.h, h=b.h))
-
-    out.sort(key=lambda blob: -blob.area)
-    return out[:limit]
 
 
 def locate(frame: np.ndarray) -> Grid | None:
@@ -769,19 +724,6 @@ def _reaction(code: int | None) -> Reaction | None:
     if code == 4:
         return Reaction.NEUTRAL
     return Reaction.FRIENDLY
-
-
-def advance_point(reading: RadioReading) -> tuple[int, int] | None:
-    """Screen point of the quest frame's Accept/Complete/Continue button, if one is up.
-
-    Deliberately not part of `state_v1`: that describes the character and the world, and
-    where a button happens to be drawn is neither. It belongs to the reading, which is
-    what a clicking skill has in hand anyway.
-    """
-    if not reading.ok or not reading.values:
-        return None
-    x, y = reading.values.get("ui.advance_x"), reading.values.get("ui.advance_y")
-    return None if x is None or y is None else (x, y)
 
 
 LIST_LINES = 5

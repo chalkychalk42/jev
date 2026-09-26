@@ -38,10 +38,6 @@ def catalog() -> dict:
     return raw
 
 
-def junk_ids() -> frozenset[int]:
-    return frozenset(catalog()["junk"])
-
-
 def junk_prices() -> dict[int, int]:
     return {int(k): int(v) for k, v in catalog()["junk_prices"].items()}
 

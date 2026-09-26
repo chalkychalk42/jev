@@ -48,13 +48,6 @@ NPC_REPAIR = 0x1000
 NPC_FLIGHTMASTER = 0x2000
 NPC_INNKEEPER = 0x10000
 
-# Any of these mean "this creature is furniture, not prey".
-FRIENDLY_FLAGS = (
-    NPC_GOSSIP | NPC_QUESTGIVER | NPC_TRAINER | NPC_TRAINER_CLASS
-    | NPC_VENDOR | NPC_REPAIR | NPC_FLIGHTMASTER | NPC_INNKEEPER
-)
-
-
 @dataclass(frozen=True)
 class Spawn:
     npc_id: int
@@ -375,12 +368,6 @@ class WorldDB:
             (quest_id,),
         ).fetchone()
         return self.object_spawn(r["id"]) if r else None
-
-    def objective_spawn(self, quest_id: int, zones: tuple[ZoneBounds, ...] = (),
-                        home: ZoneBounds | None = None) -> Spawn | None:
-        """Compatibility accessor for the first structured requirement's destination."""
-        requirements = self.requirements(quest_id, zones, home)
-        return requirements[0].spawn if requirements else None
 
     def prerequisites(self, quest_id: int) -> tuple[tuple[tuple[int, ...], ...], str | None]:
         """The server's prerequisite alternatives, including reverse NextQuestId edges.
