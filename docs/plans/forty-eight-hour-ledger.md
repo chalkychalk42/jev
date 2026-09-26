@@ -104,6 +104,14 @@ Now
     Stormwind, 1,030 yards, since every merchant near had one failure (V199); the walk
     back from Stormwind timed out its repair (V201) and died twice; too poor to repair at
     Goldshire. Level 3.48 to 3.83 by 06:19.
+  - Sessions 160-162 (06:40-07:18): 160 hearthed off the crate at 06:46 and its repair then
+    walked for the Defias Profiteer in Moonbrook (V203, stopped by hand); 161 walked from the
+    inn to MacGregor with no stuck event and repaired (gear 100%), 872 XP, 0 deaths; 162
+    played on. Testvvi 14.33 at 07:03.
+  - 07:18-07:55, the mage's fifth visit (`captures/live-mage-5.log.1-2`) on V202-V204:
+    session 1 made 5 kills in 6 fights, level 4.0 to 4.44, one death on the Goldshire road to
+    level 5-6 units; the session began with the hearthstone and a too-poor repair at Godric
+    Rothgar (V206) and walked 675 yards for cheese (V205).
   - Session 148: started a ghost; two deaths to Fleshrippers, one 23 s after getting up at
     half health, one under resurrection sickness after the Spirit Healer.
   - 02:06-02:30, the mage's check (Itheamar, `captures/live-mage-check-1.log`): A Threat
@@ -278,6 +286,11 @@ Trials
 | V199 a merchant's failures cost it walk | the mage's fourth visit, session 2 | no restock past a near merchant | the chosen merchant's walk against the nearest's | | |
 | V200 NPC body probes to 290 px | with V199 | "world focus without a mouseover unit" interact failures fall | a `target.proposal` 160+ px under the bar that opens a window | | |
 | V201 a repairer is chosen as a merchant is | the mage's fourth visit, session 3 | repairs at the nearest repairer; no repair walk over 1,000 yards | `trying the next repairer`, or a repair at a smith the guide does not name | | |
+| V202 a plate just clicked is looked for toward where it was | session 160 | "no plate proved" pulls fall (30 of 33 looks in the mage's session of 06:24) | a `face.search` toward the hint's side out of combat | | |
+| V203 a failed repairer is followed only by its neighbours | session 162 | no repair walk into another town | `trying the next repairer` only in one town | | |
+| V204 a caster casts at a Tab pick it cannot see | the mage's fifth visit | the mage's fights given up with nothing pressed fall (5 of 9 on 06:24) | `engage.blind_cast` | | |
+| V205 no restock walk over 400 yards | after the mage's fifth visit | no restock walk through another level band | `BUY_AMMO_REAGENT_FOOD: aborted ... too_far` | | |
+| V206 the purse's lessons kept between sessions | with V205 | no session-start repair walk the purse cannot pay | `character-KEY.purse.json` written; no `too_poor` twice at one purse | | |
 
 Issues
 ------
