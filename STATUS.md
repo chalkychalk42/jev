@@ -2901,3 +2901,53 @@ Stuck events fell about fivefold after V178 stopped walks going by learned escap
 2. A second mage check near 05:00, to level 4: Frostbolt and Conjure Water from the trainer
    upstairs (V187), and conjuring (V166).
 3. The paladin's pulls into camps when no plate shows (Tab picks any unit).
+
+## 26 Sep 2026 06:55 — hour eight: the Sentinel Hill inn, the mage's errands, V190-V203
+
+The hour-8 checkpoint (due 07:14):
+
+| Go if | Result |
+|---|---|
+| Testvvi 14.0 or higher (should: 14.5) | **Met**: 14.26. The "should" is missed |
+| The dry run's caster losses fixed offline | **Met**: the bind trip, the double Frost Armor and the buffs before T-0 (V176); since then V186-V187, V192 and V195-V202, found on the mage's four visits |
+
+**Since T-0:** 28 paladin sessions, 5.0 hours played; 13,682 XP (2,758/h), 152 kills, 23
+deaths (4.6/h), 237 stuck events (48/h).
+
+| Block | Sessions | Played | XP/h | Deaths/h | Stuck/h |
+|---|---|---|---|---|---|
+| 3 | 151-159 | 1.83 h | 2,768 (3,973 in 151-155) | 2.7 | 56 |
+
+Sessions 151-155 were the best of the run so far. Then about an hour of the paladin was lost
+at Sentinel Hill (sessions 156-160):
+- Gear worn to 10% sent it home by hearthstone, into the inn.
+- The walk out missed the door by four yards: the follower let a 37-yard leg drift 22 degrees.
+- The re-plans ended on a crate behind the inn, then in the corner by the stove. No unstick
+  move frees either spot.
+- V198 holds a planned leg to its line. In a door simulation, stuck events fell from 108 to 6
+  in 189 walks.
+- Both spots are blocked in route memory now.
+- Session 161, from the inn, walked to William MacGregor with no stuck event and repaired.
+  Gear is at 100%.
+
+The mage played in the paladin's hearthstone cooldowns: three sessions at 04:53-05:45 and three
+at 05:58-06:39. It went from level 2.4 to 3.98, with 21 copper and broken gear. Its losses were
+errands, not fights:
+- With one missed hover at each of 15 merchants, all of them ranked behind the unfailed ones.
+  A restock walked to Stormwind for water (V199).
+- The guides name one repairer a town, and Janos Hammerknuckle's awning took every probe
+  (V200, V201).
+- Out of a fight, the facing look had no search: 30 of 33 looks failed on one session's
+  wolves (V202).
+- One failed repairer led to the next in another town, the Defias Profiteer in Moonbrook
+  (V203, stopped by hand).
+
+**Who the fixes reach:**
+- Everyone: V198-V201 and V203. Walking, merchant and repairer choice, NPC clicks.
+- Every pull out of a fight: V202. The whole suite passes, including the paladin's fight
+  tests, and fights in combat search as before.
+
+**NEXT:**
+1. V198 on the paladin's walks (stuck/h), and V199-V203 on the mage's next visit.
+2. Hour 12 (11:14): Testvvi 14.6 or higher (should: 15.4).
+3. The switch to the mage at 14:15, level 4 in Northshire.
