@@ -248,6 +248,17 @@ def test_polymorph_neither_sends_the_mage_to_a_trainer_nor_keeps_copper_back():
                                                    race_id=1)] == [5143]
 
 
+def test_a_talent_s_later_rank_is_not_counted_as_for_sale():
+    """Pyroblast rank 2 is on Zaldimar's list at 24, its rank 1 a talent the bot never
+    takes: the stock window never teaches it. Counted, it took the last free slot in the
+    shopping of a mage new at 24, and Conjure Water, every rank of it, dropped out of what
+    the visit was for. Fireball rank 2's rank 1 is a starting spell, and counts."""
+    sale = {o.spell_id for o in training.learnable(ZALDIMAR, 24, MAGE_START, race_id=1)}
+    assert 12505 not in sale, "Pyroblast 2"
+    assert {5504, 5505, 5506} <= sale, "Conjure Water 1-3"
+    assert 143 in sale, "Fireball 2"
+
+
 def test_what_acts_in_a_fight_is_bought_before_what_is_kept_up_between_fights():
     """At 10: Frost Nova before Conjure Water 2 and Frost Armor 2, which the window sells
     first. At 12: Fireball 3 before Conjure Food 2. At 8, a new rank of a strike the bar

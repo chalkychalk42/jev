@@ -255,7 +255,7 @@ class TrainerDesk:
 
     def _whole_list(self) -> tuple[TrainerRow, ...]:
         """Every header and every service learnable now, read under one list."""
-        start = self.clock()
+        start, key = self.clock(), self._census.key
         while True:
             values = self._look()
             rows = self._census.short
@@ -263,6 +263,8 @@ class TrainerDesk:
                 return rows
             if values.get("ui.trainer") is False:
                 raise _Stop(Trained.NO_TRAINER, "the trainer window closed")
+            if self._census.key != key:
+                start, key = self.clock(), self._census.key     # a new list: read it whole
             wait = self._wait_s(LIST_S)
             if self.clock() >= start + wait:
                 raise _Stop(Trained.TIMEOUT, f"the trainer's list not read whole in {wait:.0f} s")

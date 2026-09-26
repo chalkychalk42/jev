@@ -286,9 +286,27 @@ def _find_learnable(trainer: Trainer, level: int, known: Iterable[int],
         return (facts_of is not None and bool(facts_of.rank)
                 and ranks.get(facts_of.name, 0) >= facts_of.rank)
 
+    taught = [o for o in trainer.offers if o.level <= level and not held(o)]
+    # A rank past the first is taught only once the rank before it is known, or is itself
+    # taught here: a talent's later ranks (Pyroblast rank 2 at 24, Ice Barrier's) never are,
+    # and counted, one would take a slot in the shopping from a spell that can be bought.
+    by_rank: dict[tuple[str, int], Offer] = {}
+    for offer in taught:
+        facts_of = spell(offer.spell_id, facts)
+        if facts_of is not None:
+            by_rank[(facts_of.name, facts_of.rank)] = offer
+
+    def reachable(offer: Offer) -> bool:
+        facts_of = spell(offer.spell_id, facts)
+        if (facts_of is None or facts_of.rank <= 1
+                or ranks.get(facts_of.name, 0) >= facts_of.rank - 1):
+            return True
+        before = by_rank.get((facts_of.name, facts_of.rank - 1))
+        return before is not None and reachable(before)
+
+    taught = [o for o in taught if reachable(o)]
     if bar is None:
         bar = starting_bar(trainer.class_id, race_id)
-    taught = [o for o in trainer.offers if o.level <= level and not held(o)]
     worth = set(shopping(taught, have, bar, facts=facts))
     return [o for o in taught if o in worth]
 
