@@ -3069,3 +3069,100 @@ getting up at the body. V208, its worst fault (Fireball pressed into an attacker
    its DECISIONS rows are renumbered then.
 3. Candidates: a ranged attacker whose plate is out of sight; a hopeless fight near guards; a
    loot hunt sized to its kills (not needed in 1-12: its loot hunts hold 11-16 spawns).
+
+## 26 Sep 2026 23:15 — hour twenty-four: the mage at level 9, V219-V251
+
+The hour-24 checkpoint:
+
+| Go if | Result |
+|---|---|
+| The mage at level 5 or higher (should: 8) | **Met**: 9.05 at the end of session 222 (23:07). It passed the "should" at about 20:05, three hours early |
+
+**The mage's first nine hours** (sessions 189-222): from level 5.41 to 9.05, 15,472 XP in
+8.5 hours played (1,817 an hour), 270 kills and 38 deaths. Its last hour (219-222) made 2,939
+an hour, and session 221 alone 3,907 (17 kills, 15 of 16 corpses looted). Its time in
+sessions 205-217 went to the hunt (22%), fights (12%), the bag service (12%), corpse runs
+(11.5%), quest travel (10%), restocks of food and water it conjures (9%, sessions 215-217,
+fixed by V243 and V244), training walks (4%) and meals (3%).
+
+**Fixes since hour fifteen** (V215-V218 are in the hour-fifteen entry):
+- **V219** (everyone): an accept that needs a quest the route will not finish is passed by,
+  with the chain behind it. **V220** (everyone): a rib waiting to retry a step that can no
+  longer happen ends. Together they took the mage off the kobold rib it had held for 43% of
+  its first 66 minutes, waiting on the Milly chain.
+- **V221** (casters, gated on a stand-off): a lone spawn not seen from the stand-off is looked
+  for from its own spot.
+- **V222-V229** (everyone): the consolidation (§11), deployed at hour 17 rather than 36-44:
+  6,923 source lines and 3,207 test lines out, the tutor-first arm, the decision learner and
+  the motor handover gone.
+- **V230-V232, V236** (everyone): a walk wedged indoors backs out the way the character came
+  in, a trail kept without its loops, across sessions, and ending clear of the door. It
+  freed the mage twice in session 209. In the Westbrook Garrison (sessions 215-217) all 19
+  back-outs stopped at the same spot, 5.7 yards from the door, until the hearthstone.
+- **V233** (everyone): a ghost gets up out of the camp's reach.
+- **V234** (everyone): a quest complete in the log is handed in on the way.
+- **V235, V238, V239** (everyone): a trainer or quest giver on a floor above is walked up to
+  again; no blocked spot is learned by a doorway; blocked again indoors, the floor below is
+  tried before the roof. The Lion's Pride Inn's upper floor is reached, slowly (session 218:
+  three minutes).
+- **V237, V242** (everyone; schema 18): the trainer's list is read off the strip and its
+  spells bought by value, fight spells and control spells first. The mage bought Frostbolt 1
+  and 2, then Arcane Missiles; Frost Nova at 10 comes first.
+- **V240** (everyone): a spell the purse can pay for comes before a repair of gear not broken.
+- **V241** (everyone): goods only off-guide quests want, and gems, are sold: the purse went
+  from 30 to 409 copper in session 214.
+- **V243, V244** (casters that conjure): what the bar conjures is remembered while the bar is
+  read again, and across sessions: no restock of food and water the mage makes itself. The
+  45 minutes lost in the Westbrook Garrison (sessions 214-217) began on the way out from a
+  sale to its quartermaster (corrected at 22:30: first put down to the restock, which only
+  started from inside the wedge); the hearthstone freed it at 21:49.
+
+**Melee's evidence**: the whole suite (2,469 tests) passes before each deploy. Caster changes
+are gated on facts a paladin's bar does not have (a stand-off, a conjure row). The paladin has
+not played since 14:27: its level 15.87 and its purse are as it left them.
+
+**Since 21:50, from two measured analyses of the mage's play** (sessions 189-219, read-only
+subagents): its 34 deaths all began within 18 yards of a spawn of a unit that attacks on
+sight, and 103 of the 110 attacks on it while walking began within 20 yards of one, where it
+spent 17% of its walking time; 15 of its 22 get-ups at the body died again, 2 of 12 at the
+Spirit Healer. Its time outside fights went mostly to walks for bag space (8 minutes an hour,
+trips worth 0-19 copper), with the backpack full for 50 of 84 corpses, none clicked.
+- **V245** (everyone): a quest whose accept was passed over is lost, and the chain behind it
+  passed by. Session 219 walked twice from Westbrook to Marshal Dughan for Further Concerns,
+  which needs A Fishy Peril, through Mangy Wolves, three deaths on the road. It fired at once
+  in session 220: the chain of six quests was left for Guard Thomas's.
+- **V246** (everyone): a full bag is looted all the same: coins and items onto a stack need no
+  slot.
+- **V247** (everyone): a meal and a get-up keep clear of every unit that attacks on sight, from
+  a generated index of the world's hostile spawns (28,000 points, the server's own reaction to
+  a player); a body with no clear spot in reach is got up from at the Spirit Healer; the last
+  get-up is remembered across sessions.
+- **V248** (everyone): a walk goes round the units that attack on sight where that costs less
+  than passing them: on the real navmesh, 20 walks from Goldshire to where the mage died passed
+  91 spawns straight and 30 this way, for 12% more yards.
+- **V249** (everyone): self-defence takes no bystander while something attacks, and nothing at
+  all once combat has ended (31 fallbacks fired after fights had ended; ten pulled idle units).
+- **V250** (everyone): a walk to a merchant for bag space is made when the sale pays (30 copper
+  with a slot still free), and a sale that leaves the bags nearly full blocks the service.
+- **V251** (everyone): a spell the client refuses as "not ready" is left for 4 s while another
+  is pressed (19 and 13 s of refused presses in two fatal fights).
+
+V245 fired in session 220's first seconds; V248's detours in session 222 ("round 3 units that
+attack on sight", 747 yards); V250 and V251 went out at 23:07, before session 223.
+
+**Melee's evidence**: the whole suite (2,480 tests) passes before each deploy. V245-V249 are
+general and gated on facts (a passed-over accept, a full bag, the strip's combat flag, the
+world's hostile spawns): a paladin walking the same roads takes the same detours and gets up
+in the same clear spots. The paladin has not played since 14:27; its level 15.87 stands.
+
+**NEXT:**
+1. V246-V251 on the mage: loot with the backpack full, get-ups and meals clear of hostile
+   spawns, walks round camps, no idle pulls, bag walks that pay, no refused presses repeated.
+   Measured by deaths an hour and attacks a walking minute, against sessions 205-219.
+2. Bounty on Murlocs: its camp's level 9-10 Foragers and Lurkers killed the level 9 mage twice
+   in session 222 (up to three at once). Frost Nova at level 10 (V242 buys it first) is the
+   caster's answer; the step's three-death edge fails it over to a rib meanwhile.
+3. Merchants met indoors ranked lower (the Westbrook wedge began at the garrison's
+   quartermaster); failures remembered across sessions (trainer visits, accepts; 1.3-3.7
+   minutes an hour); hunt stations chosen by distance, and only reached ones scored.
+4. The freeze at hour 44 (Sun 19:15), the report by hour 47.
