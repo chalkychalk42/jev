@@ -33,8 +33,10 @@ EXPOSURE_DETOUR = 1.6
 # Via points: this many bearings on rings this far beyond the passed spawns' spread.
 EXPOSURE_BEARINGS = 8
 EXPOSURE_MARGINS = (15.0, 40.0)
-# The route is looked along at points this far apart, for spawns this far round each.
+# The route is looked along at points this far apart, for spawns this far round each, and
+# as far again as a far-wandering unit carries its reach (V255).
 SAMPLE_YARDS = 30.0
+WANDER_LOOK = 20.0
 
 
 def _samples(points, step: float):
@@ -86,13 +88,13 @@ class ExposureQuery:
 
     def exposed(self, map_id: int, points, start, end) -> set[tuple[float, float]]:
         """The spawns a route passes within `EXPOSED_YARDS`, those round its ends aside."""
-        seen: set[tuple[float, float]] = set()
+        seen: dict[tuple[float, float], float] = {}
         for x, y in _samples(points, SAMPLE_YARDS):
-            for spawn in self.hostile(map_id, x, y, SAMPLE_YARDS + EXPOSED_YARDS):
-                seen.add((spawn[0], spawn[1]))
-        return {s for s in seen
+            for spawn in self.hostile(map_id, x, y, SAMPLE_YARDS + EXPOSED_YARDS + WANDER_LOOK):
+                seen[(spawn[0], spawn[1])] = float(spawn[3]) if len(spawn) > 3 else 0.0
+        return {s for s, extra in seen.items()
                 if math.dist(s, start[:2]) > END_YARDS and math.dist(s, end[:2]) > END_YARDS
-                and _distance_to(points, s) <= EXPOSED_YARDS}
+                and _distance_to(points, s) <= EXPOSED_YARDS + extra}
 
     @staticmethod
     def cost(length: float, exposed: int) -> float:

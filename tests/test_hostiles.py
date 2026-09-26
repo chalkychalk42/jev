@@ -49,7 +49,8 @@ def test_near_keeps_the_side_the_level_and_the_radius(tmp_path, monkeypatch):
     monkeypatch.setattr(hostiles, "HOSTILES_PATH", path)
     hostiles._index.cache_clear()
     try:
-        assert hostiles.near(0, 0.0, 0.0, 70.0, side="alliance", level=8) == [(0.0, 10.0, 5.0)]
+        assert hostiles.near(0, 0.0, 0.0, 70.0, side="alliance", level=8) == [
+            (0.0, 10.0, 5.0, 0.0)], "a 10-yard wanderer carries no more than the ordinary"
         assert len(hostiles.near(0, 0.0, 0.0, 70.0, side="horde", level=8)) == 2
         assert len(hostiles.near(0, 0.0, 0.0, 70.0, side="alliance", level=None)) == 2
         assert hostiles.near(0, 0.0, 0.0, 70.0, side=None, level=8) == []
@@ -63,3 +64,27 @@ def test_the_generated_index_names_the_mages_killers():
     near_body = hostiles.near(0, -9626.0, 505.0, 30.0, side="alliance", level=8)
     assert near_body, "the wolves round the body"
     assert hostiles.near(0, -9458.6, 28.6, 20.0, side="alliance", level=8) == []
+
+
+def test_a_far_wanderer_carries_its_reach(tmp_path, monkeypatch):
+    """V255: a Young Forest Bear wanders 30 yards; one attacked the resting level 9 mage 20
+    yards from a spawn point (session 224)."""
+    import math
+
+    from jev.run.body import REST_CLEAR_YARDS, reclaim_spot, rest_spot
+
+    path = tmp_path / "hostile-spawns.json"
+    path.write_text(json.dumps({"format": 1, "maps": {"0": [[0.0, 0.0, 5.0, 8, 9, 3, 30.0]]}}))
+    monkeypatch.setattr(hostiles, "HOSTILES_PATH", path)
+    hostiles._index.cache_clear()
+    try:
+        (bear,) = hostiles.near(0, 0.0, 0.0, 70.0, side="alliance", level=9)
+    finally:
+        hostiles._index.cache_clear()
+    assert bear[3] == 20.0
+    spot = rest_spot((5.0, 5.0), [bear])
+    assert math.dist(spot[:2], (0.0, 0.0)) >= REST_CLEAR_YARDS + 20.0
+    assert rest_spot((30.0, 0.0), [bear]) is not None, "25 yards off is inside its wander"
+    body = (10.0, 0.0)
+    got_up = reclaim_spot(body, (35.0, 0.0), [bear], 25.0)
+    assert math.dist(got_up, (0.0, 0.0)) >= 34.0, "the far side of the body from it"

@@ -1649,7 +1649,8 @@ class LiveBody:
         clear = reclaim_spot(body[:2], short, spawns, self._reclaim_yards)
         if clear != short:
             self.say(f"  getting up out of the camp's reach, "
-                     f"{min(math.dist(clear, sp[:2]) for sp in spawns):.0f} yards from its nearest spawn")
+                     f"{min(math.dist(clear, sp[:2]) - _extra(sp) for sp in spawns):.0f} yards "
+                     "from its nearest spawn's reach")
         return self._corpse_walk(world_to_map(*clear, self.client.bounds))
 
     def _hostiles(self, world, radius: float = HOSTILE_LOOK_YARDS):
@@ -1689,7 +1690,7 @@ class LiveBody:
                 short = (body[0] + (start[0] - body[0]) * share,
                          body[1] + (start[1] - body[1]) * share)
         spot = reclaim_spot(body[:2], short, spawns, self._reclaim_yards)
-        return min(math.dist(spot, sp[:2]) for sp in spawns)
+        return min(math.dist(spot, sp[:2]) - _extra(sp) for sp in spawns)
 
     def _talk_to(self, name: str):
         """Right-click a named unit: by its nameplate, or where a fresh hover finds it."""
@@ -1837,12 +1838,12 @@ def reclaim_spot(body: tuple[float, float], short: tuple[float, float], spawns,
     the body with the most room from them, the graveyard's side on a tie. The mage got up
     beside its body at Fargodeep with half its health and mana, among the Kobold Tunnelers
     that had killed it, and died again twice (sessions 196-197)."""
-    spawns = [sp[:2] for sp in spawns]
+    spawns = [(sp[0], sp[1], _extra(sp)) for sp in spawns]
     if not spawns:
         return short
 
     def room(point) -> float:
-        return min(math.dist(point, sp) for sp in spawns)
+        return min(math.dist(point, sp[:2]) - sp[2] for sp in spawns)
 
     if room(short) >= clear:
         return short
@@ -1852,12 +1853,18 @@ def reclaim_spot(body: tuple[float, float], short: tuple[float, float], spawns,
     return best
 
 
+def _extra(spawn) -> float:
+    """The yards a spawn's unit strays beyond the ordinary (`jev.world.hostiles`, V255);
+    none for a point of the step's own spawns, which carry no such fourth figure."""
+    return float(spawn[3]) if len(spawn) > 3 else 0.0
+
+
 def rest_spot(here: tuple[float, float], spawns, clear: float = REST_CLEAR_YARDS,
               rings: tuple[float, ...] = REST_RINGS, bearings: int = REST_BEARINGS):
     """The nearest point at least `clear` yards from every spawn, or `None` when `here`
     already is one or no ring finds one. World yards; the height is the nearest spawn's."""
     def clear_of(point) -> bool:
-        return all(math.dist(point, s[:2]) >= clear for s in spawns)
+        return all(math.dist(point, s[:2]) >= clear + _extra(s) for s in spawns)
 
     if clear_of(here[:2]):
         return None
@@ -1868,7 +1875,7 @@ def rest_spot(here: tuple[float, float], spawns, clear: float = REST_CLEAR_YARDS
         found = [p for p in found if clear_of(p)]
         if found:
             # Of the ring's clear points, the one with the most room.
-            best = max(found, key=lambda p: min(math.dist(p, s[:2]) for s in spawns))
+            best = max(found, key=lambda p: min(math.dist(p, s[:2]) - _extra(s) for s in spawns))
             z = min(spawns, key=lambda s: math.dist(best, s[:2]))[2]
             return (best[0], best[1], z)
     return None

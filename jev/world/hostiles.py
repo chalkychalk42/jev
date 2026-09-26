@@ -20,6 +20,12 @@ from jev.world.combat import grey_level
 HOSTILES_PATH = Path(__file__).resolve().parents[2] / "content/tbc/hostile-spawns.json"
 SIDES = {"alliance": 1, "horde": 2}
 CELL_YARDS = 60.0
+# A unit that strays further than this from its spawn point carries its reach with it: the
+# yards beyond are added to any clearance kept from the point (V255). A Young Forest Bear
+# wanders 30 yards, and one attacked the resting level 9 mage 20 yards from a spawn point
+# (session 224); most of the low levels' units wander 10 or less.
+ORDINARY_WANDER_YARDS = 10.0
+MAX_WANDER_YARDS = 30.0
 
 
 @cache
@@ -38,9 +44,10 @@ def _index() -> dict[int, dict[tuple[int, int], list[tuple]]]:
 
 
 def near(map_id: int, x: float, y: float, radius: float, *, side: str | None,
-         level: int | None) -> list[tuple[float, float, float]]:
+         level: int | None) -> list[tuple[float, float, float, float]]:
     """The spawn points within `radius` yards of (x, y) whose units attack `side` on sight
-    and are worth experience at `level` (above its grey level): (x, y, z) each. None for an
+    and are worth experience at `level` (above its grey level): (x, y, z, extra) each, extra
+    the yards its unit strays beyond the ordinary (`ORDINARY_WANDER_YARDS`). None for an
     unknown side; every level's for an unknown level."""
     bit = SIDES.get(side or "")
     if bit is None:
@@ -52,7 +59,8 @@ def near(map_id: int, x: float, y: float, radius: float, *, side: str | None,
     found = []
     for i in range(cx - span, cx + span + 1):
         for j in range(cy - span, cy + span + 1):
-            for sx, sy, sz, _low, high, sides, _wander in cells.get((i, j), ()):
+            for sx, sy, sz, _low, high, sides, wander in cells.get((i, j), ()):
                 if sides & bit and high > grey and math.dist((sx, sy), (x, y)) <= radius:
-                    found.append((sx, sy, sz))
+                    extra = max(0.0, min(wander, MAX_WANDER_YARDS) - ORDINARY_WANDER_YARDS)
+                    found.append((sx, sy, sz, extra))
     return found
