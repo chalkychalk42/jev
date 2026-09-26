@@ -1999,8 +1999,14 @@ class Fight:
             return True                        # its global cooldown would be over by now
         slot, times = self._dropped
         times = times + 1 if slot == ability.slot else 1
-        event("ability.unanswered", data={"slot": ability.slot, "role": ability.role.value,
-                                          "times": times})
+        # With the client's last error, which says why when it said anything: a quarter of
+        # the mage's presses went unanswered in sessions 201 and 214.
+        error = values.get("ui.error_last")
+        event("ability.unanswered", data={
+            "slot": ability.slot, "role": ability.role.value, "times": times,
+            "error": (UI_ERROR_KEYS[error] if isinstance(error, int)
+                      and 0 < error < len(UI_ERROR_KEYS) else None),
+            "error_count": values.get("ui.error_count"), "in_melee": values.get("target.in_melee")})
         if times >= PRESS_GIVE_UP:
             self._dropped = (0, 0)
             return True                        # counted after all, as before
