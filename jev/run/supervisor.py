@@ -31,6 +31,9 @@ FALL_GRACE_S = 2.5
 # (`cli.STOP_COMBAT_GRACE_S`). Session 121 ran out of time at 41% health in a fight, the next
 # session's first read was five seconds later at 18%, and the character died before its
 # first swing. Under the session loop's hard limit: 900 s of play, this, and the start.
+# A run whose guide is finished ends between fights the same way: session 141's guide
+# finished as a fight began, the run ended at once, and the character stood in the fight
+# through the restart and died (session 142 began by releasing its spirit).
 DEADLINE_COMBAT_GRACE_S = 60.0
 
 
@@ -472,15 +475,12 @@ class Supervisor:
     def run(self, seconds: float, *, max_steps: int = 0) -> None:
         deadline = time.monotonic() + seconds
         waited = False
+        ended: float | None = None
         try:
             while not self.stopped.is_set():
                 started = time.monotonic()
                 if started >= deadline:
-                    state = self.runtime.last_state
-                    fighting = (state is not None and state.vitals.combat is True
-                                and state.vitals.dead is not True
-                                and state.vitals.ghost is not True)
-                    if not fighting or started >= deadline + DEADLINE_COMBAT_GRACE_S:
+                    if not self._fighting() or started >= deadline + DEADLINE_COMBAT_GRACE_S:
                         break
                     if not waited:
                         waited = True
@@ -488,10 +488,20 @@ class Supervisor:
                 self.step(started)
                 if ((self.runtime.finished and self.worker is None)
                         or (max_steps and self.runtime.counters.advances >= max_steps)):
-                    break
+                    ended = started if ended is None else ended
+                    if not self._fighting() or started >= ended + DEADLINE_COMBAT_GRACE_S:
+                        break
+                    if not waited:
+                        waited = True
+                        self.say("the guide is finished; stopping once this fight is over")
                 self.stopped.wait(max(0.0, 0.25 - (time.monotonic() - started)))
         finally:
             self.close()
+
+    def _fighting(self) -> bool:
+        state = self.runtime.last_state
+        return (state is not None and state.vitals.combat is True
+                and state.vitals.dead is not True and state.vitals.ghost is not True)
 
     def close(self) -> None:
         self.stopped.set()

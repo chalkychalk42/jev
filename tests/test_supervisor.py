@@ -795,6 +795,25 @@ def test_a_run_whose_time_is_up_waits_out_the_fight_it_is_in(tmp_path):
     assert "run time is up; stopping once this fight is over" in lines
 
 
+def test_a_run_whose_guide_is_finished_fights_what_attacks_it_before_it_stops(tmp_path):
+    """Session 141's guide finished as a fight began: the run ended at once, the character
+    stood in the fight through the restart and died (session 142 began by releasing its
+    spirit)."""
+    fight = Vitals(hp=0.6, combat=True, dead=False, ghost=False)
+    states = [seen(t, vitals=fight) for t in range(4)] + [seen(t) for t in range(4, 8)]
+    rt = runtime(tmp_path, states, available_skills=Body.available | {"COMBAT_PROFILE"})
+    rt.finished = True
+    body = Body()
+    body.available = Body.available | {"COMBAT_PROFILE"}
+    body.allow_finish.set()
+    lines = []
+    supervisor = Supervisor(rt, body, say=lines.append)
+    supervisor.run(60)
+    assert rt.counters.ticks == 5, "stepped through the fight, and stopped once it was over"
+    assert body.calls >= 1, "the fight was fought, not waited through"
+    assert "the guide is finished; stopping once this fight is over" in lines
+
+
 def test_a_run_whose_time_is_up_out_of_a_fight_stops_at_once(tmp_path):
     rt = runtime(tmp_path, [seen(t) for t in range(4)])
     body = Body()

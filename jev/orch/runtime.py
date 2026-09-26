@@ -622,7 +622,9 @@ class ClientRuntime:
                                            abort_if=["senses_restored"], confidence=0,
                                            why="no trustworthy observation; release inputs"),
                                   False, "sense.blind")
-        elif self.finished:
+        elif self.finished and not floor.rule.startswith(("preempt.", "fight.")):
+            # A finished guide still fights what attacks it, and still answers a death: the
+            # run ends between fights (`Supervisor.run`), not in one (session 141).
             floor = scripted.Plan(Decision(goal="wait:finished", intent=Intent.WAIT, skill=None,
                                            abort_if=["new_guide"], confidence=1,
                                            why="guide finished"), True, "guide.finished")

@@ -63,6 +63,8 @@ Now
   - Session 141 (689 s) played 1-12 again: once 12-20 had saved its place, the next run
     read 1-12 as nothing remembered. About 6,700 yards walked toward Goldshire, four kills,
     and 1-12 marked finished again. V181 starts a run on the guide the playhead names.
+  - 00:55 deploy of V178-V181 (c7cf1cc). Session 142 began dead: 141's run had ended as a
+    fight began, since a finished guide stopped the run at once and would not fight. V182.
 
 - **25 Sep 14:10.** Pre-flight A is under way, with the loop stopped and the client closed.
   - The operator logged Testvvi out at 09:13, in Goldshire, at level 13.
