@@ -700,6 +700,65 @@ def test_a_closed_trainer_window_paints_nothing_of_it():
     assert all(shut[name] is None for name in shut if name.startswith("trainer."))
 
 
+def test_the_desk_buys_by_value_from_what_the_real_addon_paints():
+    """End to end: the stock window's state (`test_trainer_desk.TrainerWindow`) is painted
+    by the real addon at every read, the desk reads only what it paints, and the desk's
+    clicks, at the positions the addon painted, move the window. The level 8 mage with 200
+    copper buys Frostbolt, scrolled to, then Fireball rank 2."""
+    from test_trainer_desk import (
+        DOWN,
+        MAGE_BAR,
+        MAGE_KNOWN,
+        ROW_STEP,
+        ROW_X,
+        ROW_Y,
+        TRAIN,
+        UP,
+        ZALDIMAR,
+        TrainerWindow,
+    )
+
+    from jev.clients.trainer import Trained, TrainerDesk
+
+    class PaintedWindow(TrainerWindow):
+        def read(self):
+            rows = self.rows() if self.open else []
+            chosen = rows[self.selected - 1] if rows and self.selected else None
+            listed = [[r["name"], f"Rank {r['rank']}" if r["rank"] else "", self.kind(r),
+                       r.get("cost"), 1 if r.get("header") and not r["expanded"] else None]
+                      for r in rows]
+            self.tick += 1
+            return radio.unpack(payload(paint({
+                "trainerFixture": True, "trainerOpen": self.open,
+                "trainerServices": listed or None, "trainerOffset": self.offset,
+                "trainerSelected": self.selected, "money": self.money,
+                "trainEnabled": chosen is not None and self.kind(chosen) == "available"
+                and chosen["cost"] <= self.money,
+                "events": [["TRAINER_UPDATE"]] * self.revision or None,
+            }, ticks=self.tick))[:PAYLOAD_CELLS])
+
+        def click(self, x, y, right=False):
+            # The fixture's buttons, in pixels of a 1600x900 client, as the fake's own.
+            def near(point):
+                return abs(x - point[0]) <= 3 and abs(y - point[1]) <= 3
+
+            for painted, fake in (((224, 420), TRAIN), ((340, 220), UP), ((340, 380), DOWN)):
+                if near(painted):
+                    return super().click(*fake)
+            row = round((y - 212) / 16)
+            if 0 <= row < 11 and near((168, 212 + 16 * row)):
+                return super().click(ROW_X, ROW_Y + ROW_STEP * row)
+            self.clicks.append((x, y))
+            return True
+
+    window = PaintedWindow()
+    trained = TrainerDesk(window, window.read, window.visit, clock=lambda: window.now,
+                          sleep=window.sleep, trainer=ZALDIMAR, known=MAGE_KNOWN, bar=MAGE_BAR)
+    assert trained.run() is Trained.DONE, trained.detail
+    assert window.bought == trained.learned == [116, 143]
+    assert DOWN in window.clicks and window.money == 0
+
+
 def test_the_addon_never_selects_scrolls_or_buys_at_the_trainer():
     """Paint only: choosing a row, scrolling to it and pressing Train are the body's clicks."""
     src = BUILT["lua"].read_text(encoding="utf-8")

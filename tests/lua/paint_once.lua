@@ -147,7 +147,8 @@ end
 -- shown from `trainerOffset`, each row button carrying the ID of the service it shows, and
 -- the FauxScrollFrame's two scroll buttons, disabled at either end of the list.
 if STATE.trainerFixture then
-    local services = {
+    -- `trainerServices` replaces the list: {name, rank text, type, cost, folded} a row.
+    local services = STATE.trainerServices or {
         {"Arcane", nil, "header"}, {"Arcane Explosion", "Rank 1", "unavailable", 900},
         {"Arcane Missiles", "Rank 1", "available", 200}, {"Conjure Food", "Rank 2", "unavailable", 600},
         {"Conjure Water", "Rank 2", "unavailable", 400}, {"Polymorph", "Rank 1", "available", 200},
@@ -162,7 +163,8 @@ if STATE.trainerFixture then
     function GetTrainerServiceInfo(i)
         local s = services[i]
         if s == nil then return nil end
-        return s[1], s[2], s[3], s[3] == "header" and STATE.trainerFolded ~= i and 1 or nil
+        local open = s[3] == "header" and STATE.trainerFolded ~= i and s[5] ~= 1
+        return s[1], s[2], s[3], open and 1 or nil
     end
     function GetTrainerServiceCost(i)
         local s = services[i]
@@ -186,6 +188,10 @@ if STATE.trainerFixture then
     end
     scroll("ScrollUpButton", 340, 680, offset > 0 and STATE.trainerUpDisabled ~= 1)
     scroll("ScrollDownButton", 340, 520, offset < #services - 11)
+    local train = CreateFrame("Button", "ClassTrainerTrainButton")
+    function train:IsVisible() return STATE.trainerOpen == 1 end
+    function train:IsEnabled() if STATE.trainEnabled == 1 then return 1 end return nil end
+    function train:GetCenter() return 224, 480 end
 end
 
 -- The addon exactly as a client installs it: the one file `tools/gen_addon_fields.py`
