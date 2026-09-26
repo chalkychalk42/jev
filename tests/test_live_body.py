@@ -1156,6 +1156,32 @@ def test_the_policy_is_told_what_the_purse_keeps_for_the_trainer():
     assert context.kept(state) == 0
 
 
+def test_a_unit_not_found_on_the_floor_below_it_is_walked_up_to_again(monkeypatch):
+    """V235: the walk to Zaldimar Wefhellt, upstairs in the Lion's Pride Inn, "arrived" in
+    the hall under him, and training waited a session (session 197)."""
+    import jev.run.body as body_module
+    from jev.guide.coords import map_to_world, world_to_map
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4166, -1935.4166, -7939.583, -10254.166)
+    zaldimar = (-9471.7, 34.5, 63.9)
+    b.client.position = lambda: world_to_map(-9472.0, 33.0, b.client.bounds)
+    b.client.query = object()
+    monkeypatch.setattr(body_module, "surfaces_under", lambda q, m, x, y: [57.2, 63.9])
+    answers = iter([Interacted.NO_TARGET, Interacted.TRAINER])
+    b.interact = SimpleNamespace(open_on=lambda *a, **kw: next(answers), detail="")
+    assert b._open_on("Zaldimar Wefhellt", zaldimar, (0.43, 0.66)) is Interacted.TRAINER
+    assert b.client._ground[2] == 57.2, "the next plan starts on the floor below"
+
+    level = body()
+    level.client.bounds = b.client.bounds
+    level.client.position = b.client.position
+    level.client.query = object()
+    monkeypatch.setattr(body_module, "surfaces_under", lambda q, m, x, y: [57.2])
+    level.interact = SimpleNamespace(open_on=lambda *a, **kw: Interacted.NO_TARGET, detail="")
+    assert level._open_on("Zaldimar Wefhellt", zaldimar, (0.43, 0.66)) is Interacted.NO_TARGET
+
+
 def test_the_trainer_s_gossip_line_is_chosen_by_its_text():
     from jev.world.training import trainers
 

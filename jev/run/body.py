@@ -44,7 +44,7 @@ from jev.learn.choices import Choice, Stations, objective_key
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
-from jev.run.client import FOCUS_QUICK_S, Client
+from jev.run.client import FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
@@ -97,6 +97,10 @@ SICKNESS_WAIT_MAX_S = 300.0
 # again and again, "still a ghost" (session 178). After each such get-up that did not come,
 # the next stops half as far short (V213).
 TRAP_RECLAIM_YARDS = 25.0
+# A unit not found where the walk to it ended, this near in x and y and standing this high
+# over the lowest floor there, is on a floor above: walked to once more from below (V235).
+UNDER_UNIT_YARDS = 12.0
+UPPER_FLOOR_YARDS = 4.0
 # Broken gear this far from the nearest repairer goes home by hearthstone first.
 BROKEN_DURABILITY = 0.05
 HEARTH_TO_REPAIR_YARDS = 150.0
@@ -628,8 +632,7 @@ class LiveBody:
             values = reading.values if reading is not None and reading.values else {}
             opened = Interacted.QUEST if values.get("ui.quest_frame") is True else Interacted.GOSSIP
         else:
-            opened = self.interact.open_on(node.target_name, node_world=node.world,
-                                           node_map=node.pos)
+            opened = self._open_on(node.target_name, node.world, node.pos)
         if not opened.opened:
             return self._result(opened, self.interact.detail)
         reading = self._reading()
@@ -1246,9 +1249,38 @@ class LiveBody:
             time.sleep(0.1)
         return False
 
+    def _open_on(self, name: str, world, point):
+        """Open a unit by name at its node (`Interact.open_on`), and once more from the floor
+        below when it stands on one above and was not found where the walk ended (V235).
+        The mage's walk to Zaldimar Wefhellt, upstairs in the Lion's Pride Inn, "arrived" in
+        the hall under him: two plates tried, neither his, and training waited a session
+        (session 197). Positions are x and y alone, so an arrival under a unit looks like one
+        beside it; the next plan starts on the floor the character is on."""
+        opened = self.interact.open_on(name, node_world=world, node_map=point)
+        if opened in (Interacted.NOT_VISIBLE, Interacted.NO_TARGET) and self._under(world):
+            self.say(f"  {name} was not found here: walking up to the floor above again")
+            opened = self.interact.open_on(name, node_world=world, node_map=point)
+        return opened
+
+    def _under(self, world) -> bool:
+        """The character stands under `world`, a floor or more below it: then the tracked
+        height is put on the lowest floor here, where the next plan starts."""
+        query, bounds = getattr(self.client, "query", None), self.client.bounds
+        here = self._position()
+        if query is None or bounds is None or here is None or world is None or len(world) < 3:
+            return False
+        hx, hy = map_to_world(*here, bounds)[:2]
+        if math.dist((hx, hy), world[:2]) > UNDER_UNIT_YARDS:
+            return False
+        floors = surfaces_under(query, bounds.map_id, hx, hy)
+        if len(floors) < 2 or world[2] - floors[0] < UPPER_FLOOR_YARDS:
+            return False
+        self.client._ground = (hx, hy, floors[0])
+        return True
+
     def _open_trainer(self, trainer) -> bool:
         point = world_to_map(*trainer.world[:2], self.client.bounds)
-        opened = self.interact.open_on(trainer.name, node_world=trainer.world, node_map=point)
+        opened = self._open_on(trainer.name, trainer.world, point)
         if not opened.opened:
             raise BodyFailure(self._result(opened, f"{trainer.name}: "
                                                    f"{self.interact.detail or opened.value}"))
