@@ -186,6 +186,25 @@ def test_a_cluster_is_pulled_by_drop_chance_not_by_headcount():
     assert plain.x > 500.0
 
 
+def test_a_rib_stands_where_nothing_around_it_outclasses_its_band():
+    """V193: the 1-3 rib's Young Wolves clustered by Goldshire's road among level 5-6 Mangy
+    Wolves and Defias Cutpurses; a level 2 mage failed over to it from Northshire and a
+    Cutpurse killed it twice."""
+    import math
+
+    from jev.guide.coords import load_bounds
+    from jev.guide.generate import RIB_NEIGHBOUR_YARDS, RIB_OUTCLASS_LEVELS
+
+    world = WorldDB(DB)
+    elwynn = load_bounds(DB)[12]
+    stronger = [(x, y) for x, y in world.con.execute(
+        "select cast(c.position_x as real), cast(c.position_y as real) from world_creature c "
+        "join world_creature_template t on t.Entry = c.id where c.map = 0 and t.NpcFlags = 0 "
+        "and t.MaxLevel > ?", (3 + RIB_OUTCLASS_LEVELS,))]
+    [(rib, _count), *_] = world.grind_clusters(elwynn, 1, 3)
+    assert not any(math.hypot(rib.x - x, rib.y - y) <= RIB_NEIGHBOUR_YARDS for x, y in stronger)
+
+
 def test_an_items_droppers_are_those_the_quests_level_can_fight():
     """Every Riverpaw gnoll carries Patrolling Westfall's Gnoll Paws (item 725) at 80%, and
     the pool's densest cluster was the level 17-18 Taskmasters' camp: a level 13 paladin

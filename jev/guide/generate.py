@@ -198,6 +198,13 @@ def _cluster(npc_id: int, name: str, map_id: int, rows) -> Spawn:
 # A grind rib's creature counts as spread out when its spawns sit this far from their nearest
 # neighbour, as a median: Northshire's Timber Wolves 31 yards, its Defias Thugs 15.
 RIB_SPREAD_YARDS = 20.0
+# A rib stands where nothing outclasses its band: a spawn is left out of its creature's
+# cluster when anything within `RIB_NEIGHBOUR_YARDS` tops the band by more than
+# `RIB_OUTCLASS_LEVELS`. The 1-3 rib's Young Wolves clustered by Goldshire's road among
+# level 5-6 Mangy Wolves and Defias Cutpurses; a level 2 mage failed over to it from
+# Northshire, 400 yards out, and a Cutpurse killed it twice (the mage's second check, V193).
+RIB_NEIGHBOUR_YARDS = 90.0
+RIB_OUTCLASS_LEVELS = 2
 CREATURE_BEAST = 1                     # creature_template.CreatureType
 
 # Spawn points kept per cluster for a hunt to stand on: the nearest this many to its centre.
@@ -695,11 +702,22 @@ class WorldDB:
         levels = dict(self.con.execute(
             "select Entry, MaxLevel from world_creature_template where MinLevel >= ? and MaxLevel <= ?",
             (level_min, level_max)).fetchall())
+        stronger = [(r[0], r[1]) for r in self.con.execute(
+            """
+            select cast(c.position_x as real), cast(c.position_y as real)
+            from world_creature c join world_creature_template t on t.Entry = c.id
+            where c.map = ? and t.NpcFlags = 0 and t.MaxLevel > ?
+            """, (zone_bounds.map_id, level_max + RIB_OUTCLASS_LEVELS)).fetchall()
+            if (f := world_to_map(r[0], r[1], zone_bounds)) is not None
+            and on_map(*f, slack=0.25)]
+
+        def outclassed(x: float, y: float) -> bool:
+            return any(math.hypot(x - sx, y - sy) <= RIB_NEIGHBOUR_YARDS for sx, sy in stronger)
 
         by_creature: dict[int, list] = defaultdict(list)
         for r in rows:
             frac = world_to_map(r["x"], r["y"], zone_bounds)
-            if frac and on_map(*frac, slack=0.0):
+            if frac and on_map(*frac, slack=0.0) and not outclassed(r["x"], r["y"]):
                 by_creature[r["id"]].append(r)
 
         ranked = []

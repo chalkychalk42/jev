@@ -247,3 +247,4 @@ Issues
 | Seen | Issue | Evidence | State |
 |---|---|---|---|
 | 25 Sep 12:00 | The adaptive canary-student runtime test failed once in 2 full runs (planning agent) | Not seen in 3 focused runs or 4 full runs since | Watching; remove it with the retired paths (§11) |
+| 26 Sep 04:35 | `test_grade_run.py::test_new_grades_are_not_hidden_by_an_older_parquet_copy` failed once in a full run under load; 5 of 5 alone passed | `dataset.py` compares `st_mtime_ns` of the parquet copy and the JSONL: two writes inside one timestamp tie | Flaky; goes with the decision learner (§11 step 3) |

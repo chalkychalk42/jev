@@ -14,18 +14,18 @@
         3
       ],
       "pos": [
-        0.4317554939635833,
-        0.6004121568986491
+        0.464584707961586,
+        0.39060408213378744
       ],
       "world": [
-        -9329.286783854166,
-        36.86530081431071,
-        65.35596720377605
+        -8843.668579101562,
+        -77.0794267654419,
+        86.73133659362793
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 65.9723330639027,
+      "hunt_yards": 61.18545730139554,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -104,18 +104,18 @@
         7
       ],
       "pos": [
-        0.2963425640350633,
-        0.7250988753488827
+        0.2958922125923321,
+        0.7271986926672973
       ],
       "world": [
-        -9617.884543678978,
-        506.8610007546165,
-        43.945463527332656
+        -9622.74474516369,
+        508.4240955171131,
+        43.52927616664341
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 69.09056016433675,
+      "hunt_yards": 61.9934407876365,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -136,7 +136,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "22 spawns of Mangy Wolf clustered here; route not recorded",
+      "notes": "21 spawns of Mangy Wolf clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -239,28 +239,28 @@
         12
       ],
       "pos": [
-        0.06777190331848137,
-        0.9648895933969385
+        0.14084589634711453,
+        0.7668567310123289
       ],
       "world": [
-        -10172.900065104166,
-        1300.191650390625,
-        37.615716298421226
+        -9714.536566840277,
+        1046.5640055338542,
+        37.108256022135414
       ],
       "map_id": 0,
       "coord_zone_id": 12,
       "r": 0.06,
-      "hunt_yards": 25.372476182150997,
+      "hunt_yards": 23.103789165269976,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
       "title": "",
       "npc_id": null,
-      "target_name": "Harvest Golem",
+      "target_name": "Riverpaw Gnoll",
       "target_kind": "creature",
       "objective_targets": [],
       "objectives": [
-        "grind Harvest Golem"
+        "grind Riverpaw Gnoll"
       ],
       "requires": [],
       "next": [],
@@ -271,7 +271,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "6 spawns of Harvest Golem clustered here; route not recorded",
+      "notes": "11 spawns of Riverpaw Gnoll clustered here; route not recorded",
       "source": "generated"
     },
     {

@@ -14,28 +14,28 @@
         14
       ],
       "pos": [
-        0.39303108842509804,
-        0.6633144061543536
+        0.4537642594626484,
+        0.1953393129658637
       ],
       "world": [
-        -10947.7333984375,
-        1641.0577663845486,
-        44.73772218492296
+        -9855.791666666666,
+        1428.491678873698,
+        40.13298416137695
       ],
       "map_id": 0,
       "coord_zone_id": 40,
       "r": 0.06,
-      "hunt_yards": 57.57692486079211,
+      "hunt_yards": 28.596744940327458,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
       "title": "",
       "npc_id": null,
-      "target_name": "Fleshripper",
+      "target_name": "Kobold Digger",
       "target_kind": "creature",
       "objective_targets": [],
       "objectives": [
-        "grind Fleshripper"
+        "grind Kobold Digger"
       ],
       "requires": [],
       "next": [],
@@ -46,7 +46,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "10 spawns of Fleshripper clustered here; route not recorded",
+      "notes": "6 spawns of Kobold Digger clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -149,18 +149,18 @@
         20
       ],
       "pos": [
-        0.9185645406595723,
-        0.2948810400224665
+        0.9330280778997668,
+        0.2855487284526686
       ],
       "world": [
-        -10088.0556640625,
-        -198.30922020806207,
-        29.204622268676758
+        -10066.2802734375,
+        -248.9315979003906,
+        29.827199935913086
       ],
       "map_id": 0,
       "coord_zone_id": 40,
       "r": 0.06,
-      "hunt_yards": 64.84465104333151,
+      "hunt_yards": 37.039021984815726,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -181,7 +181,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "10 spawns of Starving Dire Wolf clustered here; route not recorded",
+      "notes": "7 spawns of Starving Dire Wolf clustered here; route not recorded",
       "source": "generated"
     },
     {
@@ -239,18 +239,18 @@
         18
       ],
       "pos": [
-        1.5948595514423827,
-        -0.24711282744319604
+        1.506434230596099,
+        0.09810172964588831
       ],
       "world": [
-        -8823.403483072916,
-        -2565.3416341145835,
-        132.07049814860025
+        -9628.90400390625,
+        -2255.85302734375,
+        71.02116012573242
       ],
       "map_id": 0,
       "coord_zone_id": 40,
       "r": 0.06,
-      "hunt_yards": 92.61586233190582,
+      "hunt_yards": 84.73337460870886,
       "quest_id": null,
       "quest_prerequisites": [],
       "route_blocked_reason": null,
@@ -271,7 +271,7 @@
       "xp_est": null,
       "timeout_s": 900.0,
       "skippable": true,
-      "notes": "6 spawns of Great Goretusk clustered here; route not recorded",
+      "notes": "11 spawns of Great Goretusk clustered here; route not recorded",
       "source": "generated"
     },
     {
