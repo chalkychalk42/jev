@@ -684,18 +684,16 @@ def test_hybrid_dispatch_runs_the_routine_first_and_the_tutor_on_its_failure(tmp
                      Result(SkillOutcome.SUCCEEDED, "routine ran", "ok")])
     scripted = []
     env.spine.execute = lambda arm, state, checkpoint: scripted.append(arm) or next(outcomes)
-    unsampled = next(replace(env.arm, arm_id=f"arm{i}") for i in range(100)
-                     if int(hashlib.sha1(f"arm{i}".encode()).hexdigest(), 16) % 4 != 0)
     try:
-        first = env.playing.execute(unsampled, None, lambda: None)
-        second = env.playing.execute(unsampled, None, lambda: None)
-        third = env.playing.execute(unsampled, None, lambda: None)
+        first = env.playing.execute(env.arm, None, lambda: None)
+        second = env.playing.execute(env.arm, None, lambda: None)
+        third = env.playing.execute(env.arm, None, lambda: None)
     finally:
         env.screenshots.close()
         env.playing.close()
     assert (first.code, second.code, third.code) == ("unreachable", "done", "ok")
-    assert scripted == [unsampled, unsampled], "the routine first, and again after the tutor"
-    assert asked == [unsampled], "only its failure went to the tutor"
+    assert scripted == [env.arm, env.arm], "the routine first, and again after the tutor"
+    assert asked == [env.arm], "only its failure went to the tutor"
     config = json.loads((env.recorder.dir / "play-config.json").read_text())
     assert config["dispatch"] == "tutor", "recorded as built; the fixture switched it after"
 
@@ -708,13 +706,13 @@ def test_hybrid_dispatch_asks_the_tutor_only_after_a_routine_failed(tmp_path):
     env = composition(tmp_path)
     env.playing.dispatch = "hybrid"
     try:
-        picks = [env.playing._ask_tutor(replace(env.arm, arm_id=f"arm{i}")) for i in range(400)]
+        ordinary = env.playing._ask_tutor(env.arm)
         env.playing._note_routine(env.arm, Result(Outcome.ABORTED, "stuck", "unreachable"))
         failed = env.playing._ask_tutor(env.arm)
     finally:
         env.screenshots.close()
         env.playing.close()
-    assert sum(picks) == 0, "no ordinary objective sampled"
+    assert not ordinary, "an ordinary objective is the routine's"
     assert failed, "the objective its routine just failed"
 
 

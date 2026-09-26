@@ -171,7 +171,7 @@ class PlayingBody:
         if dispatch not in DISPATCHES:
             raise ValueError(f"dispatch must be one of {sorted(DISPATCHES)}")
         # Who takes an ordinary objective first (`_ask_tutor`): the tutor always, or the
-        # guide's own routine with the tutor on its failures and a fixed sample.
+        # guide's own routine with the tutor on its failures.
         self.dispatch = dispatch
         # The objectives whose routine just failed, and how it failed (`_note_routine`).
         self._routine_failed: dict[tuple[str | None, str | None], str] = {}
