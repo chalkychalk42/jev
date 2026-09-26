@@ -292,7 +292,13 @@ def _live(args, graph) -> int:
         if screenshots is not None and screenshots.error:
             raise ScreenshotError(screenshots.error)
 
+    def stamp(label: str) -> None:
+        # Where a session's start goes: about 30 s from launch to the first action, the
+        # character standing uncontrolled meanwhile; sessions 212 and 223 began in a fight.
+        print(f"startup: {label} at {time.strftime('%H:%M:%S')}", flush=True)
+
     try:
+        stamp("attached")
         startup_checkpoint()
         if args.screenshots:
             recorder = Recorder(root=args.runs_dir)
@@ -311,6 +317,7 @@ def _live(args, graph) -> int:
             print("operator quiet: starting")
         if not client.focused(checkpoint=startup_checkpoint):
             raise NotRunning("client is not focused")
+        stamp("focused")
         values = client.read()
         if values is None and args.reconnect:
             result = reconnect_client(client, startup_checkpoint, env_file=args.env_file)
@@ -325,6 +332,7 @@ def _live(args, graph) -> int:
             raise NotRunning(f"radio or complete quest log unavailable (reading "
                              f"{'none' if values is None else 'ok'}, strip frozen "
                              f"{client.frozen_for():.1f} s, quest slots {seen} of {count})")
+        stamp("quest log read")
         # Which character is logged in decides whose playhead this run keeps.
         character = values.get("char.key")
         path, memory, route, graph = remembered(args, graph, character)
@@ -346,6 +354,7 @@ def _live(args, graph) -> int:
                              if runs_dir.is_dir() else (), danger, by_area.get)
         print(f"danger: {len(danger.cells)} cells learned"
               + (f", {attacks} attacks counted from earlier runs" if attacks else ""))
+        stamp("danger counted")
         # What walks steer by (V178): confirmed blocked spots; escapes are not taken.
         route_memory = RouteMemory(ROOT / "var/route-memory.json")
         print(f"route memory: {len(route_memory.blocks(bounds.map_id))} blocked spots kept "
@@ -366,6 +375,7 @@ def _live(args, graph) -> int:
                         home_memory=path.with_name(path.stem + ".home.json"),
                         purse_memory=path.with_name(path.stem + ".purse.json"),
                         taxi_memory=path.with_name(path.stem + ".taxi.json"))
+        stamp("body built")
         if recorder is None:
             recorder = Recorder(root=args.runs_dir)
         # What each choice has paid off before (`jev.learn.choices`), counted first from any
@@ -485,6 +495,7 @@ def _live(args, graph) -> int:
                                 operator_active=operator.active,
                                 operator_suspected=operator.suspected)
         print(f"recording to {recorder.dir}")
+        stamp("supervising")
         supervisor.run(args.run_for, max_steps=args.steps)
         if screenshots is not None:
             screenshots.close()
