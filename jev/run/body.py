@@ -477,7 +477,7 @@ class LiveBody:
             back_out = getattr(self.client, "back_out", None)
             if (not arrived and back_out is not None
                     and (self._read() or {}).get("pos.indoors") is True and back_out()):
-                self.say("  wedged indoors: backed out the way it came in")
+                self.say("  backed out: outdoors, walking on")
                 arrived = self._walk(world, stop_short)
         finally:
             self.travelling = False

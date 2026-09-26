@@ -466,3 +466,30 @@ def test_no_way_in_known_is_no_way_out():
     values["pos.mx"], values["pos.my"] = world_to_map(here[0] + 200, here[1] + 4, ELWYNN)
     client.position()
     assert client.back_out() is False, "a jump is not a way in"
+
+
+def test_the_way_in_is_kept_without_its_loops():
+    """V230: a wedged walk moves about the same few yards for minutes; a trail of every step
+    outgrew its limit and lost the door (session 198, 13 minutes in the Lion's Pride Inn)."""
+    from jev.run.client import TRAIL_POINTS
+
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    door = map_to_world(0.49, 0.42, ELWYNN)
+    values["pos.indoors"] = False
+    client.position()
+    values["pos.indoors"] = True
+
+    def at(dx, dy):
+        values["pos.mx"], values["pos.my"] = world_to_map(door[0] + dx, door[1] + dy, ELWYNN)
+        client.position()
+
+    for dy in (4, 8, 12):
+        at(0, dy)
+    for _ in range(TRAIL_POINTS):                   # back and forth in a corner
+        at(4, 12)
+        at(8, 12)
+        at(4, 12)
+        at(0, 12)
+    assert client._trail_anchored
+    assert [p[:2] for p in client._trail] == pytest.approx(
+        [door] + [(door[0], door[1] + dy) for dy in (4, 8, 12)])

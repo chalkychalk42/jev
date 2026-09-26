@@ -100,6 +100,8 @@ TRACK_EVERY_S = 0.5
 TRAIL_STEP_YARDS = 3.0
 TRAIL_JUMP_YARDS = 25.0
 TRAIL_POINTS = 400
+# Two points of a trail this far apart in height are on different floors.
+TRAIL_FLOOR_YARDS = 2.0
 UNDER_YARDS = 1.0
 LOWER_STEPS = (3.0, 6.0, 9.0, 12.0)
 # On a route being walked, the route's own height is the better evidence: the inn's stairs
@@ -141,6 +143,13 @@ MAX_WALK_S = 540.0
 
 class NotRunning(RuntimeError):
     """No client window, or it would not come to the foreground."""
+
+
+def _same_spot(a: tuple, b: tuple) -> bool:
+    """Within a trail step in x and y, and on the same floor when both heights are known."""
+    if math.dist(a[:2], b[:2]) >= TRAIL_STEP_YARDS:
+        return False
+    return a[2] is None or b[2] is None or abs(a[2] - b[2]) < TRAIL_FLOOR_YARDS
 
 
 @dataclass
@@ -301,6 +310,13 @@ class Client:
             self._trail, self._trail_anchored = [], False
         if not self._trail:
             self._trail, self._trail_anchored = [point], False
+            return
+        # Back where it has been: the way in is kept without the loop since (V230). A wedged
+        # walk moves about the same few yards for minutes, and a trail of every step of it
+        # outgrew `TRAIL_POINTS` and lost its door (session 198: 13 minutes in the inn).
+        again = next((i for i, kept in enumerate(self._trail) if _same_spot(kept, point)), None)
+        if again is not None:
+            del self._trail[again + 1:]
         elif math.dist(self._trail[-1][:2], (x, y)) >= TRAIL_STEP_YARDS:
             self._trail.append(point)
             if len(self._trail) > TRAIL_POINTS:
@@ -315,7 +331,10 @@ class Client:
         sessions, each plan out ending there (sessions 193 and 195). Nothing is walked
         without a way in that began outdoors."""
         if self.travel is None or not self._trail_anchored or len(self._trail) < 2:
+            self._say("  wedged indoors, and no way in known to walk back"
+                      + ("" if self._trail_anchored else " (it began indoors)"))
             return False
+        self._say(f"  wedged indoors: backing out the way it came in, {len(self._trail)} points")
         z = self._ground[2] if self._ground is not None else 0.0
         points = []
         for x, y, height in reversed(self._trail):     # a height not tracked: the last one
@@ -328,7 +347,10 @@ class Client:
         finally:
             self._following = ()
         after = self.read()
-        return after is not None and after.get("pos.indoors") is False
+        out = after is not None and after.get("pos.indoors") is False
+        if not out:
+            self._say("  backing out ended indoors")
+        return out
 
     def _track_height(self, values: dict) -> None:
         """Keep `_ground` on the floor the character is on (`TRACK_EVERY_S`)."""
