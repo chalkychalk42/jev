@@ -2338,6 +2338,60 @@ def test_a_caster_steps_in_when_the_strip_says_its_spells_do_not_reach(combat_cl
     assert [key for key, _ in hid.holds] == ["w"], "one step, on the strip's word"
 
 
+def _unseen_tab_pick(f):
+    """Tab picked the unit (ahead), and its plate is never proved."""
+    def acquire(name_id, **_):
+        f._ahead = True
+        return None
+
+    def engage(*_):
+        f._aim_code = FaceCode.NOT_VISIBLE
+        f.detail = "no plate proved to be the selected unit's after the search turn"
+        return False
+
+    f.acquire, f.engage = acquire, engage
+
+
+PULL = {**AT_RANGE, "vitals.combat": False, "target.attacking_me": False}
+
+
+def test_a_casters_unseen_tab_pick_is_cast_at_from_where_it_stands(combat_clock):
+    """V204: the mage's ten Tab picks among Northshire's wolves were given up "no plate
+    proved", nothing pressed (26 September 06:24). Tab picks ahead, and a spell needs only
+    that and its range."""
+    near = {**PULL, "bars.out_range": 0, "bars.in_range": 0b10}
+    dead = {**near, "target.hp": 0.0, "char.xp_pct": 0.2}
+    hid = _Hid()
+    # Three looks before the fight's loop: the first, the fresh one, and after the re-pick.
+    f = _mage([near, near, near, near, {**near, "target.hp": 0.5}, dead], hid=hid)
+    f._lasting["Frost Armor"] = 0.0
+    _unseen_tab_pick(f)
+    assert f.run(1161) is Fought.KILLED
+    assert "2" in hid.taps and [key for key, _ in hid.holds if key == "w"] == []
+
+
+def test_a_casters_unseen_tab_pick_out_of_reach_is_stepped_toward(combat_clock):
+    far = {**PULL, "bars.out_range": 0b10, "bars.in_range": 0}
+    near = {**PULL, "bars.out_range": 0, "bars.in_range": 0b10}
+    dead = {**near, "target.hp": 0.0, "char.xp_pct": 0.2}
+    hid = _Hid()
+    f = _mage([far, far, far, far, near, dead], hid=hid)
+    f._lasting["Frost Armor"] = 0.0
+    _unseen_tab_pick(f)
+    assert f.run(1161) is Fought.KILLED
+    assert [key for key, _ in hid.holds] == ["w"], "one step ahead, on the strip's word"
+
+
+def test_a_melee_characters_unseen_tab_pick_is_still_not_walked_at(combat_clock):
+    """Blind casting is a caster's: a paladin must see what it walks at."""
+    pull = {**ALIVE, "vitals.combat": False, "target.attacking_me": False}
+    hid = _Hid()
+    f = _fight([pull, pull, pull], hid=hid)
+    _unseen_tab_pick(f)
+    assert f.run(1161) is Fought.NOT_VISIBLE
+    assert hid.taps == [] and hid.holds == []
+
+
 def test_against_a_pack_the_heal_line_is_drawn_and_learned_apart():
     """V172: with two or more attacking, the pack's line; the fight teaches that one."""
     from jev.clients.fight import HEAL_LINES

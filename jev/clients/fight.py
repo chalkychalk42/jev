@@ -422,6 +422,7 @@ class Fight:
     _error_count: int | None = field(default=None, init=False)
     # Facing by the client's own errors, the selected plate unproved: an attacker in melee.
     _blind_melee: bool = field(default=False, init=False)
+    _blind_cast: bool = field(default=False, init=False)
     _damage_seen: bool = field(default=False, init=False)
     _input_refused: bool = field(default=False, init=False)
     detail: str = field(default="", init=False)
@@ -534,6 +535,7 @@ class Fight:
         self._side = -1 if h is not None and h.rng.random() < 0.5 else 1
         self._ahead = False
         self._blind_melee = False
+        self._blind_cast = False
         self._error_count = None
         self._damage_at = time.monotonic()
         self.last_hp = None
@@ -621,7 +623,8 @@ class Fight:
             self.selected_plate = None
         # Blind melee on what the client says now, not before the look: a Tab pick is not
         # yet in melee or attacking, and the look can take seconds (V191).
-        if not self.engage(v) and not self._fight_blind(self.read() or v):
+        if (not self.engage(v) and not self._fight_blind(fresh := self.read() or v)
+                and not self._cast_blind(fresh)):
             if self._aim_code is not FaceCode.NOT_VISIBLE:
                 return self._aim_failure()
             # Kept from before this fight and not on screen: nothing says it is ahead or
@@ -637,7 +640,7 @@ class Fight:
             acquired = self.acquire(name_id, defend=in_combat)
             if acquired is not None:
                 return acquired
-            if not self.engage(v):
+            if not self.engage(v) and not self._cast_blind(self.read() or v):
                 return self._aim_failure()
         # Acquisition/verification time is not time spent trying to deal damage.
         self._damage_at = self._last_aim_at = time.monotonic()
@@ -723,7 +726,10 @@ class Fight:
                 casting = v.get("bars.casting") is True
                 if error == "not_facing" and not casting:
                     if not self.engage(v):
-                        return self._aim_failure()
+                        if not self._blind_cast or self._input_refused:
+                            return Fought.REFUSED if self._input_refused else self._aim_failure()
+                        if not self._turn_quarter():     # a blind cast turns as blind melee does
+                            return Fought.REFUSED
                 elif (error == "out_of_range" or self._beyond_reach(profile, v)) and not casting:
                     if self._ranged_steps >= MAX_RANGED_STEPS:
                         self.detail = (f"stepped in {self._ranged_steps} times and the spell "
@@ -731,7 +737,10 @@ class Fight:
                         return Fought.UNREACHABLE
                     self._ranged_steps += 1
                     if not self._range_step(v):
-                        return Fought.REFUSED if self._input_refused else self._aim_failure()
+                        if not self._blind_cast or self._input_refused:
+                            return Fought.REFUSED if self._input_refused else self._aim_failure()
+                        if not self._blind_step():       # a Tab pick lies ahead
+                            return Fought.REFUSED
                 elif error == "no_line_of_sight" and not casting:
                     self._sidestep("los")
                     if self._input_refused:
@@ -1529,6 +1538,39 @@ class Fight:
         self._blind_melee = True
         self._last_aim_at = time.monotonic()
         return self._ensure_attacking()
+
+    def _cast_blind(self, values: dict) -> bool:
+        """Cast at a caster's Tab pick whose plate could not be proved. `True` if taken up.
+
+        Tab picks only in front, and a spell needs only that and its range - which the strip
+        says per slot (`bars.in_range`, V171) - not a plate on screen. On the mage's session
+        of 26 September 06:24, all ten Tab picks among Northshire's wolves were given up
+        "no plate proved" with nothing pressed. Out of reach, the fight steps forward
+        (`_blind_step`); "facing the wrong way" is a quarter turn, as in blind melee (V204).
+        Casters only: a melee character must see what it walks at.
+        """
+        profile = self.profile or for_class(values.get("char.class_id"), values.get("char.race_id"))
+        hp = values.get("target.hp")
+        if (self._aim_code is not FaceCode.NOT_VISIBLE or not self._ahead
+                or not self._ranged_ready(profile, values)
+                or values.get("target.has") is not True
+                or (isinstance(hp, (int, float)) and hp <= DEAD_HP)):
+            return False
+        event("engage.blind_cast", data={"name_id": values.get("target.name_id")})
+        self._blind_cast = True
+        self._last_aim_at = time.monotonic()
+        return True
+
+    def _blind_step(self) -> bool:
+        """One step ahead toward a blind cast's Tab pick that a spell does not reach yet."""
+        event("approach.request", data={"key": "w", "mode": "blind_step",
+                                        "duration_s": RANGED_STEP_S, "steps": self._ranged_steps})
+        if not self.hid.hold("w", RANGED_STEP_S):
+            self._input_refused = True
+            self.detail = "approach input refused"
+            return False
+        self.closed += 1
+        return True
 
     def _turn_quarter(self) -> bool:
         turn = getattr(self.hid, "TURN_RIGHT", "d")
