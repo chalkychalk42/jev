@@ -197,6 +197,24 @@ def test_engaging_refuses_when_the_unit_cannot_be_faced():
     assert f._aim_failure() is Fought.NOT_VISIBLE
 
 
+def test_a_plate_just_clicked_is_looked_for_briefly_out_of_a_fight():
+    """Out of a fight a unit not on screen is walked toward, not turned for; but one whose
+    plate was clicked a moment ago is looked for toward it, briefly (V202)."""
+    from jev.clients.targeting import FACE_HINT_SEARCH_S
+    from jev.perceive.units import Plate, RingColour
+
+    hid = _Hid()
+    targeting = _Targeting(lambda: ALIVE, hid,
+        FaceResult(FaceCode.NOT_VISIBLE, "no plate for the selected unit", turns=0))
+    f = Fight(hid=hid, read=lambda: ALIVE, read_frame=lambda: None, targeting=targeting)
+    f.engage({"vitals.combat": False})
+    assert targeting.faces[-1]["search_s"] == 0.0, "no plate clicked: no search"
+    f.last_plate = Plate(cx=1500, cy=170, w=145, colour=RingColour.YELLOW)
+    f.engage({"vitals.combat": False})
+    assert targeting.faces[-1]["search_s"] == FACE_HINT_SEARCH_S
+    assert targeting.faces[-1]["hint"] == f.last_plate
+
+
 def test_engaging_never_clicks_the_body_it_turns_and_starts_the_swing():
     hid = _Hid()
     f = _fight([ALIVE], hid=hid)

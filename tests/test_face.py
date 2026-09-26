@@ -164,6 +164,22 @@ def test_a_selected_unit_behind_the_camera_is_found_by_a_bounded_search(monkeypa
     assert world.holds[0] == ("a", FACE_SEARCH_STEP_S)
 
 
+def test_a_unit_clicked_at_the_edge_is_looked_for_toward_where_it_was(monkeypatch):
+    """The mage's Young Wolf selected by its plate at the screen's right edge: on the next
+    look its plate was under the minimap, and the fight was given up with no turn made
+    (26 September, 06:25). The brief search turns toward where the plate was clicked."""
+    from jev.clients.targeting import FACE_HINT_SEARCH_S
+    from jev.perceive.units import Plate, RingColour
+
+    world = World(bearing=60.0)              # past the edge: no plate on the next look
+    assert world.target_x() is None
+    hint = Plate(cx=WIDTH / 2 + 0.44 * WIDTH, cy=383, w=147, colour=RingColour.YELLOW)
+    result = targeting_for(world, monkeypatch).face_selected(
+        expected_name_id=2864, search_s=FACE_HINT_SEARCH_S, hint=hint)
+    assert result.faced, result.detail
+    assert world.holds[0] == ("d", FACE_SEARCH_STEP_S)
+
+
 def test_a_unit_with_no_plate_anywhere_is_not_visible_after_one_search_turn(monkeypatch):
     world = World(bearing=10.0, visible=False)
     result = targeting_for(world, monkeypatch).face_selected(expected_name_id=2864)

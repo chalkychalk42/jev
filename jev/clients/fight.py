@@ -64,7 +64,14 @@ from enum import StrEnum
 import numpy as np
 
 from jev.clients.hid import held, humaniser, pace
-from jev.clients.targeting import FACE_SEARCH_MAX_S, FaceCode, HoverCode, PaintCode, Targeting
+from jev.clients.targeting import (
+    FACE_HINT_SEARCH_S,
+    FACE_SEARCH_MAX_S,
+    FaceCode,
+    HoverCode,
+    PaintCode,
+    Targeting,
+)
 from jev.clients.travel import MIN_TRAVEL_FOR_HEADING, TURN_RATE_SEED
 from jev.guide.coords import ZoneBounds, distance_yards
 from jev.perceive.radio_frame import UI_ERROR_KEYS
@@ -1051,9 +1058,11 @@ class Fight:
         # Otherwise turning is not how an unseen unit is found: a Tab pick lies ahead,
         # beyond nameplate range, and is walked toward; a kept selection is re-chosen.
         fighting = v.get("vitals.combat") is True or v.get("target.attacking_me") is True
+        # A plate just clicked is looked for briefly, toward where it was (`FACE_HINT_SEARCH_S`).
         result = self._targeting().face_selected(
             expected_name_id=self._selected_name_id, hint=self.last_plate,
-            search_s=FACE_SEARCH_MAX_S if fighting else 0.0,
+            search_s=(FACE_SEARCH_MAX_S if fighting
+                      else FACE_HINT_SEARCH_S if self.last_plate is not None else 0.0),
             stop=self._hurt if fighting else None,
             deadline_s=FIGHT_FACE_S if fighting else None)
         if result.code is FaceCode.INTERRUPTED and fighting:

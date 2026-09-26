@@ -57,6 +57,12 @@ FACE_MAX_TURNS = 8
 # bounded by a little over a full turn at the measured 134 deg/s (travel.TURN_RATE_SEED).
 FACE_SEARCH_STEP_S = 0.3
 FACE_SEARCH_MAX_S = 2.8
+# A unit just selected by its plate, whose plate is not proved on the next look, is searched
+# for this long, toward where its plate was (`hint`). Out of a fight there was no search at
+# all: the mage's Young Wolf selected at the screen's right edge, its plate then under the
+# minimap, and the fight given up with no turn made; 30 of 33 looks in one session
+# (26 September, 06:25).
+FACE_HINT_SEARCH_S = 0.6
 _FACE_RATE_BOUNDS = (0.08, 4.0)   # offset per second; outside this a reading is noise
 # Which plate is the target's. Selection does not reliably fade other plates - a rabbit's
 # plate measured as bright as a selected wolf's - so a plate is proved by exact hover
@@ -424,6 +430,9 @@ class Targeting:
                 if searched >= search_s:
                     return done(FaceCode.NOT_VISIBLE,
                                 "no plate proved to be the selected unit's after the search turn")
+                if hint is not None and turns == 0 and searched == 0:
+                    # The plate was last where the hint is: turn that way first.
+                    search_key = right if hint.cx > view.frame.shape[1] / 2 else left
                 event("face.search", data={"key": search_key, "seconds": FACE_SEARCH_STEP_S,
                                            "searched_s": round(searched, 3)})
                 if not self.hid.hold(search_key, FACE_SEARCH_STEP_S):
