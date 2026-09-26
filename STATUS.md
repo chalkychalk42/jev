@@ -2951,3 +2951,59 @@ errands, not fights:
 1. V198 on the paladin's walks (stuck/h), and V199-V203 on the mage's next visit.
 2. Hour 12 (11:14): Testvvi 14.6 or higher (should: 15.4).
 3. The switch to the mage at 14:15, level 4 in Northshire.
+
+## 26 Sep 2026 11:10 — hour twelve: level 15, the mage's worst faults found, V204-V210
+
+The hour-12 checkpoint:
+
+| Go if | Result |
+|---|---|
+| Testvvi 14.6 or higher (should: 15.4) | **Met**: 15.25. The paladin reached level 15 at 10:30. The "should" is missed by 0.15 |
+| Switch rehearsed with fakes | **Met**: `due()` was checked with a fake clock before T-0. It answers "stay" now and switches at the first session boundary after 14:15 |
+| `danger.json` counts a level band | **Met** (V161): 1,890 cells |
+
+| Block | Sessions | Played | XP/h | Deaths/h | Stuck/h |
+|---|---|---|---|---|---|
+| 1 | 134-144 | 2.10 h | 2,887 | 4.3 | 54.8 |
+| 3 | 151-159 | 1.83 h | 2,768 | 2.7 | 56 |
+| since hour 8 | 161-172 | 2.91 h | 4,318 | 2.7 | 28 |
+
+Since T-0: 7.8 hours played, 26,165 XP (3,341/h), 31 deaths. The nine-hour run before T-0
+made 2,108 XP/h. Sessions 166 and 172 made 9,328 and 9,440 XP/h on quest hand-ins.
+
+**The mage** (Itheamar) went from level 2.4 to 5.41 over its visits. Against the plan, it
+played about 14 sessions before the switch; the ledger records why. Its worst faults:
+- **V208**, the worst: an attacker standing behind the mage, between it and the camera, puts its plate on
+  the centre line. The mage's answer to "Target needs to be in front of you" was to face by
+  the plate, which never turned. It died twice at full mana, Fireball pressed 40 and 22 times.
+  It now turns round, as melee always has.
+- **V204**: a Tab pick whose plate cannot be seen is cast at when the strip says a spell
+  reaches it. Before, it was given up with nothing pressed, 10 of 10 in one session.
+- **V205, V206**: a restock walked 675 yards for cheese; each session began with the
+  hearthstone and a repair it could not pay. Now there is no restock walk over 400 yards, and
+  the purse's lessons are kept between sessions.
+
+**The paladin's losses and fixes**:
+- **V207**: a Fleshripper hovering eight yards off killed it while every swing was "too far
+  away". Blind melee now steps in.
+- **V209** (everyone's self-defence): with no quest target named, the fight took any plate. The
+  paladin ran at a Young Goretusk while a level 19 Dust Devil killed it, and V197 then read the
+  Goretusk's level and got it up at the body beside the Dust Devil.
+- **V210**: V209 on its own made worse an attacker found nowhere (something by Jangolode Mine,
+  4-5% of health every four seconds): 33 turns round in four minutes, then a whole session.
+  After the search either side, the plate in view, else Tab's pick, is the fight. Corrected
+  within a session.
+- The Furlbrow farm's Defias (The Forgotten Heirloom) killed it three times among packs and
+  a level 15. The objective was taken all the same.
+
+**Who the fixes reach**: V204 and V208 casters; V207 melee; V202, V203, V205, V206, V209 and
+V210 everyone. Melee's evidence: the whole suite passes on each deploy, and the paladin's
+last two good sessions made over 9,000 XP/h.
+
+**NEXT:**
+1. The switch at 14:15. The mage's first sessions are V204 and V208's live check.
+2. Candidates:
+   - a ranged attacker whose plate is out of sight (a level 11 in session 173 hit from range
+     while every facing look failed);
+   - a hopeless fight near guards (run to them);
+   - a loot hunt sized to its kills.
