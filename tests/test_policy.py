@@ -276,3 +276,16 @@ def test_a_casters_measured_line_decides_its_rest():
     measured.mana_line = lambda: 0.35
     assert _recover(state, measured) is None
     assert _recover(state, Context()) is not None, "unmeasured: the fixed 55%"
+
+
+def test_a_purchase_the_purse_could_not_pay_waits_for_the_purse_it_needed():
+    """V186: a level 1 mage out of water and too poor walked to the merchant and back after
+    every kill, each copper looted making its purse "more" than at the failure."""
+    from jev.coach.policy import Context
+
+    context = Context()
+    context.supplies_failed(10)
+    assert context.can_restock(11), "without the need, any gain is a reason to try again"
+    context.supplies_need(60)
+    assert not context.can_restock(11) and not context.can_restock(59)
+    assert context.can_restock(60)

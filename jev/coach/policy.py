@@ -103,6 +103,15 @@ class Context:
     def supplies_failed(self, money: int | None) -> None:
         self.supplies_blocked, self.supplies_money = True, money
 
+    # What the purchase that could not be paid needed, when the merchant said (V186): a
+    # level 1 mage out of water, too poor to buy more, walked 100 to 150 yards to Northshire's
+    # merchant and back after every kill, each copper looted making the purse "more" than
+    # at the failure (the mage's check, 26 September).
+    supplies_needed: int | None = None
+
+    def supplies_need(self, copper: int | None) -> None:
+        self.supplies_needed = copper
+
     # A merchant out of reach (the walk or the talk timed out) is not walked to again on
     # this step, as a trainer is not (V175): Goldshire's innkeeper, upstairs of whom the
     # walk kept ending, stopped two sessions at T-0.
@@ -114,8 +123,11 @@ class Context:
     def can_restock(self, money: int | None, step_id: str | None = None) -> bool:
         if step_id is not None and step_id == self.supplies_unreachable_step:
             return False
-        return not self.supplies_blocked or (
-            money is not None and self.supplies_money is not None and money > self.supplies_money)
+        if not self.supplies_blocked:
+            return True
+        if money is not None and self.supplies_needed is not None:
+            return money >= self.supplies_needed
+        return money is not None and self.supplies_money is not None and money > self.supplies_money
 
     bags_blocked: bool = False
     # The fewest free slots since a merchant visit found nothing to sell, and whether one

@@ -203,6 +203,17 @@ def test_purse_reserve_is_honored_before_the_first_purchase():
     assert not shop.clicks
 
 
+def test_an_offer_the_purse_cannot_pay_says_what_it_needed():
+    """V186: the purse the purchase needed, so a retry waits until it is there."""
+    shop = Shop()
+    shop.v["bags.free"] = 1
+    shop.v["merchant.price"] = 101
+    vendor = shop.body()
+    assert vendor.run(expected_name="Merchant", sell=False, reserve_copper=20,
+                      supplies=(Supply(2070, "Cheese", "food"),)) is Vended.TOO_POOR
+    assert vendor.needed_copper == 121
+
+
 def test_already_stocked_and_absent_offer_have_separate_outcomes():
     shop = Shop()
     shop.v["bags.free"] = 1

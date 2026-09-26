@@ -28,7 +28,7 @@ from jev.clients.spellbook import Spellbook
 from jev.clients.targeting import FaceCode, Targeting
 from jev.clients.taxi import TaxiDesk
 from jev.clients.trainer import TrainerDesk
-from jev.clients.vendor import Vendor
+from jev.clients.vendor import Vended, Vendor
 from jev.clients.windows import close_observed
 from jev.coach.policy import Context, service
 from jev.coach.schema import Intent
@@ -1320,6 +1320,8 @@ class LiveBody:
                 continue
             if outcome.ok:
                 note_merchant(self.merchant_memory, merchant.entry, failed=False)
+            if outcome is Vended.TOO_POOR:
+                self.policy_context.supplies_need(vendor.needed_copper)
             return self._result(outcome, vendor.detail or
                                 f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
         raise AssertionError("unreachable: the last merchant returns or raises")

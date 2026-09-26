@@ -77,6 +77,13 @@ Now
     next two sessions could not read the strip at all. V184 reads the strip on the grid of
     its last good read, kept in `var/radio-grid.json`; the file was seeded from the
     measured grid for the restart.
+  - Session 148: started a ghost; two deaths to Fleshrippers, one 23 s after getting up at
+    half health, one under resurrection sickness after the Spirit Healer.
+  - 02:06-02:30, the mage's check (Itheamar, `captures/live-mage-check-1.log`): A Threat
+    Within handed in to McBride at once (V178, V180); Kobold Camp Cleanup done by Fireball
+    from range, no melee walk; level 2. Faults: out of water and too poor, the grind walked
+    to the merchant and back after every kill (V186); Khelden Bremen's click upstairs failed
+    while the view settled ("point no longer has current geometry", three stale hovers).
 
 - **25 Sep 14:10.** Pre-flight A is under way, with the loop stopped and the client closed.
   - The operator logged Testvvi out at 09:13, in Goldshire, at level 13.

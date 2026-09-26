@@ -61,6 +61,9 @@ class Vendor:
     sold_stacks: int = field(default=0, init=False)
     bought_units: int = field(default=0, init=False)
     detail: str = field(default="", init=False)
+    # What the purse needed for the offer a purchase could not pay: its price and the
+    # reserve (V186).
+    needed_copper: int | None = field(default=None, init=False)
     _deadline: float = field(default=0, init=False)
     _merchant: int = field(default=0, init=False)
 
@@ -76,6 +79,7 @@ class Vendor:
         """
         self.sold_stacks = self.bought_units = 0
         self.detail = ""
+        self.needed_copper = None
         with operation("vendor.request") as span:
             if span.enabled:
                 span.finish(code="requested", data={"name": expected_name, "sell": sell,
@@ -458,6 +462,7 @@ class Vendor:
                 if price <= 0 or quantity <= 0:
                     raise _Stop(Vended.UNAVAILABLE, "invalid or unpriced supply offer")
                 if cash - price < reserve:
+                    self.needed_copper = price + reserve
                     raise _Stop(Vended.TOO_POOR, "supply price would exceed the available purse/reserve")
                 if values.get("merchant.unlimited") is not True:
                     stock = values.get("merchant.stock")
