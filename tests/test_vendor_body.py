@@ -314,6 +314,59 @@ def test_a_sale_that_leaves_the_bags_nearly_full_blocks_the_service(monkeypatch)
     assert not b2.policy_context.bags_blocked, "room made: nothing to block"
 
 
+@pytest.mark.parametrize(("total", "money", "reserve", "expected"), [
+    (16, 800, 0, 4496),          # the backpack alone, the purse spares a pouch
+    (16, 550, 0, None),          # not with the spare kept
+    (16, 800, 300, None),        # nor with the trainer's due kept
+    (28, 2000, 0, None),         # the belt has room enough
+])
+def test_a_bag_is_bought_when_the_purse_can_spare_it(monkeypatch, total, money, reserve,
+                                                      expected):
+    """V260: the level 9 mage's 16-slot backpack held eight slots of quest items it could
+    neither sell nor use, and its bag walks cost 9.6 minutes an hour (sessions 222-228), with
+    725 copper in the purse and a 6-slot pouch at 500 at Eastvale's general goods."""
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: (
+        Merchant(1250, "Drake Lindgren", 0, (-9483.1, -1356.25, 60.0), frozenset({4496, 159})),))
+    monkeypatch.setattr("jev.run.body.bag_prices", lambda: {4496: 500, 4497: 2000})
+    monkeypatch.setattr("jev.run.body.bag_slots", lambda: {4496: 6, 4497: 10})
+    b.training_reserve = lambda state=None: reserve
+    bag = b._bag_to_buy({"inventory.total": total, "bags.money_copper": money})
+    assert (bag[0].item_id if bag else None) == expected
+    if bag:
+        assert bag[0].desired == 1
+
+
+def test_a_bag_bought_goes_on_the_belt(monkeypatch):
+    b, _visit = _bag_service(monkeypatch, [(3299, 2), (774, 1)], 1, free_after=4)
+    monkeypatch.setattr("jev.run.body.merchants",
+                        lambda map_id: (Merchant(2, "Smith", 0, (50, 50, 0), frozenset({4496})),))
+    monkeypatch.setattr("jev.run.body.bag_prices", lambda: {4496: 500})
+    monkeypatch.setattr("jev.run.body.bag_slots", lambda: {4496: 6})
+    b.training_reserve = lambda state=None: 0
+    first = {"bags.free": 1, "char.class_id": 8, "char.race_id": 1, "inventory.total": 16,
+             "bags.money_copper": 900}
+    b.client.read = lambda: dict(first)
+    equipped, bought = [], []
+    from jev.run import body as body_module
+    fake = body_module.Vendor
+
+    class Buying(fake):
+        def run(self, **kwargs):
+            bought.append([s.item_id for s in kwargs["supplies"]])
+            self.bought_units = 1
+            return super().run(**kwargs)
+
+        def equip_bags(self, bags, **kw):
+            equipped.append(sorted(bags))
+            return 0
+    monkeypatch.setattr("jev.run.body.Vendor", Buying)
+    assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
+    assert bought == [[4496]]
+    assert equipped[-1] == [4496], "the bag bought goes on"
+
+
 def test_merchants_are_ranked_by_their_walk_not_their_distance(monkeypatch):
     """Goldshire's warlock trainer sells from the inn's cellar: nearest in a straight line,
     and the way back out took 155 turns and 18 stuck events (session 90)."""

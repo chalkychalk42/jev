@@ -16,9 +16,9 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
         db.executescript("""
             CREATE TABLE world_item_template (
                 entry INT, class INT, Quality INT, SellPrice INT, InventoryType INT, startquest INT,
-                subclass INT, ContainerSlots INT, BagFamily INT);
-            INSERT INTO world_item_template VALUES (7073,15,0,6,0,0,0,0,0);
-            INSERT INTO world_item_template VALUES (5572,1,1,250,18,0,0,6,0);
+                subclass INT, ContainerSlots INT, BagFamily INT, BuyPrice INT DEFAULT 0);
+            INSERT INTO world_item_template VALUES (7073,15,0,6,0,0,0,0,0,24);
+            INSERT INTO world_item_template VALUES (5572,1,1,250,18,0,0,6,0,1000);
             CREATE TABLE world_quest_template (SrcItemId INT);
             INSERT INTO world_quest_template VALUES (0);
             CREATE TABLE world_creature_template (
@@ -58,6 +58,7 @@ def test_generator_normalizes_sqlite_text_coordinates_without_changing_values():
     assert json.loads(json.dumps(result))["vendors"][0]["world"] == [-1.25, 2.5, 0.03]
     assert merchant["entry"] == 465 and merchant["items"] == [159]
     assert result["bags"] == {"5572": 6}
+    assert result["bag_prices"] == {"5572": 1000}, "what a purse must spare for it (V260)"
     assert result["innkeepers"] == [{"entry": 295, "name": "Fixture Innkeeper", "map_id": 0,
                                      "sides": ["alliance"], "world": [10.0, 20.0, 30.0]},
                                     {"entry": 296, "name": "Hostile Innkeeper", "map_id": 0,
@@ -112,7 +113,7 @@ def test_a_merchant_that_mends_gear_is_marked_so():
         db.executescript("""
             CREATE TABLE world_item_template (
                 entry INT, class INT, Quality INT, SellPrice INT, InventoryType INT, startquest INT,
-                subclass INT, ContainerSlots INT, BagFamily INT);
+                subclass INT, ContainerSlots INT, BagFamily INT, BuyPrice INT DEFAULT 0);
             CREATE TABLE world_quest_template (SrcItemId INT);
             CREATE TABLE world_creature_template (
                 Entry INT, Name TEXT, NpcFlags INT, VendorTemplateId INT, Faction INT,

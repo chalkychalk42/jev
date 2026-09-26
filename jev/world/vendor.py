@@ -92,6 +92,11 @@ def bag_slots() -> dict[int, int]:
     return {int(k): int(v) for k, v in (catalog().get("bags") or {}).items()}
 
 
+def bag_prices() -> dict[int, int]:
+    """What a merchant asks for each general bag it sells, in copper (V260)."""
+    return {int(k): int(v) for k, v in (catalog().get("bag_prices") or {}).items()}
+
+
 # A caster drinks after most fights, so it carries twice the water (V164).
 CASTER_DRINKS = 20
 

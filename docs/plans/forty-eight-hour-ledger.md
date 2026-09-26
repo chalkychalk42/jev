@@ -380,6 +380,7 @@ Trials
 | V257 the search for a way round bounded (amends V248) | session 228 | no VENDOR_REPAIR or bag walk timing out before a step; plans in well under a second | repairs `done`; `complete: N waypoints` within seconds of a service's start | **Fired**: session 228's walks planned at once; the repair walked after the hearthstone | |
 | V258 spawns drawn from a list are in the hostile index | session 230 | fewer deaths to murlocs and gnolls; detours round their camps | murloc and Riverpaw deaths per hour; `round N units` walks near Stone Cairn Lake | | |
 | V259 a walk to a merchant or a smith waits for a meal | session 231 | no BAG_MAKE_SPACE or VENDOR_REPAIR begun below the rest line | services' starting health and mana | | |
+| V260 a bag bought when the purse can spare it | session 231 or 232 | the belt grows from 16 slots; bag walks fewer | `bought a bag (4496): on the belt`; `inventory.total` above 16 | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues

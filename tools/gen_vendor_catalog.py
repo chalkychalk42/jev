@@ -125,6 +125,10 @@ def generate(db: sqlite3.Connection, profiles: dict, guide_quests: set[int] | No
     bags = {str(row[0]): int(row[1]) for row in db.execute(
         "select entry,ContainerSlots from world_item_template where class=1 and subclass=0 "
         "and InventoryType=18 and ContainerSlots>0 and BagFamily=0 order by entry")}
+    # What each costs a merchant's customer, for a purse that can spare one (V260).
+    bag_prices = {str(row[0]): int(row[1]) for row in db.execute(
+        "select entry,BuyPrice from world_item_template where class=1 and subclass=0 "
+        "and InventoryType=18 and ContainerSlots>0 and BagFamily=0 and BuyPrice>0 order by entry")}
     # Innkeepers, where the hearthstone is bound: the one nearest the guide's work becomes
     # home (`LiveBody._bind`). A game event's spawns stand there only while it runs.
     innkeepers = []
@@ -159,7 +163,7 @@ def generate(db: sqlite3.Connection, profiles: dict, guide_quests: set[int] | No
                               "world": [float(x), float(y), float(z)],
                               "gossip": line[0] if line else None})
     return {"schema": 1, "junk": sorted(set(junk)), "junk_prices": prices, "supplies": supplies,
-            "vendors": vendors, "bags": bags, "surplus_prices": surplus,
+            "vendors": vendors, "bags": bags, "bag_prices": bag_prices, "surplus_prices": surplus,
             "innkeepers": innkeepers, "flightmasters": flightmasters}
 
 

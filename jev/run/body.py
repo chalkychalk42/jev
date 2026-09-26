@@ -63,6 +63,8 @@ from jev.world.training import placements as spell_placements
 from jev.world.training import spell as spell_facts
 from jev.world.training import trainer_due, training_cost
 from jev.world.vendor import (
+    Supply,
+    bag_prices,
     bag_slots,
     consumable_role,
     consumables,
@@ -191,6 +193,13 @@ SELL_ALL = 999
 # each about 55 s and 240 yards when it arrived, and 19 of 42 were cut off by a fight on
 # the way. With no slot free the walk is made whatever they fetch.
 SALE_WORTH_COPPER = 30
+# A bag is bought on the bag service's walk while the belt holds fewer slots than this and the
+# purse keeps this much over the bag's price and the trainer's due (V260): the level 9 mage's
+# 16-slot backpack held eight slots of quest items it could neither sell nor use, and its bag
+# walks cost 9.6 minutes an hour (sessions 222-228), with 725 copper in the purse and a 6-slot
+# pouch at 500 at Eastvale's general goods.
+BAG_ROOM_SLOTS = 28
+BAG_SPARE_COPPER = 100
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
 # Walks in a row that ended with the character wedged before it goes home by hearthstone.
@@ -1453,6 +1462,7 @@ class LiveBody:
             if not supplies:
                 return Result(SkillOutcome.ABORTED, "no confirmed empty supported food/drink slot", "unsupported")
         eligible, min_free = junk_prices(), 1 if supplies else 6
+        bag = ()
         if self.arm.decision.skill == "BAG_MAKE_SPACE":
             # A bag lying in the bags is the cheapest room there is: no merchant needed.
             equipper = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
@@ -1479,11 +1489,15 @@ class LiveBody:
                 counted = getattr(equipper, "last_census", None) or {}
                 worth = sum(eligible.get(item, 0) * count for item, count in counted.values())
                 free = values.get("bags.free")
-                if counted and isinstance(free, int) and free > 0 and worth < SALE_WORTH_COPPER:
+                # A bag bought needs a slot to land in: one free, or one a sale empties.
+                bag = (self._bag_to_buy(values)
+                       if (isinstance(free, int) and free > 0) or worth > 0 else ())
+                if (not bag and counted and isinstance(free, int) and free > 0
+                        and worth < SALE_WORTH_COPPER):
                     return Result(SkillOutcome.ABORTED,
                                   f"the bags' goods fetch {worth} copper, not worth the walk "
                                   f"with {free} slot{'s' if free > 1 else ''} free", "no_junk")
-        wanted = {s.item_id for s in supplies}
+        wanted = {s.item_id for s in (*supplies, *bag)}
         candidates = self._in_zone(m for m in merchants(self.client.bounds.map_id)
                                    if not wanted or wanted & m.items)
         if not candidates:
@@ -1506,8 +1520,10 @@ class LiveBody:
                             eligible=eligible)
             try:
                 outcome = vendor.run(expected_name=merchant.name,
-                                     supplies=tuple(s for s in supplies if s.item_id in merchant.items),
-                                     min_free=min_free, reserve_copper=reserve,
+                                     supplies=tuple(s for s in (*supplies, *bag)
+                                                    if s.item_id in merchant.items),
+                                     min_free=min_free,
+                                     reserve_copper=(self.training_reserve() if bag else reserve),
                                      timeout_s=self.travel_timeout + 120)
             except BodyFailure as failure:
                 if failure.result.code in MERCHANT_UNREACHABLE:
@@ -1527,11 +1543,34 @@ class LiveBody:
                     free = (self._read() or {}).get("bags.free")
                     if isinstance(free, int) and free <= BAGS_LOW:
                         self.policy_context.bags_failed(free)
-            if outcome is Vended.TOO_POOR:
+            if outcome is Vended.TOO_POOR and supplies:
                 self.policy_context.supplies_need(vendor.needed_copper)
+            if bag and vendor.bought_units:
+                # The bag bought goes on the belt at once, where it is room.
+                belt = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
+                              self.client.size)
+                worn = belt.equip_bags(bag_slots())
+                self.say(f"  bought a bag ({bag[0].item_id}): {'on' if worn else 'not on'} the belt")
             return self._result(outcome, vendor.detail or
                                 f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
         raise AssertionError("unreachable: the last merchant returns or raises")
+
+    def _bag_to_buy(self, values: dict) -> tuple:
+        """The general bag to buy on this walk, as a supply of one, or none: the belt short of
+        `BAG_ROOM_SLOTS`, a merchant in the zone selling one, and the purse able to spare the
+        cheapest a slot over the trainer's due and `BAG_SPARE_COPPER` (V260)."""
+        total, money = values.get("inventory.total"), values.get("bags.money_copper")
+        if not isinstance(total, int) or total >= BAG_ROOM_SLOTS or not isinstance(money, int):
+            return ()
+        slots, prices = bag_slots(), bag_prices()
+        sold = {item for m in self._in_zone(merchants(self.client.bounds.map_id))
+                for item in m.items if item in slots and item in prices}
+        if not sold:
+            return ()
+        best = min(sold, key=lambda item: (prices[item] / slots[item], -slots[item], item))
+        if money < prices[best] + self.training_reserve() + BAG_SPARE_COPPER:
+            return ()
+        return (Supply(item_id=best, name=f"bag {best}", role="bag", desired=1),)
 
     def _in_zone(self, candidates) -> list:
         """The merchants standing inside the measured zone's map box."""
