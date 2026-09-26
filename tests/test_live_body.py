@@ -475,6 +475,20 @@ def test_a_body_that_killed_the_character_again_is_left_for_the_spirit_healer(
     assert DEATH_TRAP_S > 60.0
 
 
+def test_a_service_blocked_for_the_step_does_not_stop_its_grind():
+    """V194: session 156's repair walk timed out and repairs were blocked for the step
+    (V185), but the grind asked for one from inside the hunt, with no step named, and
+    stopped for "durability is low" seventeen times."""
+    from jev.world.state_v1 import Bags
+
+    b = body()
+    worn = seen(bags=Bags(free=20, durability_min=0.2, money_copper=5000))
+    b.client.state = lambda: worn
+    assert b._service_needed() == "durability is low", "no block: the repair is wanted"
+    b.policy_context.repair_unreachable(b.arm.step_id)
+    assert b._service_needed() is None, "blocked for this step: the grind goes on"
+
+
 def test_resurrection_sickness_is_waited_out_before_going_on(monkeypatch):
     """V189: walking out under the sickness, a level 13 paladin met a Dust Devil 90 s
     after getting up at the Spirit Healer and died (session 150)."""

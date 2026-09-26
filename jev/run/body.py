@@ -765,6 +765,14 @@ class LiveBody:
         state = self.client.state()
         if state is None:
             return None
+        # On the armed step, as the policy sees it: a merchant or repairer found out of
+        # reach is blocked for the step (V175, V185), and the client's own state names no
+        # step. Session 156's repair walk timed out, and the grind stopped for "durability is
+        # low" seventeen times, armed again each time by a policy that knew the repair was
+        # out of reach (V194).
+        if self.arm is not None and self.arm.step_id:
+            state = state.model_copy(update={"guide": state.guide.model_copy(
+                update={"step_id": self.arm.step_id})})
         plan = service(state, context=self.policy_context)
         return plan.decision.why if plan else None
 
