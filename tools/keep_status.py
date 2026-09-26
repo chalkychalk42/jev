@@ -182,7 +182,7 @@ def collect() -> Facts:
     facts.loops = [line for line in _run(["pgrep", "-af", r"session_loop[0-9]*\.sh"]).splitlines()
                    if "pgrep" not in line and "bash -c" not in line]
     loop_dir = ROOT / "var" / "loop"
-    for name in ("arm", "quiet_s", "hold", "stop"):
+    for name in ("quiet_s", "hold", "stop"):
         path = loop_dir / name
         if path.exists():
             facts.flags[name] = path.read_text(errors="replace").strip()

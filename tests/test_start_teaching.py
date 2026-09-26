@@ -56,15 +56,27 @@ def test_launcher_defaults_to_check_and_never_starts_a_live_session(tmp_path, mo
     assert checked == [[*args, "--check"]]
 
 
-def test_explicit_adaptive_and_session_length_flow_through_same_check(tmp_path, monkeypatch):
+def test_the_loops_dispatch_and_session_length_flow_through_same_check(tmp_path, monkeypatch):
     path = tmp_path / "launch.json"
     path.write_text(json.dumps({"version": 1, "cwd": str(tmp_path),
                                "args": ["--play-mode", "teach", "--run-for", "180"]}))
     checked = []
     monkeypatch.setattr("jev.run.cli.main", lambda values: checked.append(values) or 0)
-    assert start_teaching.main(["--config", str(path), "--mode", "adaptive", "--session-seconds", "3600"]) == 0
-    assert start_teaching.option(checked[0], "--play-mode") == "adaptive"
+    assert start_teaching.main(["--config", str(path), "--dispatch", "hybrid",
+                                "--session-seconds", "3600"]) == 0
+    assert start_teaching.option(checked[0], "--play-mode") == "teach"
     assert float(start_teaching.option(checked[0], "--run-for")) == 3600
+    assert "--play-dispatch" not in checked[0], "hybrid is the only dispatch (V223)"
+
+
+@pytest.mark.parametrize("retired", [["--dispatch", "tutor"], ["--mode", "adaptive"]])
+def test_the_retired_arms_are_refused_before_the_check(tmp_path, monkeypatch, retired):
+    path = tmp_path / "launch.json"
+    path.write_text(json.dumps({"version": 1, "cwd": str(tmp_path), "args": ["--play-mode", "teach"]}))
+    monkeypatch.setattr("jev.run.cli.main", lambda values: pytest.fail("checked a retired arm"))
+    with pytest.raises(SystemExit) as error:
+        start_teaching.main(["--config", str(path), *retired])
+    assert error.value.code == 2
 
 
 def test_nonwindows_live_launch_refused_before_game_access(tmp_path, monkeypatch):

@@ -32,10 +32,6 @@ from jev.world.state_v1 import State
 # the decision-making Jev is there to do and the student is there to learn. It remains
 # the scripted fallback when the tutor cannot answer or stalls.
 OBJECTIVE_LOOPS = frozenset({"GRIND_UNTIL"})
-# Who takes an ordinary objective first: the tutor, or the guide's own routine (`hybrid`),
-# with the tutor only on the routine's failures. The sample of ordinary objectives it also
-# took fed an imitation student that could at best call the routines back (V158).
-DISPATCHES = frozenset({"tutor", "hybrid"})
 # Routine results that are not the routine failing its objective: nothing sellable, too
 # poor, or the objective already done.
 ROUTINE_NOT_FAILED = frozenset({"no_junk", "too_poor", "nothing", "done"})
@@ -164,15 +160,12 @@ class PlayingBody:
                  teacher_effort: str | None = None,
                  teacher_calls_per_hour: int = 240, binding_paths=(),
                  config: PlayConfig | None = None, teacher=None, learner=None,
-                 start_learning: bool = True, world_db: Path | None = DEFAULT_WORLD_DB,
-                 dispatch: str = "tutor"):
+                 start_learning: bool = True, world_db: Path | None = DEFAULT_WORLD_DB):
         if config is not None and mode != config.mode:
             raise ValueError("playing mode and configuration disagree")
-        if dispatch not in DISPATCHES:
-            raise ValueError(f"dispatch must be one of {sorted(DISPATCHES)}")
-        # Who takes an ordinary objective first (`_ask_tutor`): the tutor always, or the
-        # guide's own routine with the tutor on its failures.
-        self.dispatch = dispatch
+        # An ordinary objective goes to the guide's own routine first, and to the tutor only
+        # after its routine failed (`_ask_tutor`, hybrid dispatch). The tutor-first dispatch
+        # and the loop's A/B between the two went with V223.
         # The objectives whose routine just failed, and how it failed (`_note_routine`).
         self._routine_failed: dict[tuple[str | None, str | None], str] = {}
         # Whether such an objective goes to the tutor or back to its routine, learned from
@@ -229,7 +222,8 @@ class PlayingBody:
             "mode": mode, "config": asdict(self.controller.config),
             "controls": self.manifest.to_dict(), "controls_fingerprint": self.controls_fingerprint,
             "knowledge_fingerprint": self.knowledge.fingerprint,
-            "dispatch": dispatch,
+            # The reports tell runs apart by it: the runs before V223 may say "tutor".
+            "dispatch": "hybrid",
             "teacher_requested": teacher_model, "teacher_calls_per_hour": teacher_calls_per_hour,
             "teacher_provider": teacher_provider,
             "learning_store": str(self.learner.directory), "live_validated": False,
@@ -309,7 +303,7 @@ class PlayingBody:
                 state = State.model_validate(self.observer.observe(arm).data["state"])
             self.routine_clock = time.monotonic()
             return self.spine.execute(arm, state, focused_checkpoint)
-        if self.dispatch == "hybrid" and not self._ask_tutor(arm):
+        if not self._ask_tutor(arm):
             self.journal.append("actions", {"event": "hybrid_routine", "t": time.time(),
                                             "arm_id": arm.arm_id, "skill": arm.decision.skill,
                                             "step_id": arm.step_id})

@@ -1,7 +1,7 @@
-"""Per-session performance, for comparing ways of playing (docs/plans/nine-hour-session.md).
+"""Per-session performance, and the scoreboard's blocks (docs/plans/forty-eight-hour-session.md).
 
     python tools/session_report.py --since 88              # a row per session
-    python tools/session_report.py --since 88 --compare    # each arm's totals, intervals
+    python tools/session_report.py --since 134 --blocks 2  # the scoreboard, 2-hour blocks
     python tools/session_report.py --since 55 --csv captures/metrics.csv
     python tools/session_report.py --since 88 --motor      # + qualified motor examples
 
@@ -16,8 +16,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
-import random
 import re
 import sqlite3
 import statistics
@@ -33,8 +31,6 @@ DB = ROOT / "data/knowledge/tbc-243.sqlite"
 CAPTURES = ROOT / "captures"
 RUNS = ROOT / "runs"
 LOOP_LOG = CAPTURES / "session-loop.log"
-# Sessions shorter than this are start-up failures, not samples of play.
-MIN_MINUTES = 3.0
 # Ticks further apart than this are a pause, not play.
 MAX_TICK_GAP_S = 5.0
 
@@ -224,20 +220,6 @@ def motor_counts(store: Path) -> dict[str, tuple[int, int]]:
     return {run: (n, q) for run, (n, q) in counts.items()}
 
 
-def _interval(values: list[float], weights: list[float], *, draws: int = 2000) -> tuple[float, float]:
-    """A bootstrap 90% interval of the weighted mean: sessions differ in length."""
-    if len(values) < 2:
-        return (math.nan, math.nan)
-    rng = random.Random(7)
-    means = []
-    for _ in range(draws):
-        picks = [rng.randrange(len(values)) for _ in values]
-        total = sum(weights[i] for i in picks)
-        means.append(sum(values[i] * weights[i] for i in picks) / total if total else math.nan)
-    means.sort()
-    return means[int(0.05 * draws)], means[int(0.95 * draws)]
-
-
 def blocks(sessions: list[Session], hours: float) -> list[dict]:
     """Consecutive sessions gathered into blocks of about `hours` of play: the scoreboard a
     change is judged on (docs/plans/forty-eight-hour-session.md, section 7)."""
@@ -270,41 +252,13 @@ def _block(group: list[Session]) -> dict:
             "stations": f"{sum(s.stations_won for s in group)}/{sum(s.stations for s in group)}"}
 
 
-def compare(sessions: list[Session]) -> list[dict]:
-    """Each arm's totals: rates over its played hours, and an interval on XP/h."""
-    by_arm: dict[str, list[Session]] = defaultdict(list)
-    for s in sessions:
-        if s.minutes >= MIN_MINUTES:
-            by_arm[s.arm or "?"].append(s)
-    out = []
-    for arm, group in sorted(by_arm.items()):
-        hours = sum(s.minutes for s in group) / 60
-        loot_total = sum(s.looted + s.unlooted for s in group)
-        low, high = _interval([s.xp_per_hour for s in group], [s.minutes for s in group])
-        qualified = [s.motor_qualified for s in group if s.motor_qualified is not None]
-        out.append({
-            "arm": arm, "sessions": len(group), "hours": round(hours, 2),
-            "xp_per_hour": round(sum(s.xp for s in group) / hours) if hours else 0,
-            "xp_per_hour_90": (round(low), round(high)) if not math.isnan(low) else None,
-            "deaths_per_hour": round(sum(s.deaths for s in group) / hours, 2) if hours else 0,
-            "kills_per_hour": round(sum(s.kills for s in group) / hours, 1) if hours else 0,
-            "steps_per_hour": round(sum(s.steps for s in group) / hours, 1) if hours else 0,
-            "loot_rate": round(sum(s.looted for s in group) / loot_total, 2) if loot_total else None,
-            "stuck_per_hour": round(sum(s.stuck for s in group) / hours, 1) if hours else 0,
-            "tutor_calls_per_hour": round(sum(s.tutor_calls for s in group) / hours, 1) if hours else 0,
-            "qualified_per_hour": round(sum(qualified) / hours, 1) if qualified and hours else None,
-        })
-    return out
-
-
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--since", type=int, default=88, help="first session number")
-    parser.add_argument("--compare", action="store_true", help="totals per arm")
     parser.add_argument("--blocks", type=float, metavar="HOURS",
                         help="the scoreboard: consecutive sessions in blocks of this much play")
     parser.add_argument("--skip", type=int, nargs="*", default=[],
-                        help="sessions left out of --compare, e.g. ones a fixed bug spoiled")
+                        help="sessions left out of --blocks, e.g. ones a fixed bug spoiled")
     parser.add_argument("--csv", type=Path, help="write every session as a CSV row")
     parser.add_argument("--motor", action="store_true",
                         help="count qualified motor examples (reads the learning store)")
@@ -331,10 +285,6 @@ def main(argv=None) -> int:
                 row = {k: v for k, v in asdict(s).items() if k != "skills"}
                 row["top_skills"] = ";".join(f"{k}:{v}" for k, v in list(s.skills.items())[:4])
                 writer.writerow(row)
-    if args.compare:
-        for row in compare([s for s in sessions if s.number not in args.skip]):
-            print(json.dumps(row))
-        return 0
     if args.blocks:
         print(f"{'sessions':>9} {'hours':>5} {'lvl':>5} {'xp':>6} {'xp/h':>5} {'kill/h':>6} "
               f"{'die/h':>5} {'stuck/h':>7} {'step/h':>6} {'tutor/h':>7} {'stns':>7}")

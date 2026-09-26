@@ -99,9 +99,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=ROOT / "var/teaching-launch.json")
     parser.add_argument("--run", action="store_true", help="attach the game and begin the supervised test")
-    parser.add_argument("--mode", choices=("teach", "adaptive"))
-    parser.add_argument("--dispatch", choices=("tutor", "hybrid"),
-                        help="who takes an objective first (docs/plans/nine-hour-session.md)")
+    # The one dispatch left (V223): the guide's routine first, the tutor on its failures. The
+    # loop and tools/visit.sh still name it, so the flag stays and changes nothing.
+    parser.add_argument("--dispatch", choices=("hybrid",), default="hybrid",
+                        help="who takes an objective first: hybrid, the only one")
     parser.add_argument("--sessions", type=int, default=1, help="clean collection sessions; 0 repeats until stop/failure/route end")
     parser.add_argument("--session-seconds", type=float)
     args = parser.parse_args(argv)
@@ -110,10 +111,6 @@ def main(argv=None):
         parser.error("sessions must be nonnegative and session-seconds finite and positive")
     document = load_config(args.config)
     command = document["args"]
-    if args.mode:
-        command = replace_option(command, "--play-mode", args.mode)
-    if args.dispatch:
-        command = replace_option(command, "--play-dispatch", args.dispatch)
     if args.session_seconds:
         command = replace_option(command, "--run-for", args.session_seconds)
     if not args.run:

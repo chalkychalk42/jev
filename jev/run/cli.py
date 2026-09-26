@@ -93,8 +93,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--teacher-calls-per-hour", type=int, default=12)
     parser.add_argument("--play-mode", choices=("off", "teach", "adaptive"), default="off",
                         help="visual Jev actions inside guide skills; adaptive enables evaluated motor handover")
-    parser.add_argument("--play-dispatch", choices=("tutor", "hybrid"), default="tutor",
-                        help="hybrid: the guide's routine first, the tutor on its failures")
     parser.add_argument("--play-teacher-calls-per-hour", type=int, default=240,
                         help="separate motor tutor budget, counting each actual request/lookup")
     parser.add_argument("--play-decision-timeout", type=float, default=30,
@@ -396,7 +394,7 @@ def _live(args, graph) -> int:
                 teacher_calls_per_hour=args.play_teacher_calls_per_hour,
                 binding_paths=args.bindings, world_db=args.world_db,
                 config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout),
-                dispatch=args.play_dispatch, start_learning=False)
+                start_learning=False)
             # After a routine fails: the tutor, or the routine again, learned (V158).
             playing.recovery = Choice(choices, "recover.after_failure", log=choice_log)
             body = playing

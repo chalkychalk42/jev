@@ -191,13 +191,14 @@ def test_the_disk_and_the_stop_flag_are_respected(tmp_path):
 
 
 @needs_bash
-def test_the_loop_numbers_on_plays_the_arm_and_stops_at_the_flag(tmp_path):
+def test_the_loop_numbers_on_plays_hybrid_and_stops_at_the_flag(tmp_path):
     tree, env = _fakes(tmp_path)
     (tree / "captures").mkdir()
     (tree / "captures" / "session-loop.log").write_text(
         "session 133 start 2026-09-25T08:43:54+01:00 arm=tutor quiet=600\n"
         "session 133 exit=130 after 439s 2026-09-25T08:51:13+01:00\n")
     (tree / "var" / "loop").mkdir(parents=True, exist_ok=True)
+    # An arm file left from before V223 names the tutor-first arm; nothing reads it now.
     (tree / "var" / "loop" / "arm").write_text("tutor\n")
     for port in ("3724", "8085"):
         with (Path(env["FAKE"]) / "listening").open("a") as handle:
@@ -207,12 +208,12 @@ def test_the_loop_numbers_on_plays_the_arm_and_stops_at_the_flag(tmp_path):
                             capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr
     log = (tree / "captures" / "session-loop.log").read_text()
-    assert "session 134 start" in log and "arm=tutor" in log.splitlines()[3]
+    assert "session 134 start" in log and "arm=" not in log.splitlines()[3]
     assert "session 135 exit=0" in log and "session 136" not in log
     assert log.rstrip().splitlines()[-1].startswith("loop ended")
     assert (tree / "captures" / "live-134.log").exists()
     played = (Path(env["FAKE"]) / "sessions").read_text().splitlines()
-    assert played == ["-u tools/start_teaching.py --run --dispatch tutor"] * 2
+    assert played == ["-u tools/start_teaching.py --run --dispatch hybrid"] * 2
     second = subprocess.run([str(tree / "tools" / "session_loop.sh")], env=env,
                             capture_output=True, text=True, timeout=60)
     assert second.returncode == 0, "a stopped loop ends at once"

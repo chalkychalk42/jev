@@ -109,7 +109,7 @@ After the initial live test has established useful play, the same launcher can c
 successive clean sessions while keeping the playhead and learning store:
 
 ```text
-C:\forever-win\Scripts\python.exe tools\start_teaching.py --run --mode adaptive --sessions 0 --session-seconds 3600
+C:\forever-win\Scripts\python.exe tools\start_teaching.py --run --sessions 0 --session-seconds 3600
 ```
 
 Zero sessions means repeat until operator stop, failure or completion of the supported

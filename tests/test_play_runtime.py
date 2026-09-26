@@ -88,7 +88,8 @@ class Teacher:
                                  requested_model="fixture", actual_model="fixture")
 
 
-def composition(tmp_path, *, mode="teach", prediction="shadow", node=None, config=None):
+def composition(tmp_path, *, mode="teach", prediction="shadow", node=None, config=None,
+                tutor_first=True):
     cap, hid = PaintedCapture(), Hid()
     hid.position = (100, 100)
     hid.keys_down = lambda: sorted(hid.held)
@@ -113,6 +114,11 @@ def composition(tmp_path, *, mode="teach", prediction="shadow", node=None, confi
                           # only matters on a loaded machine, where 0.05 s missed the paint.
                           config=config or PlayConfig(mode=mode, max_actions=2, outcome_wait_s=0.5,
                                                       poll_s=0.01), start_learning=False)
+    if tutor_first:
+        # The tutor takes every objective here, as the tutor-first dispatch gave it them
+        # before V223: these tests drive the tutor's own episode. The hybrid rule itself,
+        # the routine first and the tutor after its failure, is tested with the real one.
+        playing._ask_tutor = lambda arm: True
     screenshots.start()
     skill = "GRIND_UNTIL" if node.kind is StepKind.QUEST_OBJECTIVE else "TRAVEL_TO"
     arm = Armed(Decision(goal="fixture guide objective", intent=Intent.ADVANCE, skill=skill,
@@ -675,8 +681,7 @@ def test_background_leaves_the_run_in_progress_to_its_own_controller(tmp_path):
 def test_hybrid_dispatch_runs_the_routine_first_and_the_tutor_on_its_failure(tmp_path):
     """docs/plans/nine-hour-session.md: the tutor cost a fifth of play time. In hybrid the
     guide's routine takes an ordinary objective, and the tutor the one it just failed."""
-    env = composition(tmp_path)
-    env.playing.dispatch = "hybrid"
+    env = composition(tmp_path, tutor_first=False)
     asked = []
     env.playing.controller.run = lambda arm, checkpoint: asked.append(arm) or Result(
         SkillOutcome.SUCCEEDED, "tutor played", "done")
@@ -695,7 +700,7 @@ def test_hybrid_dispatch_runs_the_routine_first_and_the_tutor_on_its_failure(tmp
     assert scripted == [env.arm, env.arm], "the routine first, and again after the tutor"
     assert asked == [env.arm], "only its failure went to the tutor"
     config = json.loads((env.recorder.dir / "play-config.json").read_text())
-    assert config["dispatch"] == "tutor", "recorded as built; the fixture switched it after"
+    assert config["dispatch"] == "hybrid", "the reports tell it from the older tutor runs"
 
 
 def test_hybrid_dispatch_asks_the_tutor_only_after_a_routine_failed(tmp_path):
@@ -703,8 +708,7 @@ def test_hybrid_dispatch_asks_the_tutor_only_after_a_routine_failed(tmp_path):
     call the routines back; its time goes to the objectives a routine has just failed."""
     from jev.learn.episode import SkillOutcome as Outcome
 
-    env = composition(tmp_path)
-    env.playing.dispatch = "hybrid"
+    env = composition(tmp_path, tutor_first=False)
     try:
         ordinary = env.playing._ask_tutor(env.arm)
         env.playing._note_routine(env.arm, Result(Outcome.ABORTED, "stuck", "unreachable"))
@@ -714,11 +718,6 @@ def test_hybrid_dispatch_asks_the_tutor_only_after_a_routine_failed(tmp_path):
         env.playing.close()
     assert not ordinary, "an ordinary objective is the routine's"
     assert failed, "the objective its routine just failed"
-
-
-def test_an_unknown_dispatch_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="dispatch"):
-        PlayingBody(None, recorder=None, store=tmp_path, screenshots=None, dispatch="sometimes")
 
 
 class _Picks:
@@ -737,8 +736,7 @@ class _Picks:
 def test_after_a_routine_fails_the_retry_is_a_learned_choice(tmp_path, option, tutor_asked):
     """V158: whether the tutor rescues a failed routine better than the routine's own retry
     is learned per skill and failure, from how each did."""
-    env = composition(tmp_path)
-    env.playing.dispatch = "hybrid"
+    env = composition(tmp_path, tutor_first=False)
     env.playing.recovery = _Picks(option)
     asked = []
     env.playing.controller.run = lambda arm, checkpoint: asked.append(arm) or Result(

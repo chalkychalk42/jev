@@ -4,7 +4,6 @@
 # It replaces /tmp/session_loop5.sh: nothing it needs lives in /tmp, which a WSL restart empties.
 #
 # Knobs, each read before every session, in var/loop/ (git ignores var/):
-#   arm      "hybrid" (the default), "tutor", or "ab" to alternate every two sessions
 #   quiet_s  the operator-pause window in seconds (default 600)
 #   hold     while it exists the loop waits between sessions: a deploy is in progress
 #   stop     the loop ends before the next session
@@ -37,15 +36,12 @@ while [ ! -f var/loop/stop ]; do
     continue
   fi
   rm -f captures/teaching/STOP
-  arm=$(cat var/loop/arm 2>/dev/null || echo hybrid)
-  if [ "$arm" = "ab" ]; then
-    if [ $(( (n / 2) % 2 )) -eq 0 ]; then arm=tutor; else arm=hybrid; fi
-  fi
   quiet=$(cat var/loop/quiet_s 2>/dev/null || echo 600)
   start=$(date +%s)
-  echo "session $n start $(date -Is) arm=$arm quiet=$quiet" >> "$LOG"
+  # Every session plays the hybrid dispatch; the tutor-first arm and the A/B went (V223).
+  echo "session $n start $(date -Is) quiet=$quiet" >> "$LOG"
   WSLENV="${WSLENV:+$WSLENV:}JEV_OPERATOR_QUIET_S" JEV_OPERATOR_QUIET_S="$quiet" \
-    timeout "$SESSION_S" "$WINPY" -u tools/start_teaching.py --run --dispatch "$arm" \
+    timeout "$SESSION_S" "$WINPY" -u tools/start_teaching.py --run --dispatch hybrid \
     > "captures/live-$n.log" 2>&1
   code=$?
   dur=$(( $(date +%s) - start ))
