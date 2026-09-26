@@ -17,9 +17,9 @@ presses Train; a press is a purchase only when the money falls. It goes on while
 worth buying is affordable. A header is never clicked, except one folded shut, to open it:
 a click on a header folds its group away or opens it.
 
-Without the list (a schema-17 addon) or without the trainer's offers, Train is pressed on
-whatever the window selects, as before: press it, see the money fall, wait for the next
-selection, and stop when the button goes.
+Without the list (a schema-17 addon, or a census the addon fails to paint) or without the
+trainer's offers, Train is pressed on whatever the window selects, as before: press it, see
+the money fall, wait for the next selection, and stop when the button goes.
 """
 
 from __future__ import annotations
@@ -32,14 +32,7 @@ from enum import StrEnum
 from jev.perceive.radio_frame import name_id
 from jev.perceive.trainer import AVAILABLE, FOLDED, TrainerCensus, TrainerRow, list_key
 from jev.run.evidence import event, traced
-from jev.world.training import (
-    Offer,
-    Trainer,
-    buy_order,
-    spell,
-    starting_bar,
-    worth_buying,
-)
+from jev.world.training import Offer, Trainer, shopping, spell, starting_bar
 
 OPEN_S = 4.0
 BOUGHT_S = 3.0
@@ -53,9 +46,16 @@ LIST_SCHEMA = 18
 # The rows learnable now and the headers come two paints in three, each row at the golden
 # ratio's turn (Helpers.lua): seven rows for the level 8 mage, all seen in about a second
 # when every paint is read. Worked out for a reader landing on one paint in two, three or
-# four, from any start: twelve rows within 10.2 s, and a row seen again within 14.4 s.
+# four, from any start: twelve rows within 10.2 s, a row seen again within 14.4 s, and
+# never more than 2 s a row up to fifty. The list grows with the spells never bought
+# (a rank 1 of Polymorph, of Blizzard, stays learnable), so the waits grow with it.
 LIST_S = 20.0
 ROW_S = 15.0
+ROW_WAIT_S = 2.0
+# The list painted at all, when the window is: every paint while it is open carries it.
+LIST_SEEN_S = 3.0
+# The list rebuilt under a choice this many times running, the desk gives up.
+MAX_CHANGES = 5
 # From a row's click to the window showing it selected, with Train enabled for it.
 SELECT_S = 3.0
 # From a scroll click to the list showing other rows: the next paint, or two.
@@ -177,10 +177,17 @@ class TrainerDesk:
     # -- by value (schema 18) -------------------------------------------------------------
 
     def _by_value(self) -> None:
+        if self._await_optional(lambda v: list_key(v) is not None, LIST_SEEN_S,
+                                window=True) is None:
+            # Schema 18 and no list painted: the census failed in the addon. Without a
+            # census, the window's own order, as before.
+            self._in_window_order(self._look())
+            self.detail = self.detail or "no trainer's list painted: bought in the window's order"
+            return
         offers = self._offers()
         bar = self.bar if self.bar is not None else starting_bar(self.trainer.class_id,
                                                                   self.race_id)
-        unfolded = 0
+        unfolded = changed = 0
         while self.bought < MAX_PURCHASES:
             rows = self._whole_list()
             folded = next((r for r in rows if r.kind == FOLDED), None)
@@ -198,9 +205,14 @@ class TrainerDesk:
             try:
                 selected = self._select(row)
             except _Changed:
+                changed += 1
+                if changed >= MAX_CHANGES:
+                    raise _Stop(Trained.NOT_SELECTED, f"the trainer's list changed under the "
+                                                      f"choice {changed} times") from None
                 continue
             if not self._train(selected, row, offer):
                 return
+            changed = 0
 
     def _offers(self) -> dict[tuple[int, int], Offer]:
         """The trainer's offers by the name hash and rank a row of its list shows. Where two
@@ -216,32 +228,45 @@ class TrainerDesk:
 
     def _choose(self, rows: tuple[TrainerRow, ...], offers: dict[tuple[int, int], Offer],
                 bar: Mapping[int, int | None], money: int) -> tuple[TrainerRow, Offer] | None:
-        """The row learnable now worth most (`buy_order`) among those worth buying
-        (`worth_buying`) that the purse pays for; `None` when there is none."""
+        """The row learnable now worth most that the purse pays for, of the offers worth
+        buying all together (`shopping`); `None` when there is none. A cheaper spell is
+        not bought into the last free slot a better one, not yet affordable, needs."""
         known = {*(self.known or ()), *self.learned}
-        best, best_key, seen = None, None, []
+        by_offer: dict[Offer, TrainerRow] = {}
+        seen = []
         for row in rows:
             if row.kind != AVAILABLE:
                 continue
             offer = offers.get((row.name_id, row.rank))
-            worth = (offer is not None and offer.spell_id not in known
-                     and worth_buying(offer.spell_id, known, bar))
-            seen.append([row.index, offer.spell_id if offer else None, row.cost, worth])
-            if not worth or row.cost is None or row.cost > money:
-                continue
-            key = buy_order(offer, known)
-            if best_key is None or key < best_key:
-                best, best_key = (row, offer), key
+            seen.append([row.index, offer.spell_id if offer else None, row.cost])
+            if offer is not None and offer.spell_id not in known and row.cost is not None:
+                by_offer[offer] = row
+        wanted = shopping(by_offer, known, bar)
+        best = next(((by_offer[o], o) for o in wanted if by_offer[o].cost <= money), None)
         event("trainer.choose", data={"money": money, "learnable": seen,
+                                      "wanted": [o.spell_id for o in wanted],
                                       "chosen": best[1].spell_id if best else None})
         return best
 
+    def _wait_s(self, least: float) -> float:
+        """A wait for rows of the short cycle: `least`, or `ROW_WAIT_S` a row of it."""
+        key = self._census.key
+        return max(least, ROW_WAIT_S * key[2]) if key is not None else least
+
     def _whole_list(self) -> tuple[TrainerRow, ...]:
         """Every header and every service learnable now, read under one list."""
-        if self._await_optional(lambda v: self._census.short is not None, LIST_S,
-                                window=True) is None:
-            raise _Stop(Trained.TIMEOUT, f"the trainer's list not read whole in {LIST_S:.0f} s")
-        return self._census.short
+        start = self.clock()
+        while True:
+            values = self._look()
+            rows = self._census.short
+            if rows is not None:
+                return rows
+            if values.get("ui.trainer") is False:
+                raise _Stop(Trained.NO_TRAINER, "the trainer window closed")
+            wait = self._wait_s(LIST_S)
+            if self.clock() >= start + wait:
+                raise _Stop(Trained.TIMEOUT, f"the trainer's list not read whole in {wait:.0f} s")
+            self.sleep(0.05)
 
     def _select(self, row: TrainerRow) -> dict:
         """Bring `row` into view, click it, and see the window select it with Train enabled:
@@ -284,8 +309,10 @@ class TrainerDesk:
         self.spent += money - after["bags.money_copper"]
         self.learned.append(offer.spell_id)
         # The server answers with the list rebuilt, the spell bought out of it: the rows
-        # read before are numbered wrong from here.
+        # read before are numbered wrong from here. They are read again in any case, so a
+        # list rebuilt late is not chosen from, then pulled from under a click.
         self._await_optional(lambda v: list_key(v) != key, NEXT_S, window=True)
+        self._census.reset()
         return True
 
     def _unfold(self, header: TrainerRow) -> None:
@@ -310,7 +337,7 @@ class TrainerDesk:
         while True:
             values = self._await_optional(
                 lambda v: list_key(v) != key or v.get("trainer.index") == row.index,
-                ROW_S, window=True)
+                self._wait_s(ROW_S), window=True)
             if values is None:
                 raise _Stop(Trained.TIMEOUT, f"no paint of the list's row {row.index}")
             if list_key(values) != key or (values.get("trainer.name_id"),

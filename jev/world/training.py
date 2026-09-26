@@ -194,15 +194,37 @@ def worth_buying(spell_id: int, known: Iterable[int], bar: Mapping[int, int | No
                  facts: dict | None = None) -> bool:
     """Whether the bot would use this spell once it knows it (V237): the fight code presses
     its role (`BUY_ORDER`), and `placements` would put it on the bar - a new rank where the
-    old one is, or a new spell the bar takes. So an aura, a save, a stun or a last resort is
-    worth buying only as the first of its kind, a long buff only for an aura the bar lacks,
-    and a heal or a short buff only as a new rank of one on the bar: at level 12 a mage's
-    Slow Fall, a new short buff, is never bought, and Fireball rank 3 is."""
+    old one is, or a new spell the bar takes - without taking the place of a spell that
+    would otherwise go there. So an aura, a save, a stun or a last resort is worth buying
+    only as the first of its kind, a long buff only for an aura the bar lacks, and a heal
+    or a short buff only as a new rank of one on the bar: at level 12 a mage's Slow Fall,
+    a new short buff, is never bought, and Fireball rank 3 is. And with one slot free and
+    Frost Nova bought, Dampen Magic is not: `placements` hands a long buff a free slot
+    before a root, and would have put it there in Frost Nova's place."""
     facts_of = spell(spell_id, facts)
     if facts_of is None or facts_of.role not in BUY_ORDER:
         return False
-    after = {*known, spell_id}
-    return any(p.spell_id == spell_id for p in placements(bar, after, facts=facts))
+    known = set(known)
+    after = {p.spell_id for p in placements(bar, {*known, spell_id}, facts=facts)}
+    if spell_id not in after:
+        return False
+    lines = {spell(s, facts).name for s in after}
+    return all(spell(p.spell_id, facts).name in lines
+               for p in placements(bar, known, facts=facts))
+
+
+def shopping(offers: Iterable[Offer], known: Iterable[int], bar: Mapping[int, int | None], *,
+             facts: dict | None = None) -> list[Offer]:
+    """The offers worth buying if all were bought, best first (`buy_order`): each worth
+    buying beside the spells known and every offer before it, so none that comes later
+    takes a slot one before it needs (V237)."""
+    known = set(known)
+    have, out = set(known), []
+    for offer in sorted(offers, key=lambda o: buy_order(o, known, facts)):
+        if offer.spell_id not in have and worth_buying(offer.spell_id, have, bar, facts=facts):
+            out.append(offer)
+            have.add(offer.spell_id)
+    return out
 
 
 def buy_order(offer: Offer, known: Iterable[int] = (), facts: dict | None = None) -> tuple:
@@ -224,8 +246,8 @@ def learnable(trainer: Trainer, level: int, known: Iterable[int], *,
               bar: Mapping[int, int | None] | None = None, race_id: int | None = None,
               facts: dict | None = None) -> list[Offer]:
     """What this trainer would teach a character of this level knowing `known`, and worth
-    buying (`worth_buying`, V237), judged against `bar` (the bar's census; without one, the
-    class's starting bar).
+    buying (`shopping`, V237), judged against `bar` (the bar's census; without one, the
+    class's starting bar). Two spells for one free slot count as one.
 
     A rank below one the spellbook holds is known too: learning Devotion Aura rank 2 takes
     rank 1 out of the spellbook, and the rank 1 the census then lacked sent a level 10
@@ -247,8 +269,9 @@ def learnable(trainer: Trainer, level: int, known: Iterable[int], *,
 
     if bar is None:
         bar = starting_bar(trainer.class_id, race_id)
-    return [o for o in trainer.offers if o.level <= level and not held(o)
-            and worth_buying(o.spell_id, have, bar, facts=facts)]
+    taught = [o for o in trainer.offers if o.level <= level and not held(o)]
+    worth = set(shopping(taught, have, bar, facts=facts))
+    return [o for o in taught if o in worth]
 
 
 def trainer_due(class_id: int | None, race_id: int | None, level: int | None,

@@ -48,6 +48,10 @@ class TrainerCensus:
     def observe(self, values: dict[str, Any]) -> None:
         key = list_key(values)
         if key is None:
+            # No list: the window has closed, or the addon could not read it. A census kept
+            # across that is a list nobody can see, and a desk choosing from it clicks at
+            # rows that are not there.
+            self.reset()
             return
         if key != self._key:
             self._key = key

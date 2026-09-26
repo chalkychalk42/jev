@@ -164,6 +164,8 @@ class TrainerWindow:
         self.clicks, self.keys, self.bought = [], [], []
         self.ignore_rows = False          # a click that lands and selects nothing
         self.shift_on_click = False       # the list rebuilt as a row is clicked
+        self.close_on_click = False       # the window shut by a hand at the first click
+        self.swap_on_click = None         # two spells' rows swapped, the list's key unchanged
 
     def kind(self, s: dict) -> str:
         if s.get("header"):
@@ -245,6 +247,14 @@ class TrainerWindow:
 
     def click(self, x, y, right=False):
         self.clicks.append((x, y))
+        if self.close_on_click:
+            self.open = False
+            return True
+        if self.swap_on_click is not None:
+            a, b = (next(i for i, s in enumerate(self.services) if s.get("spell") == spell_id)
+                    for spell_id in self.swap_on_click)
+            self.services[a], self.services[b] = self.services[b], self.services[a]
+            self.swap_on_click = None
         rows = self.rows()
         if (x, y) == TRAIN:
             chosen = rows[self.selected - 1] if self.selected else None
@@ -366,6 +376,71 @@ def test_a_list_rebuilt_under_the_click_is_read_again_before_train():
     assert window.bought == [116]
 
 
+def test_a_window_shut_after_its_list_was_read_ends_the_visit():
+    """The list read whole, then the window shut before the chosen row was reached: the
+    census goes with the list, and the visit ends at once, rather than choosing from a
+    list nobody can see until the deadline."""
+    window = TrainerWindow()
+    window.close_on_click = True
+    trained = window.desk()
+    assert trained.run() is Trained.NO_TRAINER
+    assert window.bought == [] and window.now < 5.0
+
+
+def test_two_spells_for_one_free_slot_buy_the_one_that_fights():
+    """Level 12, one slot left on the bar and 50 silver: Frost Nova is bought and goes
+    there, and Dampen Magic is not, which the bar's placing would have put there in Frost
+    Nova's place (a long buff is handed a free slot before a root)."""
+    known = frozenset({6603, 143, 168, 1459, 205, 5504, 2136, 587, 5143})
+    bar = {1: 6603, 2: 143, 3: 168, 4: 1459, 5: 205, 6: 5504, 7: 2136, 8: 587, 9: 5143,
+           10: 0, 11: None, 12: None}
+    services = (_header("Arcane"), *(_service(s) for s in (597, 5505, 604, 118, 130)),
+                _header("Fire"), _service(145), _header("Frost"), _service(7300),
+                _service(122))
+    window = TrainerWindow(services, money=5000, level=12, known=known)
+    trained = TrainerDesk(window, window.read, window.visit, clock=lambda: window.now,
+                          sleep=window.sleep, trainer=ZALDIMAR, known=known, bar=bar)
+    assert trained.run() is Trained.DONE, trained.detail
+    assert window.bought == [122, 145, 5505, 7300, 597], "Frost Nova first, no Dampen Magic"
+
+
+def test_a_row_swapped_under_the_same_list_is_named_again_before_its_click():
+    """Two rows traded places with the list's revision, row count and short count all as
+    they were: the chosen row's own paint names Polymorph where Frostbolt was read, so it
+    is not clicked; the rows are read again and Frostbolt is bought where it is now."""
+    window = TrainerWindow()
+    window.swap_on_click = (116, 118)
+    trained = window.desk()
+    assert trained.run() is Trained.DONE, trained.detail
+    assert sorted(window.bought) == [116, 143] and 118 not in window.bought
+
+
+def test_a_long_short_list_read_at_one_paint_in_three_or_four_still_buys():
+    """Spells never bought stay learnable now (a rank 1 of Polymorph, of Blizzard): with
+    twenty-five more of them, read one paint in three or four from any start, at ten
+    paints a second, the waits grow with the list."""
+    filler = tuple({"name": f"Filler {i}", "rank": 1, "cost": 10, "level": 1,
+                    "spell": 900000 + i, "needs": None} for i in range(25))
+    for step in (3, 4):
+        for start in range(step):
+            window = TrainerWindow((*LEVEL_8_LIST[:1], *filler, *LEVEL_8_LIST[1:]))
+            for _ in range(start):
+                window.read()
+
+            def read(window=window, step=step):
+                # The paints a read misses take their tenth of a second each too.
+                for _ in range(step - 1):
+                    window.read()
+                window.now += 0.1 * step - 0.05
+                return window.read()
+
+            trained = TrainerDesk(window, read, window.visit, clock=lambda w=window: w.now,
+                                  sleep=window.sleep, trainer=ZALDIMAR, known=MAGE_KNOWN,
+                                  bar=MAGE_BAR)
+            assert trained.run() is Trained.DONE, (step, start, trained.detail)
+            assert window.bought == [116, 143], (step, start)
+
+
 def test_a_window_shut_before_its_list_is_read_ends_the_visit():
     window = TrainerWindow()
     real = window.read
@@ -383,19 +458,35 @@ def test_a_window_shut_before_its_list_is_read_ends_the_visit():
     assert window.now < 1.0 and window.clicks == []
 
 
-def test_the_list_unread_whole_is_no_purchase():
+def test_a_list_painted_and_never_read_whole_is_no_purchase():
     window = TrainerWindow()
     real = window.read
 
     def read():
         v = real()
-        v.pop("trainer.short", None)                 # never a whole short cycle
+        v.pop("trainer.index", None)                 # no row ever named
         return v
 
     trained = TrainerDesk(window, read, window.visit, clock=lambda: window.now,
                           sleep=window.sleep, trainer=ZALDIMAR, known=MAGE_KNOWN, bar=MAGE_BAR)
     assert trained.run() is Trained.TIMEOUT
+    assert trained.detail == "the trainer's list not read whole in 20 s"
     assert window.bought == [] and window.clicks == []
+
+
+def test_a_strip_of_schema_18_painting_no_list_buys_in_the_window_s_order():
+    """No census, as with schema 17: the window's own order, as before, and said so."""
+    window = TrainerWindow()
+    real = window.read
+
+    def read():
+        return {k: v for k, v in real().items() if not k.startswith("trainer.")}
+
+    trained = TrainerDesk(window, read, window.visit, clock=lambda: window.now,
+                          sleep=window.sleep, trainer=ZALDIMAR, known=MAGE_KNOWN, bar=MAGE_BAR)
+    assert trained.run() is Trained.DONE
+    assert window.bought == [5143], "Arcane Missiles, the window's first row learnable now"
+    assert trained.detail == "no trainer's list painted: bought in the window's order"
 
 
 class Book:

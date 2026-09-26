@@ -241,10 +241,11 @@ def test_polymorph_neither_sends_the_mage_to_a_trainer_nor_keeps_copper_back():
     Polymorph."""
     goldshire = (-9460.0, 60.0)
     known = MAGE_START | {1459, 116, 205, 5504, 587, 2136, 143, 5143}
-    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known)] == []
+    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known, race_id=1)] == []
     assert trainer_due(8, 1, 8, known, 10_000, 0, goldshire) is None
     assert training_cost(8, 1, 8, known, 0, goldshire) == 0
-    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known - {5143})] == [5143]
+    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known - {5143},
+                                                   race_id=1)] == [5143]
 
 
 def test_what_acts_in_a_fight_is_bought_before_what_is_kept_up_between_fights():
@@ -273,8 +274,9 @@ def test_every_role_the_fight_code_presses_is_ranked_for_buying():
 
 
 def _visit(level, known, bar, money):
-    """What the desk buys at Zaldimar with `money`, best first, of the rows the stock window
-    marks learnable now: a rank only once the rank before it is known."""
+    """What the desk buys at Zaldimar with `money`, as `TrainerDesk._choose` does: of the
+    rows the stock window marks learnable now (a rank only once the rank before it is
+    known), the first the purse pays for on the shopping list of them all."""
     known, bought = set(known), []
 
     def learnable_now(offer):
@@ -285,11 +287,10 @@ def _visit(level, known, bar, money):
 
     while True:
         rows = [o for o in ZALDIMAR.offers if o.level <= level and o.spell_id not in known
-                and learnable_now(o) and o.cost <= money
-                and worth_buying(o.spell_id, known, bar)]
-        if not rows:
+                and learnable_now(o)]
+        best = next((o for o in training.shopping(rows, known, bar) if o.cost <= money), None)
+        if best is None:
             return bought, known, money
-        best = min(rows, key=lambda o: buy_order(o, known))
         bought.append(best.spell_id)
         known.add(best.spell_id)
         money -= best.cost

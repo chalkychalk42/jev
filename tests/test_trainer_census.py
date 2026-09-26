@@ -34,6 +34,16 @@ def test_a_changed_list_throws_the_half_read_one_away():
     assert [r.index for r in census.rows] == [5]
 
 
+def test_a_paint_without_the_list_throws_the_census_away():
+    """The window shut: rows read before it are rows nobody can see."""
+    census = TrainerCensus()
+    for index, kind in ((1, HEADER), (3, AVAILABLE), (5, AVAILABLE)):
+        census.observe(_row(index, kind))
+    assert census.short is not None
+    census.observe({"ui.trainer": False})
+    assert census.short is None and census.key is None and census.rows == ()
+
+
 def test_a_strip_without_the_list_is_no_census():
     census = TrainerCensus()
     census.observe({"ui.trainer": True, "trainer.revision": None, "trainer.total": None})
