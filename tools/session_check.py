@@ -4,10 +4,12 @@
     tools/session_check.py [N]      session N, or the newest in the loop's log
 
 It prints the session's end, its run, the lines that prove the learned parts loaded
-(danger, choices, the band rule), a Traceback if any, XP and deaths from the ticks, kills,
-tutor requests, the choice log's events by point, and the evidence of the caster's and
-the loot's new moves (range steps, roots, conjures, far-loot steps). For the T-0 checks
-(docs/plans/forty-eight-hour-ledger.md) and every session after.
+(danger, choices, the band rule), a Traceback if any, XP, deaths and the purse from the
+ticks, kills, services, tutor requests, the choice log's events by point, the evidence of
+the caster's, the fight's and the loot's newer moves (range steps, roots, conjures,
+far-loot steps, blind casts, turn-rounds, Tab picks), and the presses the client never
+answered. For the T-0 checks (docs/plans/forty-eight-hour-ledger.md) and every session
+after.
 """
 
 from __future__ import annotations
@@ -31,7 +33,12 @@ PROOFS = (("danger", r"^danger: .*cells learned"),
 EVIDENCE = (("range steps", "approach.request", "range_step"),
             ("roots", "engage.root", None),
             ("conjures", "conjure.request", None),
-            ("far-loot steps", "loot.step", None))
+            ("far-loot steps", "loot.step", None),
+            ("blind casts", "engage.blind_cast", None),              # V204
+            ("blind melee", "engage.blind_melee", None),             # V191, V207
+            ("turn-rounds", "engage.turn_round", None),              # V208
+            ("Tab picks", "acquire.anything", None),                 # V210
+            ("runners", "fight.runner", None))                       # V188
 
 
 def _rows(path: Path):
@@ -69,6 +76,10 @@ def check(number: int) -> list[str]:
     out.append("  [!!] Traceback: " + body[trace:trace + 300].replace("\n", " | ")
                if trace >= 0 else "  [ok] no Traceback")
     out.append(f"  kills: {len(re.findall(r'^COMBAT_PROFILE: killed', body, re.MULTILINE))}")
+    services = Counter(re.findall(r"^(TRAIN_CLASS|VENDOR_REPAIR|BUY_AMMO_REAGENT_FOOD"
+                                  r"|BAG_MAKE_SPACE): (\w+)", body, re.MULTILINE))
+    out.append("  services: " + (", ".join(f"{k} {v} {n}" for (k, v), n in sorted(services.items()))
+                                 or "none"))
     if run is None or not run.is_dir():
         return out
     summary = run_summary(run)
@@ -80,18 +91,29 @@ def check(number: int) -> list[str]:
     ticks = run / "ticks.jsonl"
     if ticks.exists():
         out.append(f"  deaths: {deaths(ticks, since=0)}")
+        purse = [bags.get("money_copper") for row in _rows(ticks)
+                 if isinstance(bags := (row.get("state") or {}).get("bags"), dict)]
+        purse = [m for m in purse if isinstance(m, int)]
+        if purse:
+            out.append(f"  money: {purse[0]} -> {purse[-1]} copper (most {max(purse)})")
     requests = sum(1 for _ in _rows(run / "play-teacher.jsonl"))
     out.append(f"  tutor records: {requests}")
     points = Counter((row.get("point"), row.get("event")) for row in _rows(run / "choices.jsonl"))
     out.append("  choices: " + (", ".join(f"{p} {e} {n}" for (p, e), n in sorted(points.items()))
                                 or "none"))
     seen = Counter()
+    presses = Counter()
     for row in _rows(run / "executions.jsonl"):
+        if row.get("operation") in ("ability.request", "ability.unanswered"):
+            presses[row["operation"]] += 1
         for name, operation, mode in EVIDENCE:
             if row.get("operation") == operation and (
                     mode is None or (row.get("data") or {}).get("mode") == mode):
                 seen[name] += 1
     out.append("  new moves: " + (", ".join(f"{k} {v}" for k, v in seen.items()) or "none"))
+    # A press the client never acted on: no cast, no cooldown, no mana (`Fight._press_answered`).
+    out.append(f"  presses: {presses['ability.request']}, "
+               f"{presses['ability.unanswered']} unanswered")
     return out
 
 
