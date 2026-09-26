@@ -885,6 +885,14 @@ class Fight:
                 if chosen is not Fought.NO_TARGET:
                     return chosen
                 if turned_round:
+                    if (self.read() or {}).get("vitals.combat") is False:
+                        # Out of combat by now: nothing is attacking, and anything taken is
+                        # a new fight. All 31 times the fallback below fired in sessions
+                        # 195-219 the fight had ended; ten of them pulled a unit minding its
+                        # own business, a level 1 wolf and a cow among them, and one of those
+                        # was the mage's death (session 211, V249).
+                        self.detail = "nothing attacking any more"
+                        return Fought.NO_TARGET
                     # Nothing attacking could be found either side, only what is in view:
                     # fight that, and with no plate in view whatever Tab picks. Something
                     # unfound hit the paladin by Jangolode Mine for 4-5% every four seconds;
@@ -1017,6 +1025,12 @@ class Fight:
         if hp is not None and hp <= DEAD_HP:
             return False                       # a corpse is selectable and not a fight
         if attackers_only and v.get("target.attacking_me") is not True:
+            return False
+        if (defend and v.get("target.attacking_me") is not True
+                and (v.get("combat.attackers") or 0) >= 1):
+            # A bystander of the wanted kind is a fight, but not while something else is
+            # attacking: a level 7 mage defending against a Young Forest Bear took an idle
+            # Rockhide Boar, twice, and died both times (sessions 207-208, V249).
             return False
         if (name_id is None or v.get("target.name_id") == name_id
                 or (defend and v.get("target.attacking_me") is True)):

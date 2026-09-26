@@ -1360,6 +1360,33 @@ def test_self_defence_turns_round_once_when_tab_finds_nothing_in_front():
                                                       "and one for anything at all (V210)")
 
 
+def test_self_defence_out_of_combat_takes_nothing_at_all():
+    """V249: all 31 times the fallback for anything at all fired in sessions 195-219 the
+    fight had ended, and ten of them pulled a unit minding its own business; one was the
+    mage's death (session 211)."""
+    hid = _Hid()
+    ended = {**ALIVE, "target.has": False, "vitals.combat": False}
+    f = _fight([ended], hid=hid)
+    f.read_frame = lambda: _plate_frame(None)
+    assert f.acquire(1161, defend=True) is Fought.NO_TARGET
+    assert hid.taps == ["tab"] * (2 * MAX_SELECTS), "a burst either side, none for anything"
+    assert f.detail == "nothing attacking any more"
+
+
+def test_self_defence_takes_no_bystander_while_something_attacks():
+    """V249: defending against a Young Forest Bear, the level 7 mage took an idle Rockhide
+    Boar of the kind it hunted, twice, and died both times (sessions 207-208)."""
+    f = _fight([ALIVE])
+    bystander = {**ALIVE, "target.attacking_me": False, "combat.attackers": 1}
+    assert f._acceptable(1161, defend=True, values=bystander) is False
+    alone = {**ALIVE, "target.attacking_me": False, "combat.attackers": 0}
+    assert f._acceptable(1161, defend=True, values=alone) is True, "nothing else attacking"
+    attacker = {**ALIVE, "target.attacking_me": True, "combat.attackers": 1}
+    assert f._acceptable(1161, defend=True, values=attacker) is True
+    hunting = {**ALIVE, "target.attacking_me": False, "combat.attackers": 1}
+    assert f._acceptable(1161, values=hunting) is True, "a pull is not self-defence"
+
+
 def test_a_refused_turn_stops_the_look_round():
     hid = _Hid()
     hid.hold = lambda key, seconds, **_: False

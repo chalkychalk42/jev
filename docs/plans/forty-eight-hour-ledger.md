@@ -365,6 +365,7 @@ Trials
 | V246 a full bag is looted all the same | session 221 | coins and stacked items taken with the backpack full | `corpse looted: took - N copper` or `an item onto a stack` at 0 free slots | | |
 | V247 a meal and a get-up clear of every unit that attacks on sight; a body in a camp left for the Spirit Healer | session 222 | fewer deaths within 3 minutes of getting up (15 of 22 at the body in 195-219) and fewer attacks on a resting mage | `resting out of the camp's reach` and `getting up out of the camp's reach` on steps with no spawns of their own; `up at the Spirit Healer: the body lies in a camp` | | |
 | V248 walks go round units that attack on sight where that costs less | session 222 (with V247) | fewer attacks on a walking mage (103 of 110 began within 20 yards of a hostile spawn in 195-219) and fewer walk deaths (23 of 34) | routes `round N units that attack on sight`; attacks per walking minute from `session_report` and the deaths profiler | | |
+| V249 self-defence takes no bystander while something attacks, nothing once combat has ended | session 222 (with V247, V248) | no `acquire.anything` out of combat; no idle unit taken while defending | `acquire.anything` events only with `vitals.combat` true | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
