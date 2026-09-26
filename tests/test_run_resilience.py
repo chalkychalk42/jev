@@ -9,12 +9,13 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from test_runtime_records import runtime, seen
 from test_supervisor import Body
+from test_teacher import FakeClient
 
 from jev.learn.episode import SkillOutcome
 from jev.run.supervisor import Result, Supervisor
 from jev.run.watchdog import Watchdog
 from jev.teacher.bridge import BudgetClient
-from jev.teacher.client import ClaudeSubscriptionClient, FakeClient
+from jev.teacher.client import ClaudeSubscriptionClient
 from jev.world.state_v1 import Char, GuidePos, Sense
 
 

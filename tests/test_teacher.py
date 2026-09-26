@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
@@ -26,7 +28,7 @@ from jev.coach.schema import Artifact, ArtifactKind, Decision, Intent, TeacherRe
 from jev.coach.situation import situation_key
 from jev.learn.episode import DecisionRow, Recorder, Stream, read
 from jev.teacher.cache import AnswerCache
-from jev.teacher.client import ClaudeSubscriptionClient, FakeClient, TeacherResult
+from jev.teacher.client import ClaudeSubscriptionClient, TeacherResult
 from jev.teacher.prompt import (
     PROMPT_CHAR_CEILING,
     PromptContext,
@@ -60,6 +62,44 @@ from jev.world.state_v1 import (
 )
 
 CATALOG = frozenset({"GRIND_UNTIL", "TRAVEL_TO", "VENDOR_REPAIR", "ACCEPT_QUEST", "LOOT"})
+
+
+Scripted = TeacherResult | str | Callable[[str, int], TeacherResult]
+
+
+@dataclass
+class FakeClient:
+    """A teacher that costs nothing. No network, no subprocess, no clock of its own.
+
+    Every test in this file runs through this, which is the point: the queue's dedup,
+    cache, retry and drop behaviour are decisions about *when* to call, and testing them
+    against a real subscription would be both slow and a bill. It lived in
+    `jev/teacher/client.py` until V229; only tests ever used it.
+
+    A bare `str` is sugar for a successful reply. Replies are consumed in order; once the
+    script runs out the last one repeats, so "always times out" is a one-element script.
+    """
+
+    replies: Sequence[Scripted] = ()
+    model_name: str = "fake"
+    delay_s: float = 0.0
+    prompts: list[str] = field(default_factory=list)
+    calls: int = 0
+
+    async def ask(self, prompt: str, *, timeout_s: float | None = None) -> TeacherResult:
+        self.prompts.append(prompt)
+        n = self.calls
+        self.calls += 1
+        if self.delay_s:
+            await asyncio.sleep(self.delay_s)
+        if not self.replies:
+            return TeacherResult(status="transport", model=self.model_name, detail="no script")
+        item = self.replies[min(n, len(self.replies) - 1)]
+        if callable(item):
+            return item(prompt, n)
+        if isinstance(item, str):
+            return TeacherResult(status="ok", text=item, model=self.model_name, latency_ms=1.0)
+        return item
 
 
 def run(coro):

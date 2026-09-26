@@ -6,13 +6,12 @@ import time
 import pytest
 from test_runtime_records import answer, runtime, seen
 from test_supervisor import Body
-from test_teacher import reply_json
+from test_teacher import FakeClient, reply_json
 
 from jev.learn.episode import SkillOutcome, read
 from jev.run.supervisor import Result, Supervisor
 from jev.run.watchdog import Watchdog
 from jev.teacher.bridge import BudgetClient, TeacherBridge
-from jev.teacher.client import FakeClient
 from jev.world.state_v1 import Bags, Char, GuidePos, Sense, Vitals
 
 

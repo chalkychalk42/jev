@@ -72,8 +72,8 @@ import json
 import os
 import shutil
 import time
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from jev.coach.schema import Status
@@ -416,40 +416,3 @@ class ClaudeSubscriptionClient:
             tokens_in=tokens_in,
             tokens_out=tokens_out,
         )
-
-
-Scripted = TeacherResult | str | Callable[[str, int], TeacherResult]
-
-
-@dataclass
-class FakeClient:
-    """A teacher that costs nothing. No network, no subprocess, no clock of its own.
-
-    Every test in `tests/test_teacher.py` runs through this, which is the point: the queue's
-    dedup, cache, retry and drop behaviour are decisions about *when* to call, and testing
-    them against a real subscription would be both slow and a bill.
-
-    A bare `str` is sugar for a successful reply. Replies are consumed in order; once the
-    script runs out the last one repeats, so "always times out" is a one-element script.
-    """
-
-    replies: Sequence[Scripted] = ()
-    model_name: str = "fake"
-    delay_s: float = 0.0
-    prompts: list[str] = field(default_factory=list)
-    calls: int = 0
-
-    async def ask(self, prompt: str, *, timeout_s: float | None = None) -> TeacherResult:
-        self.prompts.append(prompt)
-        n = self.calls
-        self.calls += 1
-        if self.delay_s:
-            await asyncio.sleep(self.delay_s)
-        if not self.replies:
-            return TeacherResult(status="transport", model=self.model_name, detail="no script")
-        item = self.replies[min(n, len(self.replies) - 1)]
-        if callable(item):
-            return item(prompt, n)
-        if isinstance(item, str):
-            return TeacherResult(status="ok", text=item, model=self.model_name, latency_ms=1.0)
-        return item
