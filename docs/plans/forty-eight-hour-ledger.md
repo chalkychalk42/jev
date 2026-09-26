@@ -285,6 +285,8 @@ Now
     T-0 session> --blocks 2` to the table below, judge the trial, then build the next
     change in the dev worktree.
 
+- **Deviation from §11, 26 Sep 16:05:** the consolidation was prepared on a side branch from 13:00 (steps 1-6: 6,923 source lines and 3,207 test lines out), replayed onto w48 with its DECISIONS rows renumbered V222-V229, and deployed at hour 17 rather than hours 36-44: a day of play on it before the freeze, where the plan left eight hours. The addon's field table is unchanged (the generated `Fields.lua` is identical), and the loop's launch flags pass the real offline check (a new test).
+
 Blocks
 ------
 
