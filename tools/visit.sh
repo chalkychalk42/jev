@@ -15,7 +15,7 @@ WINPY=${JEV_WINPY:-/mnt/c/forever-win/Scripts/python.exe}
 say() { echo "visit $(date +%H:%M:%S): $*"; }
 
 [ -e var/loop/hold ] || { say "the loop is not held; not starting"; exit 1; }
-if pgrep -f "tools/start_teaching.py --run" > /dev/null; then
+if pgrep -f "[s]tart_teaching.py --run" > /dev/null; then
   say "a session is still running; wait for the loop's exit= line"; exit 1
 fi
 back=$(.venv/bin/python - <<'EOF'
