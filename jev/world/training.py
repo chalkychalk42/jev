@@ -35,7 +35,7 @@ import math
 import pathlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from functools import cache
+from functools import cache, lru_cache
 
 CATALOG = pathlib.Path(__file__).resolve().parents[2] / "content/tbc/trainer-catalog.json"
 
@@ -252,7 +252,26 @@ def learnable(trainer: Trainer, level: int, known: Iterable[int], *,
     A rank below one the spellbook holds is known too: learning Devotion Aura rank 2 takes
     rank 1 out of the spellbook, and the rank 1 the census then lacked sent a level 10
     paladin to Brother Wilhelm for a spell he no longer offers (session 83).
+
+    Asked at every policy look, of a spellbook and a bar that change once a level: kept
+    for the catalog's own facts, where working it out took up to 12 ms a look.
     """
+    if facts is None:
+        held_bar = None if bar is None else tuple(sorted(bar.items()))
+        return list(_learnable(trainer, level, frozenset(known), held_bar, race_id))
+    return _find_learnable(trainer, level, known, bar, race_id, facts)
+
+
+@lru_cache(maxsize=256)
+def _learnable(trainer: Trainer, level: int, known: frozenset[int],
+               bar: tuple | None, race_id: int | None) -> tuple[Offer, ...]:
+    return tuple(_find_learnable(trainer, level, known, None if bar is None else dict(bar),
+                                 race_id, None))
+
+
+def _find_learnable(trainer: Trainer, level: int, known: Iterable[int],
+                    bar: Mapping[int, int | None] | None, race_id: int | None,
+                    facts: dict | None) -> list[Offer]:
     have = set(known)
     ranks: dict[str, int] = {}
     for spell_id in have:
