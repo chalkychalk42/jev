@@ -537,6 +537,15 @@ def test_a_passed_over_hand_in_within_reach_is_made_on_the_way(tmp_path):
     assert rt.tracker.step_id == "after" and 1 in rt.completed, "handed in and back"
 
 
+def test_a_quest_finished_after_its_hand_in_was_left_is_handed_in_on_the_way(tmp_path):
+    """V234: the mage finished Kobold Candles after its objective was passed over and its
+    hand-in passed by, and walked on with it complete in the log."""
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource([held(0, 5), held(1, 5)]),
+                       Recorder(tmp_path), start_step="after")
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("turnin", "after")
+
+
 def test_a_hand_in_on_the_way_that_fails_goes_straight_back_and_is_not_tried_again(tmp_path):
     states = [held(t, 5) for t in (0, 1, 13, 14, 15)]
     rt = detour_runtime(tmp_path, states)

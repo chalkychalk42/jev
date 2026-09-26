@@ -467,7 +467,10 @@ class ClientRuntime:
         return step.id if step is not None and step.quest_id != node.quest_id else None
 
     def _handin_detour(self, state: State) -> str | None:
-        """A passed-over hand-in within reach, for a quest complete in the log (`DETOUR`)."""
+        """A hand-in within reach, for a quest complete in the log (`DETOUR`): passed over,
+        passed by, or ahead (V234). The mage finished Kobold Candles, 8 of 8, after its
+        objective had been passed over and its hand-in passed by, and walked on east with it
+        in the log; Wolves Across the Border came to 8 of 8 the same way."""
         node = self.graph.get(self.tracker.step_id)
         if (node is None or node.kind is StepKind.GRIND or self.tracker.memory.rejoin_to
                 or state.quests is None or state.vitals.combat is True
@@ -478,7 +481,7 @@ class ClientRuntime:
         here = (state.pos.mx, state.pos.my)
         for step in self.graph.nodes:
             if (step.kind is StepKind.QUEST_TURNIN and step.id != node.id
-                    and step.quest_id in complete and step.id in self._retried
+                    and step.quest_id in complete
                     and not self._detour_spent(step.id, state.char.level)
                     and step.pos is not None
                     and (step.coord_zone_id is None or state.pos.coord_zone_id is None
