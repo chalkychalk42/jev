@@ -111,7 +111,12 @@ Now
   - 07:18-07:55, the mage's fifth visit (`captures/live-mage-5.log.1-2`) on V202-V204:
     session 1 made 5 kills in 6 fights, level 4.0 to 4.44, one death on the Goldshire road to
     level 5-6 units; the session began with the hearthstone and a too-poor repair at Godric
-    Rothgar (V206) and walked 675 yards for cheese (V205).
+    Rothgar (V206) and walked 675 yards for cheese (V205). Session 2: 10 kills, 0 deaths, 3
+    blind casts (V204), 7 hint searches (V202); level 4.73 by 07:51, 24 copper.
+  - Session 163 (07:52): died at once to a level 13 Fleshripper hovering eight yards off,
+    blind melee swinging "too far away" (V207); then 1,259 XP, the run's best rate (5,038/h).
+    Where 161-163's skill time went: hunting 42% (walks between stations 24%), fights 23%,
+    the level-14 training trip to Goldshire 14%.
   - Session 148: started a ghost; two deaths to Fleshrippers, one 23 s after getting up at
     half health, one under resurrection sickness after the Spirit Healer.
   - 02:06-02:30, the mage's check (Itheamar, `captures/live-mage-check-1.log`): A Threat
@@ -291,6 +296,7 @@ Trials
 | V204 a caster casts at a Tab pick it cannot see | the mage's fifth visit | the mage's fights given up with nothing pressed fall (5 of 9 on 06:24) | `engage.blind_cast` | | |
 | V205 no restock walk over 400 yards | after the mage's fifth visit | no restock walk through another level band | `BUY_AMMO_REAGENT_FOOD: aborted ... too_far` | | |
 | V206 the purse's lessons kept between sessions | with V205 | no session-start repair walk the purse cannot pay | `character-KEY.purse.json` written; no `too_poor` twice at one purse | | |
+| V207 blind melee steps in on "too far away" | session 164 | no fight lost standing out of reach of a flyer (session 163's death) | an `approach.request` with mode `blind_melee` | | |
 
 Issues
 ------
