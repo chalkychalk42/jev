@@ -417,8 +417,8 @@ class ClientRuntime:
     def _lost_quests(self, state: State) -> set[int]:
         """Quests this route will not finish: a hand-in passed over with its detour for the
         level spent (V144); one in the log, not complete, whose objective was passed over, as
-        `_unfinished_hand_in` reads it (V219); and every quest not yet taken whose
-        prerequisites all need a lost one. The mage's Wolves Across the Border (33) sat at 4 of
+        `_unfinished_hand_in` reads it (V219); one never taken whose accepts were all passed
+        over (V245); and every quest not yet taken whose prerequisites all need a lost one. The mage's Wolves Across the Border (33) sat at 4 of
         8 with its objective passed over, and the accept of Milly Osworth, which needs it, was
         tried anyway: Deputy Willem offered his only other quest, which was accepted instead,
         and the step failed over to a rib (session 189)."""
@@ -433,6 +433,19 @@ class ClientRuntime:
                  if n.kind is StepKind.QUEST_OBJECTIVE and n.id in self._retried
                  and n.quest_id is not None and n.quest_id not in self.completed
                  and (quest := held.get(n.quest_id)) is not None and quest.complete is False}
+        # And one never taken whose every accept was passed over (V245): not the step under
+        # way, nor the one a rib waits to try again. A Fishy Peril's accept was passed over
+        # in the Lion's Pride Inn, and Further Concerns, which needs it, was walked to twice
+        # from Westbrook, 500 yards through Mangy Wolves each way; Marshal Dughan offered
+        # something else, and three deaths came on the road (sessions 218-219).
+        trying = {self.tracker.step_id, self.tracker.memory.rejoin_to}
+        accepts: dict[int, list[str]] = {}
+        for n in self.graph.nodes:
+            if n.kind is StepKind.QUEST_ACCEPT and n.quest_id is not None:
+                accepts.setdefault(n.quest_id, []).append(n.id)
+        lost |= {quest_id for quest_id, ids in accepts.items()
+                 if quest_id not in self.completed and quest_id not in held
+                 and all(i in self._retried and i not in trying for i in ids)}
         waiting = [n for n in self.graph.nodes
                    if n.kind is StepKind.QUEST_ACCEPT and n.quest_id is not None
                    and n.quest_prerequisites and n.quest_id not in self.completed

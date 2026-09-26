@@ -678,6 +678,49 @@ def test_a_rib_waiting_to_retry_an_accept_that_cannot_happen_ends(tmp_path):
     assert still.tracker.step_id == "rib", "a retry that can happen waits for the rib"
 
 
+def accept_chain_graph():
+    """Quest 1's accept; quest 2 needs quest 1, and quest 3 needs quest 2."""
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    return Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("next_accept",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="next_accept", kind=StepKind.QUEST_ACCEPT, quest_id=2, next=("next_turnin",),
+             quest_prerequisites=((1,),), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="next_turnin", kind=StepKind.QUEST_TURNIN, quest_id=2, next=("chain_accept",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="chain_accept", kind=StepKind.QUEST_ACCEPT, quest_id=3, next=("chain_turnin",),
+             quest_prerequisites=((2,),), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="chain_turnin", kind=StepKind.QUEST_TURNIN, quest_id=3, next=("after",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=4, next=("rib",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(1, 60),
+             skills=("TRAVEL_TO", "GRIND_UNTIL"), **base),
+    ))
+
+
+@pytest.mark.parametrize(("held", "retried", "start", "rejoin", "expected"), [
+    ((), frozenset({"accept"}), "next_accept", None, "after"),     # never offered: the chain goes
+    ((1,), frozenset({"accept"}), "next_accept", None, "next_accept"),  # taken after all
+    ((), frozenset(), "next_accept", None, "next_accept"),         # never tried: it may be offered
+    ((), frozenset({"accept"}), "rib", "accept", "rib"),           # a rib waits to try it again
+])
+def test_an_accept_needing_a_quest_whose_accept_was_passed_over_is_passed_by(
+        tmp_path, held, retried, start, rejoin, expected):
+    """V245: A Fishy Peril's accept was passed over in the Lion's Pride Inn, and Further
+    Concerns, which needs it, was walked to twice from Westbrook through Mangy Wolves; the
+    Marshal offered something else, and three deaths came on the road (sessions 218-219)."""
+    states = [seen(t, quests=tuple(Quest(quest_id=q, complete=False) for q in held))
+              for t in range(3)]
+    rt = ClientRuntime("c", accept_chain_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       start_step=start, start_rejoin=rejoin, start_retried=retried)
+    for _ in states:
+        rt.tick(choose=False)
+    assert rt.tracker.step_id == expected
+
+
 def objective_graph():
     base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
     return Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
