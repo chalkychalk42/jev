@@ -147,6 +147,7 @@ class ClientRuntime:
     start_retried: frozenset[str] = frozenset()
     # When a short rib the run resumes on rejoins, as wall time (`playhead.Remembered`).
     start_rib_until: float | None = None
+    start_entry_level: int | None = None
     # (step, completed quests, where the step leads back to when that is not its next,
     # deaths on the step, steps already retried, when a short rib rejoins)
     on_progress: Callable[..., None] | None = None
@@ -227,6 +228,8 @@ class ClientRuntime:
             if start is not None and self.tracker.step_id == start:
                 self.tracker.memory.deaths = self.start_deaths
                 self.tracker.memory.until = self.start_rib_until
+                if self.start_entry_level is not None:
+                    self.tracker.memory.level_at_entry = self.start_entry_level
             self._retried |= set(self.start_retried)
             self._entered = True
 
@@ -235,6 +238,7 @@ class ClientRuntime:
         deaths_before = self.tracker.memory.deaths
         retried_before = set(self._retried)
         until_before = self.tracker.memory.until
+        entry_before = self.tracker.memory.level_at_entry
         finished_before = self.finished
         self.tracker.serving = (self.armed is not None
                                 and self.armed.decision.skill in SERVICING_SKILLS)
@@ -284,6 +288,7 @@ class ClientRuntime:
                                             or deaths_before != self.tracker.memory.deaths
                                             or retried_before != self._retried
                                             or until_before != self.tracker.memory.until
+                                            or entry_before != self.tracker.memory.level_at_entry
                                             or finished_before != self.finished
                                             or self.last_state is None):
             self._progress()
@@ -508,7 +513,7 @@ class ClientRuntime:
         self.on_progress(self.tracker.step_id, set(self.completed),
                          self.tracker.memory.rejoin_to, self.tracker.memory.deaths,
                          frozenset(self._retried), self.tracker.memory.until,
-                         finished=self.finished)
+                         finished=self.finished, entry_level=self.tracker.memory.level_at_entry)
 
     def _apply(self, verdict, state: State) -> None:
         match verdict.event:

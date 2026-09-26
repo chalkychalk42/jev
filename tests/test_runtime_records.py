@@ -234,7 +234,7 @@ def test_a_finished_guide_is_saved_as_finished(tmp_path):
     saved = []
     rt = runtime(tmp_path, [seen(0, quests=(Quest(quest_id=1),)), seen(1), seen(2), seen(3)],
                  start_step="turnin",
-                 on_progress=lambda *args, finished=False: saved.append(finished))
+                 on_progress=lambda *args, finished=False, **_: saved.append(finished))
     rt.run(4, 0)
     assert rt.finished and saved[-1] is True and saved[0] is False
 
@@ -427,6 +427,25 @@ def test_a_short_ribs_end_outlives_the_session(tmp_path):
                        start_step="rib", start_rejoin="turnin", start_rib_until=1234.5)
     rt.tick(choose=False)
     assert rt.tracker.memory.until == 1234.5
+
+
+def test_a_steps_entry_level_outlives_the_session(tmp_path):
+    """V214: each session entered the rib afresh, and a level 15 paladin failed over at 14
+    was still asked for 16 (26 September)."""
+    from jev.guide import playhead
+
+    path = tmp_path / "character.json"
+    playhead.save("g", "rib", {1}, path, rejoin_to="turnin", entry_level=14)
+    assert playhead.load("g", path).entry_level == 14
+    saved = []
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                       start_step="rib", start_rejoin="turnin", start_entry_level=14,
+                       on_progress=lambda *args, entry_level=None, **_: saved.append(entry_level))
+    rt.tick(choose=False)
+    assert rt.tracker.memory.level_at_entry == 14
+    assert saved and saved[-1] == 14, "and saved again"
+    playhead.save("g", "rib", {1}, path, entry_level=True)
+    assert playhead.load("g", path).entry_level is None, "only a level"
 
 
 def test_the_rest_of_a_quest_whose_accept_was_passed_over_is_skipped(tmp_path):

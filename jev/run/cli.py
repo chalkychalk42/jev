@@ -411,11 +411,12 @@ def _live(args, graph) -> int:
             keys_down=client.hid.keys_down, start_step=memory.step_id,
             start_rejoin=memory.rejoin_to, start_deaths=memory.deaths,
             start_retried=memory.retried, start_rib_until=memory.rib_until,
+            start_entry_level=memory.entry_level,
             completed=set(memory.completed),
             on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None,
-            finished=False: playhead.save(graph.graph_id, step, done, path, rejoin_to=rejoin,
-                                          deaths=deaths, retried=retried, rib_until=until,
-                                          finished=finished),
+            finished=False, entry_level=None: playhead.save(
+                graph.graph_id, step, done, path, rejoin_to=rejoin, deaths=deaths,
+                retried=retried, rib_until=until, finished=finished, entry_level=entry_level),
             character_key=character,
             outgrown_at=(OUTGROWN_AT.get(route.source_graph_id)
                          if route.source_graph_id in NEXT_GUIDE else None),
