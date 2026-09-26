@@ -274,6 +274,7 @@ class LiveBody:
         self._gear_checked: object = object()     # the bags' revision last looked through
         self._conjure_checked: object = object()  # and for what the conjures make (V166)
         self._conjure_next = 0.0                  # when the next census may be taken
+        self._conjured_last: frozenset[str] = frozenset()   # while the bar is unread (V243)
         self._placing_checked: object = object()  # the bar and spellbook last planned from
         self.travelling = False
         self.policy_context = Context()
@@ -1103,15 +1104,20 @@ class LiveBody:
         return fight.mana_line() if hasattr(fight, "mana_line") else None
 
     def conjured_roles(self) -> frozenset[str]:
-        """What this character's bar makes for itself: "drink", "food" (V166)."""
+        """What this character's bar makes for itself: "drink", "food" (V166). While the
+        bar's census is being read again (after training, the profile is none for a while)
+        the last answer stands (V243): the level 8 mage's profile went blank after Frostbolt
+        was placed, a restock of food and water it conjures was asked for, and the walk to
+        the Westbrook Garrison's quartermaster wedged it inside for a session (215)."""
         profile = self.fight.profile
         if profile is None:
-            return frozenset()
+            return self._conjured_last
         roles: set[str] = set()
         for row in profile.by_role(Role.CONJURE):
             kind = consumable_role(row.creates)
             roles |= {"food", "drink"} if kind == "both" else {kind} if kind else set()
-        return frozenset(roles)
+        self._conjured_last = frozenset(roles)
+        return self._conjured_last
 
     def _train(self, state) -> Result:
         trainer = self._trainer()

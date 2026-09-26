@@ -1191,6 +1191,20 @@ def test_a_unit_not_found_on_the_floor_below_it_is_walked_up_to_again(monkeypatc
     assert level._open_on("Zaldimar Wefhellt", zaldimar, (0.43, 0.66)) is Interacted.NO_TARGET
 
 
+def test_what_the_bar_conjures_is_remembered_while_its_census_is_read_again():
+    """V243: after Frostbolt was placed the profile went blank, a restock of the food and
+    water the mage conjures was asked for, and the walk wedged it for a session (215)."""
+    from jev.world.combat import Ability, CombatProfile, Role
+
+    b = body()
+    b.fight.profile = CombatProfile(name="mage", abilities=(
+        Ability(slot=5, role=Role.CONJURE, name="Conjure Water", spell_id=5504, creates=5350),
+        Ability(slot=6, role=Role.CONJURE, name="Conjure Food", spell_id=587, creates=5349)))
+    assert b.conjured_roles() == {"food", "drink"}
+    b.fight.profile = None
+    assert b.conjured_roles() == {"food", "drink"}, "the bar unread is not a bar without them"
+
+
 def test_the_trainer_s_gossip_line_is_chosen_by_its_text():
     from jev.world.training import trainers
 
