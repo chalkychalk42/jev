@@ -232,6 +232,14 @@ Trials
 | V179 item droppers within two levels of the quest; 12-20 regenerated | with V178 | deaths/h on 12-20 objectives fall; Patrolling Westfall done with no death | the hunt's target is Riverpaw Mongrel (`hunt.request` wanted_name_id) | | |
 | V180 a moved plate is found again when it is the only one of its colour | with V178 | `target-no-proposal` frames (7 in the last 80 runs) and "no eligible target geometry" failures fall | a `target.proposal` after a selection whose plate moved | | |
 | V183 a walk from inside a death's reach keeps the distance it has | session 144 | deaths within 60 s of getting up (4 of 7 in sessions 134-142) fall | a walk after getting up that bends round the body (`round where the character died`) | | |
+| V184 the strip is read where it was last read whole (`var/radio-grid.json`) | session 148 | no session lost to an unreadable strip | `var/radio-grid.json` present; sessions start reading | | |
+| V185 a failed repair never stops the run | session 149 | no exit=1 on VENDOR_REPAIR | a repair abort followed by play | | |
+| V186 a purchase the purse could not pay waits for the purse it needed | session 149 (paladin); the mage's next check | no walk to a merchant and back after each kill | `too_poor` once, not every kill | | |
+| V187 a selected unit's body point is aimed at again once the view settles | session 150 | trainer and quest clicks under a zone title succeed | `interact.settle` events | | |
+| V188 a runner is stunned where it stands | session 151 | fights with 3+ attackers and deaths at camps fall | `fight.runner` events (2 in session 151) | | |
+| V189 resurrection sickness is waited out | session 151 | no death within 3 min of a Spirit Healer revive | `resurrection sickness: waiting` | | |
+| V190 every reader shares the strip's last good grid | session 152 | no `target observation: checksum` | none in the log | | |
+| V191 blind melee is decided on a fresh reading | session 153 | fewer fights ending `not_visible ... time to face` (6 in session 151) | `engage.blind_melee` events | | |
 
 Issues
 ------
