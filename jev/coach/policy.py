@@ -96,9 +96,13 @@ class Context:
     def can_repair(self, money: int | None, step_id: str | None = None) -> bool:
         if step_id is not None and step_id == self.repair_unreachable_step:
             return False
-        # An unknown purse cannot establish that an unaffordable repair became payable.
+        # An unknown purse cannot establish that an unaffordable repair became payable. The
+        # repair's price is not read before it is asked for: the purse must have doubled, or
+        # grown by `REPAIR_RETRY_COPPER`, whichever is more (V196). Any copper more walked a
+        # broke level 2 mage to Northshire's smith after every kill.
         return not self.repair_blocked or (
-            money is not None and self.repair_money is not None and money > self.repair_money
+            money is not None and self.repair_money is not None
+            and money >= max(2 * self.repair_money, self.repair_money + REPAIR_RETRY_COPPER)
         )
 
     def supplies_failed(self, money: int | None) -> None:
@@ -262,6 +266,8 @@ def preempt(state: State) -> Plan | None:
 # Free bag slots at which the merchant is visited. Not none: every fight on the way there
 # drops loot, and with full bags session 81 left four kills unlooted on its way to one.
 BAGS_LOW = 2
+# After a repair the purse could not pay, how much more it must hold before the next (V196).
+REPAIR_RETRY_COPPER = 100
 
 # --------------------------------------------------------------------------- soft tier
 

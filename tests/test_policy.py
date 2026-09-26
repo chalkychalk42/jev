@@ -307,3 +307,18 @@ def test_a_restock_is_not_walked_to_without_one_purchase_in_the_purse():
     plan = service(with_purse(25))
     assert plan is not None and plan.decision.skill == "BUY_AMMO_REAGENT_FOOD"
     assert service(with_purse(None)) is not None, "a purse not read is not a reason to stay"
+
+
+def test_a_repair_the_purse_could_not_pay_waits_for_the_purse_to_grow():
+    """V196: after a repair the purse could not pay, any copper more walked a broke level 2
+    mage back to the smith after every kill."""
+    from jev.coach.policy import REPAIR_RETRY_COPPER, Context
+
+    broke = Context()
+    broke.repair_failed(10)
+    assert not broke.can_repair(11) and not broke.can_repair(10 + REPAIR_RETRY_COPPER - 1)
+    assert broke.can_repair(10 + REPAIR_RETRY_COPPER)
+    short = Context()
+    short.repair_failed(500)
+    assert not short.can_repair(999) and short.can_repair(1000), "or doubled, whichever is more"
+    assert not short.can_repair(None)
