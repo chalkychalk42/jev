@@ -472,13 +472,21 @@ class LiveBody:
             self._fly_toward(world)
         self.travelling = True
         try:
-            arrived = (self.client.approach(world, timeout_s=self.travel_timeout,
-                                            stop_short=stop_short) if stop_short
-                       else self.client.approach(world, timeout_s=self.travel_timeout))
+            arrived = self._walk(world, stop_short)
+            # Wedged indoors: out the way it came in, then the plan again from there (V230).
+            back_out = getattr(self.client, "back_out", None)
+            if (not arrived and back_out is not None
+                    and (self._read() or {}).get("pos.indoors") is True and back_out()):
+                self.say("  wedged indoors: backed out the way it came in")
+                arrived = self._walk(world, stop_short)
         finally:
             self.travelling = False
         self._note_wedged(arrived)
         return arrived
+
+    def _walk(self, world, stop_short: float = 0.0) -> bool:
+        return (self.client.approach(world, timeout_s=self.travel_timeout, stop_short=stop_short)
+                if stop_short else self.client.approach(world, timeout_s=self.travel_timeout))
 
     def _fly_toward(self, world) -> bool:
         """Fly the long part of a walk, when a remembered node lands near its end and a

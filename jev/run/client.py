@@ -38,6 +38,7 @@ from jev.guide.coords import (
     names_by_radio_id,
     world_to_map,
 )
+from jev.guide.path import Path as Route
 from jev.guide.path import PathQuery, PathStatus, stop_short_of
 from jev.guide.route_memory import AvoidingQuery, DangerAvoidingQuery
 from jev.perceive import radio_frame
@@ -92,6 +93,13 @@ GROUND_MEMORY_YARDS = 15.0
 # the floor is looked for below. (Stairs over a walkable floor stay ambiguous: the lower
 # floor is nearer, as the inn's landing over its hall is.)
 TRACK_EVERY_S = 0.5
+# The way in, kept while indoors to walk back out when a walk from inside is wedged (V230):
+# a point each `TRAIL_STEP_YARDS`, from the last point read outdoors. A jump of more than
+# `TRAIL_JUMP_YARDS` between two reads is a hearthstone, a death or a teleport: the way in
+# is not known after it. At most `TRAIL_POINTS` are kept; the way out needs its first.
+TRAIL_STEP_YARDS = 3.0
+TRAIL_JUMP_YARDS = 25.0
+TRAIL_POINTS = 400
 UNDER_YARDS = 1.0
 LOWER_STEPS = (3.0, 6.0, 9.0, 12.0)
 # On a route being walked, the route's own height is the better evidence: the inn's stairs
@@ -173,6 +181,9 @@ class Client:
     _ground: tuple[float, float, float] | None = field(default=None, init=False)
     _tracked_at: float = field(default=-math.inf, init=False)
     _following: tuple = field(default=(), init=False)     # the route being walked, if any
+    # World x and y from the last point read outdoors (`_trail_anchored`), and the way in.
+    _trail: list = field(default_factory=list, init=False)
+    _trail_anchored: bool = field(default=False, init=False)
     # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
     # context and bitmap once and reuses them, so two threads grabbing at the same time
     # tear each other's frame in half. The heartbeat samples on its own thread, so every
@@ -272,7 +283,52 @@ class Client:
         if v is None or v.get("pos.mx") is None or v.get("pos.my") is None:
             return None
         self._track_height(v)
+        self._note_trail(v)
         return (v["pos.mx"], v["pos.my"])
+
+    def _note_trail(self, values: dict) -> None:
+        """Keep the way in while the character is indoors (`back_out`, V230)."""
+        indoors = values.get("pos.indoors")
+        if self.bounds is None or indoors is None:
+            return
+        x, y = map_to_world(values["pos.mx"], values["pos.my"], self.bounds)[:2]
+        # With the height tracked there, so the way back down a stair is walked on its floors.
+        point = (x, y, self._height_near((x, y)))
+        if indoors is False:
+            self._trail, self._trail_anchored = [point], True
+            return
+        if self._trail and math.dist(self._trail[-1][:2], (x, y)) > TRAIL_JUMP_YARDS:
+            self._trail, self._trail_anchored = [], False
+        if not self._trail:
+            self._trail, self._trail_anchored = [point], False
+        elif math.dist(self._trail[-1][:2], (x, y)) >= TRAIL_STEP_YARDS:
+            self._trail.append(point)
+            if len(self._trail) > TRAIL_POINTS:
+                del self._trail[:-TRAIL_POINTS]
+                self._trail_anchored = False
+
+    def back_out(self, *, timeout_s: float = 90.0) -> bool:
+        """Walk the way in backwards, to the last point read outdoors, and say whether the
+        character is outdoors now (V230). Where a walk from inside a building is wedged, the
+        way it came in is one it has walked: the mage stood in the corner between William
+        Pestle's barrels and the window of the Lion's Pride Inn for four minutes in two
+        sessions, each plan out ending there (sessions 193 and 195). Nothing is walked
+        without a way in that began outdoors."""
+        if self.travel is None or not self._trail_anchored or len(self._trail) < 2:
+            return False
+        z = self._ground[2] if self._ground is not None else 0.0
+        points = []
+        for x, y, height in reversed(self._trail):     # a height not tracked: the last one
+            z = height if height is not None else z
+            points.append((x, y, z))
+        route = Route(PathStatus.COMPLETE, tuple(points), source="trail")
+        self._following = tuple(route.points)
+        try:
+            self.travel.follow(route, timeout_s=timeout_s)
+        finally:
+            self._following = ()
+        after = self.read()
+        return after is not None and after.get("pos.indoors") is False
 
     def _track_height(self, values: dict) -> None:
         """Keep `_ground` on the floor the character is on (`TRACK_EVERY_S`)."""

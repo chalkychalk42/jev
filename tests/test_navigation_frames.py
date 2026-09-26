@@ -419,3 +419,50 @@ def test_walks_are_planned_clear_of_the_learned_danger_at_the_characters_level()
     assert isinstance(client.query, DangerAvoidingQuery)
     assert client.query.hot(0) == [(1.0, 2.0, 0.9)]
     danger.hot.assert_called_once_with(0, 12)
+
+
+def test_a_walk_wedged_indoors_backs_out_the_way_it_came_in():
+    """V230: the mage stood in the corner between William Pestle's barrels and the window of
+    the Lion's Pride Inn for four minutes in two sessions, each plan out ending there."""
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    door = map_to_world(0.49, 0.42, ELWYNN)
+    values["pos.indoors"] = False
+    client.position()
+    walked = [(door[0] + dx, door[1] + dy) for dx, dy in ((0, 4), (0, 8), (4, 8), (8, 8), (9, 8))]
+    values["pos.indoors"] = True
+    for x, y in walked:
+        values["pos.mx"], values["pos.my"] = world_to_map(x, y, ELWYNN)
+        client.position()
+    routes = []
+
+    def follow(route, **kw):
+        routes.append(route)
+        values["pos.indoors"] = False               # out of the door
+        return SimpleNamespace(outcome=None)
+
+    client.travel.follow = follow
+    assert client.back_out() is True
+    points = [p[:2] for p in routes[0].points]
+    assert points[0] == pytest.approx(walked[-2]), "from the last point kept, 3 yards apart"
+    assert points[-1] == pytest.approx(door), "to the last point read outdoors"
+    assert [p for p in points[1:-1]] == pytest.approx(list(reversed(walked[:-2])))
+
+
+def test_no_way_in_known_is_no_way_out():
+    """Indoors since the session began, or after a hearthstone's jump: nothing to walk back."""
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    client.travel.follow = lambda route, **kw: pytest.fail("walked a way in it never saw")
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    values["pos.indoors"] = True
+    for dy in (0, 4, 8):
+        values["pos.mx"], values["pos.my"] = world_to_map(here[0], here[1] + dy, ELWYNN)
+        client.position()
+    assert client.back_out() is False, "began indoors"
+    values["pos.indoors"] = False
+    client.position()
+    values["pos.indoors"] = True
+    values["pos.mx"], values["pos.my"] = world_to_map(here[0] + 200, here[1], ELWYNN)
+    client.position()
+    values["pos.mx"], values["pos.my"] = world_to_map(here[0] + 200, here[1] + 4, ELWYNN)
+    client.position()
+    assert client.back_out() is False, "a jump is not a way in"

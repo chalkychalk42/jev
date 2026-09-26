@@ -172,6 +172,24 @@ def test_a_leg_out_of_reach_does_not_stop_for_a_meal():
     b.client.approach.assert_called()
 
 
+def test_a_leg_wedged_indoors_is_walked_again_after_backing_out():
+    """V230: the retry plans from outside the way the character came in."""
+    b = body()
+    reads = {"vitals.hp": 1.0, "vitals.combat": False, "pos.indoors": True}
+    b.client.read = lambda: dict(reads)
+    b.client.approach.side_effect = [False, True]
+    b.client.back_out = lambda: reads.update({"pos.indoors": False}) or True
+    assert b._approach((50, 50, 0)) is True
+    assert b.client.approach.call_count == 2
+    outdoors = body()
+    outdoors.client.read = lambda: {"vitals.hp": 1.0, "vitals.combat": False,
+                                    "pos.indoors": False}
+    outdoors.client.approach.return_value = False
+    outdoors.client.back_out = lambda: pytest.fail("backed out of the open air")
+    assert outdoors._approach((50, 50, 0)) is False
+    assert outdoors.client.approach.call_count == 1
+
+
 def test_unread_health_does_not_start_a_leg():
     b = body()
     b.client.read = lambda: {}
