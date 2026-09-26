@@ -277,6 +277,13 @@ def test_what_acts_in_a_fight_is_bought_before_what_is_kept_up_between_fights():
     assert buy_order(frostbolt, MAGE_LIVE) < buy_order(fireball, MAGE_LIVE)
 
 
+def test_a_mage_behind_on_its_spells_buys_frost_nova_first_at_ten():
+    """V242: 15 of the level 8 mage's 17 deaths had two to four attackers; behind on its
+    spells, it would have bought Frostbolt and both level 8 spells before Frost Nova."""
+    bought, _, _ = _visit(10, MAGE_LIVE, MAGE_LIVE_BAR, 10**7)
+    assert _names(bought[:1]) == ["Frost Nova 1"]
+
+
 def test_every_role_the_fight_code_presses_is_ranked_for_buying():
     from jev.world.combat import TRAINED_ROLES
 

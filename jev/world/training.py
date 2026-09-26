@@ -67,6 +67,8 @@ FIGHT_ROLES = ("strike", "short_buff", "root", "stun", "save", "last_resort", "h
                "attack")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
+# What holds more than one attacker, bought before the oldest gap (V242).
+CONTROL_ROLES = ("root", "stun")
 
 
 @dataclass(frozen=True)
@@ -239,7 +241,12 @@ def buy_order(offer: Offer, known: Iterable[int] = (), facts: dict | None = None
     role = facts_of.role if facts_of is not None else ""
     order = BUY_ORDER.index(role) if role in BUY_ORDER else len(BUY_ORDER)
     new_line = facts_of is None or facts_of.name not in _lines(known, facts)
-    return (role not in FIGHT_ROLES, offer.level, order, new_line, offer.cost, offer.spell_id)
+    # Control of more than one attacker before any level's gap (V242): 15 of the level 8
+    # mage's 17 deaths in sessions 206-213 had two to four attackers, Mangy Wolves and
+    # murlocs below its level among them, and a mage behind on its spells would have
+    # bought Frostbolt and both level 8 spells before Frost Nova.
+    return (role not in FIGHT_ROLES, role not in CONTROL_ROLES, offer.level, order, new_line,
+            offer.cost, offer.spell_id)
 
 
 def learnable(trainer: Trainer, level: int, known: Iterable[int], *,
