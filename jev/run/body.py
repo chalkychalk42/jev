@@ -1412,6 +1412,10 @@ class LiveBody:
                 eligible = {**eligible, **{i: surplus[i] for i in set(items)
                                            if i in surplus and i not in keep}}
                 min_free = SELL_ALL
+                # What fills the bags, for a service that finds nothing to sell: the mage's
+                # bags stayed full through sessions 208-211, "no_junk" each visit.
+                event("bags.census", data={"items": sorted(items), "keep": sorted(keep),
+                                           "eligible": sorted(eligible)})
         wanted = {s.item_id for s in supplies}
         candidates = self._in_zone(m for m in merchants(self.client.bounds.map_id)
                                    if not wanted or wanted & m.items)
