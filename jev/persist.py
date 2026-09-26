@@ -18,7 +18,17 @@ def input_lock_path() -> Path:
     return Path("/tmp") / f"jev-live-input-{os.getuid()}.lock"
 
 
+# Windows over the WSL share refuses a rename onto a file that is open a moment longer:
+# "Access is denied" from `choices.json`'s replace ended sessions 176 and 177, written
+# about once a second by a hunt re-armed that often. The rename is tried again this many
+# times, this far apart, before the error stands.
+REPLACE_TRIES = 5
+REPLACE_WAIT_S = 0.2
+
+
 def atomic_json(path: Path, value: object) -> None:
+    import time
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -28,7 +38,14 @@ def atomic_json(path: Path, value: object) -> None:
             stream.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
-        Path(temporary).replace(path)
+        for attempt in range(REPLACE_TRIES):
+            try:
+                Path(temporary).replace(path)
+                break
+            except PermissionError:
+                if attempt + 1 == REPLACE_TRIES:
+                    raise
+                time.sleep(REPLACE_WAIT_S)
     finally:
         Path(temporary).unlink(missing_ok=True)
 
