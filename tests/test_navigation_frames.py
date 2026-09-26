@@ -548,3 +548,19 @@ def test_the_way_back_ends_clear_of_the_door_or_at_it():
     client.travel.follow = follow
     assert client.back_out() is True, "at the door, if not through it"
     assert ends[0][0] == pytest.approx(door[0] - 6), "the walk back ends outside the door"
+
+
+def test_no_blocked_spot_is_learned_by_a_doorway():
+    """V238: a spot learned as blocked in the Lion's Pride Inn's hall, where the indoor flag
+    was not painted, routed every walk to its stairs round it."""
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    hall = map_to_world(0.49, 0.42, ELWYNN)
+    values["pos.indoors"] = True
+    client.position()
+    values["pos.indoors"] = False
+    values["pos.mx"], values["pos.my"] = world_to_map(hall[0] + 6, hall[1], ELWYNN)
+    client.position()
+    assert client.near_indoors(), "six yards from a point read indoors"
+    assert client.travel._inside(), "what the walk asks before it learns a blocked spot"
+    values["pos.mx"], values["pos.my"] = world_to_map(hall[0] + 40, hall[1], ELWYNN)
+    assert not client.near_indoors(), "forty yards off, out in the open"

@@ -103,6 +103,12 @@ TRAIL_POINTS = 400
 # Outdoor points kept at the trail's head, and how near its end a walk back has arrived.
 TRAIL_OUTSIDE_POINTS = 3
 TRAIL_DONE_YARDS = 5.0
+# Near where the strip has read indoors, no spot is learned as blocked (V238): the
+# indoor flag is not painted in every doorway and hall, and a blocked spot learned in the
+# Lion's Pride Inn's hall routed every walk to its stairs round it. Within `DOOR_YARDS`
+# of a point read indoors in the last `INDOOR_MEMORY_S`.
+DOOR_YARDS = 12.0
+INDOOR_MEMORY_S = 1800.0
 # Two points of a trail this far apart in height are on different floors.
 TRAIL_FLOOR_YARDS = 2.0
 UNDER_YARDS = 1.0
@@ -197,6 +203,7 @@ class Client:
     _trail: list = field(default_factory=list, init=False)
     _trail_anchored: bool = field(default=False, init=False)
     _outside: bool = field(default=False, init=False)     # the last read was outdoors
+    _indoor_seen: list = field(default_factory=list, init=False)   # (monotonic, x, y)
     # The way in outlives the session (V232): saved at close, and taken up by the next
     # session if its first read is where the last one ended.
     trail_memory: Path | None = field(default=None, init=False)
@@ -324,6 +331,8 @@ class Client:
             self._trail, self._trail_anchored, self._outside = tail, True, True
             return
         self._outside = False
+        if not self._indoor_seen or math.dist(self._indoor_seen[-1][1:], (x, y)) >= TRAIL_STEP_YARDS:
+            self._indoor_seen = [*self._indoor_seen, (time.monotonic(), x, y)][-TRAIL_POINTS:]
         if self._trail and math.dist(self._trail[-1][:2], (x, y)) > TRAIL_JUMP_YARDS:
             self._trail, self._trail_anchored = [], False
         if not self._trail:
@@ -340,6 +349,20 @@ class Client:
             if len(self._trail) > TRAIL_POINTS:
                 del self._trail[:-TRAIL_POINTS]
                 self._trail_anchored = False
+
+    def near_indoors(self) -> bool:
+        """Indoors, or within `DOOR_YARDS` of a point read indoors lately (V238)."""
+        values = self.read()
+        if values is None:
+            return False
+        if values.get("pos.indoors") is True:
+            return True
+        if self.bounds is None or values.get("pos.mx") is None or values.get("pos.my") is None:
+            return False
+        x, y = map_to_world(values["pos.mx"], values["pos.my"], self.bounds)[:2]
+        now = time.monotonic()
+        return any(now - t <= INDOOR_MEMORY_S and math.dist((ix, iy), (x, y)) <= DOOR_YARDS
+                   for t, ix, iy in self._indoor_seen)
 
     def back_out(self, *, timeout_s: float = 90.0) -> bool:
         """Walk the way in backwards, to the last point read outdoors, and say whether the
@@ -743,7 +766,7 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards,
-                           indoors=lambda: (client.read() or {}).get("pos.indoors") is True)
+                           indoors=client.near_indoors)
     return client
 
 
