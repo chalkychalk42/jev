@@ -19,7 +19,7 @@ from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
 from jev.clients.fight import Fight
 from jev.clients.gather import Gather, Gathered
-from jev.clients.hearth import Hearth
+from jev.clients.hearth import Hearth, Hearthed
 from jev.clients.interact import Interact
 from jev.clients.interact import Result as Interacted
 from jev.clients.loot import Loot, Looted
@@ -105,6 +105,11 @@ TRAP_RECLAIM_YARDS = 25.0
 # sessions 195-219, the best spot 25 yards out had 20 yards or more in 28, and under 18 only
 # in Fargodeep's kobold camp, three.
 HOSTILE_LOOK_YARDS = 70.0
+# The hearthstone's cooldown (an hour on 2.4.3), and how long a press that did not move the
+# character leaves it before trying again: 10 of the mage's 14 presses in sessions 205-217 met
+# a stone still cooling, about 20 s each, and a wedge pressed it walk after walk (V253).
+HEARTH_COOLDOWN_S = 3600.0
+HEARTH_RETRY_S = 600.0
 CAMP_ROOM_YARDS = 18.0
 # A unit not found where the walk to it ended, this near in x and y and standing this high
 # over the lowest floor there, is on a floor above: walked to once more from below (V235).
@@ -324,6 +329,7 @@ class LiveBody:
         self.hearth = Hearth(hid=client.hid, read=self._read,
                              window_origin=client.origin, window_size=client.size)
         self._revived_at: float | None = None
+        self._hearth_ready_at: float | None = None      # wall time, in the purse file (V253)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
         self._wedged = 0
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
@@ -1113,6 +1119,9 @@ class LiveBody:
                 revived = raw.get("revived_at") if isinstance(raw, dict) else None
                 if isinstance(revived, (int, float)) and not isinstance(revived, bool):
                     self._revived_at = float(revived)
+                ready = raw.get("hearth_ready_at") if isinstance(raw, dict) else None
+                if isinstance(ready, (int, float)) and not isinstance(ready, bool):
+                    self._hearth_ready_at = float(ready)
             context.saved = self._save_purse
         context.trainable = self.trainable
         context.reserve = self.training_reserve
@@ -1185,11 +1194,25 @@ class LiveBody:
         with contextlib.suppress(OSError):
             atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse(),
                                                   "conjured": sorted(self._conjured_last),
-                                                  "revived_at": self._revived_at})
+                                                  "revived_at": self._revived_at,
+                                                  "hearth_ready_at": self._hearth_ready_at})
 
     def _go_home(self):
-        """Home by hearthstone; where it sets the character down is home from then on."""
+        """Home by hearthstone; where it sets the character down is home from then on. Not
+        pressed while it is still cooling from the last use this character made of it
+        (V253)."""
+        now = time.time()
+        if self._hearth_ready_at is not None and now < self._hearth_ready_at:
+            self.hearth.detail = (f"cooling down, {(self._hearth_ready_at - now) / 60:.0f} "
+                                  "minutes left")
+            return Hearthed.NOT_READY
         home = self.hearth.run()
+        if home is Hearthed.HOME:
+            self._hearth_ready_at = now + HEARTH_COOLDOWN_S
+            self._save_purse()
+        elif home is Hearthed.NOT_READY:
+            self._hearth_ready_at = now + HEARTH_RETRY_S
+            self._save_purse()
         here = self._position() if home.ok else None
         world = map_to_world(*here, self.client.bounds) if here is not None else None
         if world is not None:

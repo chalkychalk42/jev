@@ -671,6 +671,39 @@ def test_a_ghost_gets_up_clear_of_hostile_spawns_on_a_step_with_none_of_its_own(
     assert min(math.dist(spot[:2], w[:2]) for w in wolves) > 25.0, "not among the wolves"
 
 
+def test_a_hearthstone_still_cooling_is_not_pressed(tmp_path, monkeypatch):
+    """V253: 10 of the mage's 14 presses in sessions 205-217 met a stone still cooling,
+    about 20 s each, and a wedge pressed it walk after walk."""
+    from jev.clients.hearth import Hearthed
+    from jev.coach.policy import Context
+    from jev.run.body import HEARTH_COOLDOWN_S, HEARTH_RETRY_S
+
+    now = [10_000.0]
+    monkeypatch.setattr("jev.run.body.time.time", lambda: now[0])
+    b = body()
+    b.purse_memory = tmp_path / "character-1.purse.json"
+    b.policy_context = Context()
+    b.client.position = lambda: None
+    pressed = []
+    b.hearth.run = lambda: pressed.append(now[0]) or Hearthed.HOME
+    assert b._go_home() is Hearthed.HOME
+    now[0] += 600.0
+    assert b._go_home() is Hearthed.NOT_READY and len(pressed) == 1, "cooling: not pressed"
+    later = body()                                   # the next session knows it
+    later.purse_memory = b.purse_memory
+    later.policy_context = Context()
+    later.hearth.run = lambda: pressed.append(now[0]) or Hearthed.HOME
+    assert later._go_home() is Hearthed.NOT_READY and len(pressed) == 1
+    now[0] += HEARTH_COOLDOWN_S
+    later.client.position = lambda: None
+    assert later._go_home() is Hearthed.HOME and len(pressed) == 2
+    later.hearth.run = lambda: pressed.append(now[0]) or Hearthed.NOT_READY
+    now[0] += HEARTH_COOLDOWN_S
+    assert later._go_home() is Hearthed.NOT_READY and len(pressed) == 3
+    now[0] += HEARTH_RETRY_S / 2
+    assert later._go_home() is Hearthed.NOT_READY and len(pressed) == 3, "tried again later"
+
+
 def test_a_service_blocked_for_the_step_does_not_stop_its_grind():
     """V194: session 156's repair walk timed out and repairs were blocked for the step
     (V185), but the grind asked for one from inside the hunt, with no step named, and
