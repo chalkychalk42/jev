@@ -334,6 +334,15 @@ def test_a_plate_the_view_moved_off_its_anchor_is_found_again_when_it_is_the_onl
     assert body_candidates(frame, plate=moved) == ()
 
 
+def test_body_points_reach_a_unit_close_under_an_awning():
+    """Janos Hammerknuckle in his stall: his bar's bottom at 295 px, the awning down to
+    470, his head at 480. Every point to 110 px under the bar was awning (26 September)."""
+    [sighting] = candidates(_scene())
+    bottom = sighting.plate.bounds[3]
+    drops = [p.torso[1] - bottom for p in body_candidates(_scene())]
+    assert max(drops) >= 185
+
+
 def test_multiple_proposals_do_not_promote_the_largest_component_to_identity():
     frame = _scene()
     _outline(frame, 755, 650, 90, 40, (211, 173, 8))

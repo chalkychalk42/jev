@@ -63,6 +63,9 @@ _FACE_RATE_BOUNDS = (0.08, 4.0)   # offset per second; outside this a reading is
 # ownership once, then tracked: the nearest candidate to where the last proved plate was
 # predicted to move. A health bar's fill shrinks, but its left edge and centre do not.
 FACE_HOVER_PROBES = 3
+# Body probes this close to one already hovered are the same probe (`click_selected`): the
+# stall's weaponsmith was hovered at 30 px under his bar and again at 28, of five probes.
+PROBE_SAME_PX = 6.0
 TRACK_DX, TRACK_DY = 0.06, 0.05      # fractions of the client width / height
 # A turn's outcome is uncertain by a share of its own size (the rate is still being
 # measured), so the horizontal window grows with the predicted shift.
@@ -639,7 +642,7 @@ class Targeting:
         return ClickResult(last.code, last.point, last.detail, attempts)
 
     def click_selected(self, *, kind: str = "living", expected_name_id: int | None = None,
-                       plate: units.Plate | None = None, max_probes: int = 6,
+                       plate: units.Plate | None = None, max_probes: int = 8,
                        timeout_s: float = 8.0, max_view_age_s: float = 0.5) -> ClickResult:
         """One bounded selected *living* unit action, used to open an NPC's window.
 
@@ -681,7 +684,10 @@ class Targeting:
             # Ring brackets first; plate-anchored body points when the ring is hidden.
             proposals = (*units.candidates(view.frame, plate=plate),
                          *units.body_candidates(view.frame, plate=plate))
-            candidate = next((p for p in proposals if p.torso not in tried), None)
+            # A point a plate's redraw moved by a pixel or two was tried already.
+            candidate = next((p for p in proposals
+                              if all(math.dist(p.torso, t) > PROBE_SAME_PX for t in tried)),
+                             None)
             if candidate is None:
                 self._retain("target-no-proposal", view)
                 return ClickResult(last.code, last.point, last.detail, attempts)

@@ -678,8 +678,12 @@ def revalidate(frame: np.ndarray, point: Point, *, plate: Plate | None = None,
 # all, and the turn-in failed with "no eligible target geometry". A point this far below
 # the bar's bottom edge is not the nameplate, so a fresh hover owning the target there is
 # its body. Drops cover his torso, 30-80 px below the bar, before the character's head.
+# The deeper ones find a unit close to the camera under an awning: Janos Hammerknuckle in
+# his stall on 26 September, bar bottom at 295 px, the awning down to 470, his head at 480;
+# every drop to 110 was awning, and the repair failed with "world focus without a
+# mouseover unit". A drop on another unit, or on the character, is refused by its hover.
 BODY_MARGIN_PX = 12
-BODY_DROPS = (30, 55, 80, 110)
+BODY_DROPS = (30, 55, 80, 110, 160, 220, 290)
 
 
 @dataclass(frozen=True)
