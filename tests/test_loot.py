@@ -56,13 +56,30 @@ def test_full_bags_close_a_persisting_loot_frame_before_service(monkeypatch):
     assert hid.taps == ["esc"]
 
 
-def test_a_full_bag_is_not_clicked_at():
-    """Looting into a full bag silently takes nothing, and the fix is a vendor rather
-    than another click."""
+def test_a_full_bag_is_clicked_at_and_nothing_coming_off_is_bags_full(monkeypatch):
+    """V246: coins and an item onto its own stack need no free slot. Nothing came off this
+    one: that is the vendor's problem, as before."""
+    monkeypatch.setattr("jev.clients.loot.time.sleep", lambda _: None)
     hid = _Hid()
     skill = _loot([{**HAVE, "bags.free": 0}], hid=hid)
-    assert skill.run() is Looted.BAGS_FULL
-    assert hid.clicks == []
+    assert skill.run(settle_s=0) is Looted.BAGS_FULL
+    assert hid.clicks == [(710, 533, True)]
+    assert "bags are full" in skill.detail
+
+
+@pytest.mark.parametrize("after", [
+    {"bags.money_silver": 4},                  # coins take no slot
+    {"inventory.revision": 41},                # an item onto a stack it already has
+])
+def test_a_full_bag_still_takes_what_needs_no_slot(monkeypatch, after):
+    """V246: the mage's backpack was full for 50 of 84 corpses in sessions 205-217, and 7
+    Rockhide Boars went unlooted with a stack of Chunks of Boar Meat in the bags, 3 short
+    of Pie for Billy."""
+    monkeypatch.setattr("jev.clients.loot.time.sleep", lambda _: None)
+    full = {**HAVE, "bags.free": 0, "inventory.revision": 40}
+    skill = _loot([full, {**full, **after}])
+    assert skill.run(settle_s=1.0) is Looted.TOOK
+    assert skill.took == 1
 
 
 def test_nothing_selected_is_not_a_corpse():

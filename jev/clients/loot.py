@@ -36,8 +36,11 @@ An empty corpse is a real and common outcome. `NOTHING` means no observed change
 the click; that remains non-fatal, but cannot prove whether the corpse was empty or the
 click missed. The execution stream retains the geometry and observed deltas separately.
 
-Bags are checked **before** the click. A full bag makes looting silently do nothing, and
-the fix for that is a vendor, not another click.
+A full bag is clicked at all the same (V246): coins take no slot, and an item lands on a
+stack it already has, so the client still takes those; only when nothing came off the
+corpse is it "bags full", and the fix for the rest is a vendor. The mage's backpack was full
+for 50 of 84 corpses in sessions 205-217, and 7 Rockhide Boars went unlooted in five minutes
+of Pie for Billy, 3 Chunks of Boar Meat short, with a stack of them in the bags.
 """
 
 from __future__ import annotations
@@ -72,7 +75,7 @@ class Looted(StrEnum):
     TOOK = "took"              # objective, money or bag capacity changed
     NOTHING = "nothing"        # no observed change after clicking; emptiness is unconfirmed
     NO_CORPSE = "no_corpse"    # nothing selected to loot
-    BAGS_FULL = "bags_full"    # would not fit; a vendor is the answer, not a click
+    BAGS_FULL = "bags_full"    # the bags full and nothing came off: a vendor is the answer
     BLIND = "blind"
     REFUSED = "refused"
     INTERRUPTED = "interrupted"
@@ -97,6 +100,7 @@ class Loot:
     clicked: tuple[int, int] | None = field(default=None, init=False)
     took: int = field(default=0, init=False)
     detail: str = field(default="", init=False)
+    _full: bool = field(default=False, init=False)      # no free slot when last clicked
 
     @traced("loot")
     def run(self, *, settle_s: float = SETTLE_S,
@@ -129,6 +133,9 @@ class Loot:
             mark = self._errors()
             result = self._once(settle_s=settle_s, progress=progress, anchor=None,
                                 name_id=name_id)
+        if result is Looted.NOTHING and self._full:
+            self.detail = "bags are full; nothing that stacks or pays came off it"
+            return Looted.BAGS_FULL
         return result
 
     def _errors(self) -> int | None:
@@ -169,7 +176,9 @@ class Loot:
         v = self.read()
         if v is None:
             return Looted.BLIND
-        if v.get("bags.free") == 0:
+        self._full = v.get("bags.free") == 0
+        if self._full and v.get("ui.loot") is True:
+            # A frame left standing with the bags full holds what did not fit (V246).
             self.detail = "bags are full; looting would take nothing"
             return self._close_if_open(v) or Looted.BAGS_FULL
         before = {**v, "objective": self._counter()}
