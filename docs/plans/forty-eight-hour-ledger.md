@@ -347,6 +347,11 @@ Trials
 | V221 a lone spawn not seen from a stand-off is looked for from its spot | session 194 | no session spent at a named mob's stand-off | a second `hunt.approach` to a lone spawn without the stand-off | | |
 | V222-V229 the consolidation (§11) | session 196 | no behaviour change in play; the suite and the offline check green | session 196: the usual proof lines, no Traceback, 9 kills; `keep.sh status` and `session_check` read the new logs | | |
 | V230 a walk wedged indoors backs out the way it came in | session 198 | no minutes-long wedge in a building the character walked into | `wedged indoors: backed out the way it came in` | | |
+| V231 the way in is kept without its loops; back-outs logged | session 200 | a back-out after every wedged walk indoors with a way in | `wedged indoors: backing out the way it came in, 25 points` (sessions 201-203); twice `backing out ended indoors` | | |
+| V232 the way in outlives the session | session 201 | no "no way in known (it began indoors)" after a session that ended inside | `character-73ce06a8.trail.json` written at session 201's close | | |
+| V233 a ghost gets up out of the camp's reach | session 202 | no death within 30 s of getting up at the body (2 of 4 in sessions 195-197) | `getting up out of the camp's reach` | | |
+| V234 a quest complete in the log is handed in on the way | session 203 | Kobold Candles and Wolves Across the Border handed in when the mage passes William Pestle or Eagan Peltskinner | a detour to a hand-in not in `retried` | | |
+| V235 a unit not found on arrival, on a floor above, is walked up to again | session 204 | trainer visits to Zaldimar and Khelden that end under them fall | `was not found here: walking up to the floor above again` | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
