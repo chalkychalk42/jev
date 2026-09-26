@@ -45,6 +45,10 @@ class PaintCode(StrEnum):
 # line whatever its distance. Turning until the selected unit's own nameplate reaches that
 # line is therefore facing it, observed rather than assumed.
 FACE_TOLERANCE = 0.05       # of the client width either side of centre
+# Where our own radio strip is drawn, as fractions of the client (left, top, right, bottom):
+# over the world at the top-centre, hiding the plates behind it (V211). Measured on
+# session 173's frames at 1600x900: x 715-885, y 0-155.
+STRIP_COVER = (0.44, 0.0, 0.56, 0.18)
 # Seconds of turning per unit of offset for the first pulse. Offsets understate the angle
 # to a unit close beside the character, so every later pulse uses the rate the previous
 # pulse actually produced - the same "compare what was asked with what was got" rule the
@@ -90,6 +94,13 @@ class FaceCode(StrEnum):
     BLIND = "blind"
     REFUSED = "refused"
 
+
+
+def _behind_strip(point, shape) -> bool:
+    """Is this frame point under the radio strip (`STRIP_COVER`)?"""
+    height, width = shape[0], shape[1]
+    left, top, right, bottom = STRIP_COVER
+    return left * width <= point[0] <= right * width and top * height <= point[1] <= bottom * height
 
 @dataclass(frozen=True)
 class FaceResult:
@@ -426,6 +437,15 @@ class Targeting:
             if isinstance(plate, FaceResult):
                 return done(plate.code, plate.detail)
             if plate is None:
+                if tracked is not None and _behind_strip(tracked, view.frame.shape):
+                    # Turned toward, a plate high on the screen slides under our own radio
+                    # strip at the top-centre, which is drawn over the world: the Defias
+                    # Smuggler on the ridge was proved at +0.096, turned to, and lost there,
+                    # 157 looks "not visible" in session 173 (V211). The strip covers the
+                    # centre line only, so a plate that went under it is on it.
+                    width = view.frame.shape[1]
+                    return done(FaceCode.FACED, "selected plate under the radio strip, on the "
+                                "centre line", (tracked[0] - width / 2) / width, None)
                 tracked = None
                 if searched >= search_s:
                     return done(FaceCode.NOT_VISIBLE,

@@ -180,6 +180,44 @@ def test_a_unit_clicked_at_the_edge_is_looked_for_toward_where_it_was(monkeypatc
     assert world.holds[0] == ("d", FACE_SEARCH_STEP_S)
 
 
+class UphillWorld(World):
+    """A unit up a slope: its plate high on the screen, and hidden under our radio strip
+    at the top-centre (`STRIP_COVER`), which is drawn over the world."""
+
+    PLATE_Y = 131
+
+    def target_x(self):
+        x = super().target_x()
+        if x is not None and 0.44 * WIDTH <= x <= 0.56 * WIDTH:
+            return None                          # under the strip
+        return x
+
+    def frame(self):
+        frame = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
+        if (x := self.target_x()) is not None:
+            left = round(x - 73)
+            frame[self.PLATE_Y - 3:self.PLATE_Y + 4, max(0, left):left + 147] = YELLOW
+        return frame
+
+    def hover(self, point):
+        x = self.target_x()
+        if x is not None and abs(point[0] - x) < 20 and abs(point[1] - self.PLATE_Y) < 10:
+            return HoverCode.MATCH
+        return HoverCode.GROUND
+
+
+def test_a_plate_turned_under_the_radio_strip_is_on_the_centre_line(monkeypatch):
+    """V211: the Defias Smuggler on the ridge was proved at +0.096, turned to, and lost
+    under our strip; 157 looks ended "not visible" in session 173."""
+    world = UphillWorld(bearing=8.0)
+    assert world.target_x() is not None, "in view, right of the strip, to begin with"
+    result = targeting_for(world, monkeypatch).face_selected(
+        expected_name_id=2864, search_s=FACE_SEARCH_MAX_S)
+    assert result.faced, result.detail
+    assert "strip" in result.detail
+    assert all(key == "d" for key, _ in world.holds), "turned toward it, never searched"
+
+
 def test_a_unit_with_no_plate_anywhere_is_not_visible_after_one_search_turn(monkeypatch):
     world = World(bearing=10.0, visible=False)
     result = targeting_for(world, monkeypatch).face_selected(expected_name_id=2864)
