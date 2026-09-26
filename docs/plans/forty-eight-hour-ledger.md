@@ -340,6 +340,8 @@ Trials
 | V216 a person is three inputs inside three seconds | session 184 | no false pause; a person still pauses the run | strays logged "1 of 3" and never confirmed (session 184: one) | | |
 | V217 full bags a merchant cannot help do not stop a hunt | session 188 | no run of `GRIND_UNTIL: bags_full` (583 in session 186, all of 187) | session 188: `no_junk`, then the hunt walked and fought | | |
 | V218 the walk out of reach does not stop for a meal | session 190 | no "not fit to travel: in combat" during a pause | a leg started in combat under the pause at low health | | |
+| V219 an accept needing a quest the route will not finish is passed by | session 191 | no accept tried whose prerequisite is lost (Milly Osworth twice and Milly's Harvest once in sessions 189-190, each with a rib) | the playhead moving from a Milly accept to the step past its chain with no ACCEPT_QUEST | | |
+| V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
 ------
