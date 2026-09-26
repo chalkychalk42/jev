@@ -3007,3 +3007,65 @@ last two good sessions made over 9,000 XP/h.
      while every facing look failed);
    - a hopeless fight near guards (run to them);
    - a loot hunt sized to its kills.
+
+## 26 Sep 2026 14:35 — hour fifteen: the switch to the mage, V211-V218
+
+The hour-15 checkpoint:
+
+| Go if | Result |
+|---|---|
+| The switch is made; the mage is in the world and verified | **Met**: at 14:27, the first session end after 14:15, the loop closed the client, launched it, and entered Itheamar ("in the world as Itheamar, level 5", 14:28:50). The mage's first session took two Red Burlap Bandanas in its first two fights |
+
+**The paladin's turn is over.** Testvvi played from level 13.05 at T-0 to 15.87: 11.4 hours
+in sessions 134-188, 34,519 XP (3,038 an hour), 356 kills and 41 deaths. Since hour twelve,
+2,365 XP an hour. Its best sessions since hour twelve were 181 and 183 (4,713 and
+5,786 XP/h, no deaths). Its last hour went to Jangolode Mine's Defias Smugglers, who throw
+knives from out of sight: nine deaths in sessions 182-188, and fights ending "not
+visible" one after another. That is the open problem of a ranged attacker whose plate
+cannot be found.
+
+**Fixes since hour twelve**:
+- **V211** (everyone): a plate turned under the radio strip is on the centre line.
+- **V212** (everyone): three fights in a row that never engage keep combat off the floor for
+  30 s, and the step's walk goes on. The body's own guard ("combat before travel") had to
+  learn it too: without that, sessions 176-177 looped and crashed on a locked
+  `choices.json`, which `atomic_json` now retries.
+- **V213** (everyone): a ghost that does not get up short of its body goes closer: 25 yards,
+  then half as far each time.
+- **V214** (everyone): a step's entry level is kept in the playhead, so a failover grind ends
+  a level above where it began, whatever the sessions between. Session 181 left the Dust
+  Devils' rib at once.
+- **V215** (everyone; it binds only a purse short of the next spell): a restock keeps the
+  price of the next spell a trainer in reach would teach. The mage had trained once in five
+  levels. It sold its bags for 134 copper and spent it on a repair and 15 waters, while
+  Conjure Water cost 100.
+- **V216** (everyone): the operator watch needs three inputs inside 3 s, not 10, before it
+  pauses the run. The machine's own strays after the bot's keys came at least 3 s apart;
+  twice they reached "2 of 3" inside ten seconds.
+- **V217** (everyone): full bags a merchant cannot help do not stop a hunt. Once a merchant
+  had found nothing to buy, the hunt handed its step back 583 times in session 186 and all
+  of session 187 (one kill), "bags are full; service before the next pull". The hunt now
+  leaves full bags to the policy's services and fights on. In session 188 it hunted.
+- **V218** (everyone, deployed after session 189): the walk out of reach during a V212 pause
+  does not stop for a meal no fight allows. Session 188 asked for one six times running and
+  stood where the Smugglers' knives reached it.
+
+**Melee's evidence**: the whole suite passes before each deploy. The paladin made 4,713 and
+5,786 XP/h in sessions 181 and 183. V215 left its purse (25-27 silver) and its buying as they
+were.
+
+**The mage takes over** at level 5.41, with 57 copper and Fireball rank 1. Across its twelve
+visits (2.9 hours), it spent 28% of its time on restocks and repairs it could not pay for (fixed
+since by V186, V195, V196, V199, V201, V203, V205, V206 and V215) and 10% dead or as a ghost.
+Half its fights began with the mob already on it. Three of its eight deaths came right after
+getting up at the body. V208, its worst fault (Fireball pressed into an attacker behind it,
+30% of presses unanswered), and V204 are now live for it for the first time.
+
+**NEXT:**
+1. The mage's first sessions: V204, V208 and V215 live; its first training (Frostbolt or
+   Conjure Water, 100 copper each); the Northshire vineyard; Brother Neals' tower.
+2. The consolidation (§11) is ready on a side branch, `consolidate`: 6,923 source lines and
+   3,207 test lines out, the suite green, not merged. It is reviewed and merged in hours 36-44;
+   its DECISIONS rows are renumbered then.
+3. Candidates: a ranged attacker whose plate is out of sight; a hopeless fight near guards; a
+   loot hunt sized to its kills (not needed in 1-12: its loot hunts hold 11-16 spawns).
