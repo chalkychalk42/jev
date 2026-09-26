@@ -582,6 +582,10 @@ def test_the_selected_units_range_is_painted_per_slot():
 
 # --- schema 18: the class trainer's list (V237) ------------------------------------------
 
+# The type codes the desk reads (`jev.perceive.trainer`), asserted of what the addon paints.
+from jev.perceive.trainer import AVAILABLE, FOLDED, HEADER, UNAVAILABLE  # noqa: E402
+
+
 def _trainer(ticks: int, **state) -> dict:
     return radio.unpack(payload(paint({"trainerFixture": True, "trainerOpen": 1, **state},
                                       ticks=ticks))[:PAYLOAD_CELLS])
@@ -596,17 +600,19 @@ def test_the_trainer_list_names_each_row_its_rank_type_price_and_button():
     assert (missiles["trainer.total"], missiles["trainer.short"]) == (16, 7)
     assert missiles["trainer.index"] == 3
     assert missiles["trainer.name_id"] == name_id("Arcane Missiles")
-    assert (missiles["trainer.rank"], missiles["trainer.type"], missiles["trainer.cost"]) == (1, 1, 200)
+    assert (missiles["trainer.rank"], missiles["trainer.type"], missiles["trainer.cost"]) == (
+        1, AVAILABLE, 200)
     # ClassTrainerSkill3 shows row 3: (168, 656) of a 1600x900 interface.
     assert missiles["trainer.x"] == pytest.approx(168 / 1600, abs=0.001)
     assert missiles["trainer.y"] == pytest.approx(1 - 656 / 900, abs=0.001)
     assert missiles["trainer.go_x"] is None
     assert missiles["trainer.top"] == 1, "the list shows rows 1-11"
     header = _trainer(1)                                # the whole list's first row
-    assert (header["trainer.index"], header["trainer.type"]) == (1, 0)
+    assert (header["trainer.index"], header["trainer.type"]) == (1, HEADER)
     assert header["trainer.name_id"] == name_id("Arcane") and header["trainer.cost"] is None
     not_yet = _trainer(3)                               # the whole list's second row
-    assert (not_yet["trainer.index"], not_yet["trainer.type"], not_yet["trainer.rank"]) == (2, 2, 1)
+    assert (not_yet["trainer.index"], not_yet["trainer.type"], not_yet["trainer.rank"]) == (
+        2, UNAVAILABLE, 1)
     slow_fall = _trainer(31)                            # row 16: no rank at all
     assert (slow_fall["trainer.index"], slow_fall["trainer.rank"]) == (16, 0)
 
@@ -639,7 +645,7 @@ def test_a_row_out_of_view_paints_the_scroll_button_toward_it():
 
 def test_a_folded_header_and_the_selected_row_are_painted():
     folded = _trainer(8, trainerFolded=7)               # the Fire header, folded shut
-    assert (folded["trainer.index"], folded["trainer.type"]) == (7, 4)
+    assert (folded["trainer.index"], folded["trainer.type"]) == (7, FOLDED)
     assert _trainer(1, trainerSelected=9)["trainer.selected"] == 9
     assert _trainer(1)["trainer.selected"] is None
 
