@@ -61,14 +61,20 @@ def main() -> int:
           f"falling={values['flags.falling']} combat={values['vitals.combat']}")
 
     try:
+        # The jumps last: a character climbed onto a table in a corner of Sentinel Hill's
+        # inn loft and nothing on the ground moved it (26 September).
         for label, key, secs in (("forward", "w", 1.0), ("back", "s", 1.0),
                                  ("strafe-left", "a", 1.0), ("strafe-right", "d", 1.0),
-                                 ("jump+forward", "w", 1.0)):
+                                 ("jump+forward", "w", 1.0), ("jump+back", "s", 1.0),
+                                 ("round+jump", "w", 1.0)):
             before = read()
             if before is None:
                 print(f"  {label:14} lost the strip")
                 continue
-            if label.startswith("jump"):
+            if label == "round+jump":
+                hid.hold("d", 1.35)          # about half a turn at the measured rate
+                time.sleep(0.3)
+            if "jump" in label:
                 hid.tap("space")
                 time.sleep(0.15)
             # a/d are strafe only with no modifier in the default binding; if the client
