@@ -580,6 +580,94 @@ def test_the_selected_units_range_is_painted_per_slot():
     assert none["bars.in_range"] is None and none["bars.out_range"] is None
 
 
+# --- schema 18: the class trainer's list (V237) ------------------------------------------
+
+def _trainer(ticks: int, **state) -> dict:
+    return radio.unpack(payload(paint({"trainerFixture": True, "trainerOpen": 1, **state},
+                                      ticks=ticks))[:PAYLOAD_CELLS])
+
+
+def test_the_trainer_list_names_each_row_its_rank_type_price_and_button():
+    """The fixture is a level 8 mage's list: 16 rows, of which the three headers and the
+    four services learnable now make the short cycle (rows 1, 3, 6, 7, 9, 11, 14)."""
+    from jev.perceive.radio_frame import name_id
+
+    missiles = _trainer(4)                              # the short cycle's second row
+    assert (missiles["trainer.total"], missiles["trainer.short"]) == (16, 7)
+    assert missiles["trainer.index"] == 3
+    assert missiles["trainer.name_id"] == name_id("Arcane Missiles")
+    assert (missiles["trainer.rank"], missiles["trainer.type"], missiles["trainer.cost"]) == (1, 1, 200)
+    # ClassTrainerSkill3 shows row 3: (168, 656) of a 1600x900 interface.
+    assert missiles["trainer.x"] == pytest.approx(168 / 1600, abs=0.001)
+    assert missiles["trainer.y"] == pytest.approx(1 - 656 / 900, abs=0.001)
+    assert missiles["trainer.go_x"] is None
+    assert missiles["trainer.top"] == 1, "the list shows rows 1-11"
+    header = _trainer(1)                                # the whole list's first row
+    assert (header["trainer.index"], header["trainer.type"]) == (1, 0)
+    assert header["trainer.name_id"] == name_id("Arcane") and header["trainer.cost"] is None
+    not_yet = _trainer(3)                               # the whole list's second row
+    assert (not_yet["trainer.index"], not_yet["trainer.type"], not_yet["trainer.rank"]) == (2, 2, 1)
+    slow_fall = _trainer(31)                            # row 16: no rank at all
+    assert (slow_fall["trainer.index"], slow_fall["trainer.rank"]) == (16, 0)
+
+
+def test_every_other_paint_is_a_header_or_a_service_learnable_now():
+    """Most of a city trainer's list is red: the rows a buyer acts on come round in a
+    second or two, not the twenty the whole list takes."""
+    rows = [_trainer(tick)["trainer.index"] for tick in range(2, 16, 2)]
+    assert rows == [1, 3, 6, 7, 9, 11, 14]
+    assert [_trainer(tick)["trainer.index"] for tick in (1, 3, 5)] == [1, 2, 3]
+
+
+def test_a_row_out_of_view_paints_the_scroll_button_toward_it():
+    frostbolt = _trainer(14)                            # row 14, below the eleven shown
+    assert (frostbolt["trainer.index"], frostbolt["trainer.x"]) == (14, None)
+    assert frostbolt["trainer.go_x"] == pytest.approx(340 / 1600, abs=0.001)
+    assert frostbolt["trainer.go_y"] == pytest.approx(1 - 520 / 900, abs=0.001)
+    scrolled = _trainer(14, trainerOffset=5)            # rows 6-16 shown: row 14 is too
+    assert scrolled["trainer.x"] == pytest.approx(168 / 1600, abs=0.001)
+    assert scrolled["trainer.y"] == pytest.approx(1 - (688 - 16 * 8) / 900, abs=0.001)
+    assert scrolled["trainer.go_x"] is None
+    assert (frostbolt["trainer.top"], scrolled["trainer.top"]) == (1, 6)
+    above = _trainer(2, trainerOffset=5)                # row 1, above them
+    assert above["trainer.index"] == 1 and above["trainer.x"] is None
+    assert above["trainer.top"] == 6
+    assert above["trainer.go_y"] == pytest.approx(1 - 680 / 900, abs=0.001)
+    stuck = _trainer(2, trainerOffset=5, trainerUpDisabled=1)
+    assert stuck["trainer.go_x"] is None, "a disabled scroll button is no way to the row"
+
+
+def test_a_folded_header_and_the_selected_row_are_painted():
+    folded = _trainer(8, trainerFolded=7)               # the Fire header, folded shut
+    assert (folded["trainer.index"], folded["trainer.type"]) == (7, 4)
+    assert _trainer(1, trainerSelected=9)["trainer.selected"] == 9
+    assert _trainer(1)["trainer.selected"] is None
+
+
+def test_the_trainer_list_revision_follows_the_stock_window_s_updates():
+    """A purchase, a header folded or a filter changed rebuilds the stock list and shifts
+    its row numbers: a census across one is thrown away."""
+    before = _trainer(1)["trainer.revision"]
+    after = _trainer(1, events=[["TRAINER_SHOW"], ["TRAINER_UPDATE"], ["TRAINER_UPDATE"]])
+    assert after["trainer.revision"] == before + 3
+    assert _trainer(1, events=[["BAG_UPDATE"]])["trainer.revision"] == before
+
+
+def test_a_closed_trainer_window_paints_nothing_of_it():
+    shut = _trainer(4, trainerOpen=False)
+    assert shut["ui.trainer"] is False
+    assert all(shut[name] is None for name in shut if name.startswith("trainer."))
+
+
+def test_the_addon_never_selects_scrolls_or_buys_at_the_trainer():
+    """Paint only: choosing a row, scrolling to it and pressing Train are the body's clicks."""
+    src = BUILT["lua"].read_text(encoding="utf-8")
+    for forbidden in ("SelectTrainerService", "BuyTrainerService", "ExpandTrainerSkillLine",
+                      "CollapseTrainerSkillLine", "SetTrainerServiceTypeFilter",
+                      "SetVerticalScroll", "SetValue", "FauxScrollFrame_SetOffset", ":Click("):
+        assert forbidden not in src, f"the addon calls {forbidden}, which actuates"
+
+
 def test_the_attackers_are_counted_from_the_combat_log():
     """Distinct units that hit or missed the character in the last six seconds."""
     me, wolf, gnoll, bystander = ("0x0000000000000042", "0xF1300000000000A1",

@@ -142,6 +142,52 @@ if STATE.taxiFixture then
     end
 end
 
+-- A class trainer's window as the stock 2.4.3 frame draws it (Blizzard_TrainerUI): a mage's
+-- list at level 8 with the used filter off, three skill lines sorted by name, eleven rows
+-- shown from `trainerOffset`, each row button carrying the ID of the service it shows, and
+-- the FauxScrollFrame's two scroll buttons, disabled at either end of the list.
+if STATE.trainerFixture then
+    local services = {
+        {"Arcane", nil, "header"}, {"Arcane Explosion", "Rank 1", "unavailable", 900},
+        {"Arcane Missiles", "Rank 1", "available", 200}, {"Conjure Food", "Rank 2", "unavailable", 600},
+        {"Conjure Water", "Rank 2", "unavailable", 400}, {"Polymorph", "Rank 1", "available", 200},
+        {"Fire", nil, "header"}, {"Fire Blast", "Rank 2", "unavailable", 900},
+        {"Fireball", "Rank 2", "available", 100}, {"Fireball", "Rank 3", "unavailable", 600},
+        {"Frost", nil, "header"}, {"Frost Armor", "Rank 2", "unavailable", 400},
+        {"Frost Nova", "Rank 1", "unavailable", 400}, {"Frostbolt", "Rank 1", "available", 100},
+        {"Frostbolt", "Rank 2", "unavailable", 200}, {"Slow Fall", "", "unavailable", 600},
+    }
+    local offset = STATE.trainerOffset or 0
+    function GetNumTrainerServices() return #services end
+    function GetTrainerServiceInfo(i)
+        local s = services[i]
+        if s == nil then return nil end
+        return s[1], s[2], s[3], s[3] == "header" and STATE.trainerFolded ~= i and 1 or nil
+    end
+    function GetTrainerServiceCost(i)
+        local s = services[i]
+        return s and s[4] or 0, 0, 0
+    end
+    local frame = CreateFrame("Frame", "ClassTrainerFrame")
+    function frame:IsVisible() return STATE.trainerOpen == 1 end
+    frame.selectedService = STATE.trainerSelected
+    for b = 1, 11 do
+        local btn = CreateFrame("Button", "ClassTrainerSkill" .. b)
+        function btn:GetID() return offset + b end
+        function btn:IsVisible() return offset + b <= #services end
+        function btn:IsEnabled() return 1 end
+        function btn:GetCenter() return 168, 688 - 16 * (b - 1) end
+    end
+    local function scroll(name, x, y, on)
+        local btn = CreateFrame("Button", "ClassTrainerListScrollFrameScrollBar" .. name)
+        function btn:IsVisible() return #services > 11 end
+        function btn:IsEnabled() if on then return 1 end return nil end
+        function btn:GetCenter() return x, y end
+    end
+    scroll("ScrollUpButton", 340, 680, offset > 0 and STATE.trainerUpDisabled ~= 1)
+    scroll("ScrollDownButton", 340, 520, offset < #services - 11)
+end
+
 -- The addon exactly as a client installs it: the one file `tools/gen_addon_fields.py`
 -- builds. It owns no global names, so any global it assigns fails the run, attributed by
 -- the chunk doing the assigning - the event arguments this harness sets (arg2, ...) are

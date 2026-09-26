@@ -215,6 +215,7 @@ local function paint()
     pcall(Helpers.snapshotBar)
     pcall(Helpers.snapshotSpells)
     pcall(Helpers.snapshotTaxi)
+    pcall(Helpers.snapshotTrainer)
 
     ENV.SEQ = (ENV.SEQ + 1) % 256
 

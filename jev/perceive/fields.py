@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 17                                   # bump when the field table changes shape
+SCHEMA = 18                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -73,7 +73,10 @@ paint each, and the Train button: a trained spell goes on the bar only by a drag
 strip can show the ends of.
 16: the flight master's map, one node per paint: which node is here and which can be
 flown to, by name hash, and where each node's button is.
-Old schema 6, 7 and 8 reads remain supported, with appended observations unknown."""
+17: the selected unit's range per main-bar slot, and the attackers (V171).
+18: the class trainer's list, one row per paint: each row's name hash, rank, type, price
+and button, the scroll button toward a row out of view, and the row Train buys (V237).
+Old schemas remain readable, with appended observations unknown: `SCHEMA_FIELDS`."""
 LAST_HEADER_SCHEMA = 14
 EXTENDED = 0
 """The 4-bit header's code for "the schema number follows in `schema_rev`" (schema 15 on).
@@ -591,6 +594,53 @@ FIELDS: tuple[Field, ...] = (
     # Distinct units that hit or missed the character in the last six seconds, from the
     # combat log: how many it is fighting, which no count of plates can say.
     Field("combat.attackers", 4, Kind.UINT, "return ATTACKERS()", "0-14; 15 is NA"),
+
+    # -- schema 18: the class trainer's list (V237) ---------------------------------------
+    #
+    # The stock trainer window selects the first service the character can learn, and its
+    # Train button buys whatever is selected. The window sorts services by skill line and
+    # then by name, so a mage bought Conjure Water before Frostbolt at level 5 and Conjure
+    # Food before Fire Blast and Fireball rank 2 at level 6 (26 September), and from level
+    # 8 the same order buys Polymorph, which nothing presses. Buying by value is a click on
+    # the row wanted before Train, so the strip shows the list one row per paint: each
+    # row's name hashed as names are, the number in its rank, its type and its price, and
+    # its button while the scroll list shows it, else the scroll button toward it. Every
+    # paint also says which row is selected, so a click is seen to have taken, and which
+    # row the list shows first: after a purchase the stock window scrolls the first
+    # learnable row to the top, a row a hundred further down is twenty scroll clicks of
+    # about five rows, and each click is seen in the next paint, not the chosen row's.
+    #
+    # The window lists every service the trainer has for the class, learnable or not: a
+    # level 8 mage at a city trainer sees close to two hundred rows, most of them red. So
+    # every other paint describes a header or a service learnable now, in turn, and
+    # `short` says how many of those there are: a reader has them all within a second or
+    # two, where the whole list takes twenty. Nothing here selects, scrolls or buys.
+    Field("trainer.revision", 8, Kind.UINT, "return TRAINER_CENSUS('revision')",
+          "changes when the trainer's list does (TRAINER_UPDATE); a census across it is void"),
+    Field("trainer.total", 8, Kind.UINT, "return TRAINER_CENSUS('total')",
+          "rows in the open trainer's list, headers included, as the stock window lists them"),
+    Field("trainer.short", 8, Kind.UINT, "return TRAINER_CENSUS('short')",
+          "of those, the headers and the services learnable now: every other paint's rows"),
+    Field("trainer.selected", 8, Kind.UINT, "return TRAINER_CENSUS('selected')",
+          "the row the stock window has selected, which its Train button buys"),
+    Field("trainer.top", 8, Kind.UINT, "return TRAINER_CENSUS('top')",
+          "the first row the scroll list shows, of eleven: a scroll click seen at once"),
+    Field("trainer.index", 8, Kind.UINT, "return TRAINER_CENSUS('index')",
+          "the row the next fields describe, 1 at the top of the whole list"),
+    Field("trainer.name_id", 16, Kind.UINT, "return TRAINER_CENSUS('name_id')",
+          "its name, hashed as names are; a header's is its skill line's"),
+    Field("trainer.rank", 5, Kind.UINT, "return TRAINER_CENSUS('rank')",
+          "the number in its rank text (\"Rank 2\"); 0 without one"),
+    Field("trainer.type", 3, Kind.UINT, "return TRAINER_CENSUS('type')",
+          "0 header, 1 learnable now, 2 not yet, 3 known, 4 a header folded shut"),
+    Field("trainer.cost", 20, Kind.UINT, "return TRAINER_CENSUS('cost')",
+          "its price in copper; unknown for a header, or past 104 gold"),
+    Field("trainer.x", 11, Kind.FRAC, "return TRAINER_CENSUS('x')",
+          "fraction across the interface of its row's button, while the list shows it"),
+    Field("trainer.y", 11, Kind.FRAC, "return TRAINER_CENSUS('y')"),
+    Field("trainer.go_x", 11, Kind.FRAC, "return TRAINER_CENSUS('go_x')",
+          "out of view: the list's scroll button toward it, while it can scroll that way"),
+    Field("trainer.go_y", 11, Kind.FRAC, "return TRAINER_CENSUS('go_y')"),
 )
 
 # --------------------------------------------------------------------------- layout
@@ -602,11 +652,14 @@ FIELDS: tuple[Field, ...] = (
 _LEGACY = FIELDS[:1] + FIELDS[2:131]
 SCHEMA_FIELDS = {6: _LEGACY[:75], 7: _LEGACY[:112], 8: _LEGACY[:117], 9: _LEGACY[:121],
                  10: _LEGACY[:125], 11: _LEGACY[:126], 12: _LEGACY[:127], 13: _LEGACY[:128],
-                 14: _LEGACY, 15: FIELDS[:147], 16: FIELDS[:154], 17: FIELDS}
+                 14: _LEGACY, 15: FIELDS[:147], 16: FIELDS[:154], 17: FIELDS[:157],
+                 18: FIELDS}
 # Schema 14 was the last the 4-bit header could name (15 is its not-available code), and
 # was redefined once, within the hour it was installed on one client, to add `target.guid`.
 # From 15 the header says EXTENDED and the number is in `schema_rev`; a new layout appends
-# and takes the next number there.
+# and takes the next number there. The decoder reads every schema here: the client keeps
+# painting the one installed until an operator installs the next, so a decoder that knows
+# the next goes live first (docs/OPERATING.md).
 assert _LEGACY[-1].name == "target.guid" and FIELDS[1].name == "schema_rev"
 assert sum(f.bits for f in SCHEMA_FIELDS[6]) == 582
 assert sum(f.bits for f in SCHEMA_FIELDS[7]) == 1035
@@ -621,6 +674,8 @@ assert sum(f.bits for f in SCHEMA_FIELDS[15]) == 1317
 assert SCHEMA_FIELDS[15][-1].name == "cursor.holding"
 assert sum(f.bits for f in SCHEMA_FIELDS[16]) == 1371
 assert SCHEMA_FIELDS[16][-1].name == "taxi.y"
+assert sum(f.bits for f in SCHEMA_FIELDS[17]) == 1401
+assert SCHEMA_FIELDS[17][-1].name == "combat.attackers"
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

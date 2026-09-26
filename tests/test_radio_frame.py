@@ -172,18 +172,20 @@ def _paint(
     size: tuple[int, int] = (240, 420),
     seed: int = 7,
     swatches: list[tuple[int, int, int]] | None = None,
+    rows: list[list[tuple[int, int, int]]] | None = None,
 ) -> np.ndarray:
     """Render the strip into a frame, then put it through a capture pipeline.
 
     Order matters and mirrors reality: the client renders true colours, the capture stack
     applies its own transfer curve, compression bleeds edges, and the sensor path adds
     noise. Doing the transform after the blur would let the calibration row absorb damage
-    it would never see in the field.
+    it would never see in the field. `rows`, when given, is a strip painted by another
+    build (an older schema), in place of this one's.
     """
     height, width = size
     frame = _background(height, width, seed)
 
-    rows = _grid_colours(values)
+    rows = _grid_colours(values) if rows is None else [list(line) for line in rows]
     if swatches is not None:
         rows[0] = [MARKER_L, *swatches, MARKER_R]
 
@@ -983,6 +985,68 @@ def test_a_remembered_grid_that_no_longer_fits_falls_back_to_the_locator():
     reading = radio_frame.read(frame, grid=moved)
     assert reading.ok, f"{reading.fault}: {reading.detail}"
     assert reading.grid != moved
+
+
+def _schema17_rows(values: dict) -> list[list[tuple[int, int, int]]]:
+    """What the installed addon paints (schema 17, before V237): eleven rows, the payload
+    ending at `combat.attackers`, then its checksum, then black."""
+    from jev.perceive.fields import SCHEMA_FIELDS, checksum
+
+    bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
+                   for f in SCHEMA_FIELDS[17])
+    cells = radio.bits_to_cells(bits + format(checksum(bits), "016b"))
+    assert len(cells) == 119, "schema 17: 1,401 bits and a checksum in 119 cells"
+    cells += [(0, 0, 0)] * (10 * GRID_COLS - len(cells))
+    return [radio.calibration_row()] + [cells[r * GRID_COLS:(r + 1) * GRID_COLS]
+                                        for r in range(10)]
+
+
+def test_a_schema_17_strip_reads_whole_on_the_schema_18_decoder():
+    """V237: the live client paints schema 17 until the operator installs the addon that
+    paints 18, and the decoder goes live first. An eleven-row strip reads whole on a
+    decoder that samples twelve rows, found afresh and on the grid kept from it
+    (`var/radio-grid.json` holds `"rows": 11`): every schema-17 value as painted, the
+    trainer's list unknown."""
+    from jev.perceive.fields import EXTENDED, SCHEMA_FIELDS
+
+    values = {**_values(), "schema": EXTENDED, "schema_rev": 17, "ui.trainer": True,
+              "bags.money_copper": 626, "combat.attackers": 2, "taxi.total": 3}
+    frame = _paint(values, rows=_schema17_rows(values), seed=23)
+    want = {f.name: None for f in FIELDS}
+    for f in SCHEMA_FIELDS[17]:
+        want[f.name] = radio.decode_field(f, radio.encode_field(f, values.get(f.name)))
+    want["schema"] = 17
+
+    radio_frame.forget_grid()
+    located = radio_frame.read(frame)
+    assert located.ok, f"{located.fault}: {located.detail}"
+    assert located.values == want
+    assert located.values["ui.trainer"] is True and located.values["trainer.total"] is None
+    assert all(located.values[f.name] is None for f in FIELDS[len(SCHEMA_FIELDS[17]):])
+
+    kept = radio_frame.Grid(**{**located.grid.__dict__, "rows": 11})
+    radio_frame.forget_grid()
+    again = radio_frame.read(frame, grid=kept)
+    assert again.ok and again.values == want
+    radio_frame.forget_grid()
+
+
+def test_a_grid_kept_from_the_eleven_row_strip_reads_the_twelve_row_one(monkeypatch):
+    """Once schema 18 is installed, the grid kept from schema 17's strip is still where the
+    strip is: read on it with this layout's twelve rows, not nine cells short and handed
+    to the locator the scenery can mislead."""
+    values = _values()
+    frame = _paint(values)
+    located = radio_frame.locate(frame)
+    assert located is not None and located.rows == GRID_ROWS == 12
+    kept = radio_frame.Grid(**{**located.__dict__, "rows": 11})
+    radio_frame.forget_grid()
+    monkeypatch.setattr(radio_frame, "locate", lambda frame: None)
+    reading = radio_frame.read(frame, grid=kept)
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    assert reading.values == radio.unpack(radio.pack(values))
+    assert reading.grid.rows == 12
+    radio_frame.forget_grid()
 
 
 def test_the_strip_reads_while_the_character_is_a_ghost():

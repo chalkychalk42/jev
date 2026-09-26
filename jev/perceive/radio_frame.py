@@ -25,7 +25,7 @@ asking the question, and gets no answer to it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -638,6 +638,20 @@ def forget_grid() -> None:
     _last_grid = None
 
 
+def _this_layout(grid: Grid) -> Grid:
+    """A grid kept from a strip of another shape, with this layout's rows and columns.
+
+    Where the strip is and how big its cells are outlast a schema that adds a row; the
+    row count does not. `var/radio-grid.json` holds schema 17's eleven rows, and a
+    twelve-row strip sampled on them is nine cells short: every read would fall back to
+    the locator, the half of the reader the scenery can mislead (session 145). An older,
+    shorter strip read on more rows is whole all the same, its schema's own layout
+    deciding how much of the grid is payload (`radio.unpack_bits`)."""
+    if (grid.rows, grid.cols) == (GRID_ROWS, GRID_COLS):
+        return grid
+    return replace(grid, rows=GRID_ROWS, cols=GRID_COLS)
+
+
 def read(frame: np.ndarray, *, prev_seq: int | None = None,
          grid: Grid | None = None) -> RadioReading:
     """The whole pipeline: locate, sample, solve the transform, invert, unpack.
@@ -651,7 +665,7 @@ def read(frame: np.ndarray, *, prev_seq: int | None = None,
     (session 145). On the remembered grid those frames read whole.
     """
     global _last_grid
-    for hint in dict.fromkeys(g for g in (grid, _last_grid) if g is not None):
+    for hint in dict.fromkeys(_this_layout(g) for g in (grid, _last_grid) if g is not None):
         hinted = _read_on(frame, hint, prev_seq)
         if hinted.ok or hinted.fault is SenseFault.STALE:
             _last_grid = hint

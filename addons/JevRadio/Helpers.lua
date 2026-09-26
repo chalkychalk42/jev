@@ -1019,6 +1019,105 @@ end
 
 local function TAXI_CENSUS(key) return taxiSnapshot[key] end
 
+-- --------------------------------------------------------------------- class trainer
+--
+-- The open trainer's list, one row per paint (fields.py, schema 18): each row's name
+-- hashed as names are, the number in its rank text, its type, its price, and its button
+-- while the scroll list shows it, else the scroll button toward it; and every paint, the
+-- row the stock window has selected, which is the one its Train button buys, and the
+-- first row the list shows, so a scroll click is seen in the next paint. Only stock
+-- reads: GetNumTrainerServices, GetTrainerServiceInfo, GetTrainerServiceCost, the stock
+-- rows' own IDs and positions and the frame's own `selectedService`. Choosing a row,
+-- scrolling to it and pressing Train are clicks the body makes.
+--
+-- The window lists every service the trainer has for the class, learnable or not, so the
+-- whole list is close to two hundred rows at a city trainer. Every other paint describes
+-- a header or a service learnable now, in turn, and `short` counts those: a reader has
+-- them all within a second or two. A header click folds its group away or opens it, so a
+-- folded one is its own type.
+--
+-- The stock window (Blizzard_TrainerUI 2.4.3) shows eleven rows, ClassTrainerSkill1-11,
+-- and gives each the ID of the service it shows (ClassTrainerFrame_Update), so a row is
+-- found by its ID and not by its place. Its scroll buttons are the FauxScrollFrame's own,
+-- disabled at either end.
+
+local TRAINER_TYPES = { header = 0, available = 1, unavailable = 2, used = 3 }
+local TRAINER_FOLDED = 4
+local TRAINER_ROWS = 11
+local TRAINER_SCROLL = "ClassTrainerListScrollFrameScrollBar"
+local trainerRevision = 0
+local trainerTick, trainerShort, trainerWhole = 0, 0, 0
+local trainerSnapshot = {}
+
+local function TRAINER_OPEN()
+    return ClassTrainerFrame ~= nil and ClassTrainerFrame:IsVisible() and true or false
+end
+
+local function snapshotTrainer()
+    trainerSnapshot = {}
+    if not TRAINER_OPEN() or not GetNumTrainerServices or not GetTrainerServiceInfo then
+        return
+    end
+    local total = GetNumTrainerServices() or 0
+    local short = {}
+    for i = 1, total do
+        local _, _, kind = GetTrainerServiceInfo(i)
+        if kind == "header" or kind == "available" then short[#short + 1] = i end
+    end
+    local snap = { revision = trainerRevision, total = clamp(total, 254),
+                   short = clamp(#short, 254) }
+    local selected = ClassTrainerFrame.selectedService
+    if type(selected) == "number" then snap.selected = selected end
+    trainerSnapshot = snap
+    if total < 1 then return end
+    trainerTick = trainerTick + 1
+    local i
+    if trainerTick % 2 == 0 and #short > 0 then
+        trainerShort = trainerShort % #short + 1
+        i = short[trainerShort]
+    else
+        trainerWhole = trainerWhole % total + 1
+        i = trainerWhole
+    end
+    snap.index = i
+    local name, rank, kind, expanded = GetTrainerServiceInfo(i)
+    snap.name_id = nameid(name)
+    snap.rank = clamp(tonumber(string.match(rank or "", "(%d+)")) or 0, 30)
+    snap.type = TRAINER_TYPES[kind]
+    if kind == "header" then
+        if not expanded then snap.type = TRAINER_FOLDED end
+    elseif GetTrainerServiceCost then
+        snap.cost = GetTrainerServiceCost(i)
+    end
+    local first, last, shown
+    for b = 1, TRAINER_ROWS do
+        local btn = _G["ClassTrainerSkill" .. b]
+        local id = btn and btn:IsVisible() and btn.GetID and btn:GetID()
+        if type(id) == "number" then
+            if id == i then shown = btn end
+            if first == nil or id < first then first = id end
+            if last == nil or id > last then last = id end
+        end
+    end
+    snap.top = first
+    if shown then
+        snap.x, snap.y = point(shown, "x"), point(shown, "y")
+        return
+    end
+    if first == nil then return end
+    local go
+    if i < first then
+        go = _G[TRAINER_SCROLL .. "ScrollUpButton"]
+    elseif i > last then
+        go = _G[TRAINER_SCROLL .. "ScrollDownButton"]
+    end
+    if go and go:IsVisible() and enabled(go) then
+        snap.go_x, snap.go_y = point(go, "x"), point(go, "y")
+    end
+end
+
+local function TRAINER_CENSUS(key) return trainerSnapshot[key] end
+
 -- --------------------------------------------------------------------- melee
 --
 -- Stock 2.4.3 ActionButton_UpdateFlash flashes the Attack button when
@@ -1150,6 +1249,9 @@ watcher:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
 watcher:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
 watcher:RegisterEvent("SPELLS_CHANGED")
 watcher:RegisterEvent("LEARNED_SPELL_IN_TAB")
+watcher:RegisterEvent("TRAINER_SHOW")
+watcher:RegisterEvent("TRAINER_UPDATE")
+watcher:RegisterEvent("TRAINER_CLOSED")
 
 watcher:SetScript("OnEvent", function(self, event, a1)
     -- 2.4.3 delivers event arguments in the globals arg1..argN; named handler parameters
@@ -1185,6 +1287,10 @@ watcher:SetScript("OnEvent", function(self, event, a1)
         barRevision = (barRevision + 1) % 255
     elseif ev == "SPELLS_CHANGED" or ev == "LEARNED_SPELL_IN_TAB" then
         spellRevision = (spellRevision + 1) % 255
+    elseif ev == "TRAINER_SHOW" or ev == "TRAINER_UPDATE" or ev == "TRAINER_CLOSED" then
+        -- The stock window rebuilds its list on each of these (a purchase, a header folded
+        -- or opened, a filter changed), and row numbers shift with it.
+        trainerRevision = (trainerRevision + 1) % 255
     elseif ev == "BAG_UPDATE" then
         inventoryRevision = (inventoryRevision + 1) % 65535
     elseif ev == "QUEST_LOG_UPDATE" then
@@ -1273,6 +1379,8 @@ return {
     TAXI_OPEN = TAXI_OPEN,
     TAXI_CENSUS = TAXI_CENSUS,
     snapshotTaxi = snapshotTaxi,
+    TRAINER_CENSUS = TRAINER_CENSUS,
+    snapshotTrainer = snapshotTrainer,
     GCD_FRAC = GCD_FRAC,
     CASTING = CASTING,
     ATTACKING = ATTACKING,

@@ -47,8 +47,9 @@ class PaintCode(StrEnum):
 FACE_TOLERANCE = 0.05       # of the client width either side of centre
 # Where our own radio strip is drawn, as fractions of the client (left, top, right, bottom):
 # over the world at the top-centre, hiding the plates behind it (V211). Measured on
-# session 173's frames at 1600x900: x 715-885, y 0-155.
-STRIP_COVER = (0.44, 0.0, 0.56, 0.18)
+# session 173's frames at 1600x900: x 715-885, y 0-155, eleven rows of 14 px. Schema 18's
+# twelfth row (V237) takes it to 169, 0.19.
+STRIP_COVER = (0.44, 0.0, 0.56, 0.19)
 # Seconds of turning per unit of offset for the first pulse. Offsets understate the angle
 # to a unit close beside the character, so every later pulse uses the rate the previous
 # pulse actually produced - the same "compare what was asked with what was got" rule the

@@ -70,11 +70,13 @@ def test_appended_fields_fit_the_existing_grid():
     schema 14's 16-bit world object and 16-bit unit identity fit the row that left.
     Schema 15's revision byte, bar census and spellbook census add one row more; schema
     16's flight map census fits the row that left, and so do schema 17's range masks and
-    attacker count."""
+    attacker count. Schema 18's trainer census, 136 bits against the 23 left, adds one
+    row more, deliberately (V237)."""
     lay = layout()
-    assert (lay["cols"], lay["rows"]) == (12, 11)
-    assert lay["payload_bits"] == 1401
-    assert lay["field_count"] == 157
+    assert (lay["cols"], lay["rows"]) == (12, 12)
+    assert lay["payload_bits"] == 1537
+    assert lay["field_count"] == 171
+    assert sum(f.bits for f in SCHEMA_FIELDS[17]) == 1401, "schema 17 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[16]) == 1371, "schema 16 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[15]) == 1317, "schema 15 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[14]) == 1169, "schema 14 is a preserved prefix"
@@ -106,11 +108,11 @@ def test_every_field_round_trips_at_its_boundaries(field):
 
 def test_the_schema_names_itself_in_the_revision_byte():
     """The 4-bit header ran out at 14: from 15 it says EXTENDED and the number follows."""
-    bits = radio.pack_bits({"schema": 17, "seq": 7})
+    bits = radio.pack_bits({"schema": 18, "seq": 7})
     assert int(bits[:4], 2) == 0
-    assert int(bits[4:12], 2) == 17
+    assert int(bits[4:12], 2) == 18
     decoded = radio.unpack_bits(bits)
-    assert decoded["schema"] == 17 and decoded["schema_rev"] == 17 and decoded["seq"] == 7
+    assert decoded["schema"] == 18 and decoded["schema_rev"] == 18 and decoded["seq"] == 7
 
 
 def test_a_schema_15_strip_still_decodes_without_the_flight_map():
@@ -123,9 +125,30 @@ def test_a_schema_15_strip_still_decodes_without_the_flight_map():
     assert decoded.get("ui.taxi") is None
 
 
-def test_a_revision_this_decoder_does_not_know_is_a_schema_error():
+def test_a_schema_17_strip_still_decodes_without_the_trainer_list():
+    """V237: the installed addon paints schema 17 until an operator installs 18, and the
+    decoder goes live first. Every schema-17 field reads as it did; the trainer's list is
+    unknown, not empty."""
     fields = SCHEMA_FIELDS[17]
-    values = {"schema": 0, "schema_rev": 18, "seq": 1}
+    values = {f.name: _boundaries(f)[-1] for f in fields}
+    values.update({"schema": 0, "schema_rev": 17, "seq": 9, "char.level": 10,
+                   "ui.trainer": True, "combat.attackers": 2, "bags.money_copper": 1234})
+    bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
+                   for f in fields)
+    assert len(bits) == 1401
+    decoded = radio.unpack_bits(bits + format(checksum(bits), "016b"))
+    assert decoded["schema"] == 17 and decoded["schema_rev"] == 17
+    for field in fields[2:]:
+        if field.kind not in (Kind.FRAC, Kind.ANGLE):
+            assert decoded[field.name] == values[field.name], field.name
+    assert decoded["ui.trainer"] is True and decoded["combat.attackers"] == 2
+    trainer = [f.name for f in FIELDS if f.name.startswith("trainer.")]
+    assert len(trainer) == 14 and all(decoded[name] is None for name in trainer)
+
+
+def test_a_revision_this_decoder_does_not_know_is_a_schema_error():
+    fields = SCHEMA_FIELDS[18]
+    values = {"schema": 0, "schema_rev": 19, "seq": 1}
     bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
                    for f in fields)
     with pytest.raises(radio.DecodeError) as err:
