@@ -104,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-progress", type=float, default=900)
     parser.add_argument("--reconnect-limit", type=int, default=3)
     args = parser.parse_args(argv)
+    if not args.check:
+        print(f"startup: arguments read at {time.strftime('%H:%M:%S')}", flush=True)
     from jev.play.providers import model_for
 
     args.teacher_model = model_for(args.teacher_provider, args.teacher_model)
@@ -275,6 +277,7 @@ def remembered(args, graph, key: int | None):
 
 
 def _live(args, graph) -> int:
+    print(f"startup: attaching at {time.strftime('%H:%M:%S')}", flush=True)
     try:
         client = attach(args.client_id)
     except NotRunning as exc:
