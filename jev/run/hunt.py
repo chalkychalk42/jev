@@ -227,6 +227,7 @@ class Hunt:
         post = 0
         dry = 0
         stood = False
+        close = False                # a lone spawn looked for from its own spot (V221)
 
         while time.monotonic() < deadline:
             # A ghost cannot fight, heal or eat, and every skill below reports something
@@ -274,8 +275,9 @@ class Hunt:
                     chooser.arrive(target)
                     self._found = False
                 with operation("hunt.approach", data={"destination": target}) as span:
-                    arrived = (self.approach(target, stop_short=self.standoff_yards)
-                               if self.standoff_yards else self.approach(target))
+                    standoff = 0.0 if close else self.standoff_yards
+                    arrived = (self.approach(target, stop_short=standoff)
+                               if standoff else self.approach(target))
                     span.finish(code="true" if arrived else "false")
                 if not arrived:
                     continue          # a station we cannot stand on is not a dead end
@@ -322,7 +324,14 @@ class Hunt:
                 # Nothing here worth swinging at. Two empty looks and the camp has moved
                 # on without us; go and stand somewhere else.
                 dry += 1
-                if lone:
+                if lone and self.standoff_yards and not close and dry >= DRY_LOOKS:
+                    # Not seen from a caster's stand-off, which walks nothing when already
+                    # within it and so never faces the spawn: from the spawn's own spot,
+                    # walked to (V221). The mage stood 18 yards from Garrick Padfoot with
+                    # its back to him for two sessions, "no nameplate", his plate at the
+                    # screen's edge by the shack.
+                    close, stood = True, False
+                elif lone:
                     self.sleep(LONE_LOOK_S)
                 elif dry >= DRY_LOOKS:
                     stood = False

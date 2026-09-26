@@ -442,6 +442,22 @@ def test_a_lone_spawn_is_waited_at_not_walked_away_from():
     assert slept == [LONE_LOOK_S] * 5
 
 
+def test_a_lone_spawn_not_seen_from_a_stand_off_is_looked_for_from_its_spot():
+    """V221: the mage stood 18 yards from Garrick Padfoot, already within its stand-off so
+    walking nothing and never facing him, and looked the whole of two sessions."""
+    from jev.run.hunt import LONE_LOOK_S
+
+    h, _ = _hunt([Fought.NO_TARGET] * 3 + [Fought.KILLED], [(0, 1)] * 5 + [(1, 1)])
+    walks = []
+    h.approach = lambda p, stop_short=0.0: walks.append(stop_short) or True
+    h.standoff_yards = 18.0
+    slept = []
+    h.sleep = slept.append
+    assert h.run((0.0, 0.0, 13.0), 30.0, timeout_s=5, spawns=((0.0, 0.0, 13.0),)) is Hunted.DONE
+    assert walks == [18.0, 0.0], "the stand-off, then the spawn's own spot"
+    assert slept == [LONE_LOOK_S, LONE_LOOK_S]
+
+
 def test_a_camp_of_many_spawns_still_moves_on_when_dry():
     spawns = ((0.0, 0.0, 80.0), (40.0, 0.0, 80.0))
     h, walked = _hunt([Fought.NO_TARGET], [(0, 5)])
