@@ -127,6 +127,11 @@ MERCHANT_TRIES = 5
 CORNER_YARDS = 15.0
 MERCHANT_PLANS = 12
 UNPLANNED_FACTOR = 3.0
+# Each failure since a merchant's last sale adds this to its walk. Ranked behind every
+# merchant that never failed, one missed hover at each nearby merchant (fifteen in Elwynn
+# and Westfall, 26 September) sent a level 3 mage from Northshire to Ben Trias in Stormwind,
+# 1,030 yards, for water, past Brother Danil twenty yards away.
+FAILED_MERCHANT_YARDS = 250.0
 # Binding the hearthstone (`LiveBody.bindable`): an inn this near the guide's current step,
 # while home is farther than `HOME_FAR_YARDS` from it or unknown. Goldshire's inn is 590
 # yards from Northshire's quests, which bind nowhere, and 360 from Fargodeep Mine's.
@@ -1311,12 +1316,14 @@ class LiveBody:
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
         world = map_to_world(*here, self.client.bounds)
         failed = load_merchant_failures(self.merchant_memory)
-        # The ones that answered before first, then the shortest walk.
+        # The shortest walk, each failure since the last sale counted in yards.
         near = sorted(candidates, key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_PLANS]
         walks = {m.entry: self._walk_yards(m.world, math.dist(m.world[:2], world)) for m in near}
-        ranked = sorted(near, key=lambda m: (failed.get(m.entry, 0), walks[m.entry]))
+        ranked = sorted(near, key=lambda m: walks[m.entry]
+                        + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
         ranked += sorted((m for m in candidates if m.entry not in walks),
-                         key=lambda m: (failed.get(m.entry, 0), math.dist(m.world[:2], world)))
+                         key=lambda m: math.dist(m.world[:2], world)
+                         + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
         ranked = ranked[:MERCHANT_TRIES]
         for merchant in ranked:
             def visit(merchant=merchant):

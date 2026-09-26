@@ -281,3 +281,43 @@ def test_a_farther_merchant_with_an_easy_walk_beats_the_nearest_up_a_tower(monke
     monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
     assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
     assert visit.call_args.args == ("In The Street",)
+
+
+@pytest.mark.parametrize(("failures", "chosen"), [(1, "Near"), (3, "Clean")])
+def test_a_failure_costs_a_merchant_yards_not_its_place(failures, chosen, tmp_path, monkeypatch):
+    """One missed hover at each nearby merchant sent a level 3 mage from Northshire to
+    Stormwind for water, 1,030 yards, past Brother Danil twenty yards away (26 September).
+    Failures since the last sale are still counted, as walk."""
+    from jev.world.vendor import note_merchant
+
+    b = body()
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+    vendors = (Merchant(1, "Near", 0, (50, 51, 0), frozenset()),
+               Merchant(2, "Clean", 0, (60, 60, 0), frozenset()))
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    plans = {(50, 51, 0): SimpleNamespace(usable=True, points=[(0, 0, 0)] * 2,
+                                          length_yards=lambda: 20.0),
+             (60, 60, 0): SimpleNamespace(usable=True, points=[(0, 0, 0)] * 2,
+                                          length_yards=lambda: 600.0)}
+    b.client.plan_to = lambda world: plans[tuple(world)]
+    b.merchant_memory = tmp_path / "merchant-memory.json"
+    for _ in range(failures):
+        note_merchant(b.merchant_memory, 1, failed=True)
+    visit = Mock(return_value=Interacted.VENDOR)
+    b.interact = SimpleNamespace(open_on=visit)
+    class FakeVendor:
+        detail = "observed service"
+        def equip_bags(self, bags, **kw):
+            return 0
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
+            self.open_shop = open_shop
+        def run(self, **kwargs):
+            assert self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
+    assert visit.call_args.args == (chosen,)
