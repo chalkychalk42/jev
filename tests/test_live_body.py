@@ -837,6 +837,24 @@ def test_a_ghost_that_does_not_get_up_short_of_the_body_goes_closer(monkeypatch)
     assert b._reclaim_yards == TRAP_RECLAIM_YARDS, "up at last: the next death starts afresh"
 
 
+def test_a_ghost_gets_up_out_of_the_camps_reach():
+    """V233: the mage got up beside its body at Fargodeep with half its health and mana,
+    among the Kobold Tunnelers that had killed it, and died again (sessions 196-197)."""
+    import math
+
+    from jev.run.body import REST_CLEAR_YARDS, reclaim_spot
+
+    body_at, short = (0.0, 0.0), (0.0, 25.0)           # the graveyard lies north
+    assert reclaim_spot(body_at, short, (), 25.0) == short, "no spawns known: as before"
+    far = ((0.0, -60.0, 0.0),)
+    assert reclaim_spot(body_at, short, far, 25.0) == short, "already clear of them"
+    camp = ((0.0, 40.0, 0.0), (15.0, 35.0, 0.0), (-15.0, 35.0, 0.0))   # between it and the graveyard
+    spot = reclaim_spot(body_at, short, camp, 25.0)
+    assert math.dist(spot, body_at) == pytest.approx(25.0), "still within the body's reach"
+    assert min(math.dist(spot, c[:2]) for c in camp) >= REST_CLEAR_YARDS
+    assert spot[1] < 0, "the far side of the body from the camp"
+
+
 def test_a_ghost_already_inside_the_short_ring_stays_where_it_is():
     from jev.guide.coords import world_to_map
 

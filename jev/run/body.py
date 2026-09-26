@@ -1527,7 +1527,13 @@ class LiveBody:
             return True
         share = self._reclaim_yards / apart
         short = (body[0] + (start[0] - body[0]) * share, body[1] + (start[1] - body[1]) * share)
-        return self._corpse_walk(world_to_map(*short, self.client.bounds))
+        node = self._node()
+        spawns = spawn_around(self.hunt_spawns, node.id) if node is not None else ()
+        clear = reclaim_spot(body[:2], short, spawns, self._reclaim_yards)
+        if clear != short:
+            self.say(f"  getting up out of the camp's reach, "
+                     f"{min(math.dist(clear, sp[:2]) for sp in spawns):.0f} yards from its nearest spawn")
+        return self._corpse_walk(world_to_map(*clear, self.client.bounds))
 
     def _talk_to(self, name: str):
         """Right-click a named unit: by its nameplate, or where a fresh hover finds it."""
@@ -1642,6 +1648,29 @@ class LiveBody:
 
     def _wait(self, state) -> Result:
         return Result(SkillOutcome.SUCCEEDED)
+
+
+def reclaim_spot(body: tuple[float, float], short: tuple[float, float], spawns,
+                 reach: float, clear: float = REST_CLEAR_YARDS,
+                 bearings: int = REST_BEARINGS) -> tuple[float, float]:
+    """Where a ghost gets up (V233): `short`, the graveyard's side of the body, when it is
+    `clear` yards from every spawn of the step's creatures; else the point `reach` yards from
+    the body with the most room from them, the graveyard's side on a tie. The mage got up
+    beside its body at Fargodeep with half its health and mana, among the Kobold Tunnelers
+    that had killed it, and died again twice (sessions 196-197)."""
+    spawns = [sp[:2] for sp in spawns]
+    if not spawns:
+        return short
+
+    def room(point) -> float:
+        return min(math.dist(point, sp) for sp in spawns)
+
+    if room(short) >= clear:
+        return short
+    ring = [(body[0] + reach * math.cos(2 * math.pi * i / bearings),
+             body[1] + reach * math.sin(2 * math.pi * i / bearings)) for i in range(bearings)]
+    best = max([short, *ring], key=lambda p: (round(room(p), 1), -math.dist(p, short)))
+    return best
 
 
 def rest_spot(here: tuple[float, float], spawns, clear: float = REST_CLEAR_YARDS,
