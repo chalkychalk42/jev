@@ -143,3 +143,39 @@ def test_loader_reads_the_repair_flag(monkeypatch):
         {"entry": 152, "name": "Fixture Grocer", "map_id": 0, "world": [4, 5, 6], "items": []}]})
     smith, grocer = vendor.merchants(0)
     assert smith.repairs is True and grocer.repairs is False
+
+
+def test_goods_only_quests_off_the_guides_ask_for_are_sold():
+    """V241: a trade good or gem some quest somewhere asks for was never sold, and the level
+    8 mage's bags filled with a Tigerseye, Malachite, Linen Cloth and Small Spider Legs,
+    "no junk" at each merchant (session 212)."""
+    import sqlite3
+
+    db = sqlite3.connect(":memory:")
+    db.executescript("""
+        CREATE TABLE world_item_template (entry INT, class INT, subclass INT, SellPrice INT,
+            InventoryType INT, Quality INT, startquest INT, ContainerSlots INT, BagFamily INT,
+            BuyPrice INT);
+        INSERT INTO world_item_template VALUES (2589, 7, 0, 13, 0, 1, 0, 0, 0, 0);
+        INSERT INTO world_item_template VALUES (818, 3, 7, 100, 0, 2, 0, 0, 0, 0);
+        INSERT INTO world_item_template VALUES (769, 7, 0, 3, 0, 1, 0, 0, 0, 0);
+        CREATE TABLE world_quest_template (entry INT, SrcItemId INT, ReqItemId1 INT);
+        INSERT INTO world_quest_template VALUES (7, 0, 2589);
+        INSERT INTO world_quest_template VALUES (8, 0, 818);
+        INSERT INTO world_quest_template VALUES (86, 0, 769);
+        CREATE TABLE world_creature_template (Entry INT, Name TEXT, NpcFlags INT, Faction INT,
+            FactionAlliance INT, GossipMenuId INT);
+        CREATE TABLE world_creature (guid INT, id INT, map INT, position_x TEXT,
+            position_y TEXT, position_z TEXT);
+        CREATE TABLE world_game_event_creature (guid INT, event INT);
+        CREATE TABLE world_npc_vendor (entry INT, item INT, ExtendedCost INT, condition_id INT);
+        CREATE TABLE world_npc_vendor_template (entry INT, item INT, ExtendedCost INT,
+            condition_id INT);
+        CREATE TABLE world_gossip_menu_option (menu_id INT, id INT, option_id INT,
+            option_text TEXT);
+        CREATE TABLE dbc_FactionTemplate (id INT, c3 INT, c4 INT, c5 INT);
+    """)
+    everyone = generate(db, {})["surplus_prices"]
+    guided = generate(db, {}, guide_quests={86})["surplus_prices"]
+    assert everyone == {}, "every quest's goods kept, as before"
+    assert guided == {"2589": 13, "818": 100}, "the guides' own quest's meat kept, the rest sold"
