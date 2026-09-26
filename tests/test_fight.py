@@ -2480,6 +2480,33 @@ def test_a_cast_not_in_front_with_the_plate_centred_turns_round(combat_clock):
     assert len(turns) == 1, "then, still not in front, turned round"
 
 
+def test_a_caster_whose_attacker_is_lost_beside_it_turns_a_quarter_not_gives_up(combat_clock):
+    """V256: a Riverpaw Outrunner beside the level 9 mage: "not in front", its plate never
+    proved, the fight given up and begun again, 8 s with nothing pressed, and the mage died
+    with the gnoll at 30% (session 225)."""
+    hit = {**AT_RANGE, "target.in_melee": True, "target.attacking_me": True,
+           "ui.error_count": 3, "ui.error_last": 0}
+    beside = {**hit, "ui.error_count": 4, "ui.error_last": 3}         # 3 = not_facing
+    again = {**hit, "ui.error_count": 5, "ui.error_last": 3}
+    dead = {**again, "target.hp": 0.0, "char.xp_pct": 0.2}
+    hid = _Hid()
+    f = _mage([hit, hit, beside, beside, again, again, dead], hid=hid)
+    f._lasting["Frost Armor"] = 0.0
+    f.acquire = lambda name_id, **_: None
+    searches = []
+
+    def engage(*_):
+        searches.append(True)
+        f._aim_code = FaceCode.NOT_VISIBLE
+        return False
+
+    f.engage = engage
+    assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
+    quarters = [h for h in hid.holds if h[0] == "d" and 0.5 < h[1] < 1.6]
+    assert len(quarters) == 2, "turned a quarter at each 'not in front', not given up"
+    assert len(searches) <= 2, "the fight's first look and one search; blind, none after"
+
+
 def test_a_casters_unseen_tab_pick_is_cast_at_from_where_it_stands(combat_clock):
     """V204: the mage's ten Tab picks among Northshire's wolves were given up "no plate
     proved", nothing pressed (26 September 06:24). Tab picks ahead, and a spell needs only

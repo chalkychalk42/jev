@@ -735,6 +735,7 @@ class Fight:
                 error = self._new_error(v)
                 casting = v.get("bars.casting") is True
                 if error == "not_facing" and not casting:
+                    near = v.get("target.in_melee") is True
                     if self._aim_code is FaceCode.FACED and not self._blind_cast:
                         # Its plate on the centre line and the spell "not in front": the unit
                         # stands behind the caster, between it and the camera. Facing by the
@@ -743,7 +744,21 @@ class Fight:
                         # every one "Target needs to be in front of you" (V208).
                         if not self._face_behind():
                             return Fought.REFUSED
+                    elif self._blind_cast and near:
+                        # Found blind and in reach: a quarter turn, no search first (V256).
+                        if not self._turn_quarter():
+                            return Fought.REFUSED
                     elif not self.engage(v):
+                        if (not self._blind_cast and not self._input_refused and near
+                                and v.get("target.attacking_me") is True):
+                            # In reach and hitting the caster, its plate lost beside or
+                            # behind: turned for a quarter at a time, as blind melee is, not
+                            # given up. A Riverpaw Outrunner beside the level 9 mage cost the
+                            # search's 3 s, the fight's end and a fresh one, 8 s with nothing
+                            # pressed, and the mage died with the gnoll at 30% (session 225).
+                            event("engage.blind_cast", data={
+                                "name_id": v.get("target.name_id"), "in_melee": True})
+                            self._blind_cast = True
                         if not self._blind_cast or self._input_refused:
                             return Fought.REFUSED if self._input_refused else self._aim_failure()
                         if not self._turn_quarter():     # a blind cast turns as blind melee does

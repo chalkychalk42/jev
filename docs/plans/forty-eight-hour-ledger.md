@@ -376,6 +376,7 @@ Trials
 | V253 a hearthstone still cooling is not pressed | session 224 (with V252) | no `hearthstone not_ready pressed the hearthstone and did not move` within an hour of a use | `hearthstone: not_ready cooling down, N minutes left` | | |
 | V254 a trainer not reached tried again after half an hour, across sessions | session 225 | no TRAIN_CLASS failure repeated within 30 minutes | the purse file's `train_blocked_level` and `train_blocked_until` | | |
 | V255 far wanderers carry their reach | session 226 | fewer attacks on a resting mage from bears and 15-30-yard wanderers | rest and get-up spots further from such spawns (`resting out of the camp's reach, N yards off`) | | |
+| V256 a caster's attacker lost beside it: quarter turns, not a fight given up | session 227 | no fight ended `not_visible` with the unit in reach and attacking | `engage.blind_cast` with `in_melee`; `engage.turn_quarter` | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
