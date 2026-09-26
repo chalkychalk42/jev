@@ -70,6 +70,16 @@ class Hearth:
             return stone
         event("hearth.request", data={"bag": stone.get("inventory.bag"),
                                       "slot": stone.get("inventory.slot"), "from": list(start)})
+        # What was opened is closed however the press ends. Left open after a stone on
+        # cooldown, the backpack covered the screen's lower right, the stone's tooltip
+        # over it, for the rest of the session (session 158).
+        try:
+            return self._press(stone, start)
+        finally:
+            if opener is not None:
+                self._click(opener, "inventory.open_")
+
+    def _press(self, stone: dict, start: tuple[float, float]) -> Hearthed:
         if not self._click(stone, "inventory.", right=True):
             return Hearthed.REFUSED
         deadline = self.monotonic() + CAST_S + 8.0
@@ -80,8 +90,6 @@ class Hearth:
                 at, last = last, (v["pos.mx"], v["pos.my"])
                 if math.dist(start, last) > MOVED or math.dist(at, last) > JUMP:
                     event("hearth.arrived", data={"to": [v["pos.mx"], v["pos.my"]]})
-                    if opener is not None:
-                        self._click(opener, "inventory.open_")     # close what we opened
                     return Hearthed.HOME
                 if v.get("vitals.combat") is True:
                     self.detail = "combat broke the cast"

@@ -64,6 +64,16 @@ def test_a_stone_that_does_not_move_the_character_is_not_home():
     assert _hearth(world).run() is Hearthed.NOT_READY
 
 
+def test_a_stone_on_cooldown_closes_the_bag_it_opened():
+    """Left open, the backpack covered the screen's lower right for the rest of the
+    session (session 158)."""
+    world = _World([117, HEARTHSTONE, 2070])
+    assert _hearth(world).run() is Hearthed.NOT_READY
+    opened, used, closed = world.hid.clicks
+    assert not opened[2] and used[2] and not closed[2], "open, right-click the stone, close"
+    assert closed[:2] == opened[:2]
+
+
 def test_the_cast_is_not_tried_in_combat():
     world = _World([HEARTHSTONE], bag_open=True, combat=True)
     assert _hearth(world).run() is Hearthed.IN_COMBAT
