@@ -353,7 +353,12 @@ Trials
 | V234 a quest complete in the log is handed in on the way | session 203 | Kobold Candles and Wolves Across the Border handed in when the mage passes William Pestle or Eagan Peltskinner | a detour to a hand-in not in `retried` | | |
 | V235 a unit not found on arrival, on a floor above, is walked up to again | session 204 | trainer visits to Zaldimar and Khelden that end under them fall | `was not found here: walking up to the floor above again` | | |
 | V236 the walk back ends clear of the door, or plans again at it | session 206 | no `backing out ended indoors` without a plan tried after it | `backing out ended indoors (...; at the door, planning again)` | | |
-| V237 a trainer's spells bought by value (schema 18) | decoder session 207; addon 19:19 before session 208 | the mage's next visits buy Frostbolt, Frostbolt 2, Frost Nova before conjures and never Polymorph | a `trainer.row` census read at a trainer, and the rows bought in the value order | | |
+| V237 a trainer's spells bought by value (schema 18) | decoder session 207; addon 19:19 before session 208 | the mage's next visits buy Frostbolt, Frostbolt 2, Frost Nova before conjures and never Polymorph | a `trainer.row` census read at a trainer, and the rows bought in the value order | **Fired**, session 214: `Zaldimar Wefhellt: done, 2 bought for 285 copper [Frostbolt 1, Frostbolt 2]`, Frostbolt on slot 8 | |
+| V238 no blocked spot learned by a doorway (and the inn's two removed) | session 210 | trainer walks in the inn arrive | the route memory's count fell from 5 to 4 confirmed spots; `blocked again here` lines fewer | | |
+| V239 blocked again indoors, the floor below first | session 211 | no re-plan from the inn's roof | no `planning from the floor at 68` after 210 | | |
+| V240 affordable training before a repair of gear not broken | session 213 | training visits with a purse that pays for a spell | a TRAIN_CLASS ahead of a VENDOR_REPAIR at under a third of the durability | | |
+| V241 goods only off-guide quests want are sold, gems too | session 214 | the bag service sells cloth and gems; loot is taken again | **Fired**, session 214: `sold 6 stacks`, the purse from 30 to 409 copper | | |
+| V242 control spells before the oldest gap | session 215 | Frost Nova bought first at 10 | the first TRAIN_CLASS at level 10 | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
