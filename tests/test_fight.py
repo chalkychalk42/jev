@@ -1790,6 +1790,27 @@ def test_defending_clicks_through_a_bystanders_plate_to_the_attackers():
     assert len(hid.clicks) == 2, "the bystander's plate, then the attacker's"
 
 
+def test_defending_with_no_name_wanted_never_settles_on_a_bystander():
+    """V209: a Young Goretusk minding its own business was the only plate in view, and was
+    chosen, while something behind the paladin took it from full health to dead (session
+    168). Self-defence without a wanted name takes only what attacks."""
+    import numpy as np
+
+    frame = np.zeros((900, 1600, 3), dtype=np.uint8)
+    frame[380:387, 727:874] = (230, 200, 10)          # the bystander's plate, alone
+    hid = _Hid()
+    base = {**ALIVE, "vitals.combat": True, "target.name_id": 2044}
+    bystander = {**base, "target.attacking_me": False, "target.in_melee": False}
+
+    def read():
+        return bystander if hid.clicks else {**base, "target.has": False}
+
+    f = Fight(hid=hid, read=read, read_frame=lambda: frame, window_origin=(10, 38),
+              targeting=_Targeting(read, hid))
+    assert f._pick_plate(None, defend=True) is False, "a bystander is no self-defence"
+    assert f._pick_plate(None, defend=False) is None, "out of it, any plate still serves"
+
+
 # -- trained spells (`jev.world.training`, `jev.world.combat.from_bar`) --------------
 
 TRAINED_BAR = {1: 6603, 2: 20154, 3: 639, 4: 465, 5: 19740, 6: 20271, 7: 498, 8: 853,

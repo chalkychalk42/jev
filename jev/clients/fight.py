@@ -920,7 +920,13 @@ class Fight:
         if frame is None:
             return False
         candidates = self._candidates(frame)
-        for attackers_only in ((True, False) if defend else (False,)):
+        # Defending with no name wanted, only what attacks us: the second pass is for a
+        # bystander of the quest's own kind, and without a name it took any plate. A Young
+        # Goretusk minding its own business was chosen while something behind the paladin
+        # took it from full health to dead (session 168, V209). Tab, attackers only in
+        # self-defence, and the turn round find what is behind.
+        passes = ((True, False) if name_id is not None else (True,)) if defend else (False,)
+        for attackers_only in passes:
             for plate in candidates:
                 point = (self.window_origin[0] + round(plate.cx),
                          self.window_origin[1] + round(plate.cy))
