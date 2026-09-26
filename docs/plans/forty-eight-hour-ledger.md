@@ -77,6 +77,20 @@ Now
     next two sessions could not read the strip at all. V184 reads the strip on the grid of
     its last good read, kept in `var/radio-grid.json`; the file was seeded from the
     measured grid for the restart.
+  - Sessions 151-155 on V188-V191: 14-16 kills a session, deaths 1, 0, 1, 1; Testvvi 14 at
+    03:41. Blind melee (V191) fired 6-11 times a session; fights given up on the facing
+    look fell to 0-3.
+  - 04:13-04:31, the mage's second check (`captures/live-mage-check-2.log`): Arcane
+    Intellect trained upstairs; Wolves Across the Border 1 of 8 in four kills (V192);
+    the step's failover rib by Goldshire's road killed the level 2 mage twice (V193).
+  - Session 156 began in the Defias Smugglers' camp where the visit had logged Testvvi out:
+    four attackers at 26 s. After the Spirit Healer and the hearth, the repair walk wandered
+    the Sentinel Hill inn for 110 s and ended on a crate in a corner of its loft, where it
+    moves 0 yards in every direction (`tools/probe_unstick.py`, jumps and turns included).
+    The grind then stopped for "durability is low" 17 times (V194). The hearthstone is out
+    until about 05:37; the wedged-walks rule takes it home then.
+  - 04:53-05:45: three mage sessions (`captures/live-mage-check-3.log.1-3`) while the
+    paladin's hearthstone cools.
   - Session 148: started a ghost; two deaths to Fleshrippers, one 23 s after getting up at
     half health, one under resurrection sickness after the Spirit Healer.
   - 02:06-02:30, the mage's check (Itheamar, `captures/live-mage-check-1.log`): A Threat
