@@ -87,3 +87,28 @@ def test_anything_going_wrong_plans_as_before():
     query = ExposureQuery(_OpenGround(), broken)
     route = query.path(0, (0.0, 0.0, 60.0), (400.0, 0.0, 60.0))
     assert len(route.points) == 2
+
+
+def test_the_search_for_a_way_round_stops_at_its_budget():
+    """V257: ranking twelve repairers through the search from Windows ran the level 9 mage's
+    repair past its time with not a step walked (sessions 226-227)."""
+    from jev.guide.exposure import EXPOSURE_BUDGET_S
+
+    ticks = iter(range(1000))
+    camp = [(200.0, 0.0), (210.0, 8.0), (195.0, -6.0)]
+    inner = _OpenGround()
+    query = ExposureQuery(inner, _spawns(camp),
+                          clock=lambda: next(ticks) * (EXPOSURE_BUDGET_S / 3))
+    route = query.path(0, (0.0, 0.0, 60.0), (400.0, 0.0, 60.0))
+    assert route.usable
+    assert inner.asked <= 1 + 2 * 3, "a few legs, then the best found"
+
+
+def test_the_ways_round_are_planned_below_the_layers_that_search_their_own():
+    camp = [(200.0, 0.0), (210.0, 8.0), (195.0, -6.0)]
+    inner, legs = _OpenGround(), _OpenGround()
+    query = ExposureQuery(inner, _spawns(camp), legs=legs)
+    route = query.path(0, (0.0, 0.0, 60.0), (400.0, 0.0, 60.0))
+    assert len(route.points) > 2
+    assert inner.asked == 1 and legs.asked > 2, "the direct route above, the legs below"
+    assert query.estimate() is inner, "a walk's cost is asked without the search"

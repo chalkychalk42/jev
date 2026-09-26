@@ -16,6 +16,7 @@ each spawn passed within `EXPOSED_YARDS`. Anything that goes wrong here plans as
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable
 
 from jev.guide.path import Path, PathStatus
@@ -33,6 +34,10 @@ EXPOSURE_DETOUR = 1.6
 # Via points: this many bearings on rings this far beyond the passed spawns' spread.
 EXPOSURE_BEARINGS = 8
 EXPOSURE_MARGINS = (15.0, 40.0)
+# The search for a way round stops after this long, with the best found (V257): a level 9
+# mage's repair, ranking twelve repairers through it from Windows, ran past its time with
+# not a step walked (sessions 226-227).
+EXPOSURE_BUDGET_S = 1.0
 # The route is looked along at points this far apart, for spawns this far round each, and
 # as far again as a far-wandering unit carries its reach (V255).
 SAMPLE_YARDS = 30.0
@@ -73,8 +78,17 @@ class ExposureQuery:
     radius)` gives the spawns round a point that attack this character (x, y, z each); none
     for a ghost."""
 
-    def __init__(self, inner, hostile: Callable[[int, float, float, float], list]):
+    def __init__(self, inner, hostile: Callable[[int, float, float, float], list], *,
+                 legs=None, clock: Callable[[], float] = time.monotonic):
+        # `legs` plans the ways round: below the layers that search rings of their own, whose
+        # searches inside each of this one's legs multiplied the queries (V257).
         self.inner, self.hostile = inner, hostile
+        self.legs = legs if legs is not None else inner
+        self.clock = clock
+
+    def estimate(self):
+        """The planner for a walk's cost, without this layer's search (V257)."""
+        return self.inner
 
     def path(self, map_id: int, start, end) -> Path:
         direct = self.inner.path(map_id, start, end)
@@ -114,15 +128,18 @@ class ExposureQuery:
         cy = sum(y for _, y in passed) / len(passed)
         spread = max(math.dist((cx, cy), s) for s in passed)
         z = (start[2] + end[2]) / 2
+        deadline = self.clock() + EXPOSURE_BUDGET_S
         for margin in EXPOSURE_MARGINS:
             radius = spread + EXPOSED_YARDS + margin
             for k in range(EXPOSURE_BEARINGS):
+                if self.clock() >= deadline:
+                    return best
                 angle = 2 * math.pi * k / EXPOSURE_BEARINGS
                 via = (cx + radius * math.cos(angle), cy + radius * math.sin(angle), z)
-                first = self.inner.path(map_id, start, via)
+                first = self.legs.path(map_id, start, via)
                 if first.status is not PathStatus.COMPLETE or len(first.points) < 2:
                     continue
-                second = self.inner.path(map_id, first.points[-1], end)
+                second = self.legs.path(map_id, first.points[-1], end)
                 if second.status is not PathStatus.COMPLETE or len(second.points) < 2:
                     continue
                 total = first.length_yards() + second.length_yards()

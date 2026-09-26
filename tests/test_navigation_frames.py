@@ -423,6 +423,29 @@ def test_walks_are_planned_clear_of_the_learned_danger_at_the_characters_level()
     danger.hot.assert_called_once_with(0, 12)
 
 
+def test_a_walks_cost_is_planned_without_the_search_for_a_way_round():
+    """V257: ranking twelve repairers through the search from Windows ran the level 9 mage's
+    repair past its time with not a step walked (sessions 226-227)."""
+    from jev.guide.path import Path as Route
+    from jev.guide.path import PathStatus as Status
+    from jev.guide.route_memory import RouteMemory
+
+    client, values = client_in("Elwynn", (0.5, 0.5))
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory())
+    asked = []
+
+    class Estimate:
+        def path(self, map_id, start, end):
+            asked.append("estimate")
+            return Route(Status.COMPLETE, (tuple(start), tuple(end)))
+
+    client.query.estimate = lambda: Estimate()
+    client.query.path = lambda *a: asked.append("search") or Route(Status.COMPLETE, ())
+    client.travel.position = lambda: (0.5, 0.5)
+    assert client.plan_to((-9000.0, 100.0, 50.0)).usable
+    assert asked == ["estimate"]
+
+
 def test_the_planner_asks_for_the_spawns_that_attack_this_character(monkeypatch):
     """V248: the side from the race read now, the level too, and none for a ghost."""
     from jev.guide.route_memory import RouteMemory

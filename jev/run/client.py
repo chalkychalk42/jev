@@ -609,17 +609,24 @@ class Client:
         here = self.travel.position()
         if here is None:
             return None
-        return self._plan(map_to_world(here[0], here[1], self.bounds), world)
+        # A walk's cost, for ranking where to go: the planner below the detours round units
+        # that attack on sight (V257). Ranking twelve repairers through them took the level
+        # 9 mage's repair past its time with not a step walked (sessions 226-227).
+        estimate = getattr(self.query, "estimate", None)
+        return self._plan(map_to_world(here[0], here[1], self.bounds), world,
+                          query=estimate() if callable(estimate) else None)
 
-    def _plan(self, here: tuple[float, float], world: tuple[float, float, float]):
+    def _plan(self, here: tuple[float, float], world: tuple[float, float, float],
+              query=None):
         """The first complete plan over `START_HEIGHTS`, else the partial one ending nearest."""
+        query = query or self.query
         heights = [world[2] + dz for dz in START_HEIGHTS]
         if (self._ground is not None
                 and math.dist(self._ground[:2], here[:2]) <= GROUND_MEMORY_YARDS):
             heights.insert(0, self._ground[2])
         best = None
         for z in heights:
-            path = self.query.path(self.bounds.map_id, (here[0], here[1], z), world)
+            path = query.path(self.bounds.map_id, (here[0], here[1], z), world)
             if path.usable and path.status is PathStatus.COMPLETE:
                 return path
             if path.usable and (best is None or math.dist(path.points[-1][:2], world[:2])
@@ -782,7 +789,8 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
             return hostiles.near(map_id, x, y, radius,
                                  side=radio_frame.FACTION_BY_RACE.get(race) if race else None,
                                  level=level if isinstance(level, int) else None)
-        client.query = ExposureQuery(client.query, hostile)
+        client.query = ExposureQuery(client.query, hostile,
+                                     legs=AvoidingQuery(query, route_memory))
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards,

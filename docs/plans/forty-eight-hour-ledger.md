@@ -377,6 +377,7 @@ Trials
 | V254 a trainer not reached tried again after half an hour, across sessions | session 225 | no TRAIN_CLASS failure repeated within 30 minutes | the purse file's `train_blocked_level` and `train_blocked_until` | | |
 | V255 far wanderers carry their reach | session 226 | fewer attacks on a resting mage from bears and 15-30-yard wanderers | rest and get-up spots further from such spawns (`resting out of the camp's reach, N yards off`) | | |
 | V256 a caster's attacker lost beside it: quarter turns, not a fight given up | session 227 | no fight ended `not_visible` with the unit in reach and attacking | `engage.blind_cast` with `in_melee`; `engage.turn_quarter` | | |
+| V257 the search for a way round bounded (amends V248) | session 228 | no VENDOR_REPAIR or bag walk timing out before a step; plans in well under a second | repairs `done`; `complete: N waypoints` within seconds of a service's start | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
