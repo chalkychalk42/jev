@@ -17,6 +17,7 @@ from jev.guide.coords import (
     navigation_frame,
     world_to_map,
 )
+from jev.guide.exposure import ExposureQuery
 from jev.guide.graph import Graph, Node
 from jev.guide.tracker import Event, Tracker
 from jev.perceive.fields import FIELDS
@@ -416,9 +417,27 @@ def test_walks_are_planned_clear_of_the_learned_danger_at_the_characters_level()
     danger.hot.return_value = [(1.0, 2.0, 0.9)]
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES,
                 route_memory=RouteMemory(), danger=danger)
-    assert isinstance(client.query, DangerAvoidingQuery)
-    assert client.query.hot(0) == [(1.0, 2.0, 0.9)]
+    assert isinstance(client.query, ExposureQuery), "and round hostile spawns (V248)"
+    assert isinstance(client.query.inner, DangerAvoidingQuery)
+    assert client.query.inner.hot(0) == [(1.0, 2.0, 0.9)]
     danger.hot.assert_called_once_with(0, 12)
+
+
+def test_the_planner_asks_for_the_spawns_that_attack_this_character(monkeypatch):
+    """V248: the side from the race read now, the level too, and none for a ghost."""
+    from jev.guide.route_memory import RouteMemory
+
+    client, values = client_in("Elwynn", (0.5, 0.5))
+    values["char.level"] = 8
+    values["char.race_id"] = 1
+    asked = []
+    monkeypatch.setattr("jev.run.client.hostiles.near",
+                        lambda *a, **k: asked.append((a, k)) or [(1.0, 2.0, 3.0)])
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory())
+    assert client.query.hostile(0, 10.0, 20.0, 50.0) == [(1.0, 2.0, 3.0)]
+    assert asked[-1] == ((0, 10.0, 20.0, 50.0), {"side": "alliance", "level": 8})
+    values["vitals.ghost"] = True
+    assert client.query.hostile(0, 10.0, 20.0, 50.0) == []
 
 
 def test_a_walk_wedged_indoors_backs_out_the_way_it_came_in():

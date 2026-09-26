@@ -38,6 +38,7 @@ from jev.guide.coords import (
     names_by_radio_id,
     world_to_map,
 )
+from jev.guide.exposure import ExposureQuery
 from jev.guide.path import Path as Route
 from jev.guide.path import PathQuery, PathStatus, stop_short_of
 from jev.guide.route_memory import AvoidingQuery, DangerAvoidingQuery
@@ -45,6 +46,7 @@ from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
 from jev.perceive.spellbook import SpellCensus
 from jev.persist import atomic_json
+from jev.world import hostiles
 from jev.world.state_v1 import Pos, SenseFault
 
 # Taking the window back: short waits first, doubling, capped.
@@ -768,6 +770,19 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     client.query = (query if route_memory is None
                     else DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory,
                                              hot=hot))
+    if route_memory is not None:
+        # ...and of the spawns of units that attack it on sight, where a way round costs less
+        # than passing them (`jev.guide.exposure`, V248). A ghost passes them unharmed.
+        def hostile(map_id, x, y, radius):
+            values = client.read() or {}
+            if values.get("vitals.ghost") is True:
+                return []
+            race = radio_frame.RACE_BY_ID.get(values.get("char.race_id"))
+            level = values.get("char.level")
+            return hostiles.near(map_id, x, y, radius,
+                                 side=radio_frame.FACTION_BY_RACE.get(race) if race else None,
+                                 level=level if isinstance(level, int) else None)
+        client.query = ExposureQuery(client.query, hostile)
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards,
