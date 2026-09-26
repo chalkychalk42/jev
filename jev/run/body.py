@@ -449,7 +449,10 @@ class LiveBody:
         if not ghost:
             if v.get("vitals.dead") is True:
                 raise Cancelled("dead before travel")
-            if v.get("vitals.combat") is True:
+            # Not while combat is paused after fights that never engaged: this walk is the
+            # way out of reach (V212). In session 176 the pause was met here sixteen times.
+            if (v.get("vitals.combat") is True
+                    and not self.policy_context.fight_paused(time.time())):
                 raise Cancelled("combat before travel")
             hp = v.get("vitals.hp")
             if hp is None:

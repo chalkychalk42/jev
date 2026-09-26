@@ -138,6 +138,23 @@ def test_a_purse_lesson_outlives_the_session(tmp_path):
     assert again.policy_context.can_repair(0)
 
 
+def test_a_leg_starts_in_combat_only_while_combat_is_paused():
+    """V212: after fights that never engaged, the walk is the way out of reach; in session
+    176 the pause met "combat before travel" sixteen times."""
+    import time as clock
+
+    from jev.coach.policy import Context
+
+    b = body()
+    b.client.read = lambda: {"vitals.hp": 1.0, "vitals.combat": True}
+    b.policy_context = Context()
+    with pytest.raises(Cancelled, match="combat before travel"):
+        b._approach((50, 50, 0))
+    b.policy_context.fight_paused_until = clock.time() + 30
+    b._approach((50, 50, 0))
+    b.client.approach.assert_called()
+
+
 def test_unread_health_does_not_start_a_leg():
     b = body()
     b.client.read = lambda: {}
