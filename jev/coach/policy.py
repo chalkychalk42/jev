@@ -377,16 +377,18 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
                        ("dead", "combat"), service="repair"), True, "service.durability")
 
     conjured = context.conjured() if context is not None else frozenset()
-    # What is above the trainer's due (V215).
-    spare = (b.money_copper - context.kept(state)
-             if context is not None and b.money_copper is not None else b.money_copper)
-    if ((context is None or context.can_restock(b.money_copper, state.guide.step_id))
-            and ((b.food_id is not None and b.food_count == 0 and "food" not in conjured
-                  and _affordable(b.food_id, spare))
-                 or (b.drink_id is not None and b.drink_count == 0
-                     and "drink" not in conjured and _affordable(b.drink_id, spare)))):
-        return Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD", "confirmed food or drink is empty",
-                       0.8, ("dead", "combat"), service="supplies"), True, "service.supplies")
+    empty = [item for item, count, kind in ((b.food_id, b.food_count, "food"),
+                                             (b.drink_id, b.drink_count, "drink"))
+             if item is not None and count == 0 and kind not in conjured]
+    if empty and (context is None or context.can_restock(b.money_copper, state.guide.step_id)):
+        # What is above the trainer's due (V215), asked only with something to buy: the
+        # spellbook's census is shared with the capture thread.
+        spare = (b.money_copper - context.kept(state)
+                 if context is not None and b.money_copper is not None else b.money_copper)
+        if any(_affordable(item, spare) for item in empty):
+            return Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD",
+                           "confirmed food or drink is empty", 0.8, ("dead", "combat"),
+                           service="supplies"), True, "service.supplies")
 
     # Last: spells a trainer would teach now. A paladin that never trained fought to level
     # 8 on Seal of Righteousness and Holy Light rank 1, losing to two wolves at once. It can

@@ -329,6 +329,12 @@ def test_a_restock_buys_only_with_what_is_above_the_trainers_due():
     saving.reserve = lambda state: 1 // 0
     assert service(with_purse(82), context=saving).decision.skill == "BUY_AMMO_REAGENT_FOOD", \
         "a reserve that cannot be worked out keeps nothing"
+    asked = []
+    saving.reserve = lambda state: asked.append(state) or 100
+    stocked = seen(bags=Bags(free=10, durability_min=1.0, money_copper=82, food_id=2070,
+                             food_count=5, drink_id=159, drink_count=3))
+    assert service(stocked, context=saving) is None and not asked, \
+        "nothing to buy, nothing asked of the spellbook"
 
 
 def test_a_repair_the_purse_could_not_pay_waits_for_the_purse_to_grow():
