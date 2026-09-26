@@ -670,6 +670,19 @@ class RadioReading:
     transform: tuple[tuple[float, float], ...] | None = None
 
 
+# The grid of this process's last whole read, shared by every reader of the window: the
+# client's and the targeting's own views of a fight (V190). The targeting decoded its frames
+# without the client's remembered grid, and the misled locator of session 145 went on
+# failing its checksum there: "blind target observation: checksum" (session 151).
+_last_grid: Grid | None = None
+
+
+def forget_grid() -> None:
+    """Drop the shared grid (tests; a window that has moved is found again anyway)."""
+    global _last_grid
+    _last_grid = None
+
+
 def read(frame: np.ndarray, *, prev_seq: int | None = None,
          grid: Grid | None = None) -> RadioReading:
     """The whole pipeline: locate, sample, solve the transform, invert, unpack.
@@ -682,14 +695,19 @@ def read(frame: np.ndarray, *, prev_seq: int | None = None,
     every other second until the character died, and the session sat blind beside the body
     (session 145). On the remembered grid those frames read whole.
     """
-    if grid is not None:
-        hinted = _read_on(frame, grid, prev_seq)
+    global _last_grid
+    for hint in dict.fromkeys(g for g in (grid, _last_grid) if g is not None):
+        hinted = _read_on(frame, hint, prev_seq)
         if hinted.ok or hinted.fault is SenseFault.STALE:
+            _last_grid = hint
             return hinted
     located = locate(frame)
     if located is None:
         return RadioReading(None, False, SenseFault.NOT_FOUND, detail="no marker pair")
-    return _read_on(frame, located, prev_seq)
+    reading = _read_on(frame, located, prev_seq)
+    if reading.ok:
+        _last_grid = located
+    return reading
 
 
 def _read_on(frame: np.ndarray, grid: Grid, prev_seq: int | None) -> RadioReading:

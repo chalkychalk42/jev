@@ -965,12 +965,16 @@ def test_a_strip_the_scenery_misleads_the_locator_on_is_read_on_its_remembered_g
     large. In the fight before, the strip had come and gone every other second and each
     loss cut the fight off. On the grid the strip was last read on, the frame reads whole."""
     frame = np.load(MISLED)["frame"]
+    radio_frame.forget_grid()
     assert not radio_frame.read(frame).ok, "the locator alone is misled here"
     remembered = radio_frame.Grid(x0=121.45, y0=6.55, dx=14.1, dy=14.1,
                                   cell_w=14.1, cell_h=14.1)
     reading = radio_frame.read(frame, grid=remembered)
     assert reading.ok, f"{reading.fault}: {reading.detail}"
     assert reading.values["vitals.dead"] is True and reading.grid == remembered
+    # V190: every reader in the process has it now, the targeting's views included.
+    assert radio_frame.read(frame).ok
+    radio_frame.forget_grid()
 
 
 def test_a_remembered_grid_that_no_longer_fits_falls_back_to_the_locator():
