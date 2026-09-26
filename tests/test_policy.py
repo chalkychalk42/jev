@@ -249,6 +249,21 @@ def test_the_body_drinks_to_the_policys_line_so_a_rest_is_not_armed_again():
     assert drink_to(True) > rest_mana(True) and drink_to(False) > rest_mana(False)
 
 
+def test_a_spell_the_purse_can_pay_for_comes_before_a_repair_of_gear_not_broken():
+    """V240: the level 7 mage's repairs took the copper Frostbolt waited for (session 208)."""
+    from jev.coach.policy import Context, service
+    from jev.world.state_v1 import Char
+
+    context = Context()
+    context.trainable = lambda state: True
+    worn = _s(char=Char(level=8), bags=Bags(free=10, durability_min=0.3))
+    assert service(worn, context=context).decision.skill == "TRAIN_CLASS"
+    broken = _s(char=Char(level=8), bags=Bags(free=10, durability_min=0.0))
+    assert service(broken, context=context).decision.skill == "VENDOR_REPAIR", "broken first"
+    context.trainable = lambda state: False
+    assert service(worn, context=context).decision.skill == "VENDOR_REPAIR", "nothing to learn"
+
+
 def test_a_restock_does_not_buy_what_the_character_conjures():
     """V166: the bar's starting water runs out, and the conjured water is in the bags."""
     from jev.coach.policy import Context, service

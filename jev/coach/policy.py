@@ -372,6 +372,15 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
         return Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are nearly full",
                        0.75, ("dead", "combat"), service="bags"), True, "service.bags_full")
 
+    # A spell the purse can pay for comes before a repair of gear not yet broken (V240): a
+    # repair at a third of the durability buys no armour back, and the level 7 mage's
+    # repairs took the copper Frostbolt waited for, 77 of 137 in session 208, while it died
+    # to boars and bears it had no slow for.
+    if (context is not None and b.durability_min is not None and b.durability_min < 0.35
+            and _recover(state, context) is None and context.can_train(state)):
+        return Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
+                       0.6, ("dead", "combat"), service="train"), True, "service.train")
+
     if can_repair and b.durability_min is not None and b.durability_min < 0.35:
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is low", 0.65,
                        ("dead", "combat"), service="repair"), True, "service.durability")
