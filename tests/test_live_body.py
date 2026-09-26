@@ -101,6 +101,24 @@ def test_a_repairer_that_cannot_be_clicked_is_passed_over_for_the_next(tmp_path,
     assert b._repairer_yards() == pytest.approx(1.0), "the smith a yard off, not the grocer"
 
 
+def test_a_failed_repairer_is_followed_only_by_its_neighbours(tmp_path, monkeypatch):
+    """From Sentinel Hill the next repairer after William MacGregor was the Defias
+    Profiteer in Moonbrook, 625 yards among Defias, walked for as soon as MacGregor's walk
+    ended in the hearthstone (session 160). A failure there is the repair's failure."""
+    from jev.world.vendor import Merchant
+
+    b = body()
+    b.merchant_memory = tmp_path / "merchant-memory.json"
+    vendors = (Merchant(1668, "In Town", 0, (50, 51, 0), frozenset(), repairs=True),
+               Merchant(1669, "Another Town", 0, (95, 95, 0), frozenset(), repairs=True))
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    visit = Mock(return_value=Interacted.APPROACH_FAILED)
+    b.interact = SimpleNamespace(open_on=visit, detail="the planner could not stand us on the node")
+    with pytest.raises(BodyFailure, match="In Town"):
+        b._visit_repairer()
+    assert [c.args[0] for c in visit.call_args_list] == ["In Town"]
+
+
 def test_unread_health_does_not_start_a_leg():
     b = body()
     b.client.read = lambda: {}

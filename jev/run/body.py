@@ -132,6 +132,11 @@ UNPLANNED_FACTOR = 3.0
 # and Westfall, 26 September) sent a level 3 mage from Northshire to Ben Trias in Stormwind,
 # 1,030 yards, for water, past Brother Danil twenty yards away.
 FAILED_MERCHANT_YARDS = 250.0
+# A repairer that fails is followed only by one standing this near the first chosen (V203):
+# Northshire's three smiths are twenty yards apart, but from Sentinel Hill the next after
+# William MacGregor was the Defias Profiteer in Moonbrook, 625 yards among level 15-17
+# Defias, walked for as soon as MacGregor's walk ended in the hearthstone (session 160).
+REPAIRER_NEIGHBOUR_YARDS = 60.0
 # Binding the hearthstone (`LiveBody.bindable`): an inn this near the guide's current step,
 # while home is farther than `HOME_FAR_YARDS` from it or unknown. Goldshire's inn is 590
 # yards from Northshire's quests, which bind nowhere, and 360 from Fargodeep Mine's.
@@ -1402,6 +1407,8 @@ class LiveBody:
         repairers = self._repairers()
         if repairers:
             ranked = self._ranked(repairers, world)
+            ranked = [m for m in ranked if math.dist(m.world[:2], ranked[0].world[:2])
+                      <= REPAIRER_NEIGHBOUR_YARDS]
             for merchant in ranked:
                 try:
                     opened = self._open_merchant(
