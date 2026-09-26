@@ -333,6 +333,8 @@ Trials
 | V211 a plate turned under the radio strip is on the centre line | session 175 | fewer "time to face ran out" fights at units up a slope | `target.face` faced "under the radio strip" | | |
 | V212 fights that never engage pause combat and the walk goes on | session 176 (policy, supervisor), 178 (body) | no half hour pinned by an unreachable attacker (sessions 173-177) | `fights that never engaged: combat paused, walking on`, then a walk | | |
 | V213 a ghost that does not get up short of the body goes closer | session 179 | no corpse run repeated "still a ghost" | session 179: still a ghost at 25 yards, then alive at 12.5 (11:57) | | |
+| V214 a step's entry level outlives the session | session 181 | a failover grind ends a level above where it began, whatever the sessions between | the playhead's `entry_level` (15 on Poor Old Blanchy, session 182); session 181 left the rib, 4,713 XP/h, no death | | |
+| V215 a restock keeps what the trainer is owed | session 183 (paladin); the mage from 14:15 | the mage trains at each level it can pay for; no water bought while Conjure Water is untrained and in reach | `TRAIN_CLASS: done` for the mage before its next `BUY_AMMO_REAGENT_FOOD` | | |
 
 Issues
 ------
