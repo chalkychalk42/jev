@@ -363,6 +363,7 @@ Trials
 | V244 conjured roles kept across sessions | session 219 (the purse file takes the roles in 219; 220 is the first to start with them) | no restock of conjured food or water at a session's start | no BUY_AMMO_REAGENT_FOOD in the mage's sessions while its bar conjures both | | |
 | V245 an accept passed over loses its quest and the chain behind it | session 220 | the route leaves Goldshire's Further Concerns chain (35, 37, 45, 71, 39, 59) for Guard Thomas's 46 and 52 | no ACCEPT_QUEST of Further Concerns after 219; the playhead past 59 | **Fired**, session 220's first seconds: the playhead from the rib (waiting on Further Concerns' hand-in) to `46_bounty_on_murlocs_accept` | |
 | V246 a full bag is looted all the same | session 221 | coins and stacked items taken with the backpack full | `corpse looted: took - N copper` or `an item onto a stack` at 0 free slots | | |
+| V247 a meal and a get-up clear of every unit that attacks on sight; a body in a camp left for the Spirit Healer | session 222 | fewer deaths within 3 minutes of getting up (15 of 22 at the body in 195-219) and fewer attacks on a resting mage | `resting out of the camp's reach` and `getting up out of the camp's reach` on steps with no spawns of their own; `up at the Spirit Healer: the body lies in a camp` | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues

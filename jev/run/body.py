@@ -48,6 +48,7 @@ from jev.run.client import FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
 from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
+from jev.world import hostiles
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
 from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import keep as gear_keep
@@ -98,6 +99,13 @@ SICKNESS_WAIT_MAX_S = 300.0
 # again and again, "still a ghost" (session 178). After each such get-up that did not come,
 # the next stops half as far short (V213).
 TRAP_RECLAIM_YARDS = 25.0
+# How far round a body or a meal the spawns of units that attack on sight are looked for
+# (`jev.world.hostiles`, V247), and the least room from them a get-up spot must have: under
+# it, the body lies in a camp and the ghost gets up at the Spirit Healer. At the 34 bodies of
+# sessions 195-219, the best spot 25 yards out had 20 yards or more in 28, and under 18 only
+# in Fargodeep's kobold camp, three.
+HOSTILE_LOOK_YARDS = 70.0
+CAMP_ROOM_YARDS = 18.0
 # A unit not found where the walk to it ended, this near in x and y and standing this high
 # over the lowest floor there, is on a floor above: walked to once more from below (V235).
 UNDER_UNIT_YARDS = 12.0
@@ -1097,6 +1105,9 @@ class LiveBody:
                 kept = raw.get("conjured") if isinstance(raw, dict) else None
                 if isinstance(kept, list):
                     self._conjured_last = frozenset(k for k in kept if k in ("food", "drink"))
+                revived = raw.get("revived_at") if isinstance(raw, dict) else None
+                if isinstance(revived, (int, float)) and not isinstance(revived, bool):
+                    self._revived_at = float(revived)
             context.saved = self._save_purse
         context.trainable = self.trainable
         context.reserve = self.training_reserve
@@ -1168,7 +1179,8 @@ class LiveBody:
 
         with contextlib.suppress(OSError):
             atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse(),
-                                                  "conjured": sorted(self._conjured_last)})
+                                                  "conjured": sorted(self._conjured_last),
+                                                  "revived_at": self._revived_at})
 
     def _go_home(self):
         """Home by hearthstone; where it sets the character down is home from then on."""
@@ -1355,16 +1367,20 @@ class LiveBody:
         return f"placed {len(book.placed)} of {len(plan)} spells ({outcome.value})"
 
     def _clear_of_spawns(self) -> None:
-        """Walk out of reach of the step's own spawn points before a meal, where a way out
-        is known: nearest point first, on rings round the character."""
+        """Walk out of reach of the step's own spawn points, and of every unit's near that
+        attacks on sight (V247), before a meal, where a way out is known: nearest point
+        first, on rings round the character. All ten attacks on the mage resting or getting
+        up began within 20 yards of such a spawn (sessions 195-219)."""
         node = self._node()
         here = self._position()
-        if node is None or here is None:
+        if here is None:
             return
-        spawns = spawn_around(self.hunt_spawns, node.id)
+        world = map_to_world(*here, self.client.bounds)
+        spawns = (*(spawn_around(self.hunt_spawns, node.id) if node is not None else ()),
+                  *self._hostiles(world))
         if not spawns:
             return
-        spot = rest_spot(map_to_world(*here, self.client.bounds), spawns)
+        spot = rest_spot(world, spawns)
         if spot is None:
             return
         self.say(f"  resting out of the camp's reach, {math.dist(spot[:2], map_to_world(*here, self.client.bounds)):.0f} yards off")
@@ -1587,13 +1603,51 @@ class LiveBody:
             return True
         share = self._reclaim_yards / apart
         short = (body[0] + (start[0] - body[0]) * share, body[1] + (start[1] - body[1]) * share)
-        node = self._node()
-        spawns = spawn_around(self.hunt_spawns, node.id) if node is not None else ()
+        spawns = self._camp_spawns(body)
         clear = reclaim_spot(body[:2], short, spawns, self._reclaim_yards)
         if clear != short:
             self.say(f"  getting up out of the camp's reach, "
                      f"{min(math.dist(clear, sp[:2]) for sp in spawns):.0f} yards from its nearest spawn")
         return self._corpse_walk(world_to_map(*clear, self.client.bounds))
+
+    def _hostiles(self, world, radius: float = HOSTILE_LOOK_YARDS):
+        """The spawns round `world` of units that attack this character on sight and are
+        worth experience at its level (`jev.world.hostiles`, V247)."""
+        level = (self._read() or {}).get("char.level")
+        return hostiles.near(self.client.bounds.map_id, world[0], world[1], radius,
+                             side=self._side, level=level if isinstance(level, int) else None)
+
+    def _camp_spawns(self, body) -> tuple:
+        """What a ghost keeps clear of when it gets up: the step's own spawns and every
+        hostile one round the body. On a travel or quest step the step has none, and the
+        mage got up among the Mangy Wolves that had killed it (session 219)."""
+        node = self._node()
+        return (*(spawn_around(self.hunt_spawns, node.id) if node is not None else ()),
+                *self._hostiles(body))
+
+    def _body_room(self, state) -> float | None:
+        """The most room from hostile spawns a ghost could get up with: at the graveyard's
+        side of the body or `_reclaim_yards` round it. `None` with no body read or nothing
+        hostile near it."""
+        pos = getattr(state, "pos", None)
+        if pos is None or pos.corpse_mx is None or pos.corpse_my is None:
+            return None
+        body = map_to_world(pos.corpse_mx, pos.corpse_my, self.client.bounds)
+        spawns = self._camp_spawns(body)
+        if not spawns:
+            return None
+        origin = self.recover.graveyard or ((pos.mx, pos.my) if pos.mx is not None
+                                            and pos.my is not None else None)
+        short = body[:2]
+        if origin is not None:
+            start = map_to_world(*origin, self.client.bounds)
+            apart = math.dist(body[:2], start[:2])
+            if apart > self._reclaim_yards:
+                share = self._reclaim_yards / apart
+                short = (body[0] + (start[0] - body[0]) * share,
+                         body[1] + (start[1] - body[1]) * share)
+        spot = reclaim_spot(body[:2], short, spawns, self._reclaim_yards)
+        return min(math.dist(spot, sp[:2]) for sp in spawns)
 
     def _talk_to(self, name: str):
         """Right-click a named unit: by its nameplate, or where a fresh hover finds it."""
@@ -1645,17 +1699,34 @@ class LiveBody:
         # A body where the character keeps dying is not worth getting up at: run
         # 20260923T181209-bc03ba got up beside a level 6 wolf at half health and died,
         # four times. Up at the Spirit Healer instead, and home by hearthstone.
-        trapped = self._revived_at is not None and time.monotonic() - self._revived_at < DEATH_TRAP_S
+        # The clock is the wall's, kept in the purse file: session 219 began with the get-up
+        # at the end of 218 forgotten, got up at the body again and died (V247).
+        trapped = self._revived_at is not None and time.time() - self._revived_at < DEATH_TRAP_S
         if trapped or self._killed_by_stronger(state):
             up = self.recover.run_spirit_healer()
             if up is Recovered.ALIVE:
-                self._revived_at = None
+                self._revived(None)
                 home = self._go_home()
                 self.say(f"  up at the Spirit Healer; hearthstone: {home.value} {self.hearth.detail}")
                 self._wait_out_sickness()
                 return self._result(up, f"up at the Spirit Healer; hearthstone {home.value}")
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body, "
                      f"to get up {TRAP_RECLAIM_YARDS:.0f} yards short of it")
+        else:
+            # A body with no spot in reach clear of the units that attack on sight lies in a
+            # camp: 15 of the mage's 22 get-ups at the body died again, a median of 39 s
+            # later, and 2 of its 12 at the Spirit Healer (sessions 195-219, V247). Up there,
+            # and on: the hearthstone is kept for a wedge.
+            room = self._body_room(state)
+            if room is not None and room < CAMP_ROOM_YARDS:
+                up = self.recover.run_spirit_healer()
+                if up is Recovered.ALIVE:
+                    self._revived(None)
+                    self.say(f"  up at the Spirit Healer: the body lies in a camp, "
+                             f"{room:.0f} yards from a hostile spawn at best")
+                    self._wait_out_sickness()
+                    return self._result(up, "up at the Spirit Healer; the body lies in a camp")
+                self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
         # Always short of the body. Whatever killed the character stands beside it, back at
         # its spawn: the first reclaim at the body itself, at half health, died again four
         # times in runs 20260924T045140-ec8686 and ...050644-f9f9fa, and a new session
@@ -1667,12 +1738,18 @@ class LiveBody:
         finally:
             self.recover.walk_to = walk
         if outcome is Recovered.ALIVE:
-            self._revived_at = time.monotonic()
+            self._revived(time.time())
             self._reclaim_yards = TRAP_RECLAIM_YARDS
         elif outcome is Recovered.STILL_GHOST:
             # Out of the body's reach from there, it seems: half as far short next time.
             self._reclaim_yards = self._reclaim_yards / 2 if self._reclaim_yards > 4 else 0.0
         return self._result(outcome, self.recover.detail)
+
+    def _revived(self, at: float | None) -> None:
+        """When the character last got up at its body (wall time), kept in the purse file
+        for the next session's recovery."""
+        self._revived_at = at
+        self._save_purse()
 
     def _killed_by_stronger(self, state) -> bool:
         """The last fight's unit was `OUTCLASSED_BY` levels or more above the character."""

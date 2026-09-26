@@ -572,7 +572,7 @@ def test_a_body_that_killed_the_character_again_is_left_for_the_spirit_healer(
 
     b = body()
     now = 10_000.0
-    monkeypatch.setattr("jev.run.body.time.monotonic", lambda: now)
+    monkeypatch.setattr("jev.run.body.time.time", lambda: now)     # the wall's clock (V247)
     b._revived_at = None if since_revived is None else now - since_revived
     calls = []
     b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
@@ -583,6 +583,92 @@ def test_a_body_that_killed_the_character_again_is_left_for_the_spirit_healer(
     assert calls == (["healer", "hearth"] if healer else ["corpse"])
     assert (b._revived_at is None) if healer else (b._revived_at == now)
     assert DEATH_TRAP_S > 60.0
+
+
+def test_a_revival_is_remembered_by_the_next_session(tmp_path, monkeypatch):
+    """V247: session 219 began with the get-up at the end of 218 forgotten, got up at the
+    body again and died."""
+    from jev.coach.policy import Context
+
+    now = 10_000.0
+    monkeypatch.setattr("jev.run.body.time.time", lambda: now)
+    b = body()
+    b.purse_memory = tmp_path / "character-1.purse.json"
+    b.policy_context = Context()
+    b._revived(now - 60.0)
+    later = body()
+    later.purse_memory = b.purse_memory
+    later.policy_context = Context()
+    assert later._revived_at == now - 60.0
+    calls = []
+    later.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+    later.recover.run = lambda corpse: calls.append("corpse") or Recovered.ALIVE
+    from jev.clients.hearth import Hearthed
+
+    later.hearth.run = lambda: calls.append("hearth") or Hearthed.HOME
+    later._wait_out_sickness = lambda: 0.0
+    later._recover(seen())
+    assert calls[0] == "healer", "died again inside the trap's minutes: not at the body"
+
+
+def ghost_at(corpse_world, bounds):
+    from jev.guide.coords import world_to_map
+    from jev.world.state_v1 import Pos, Vitals
+
+    cx, cy = world_to_map(*corpse_world, bounds)
+    gx, gy = world_to_map(corpse_world[0] - 150.0, corpse_world[1], bounds)
+    return seen(pos=Pos(mx=gx, my=gy, corpse_mx=cx, corpse_my=cy, zone="Elwynn"),
+                vitals=Vitals(hp=0.0, dead=False, ghost=True))
+
+
+@pytest.mark.parametrize(("camp", "expected"), [
+    ([(0.0, 0.0), (20.0, 0.0), (-20.0, 0.0), (0.0, 20.0), (0.0, -20.0),
+      (18.0, 18.0), (-18.0, 18.0), (18.0, -18.0), (-18.0, -18.0),
+      (40.0, 0.0), (-40.0, 0.0), (0.0, 40.0), (0.0, -40.0)], "healer"),
+    ([(0.0, 5.0)], "corpse"),                  # one wolf beside it: a spot 25 yards off is clear
+    ([], "corpse"),                            # nothing hostile near
+])
+def test_a_body_in_a_camp_is_got_up_from_at_the_spirit_healer(monkeypatch, camp, expected):
+    """V247: 15 of the mage's 22 get-ups at the body died again, a median of 39 s later,
+    and 2 of its 12 at the Spirit Healer (sessions 195-219). No hearthstone for it: the stone
+    is kept for a wedge."""
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._revived_at = None
+    b._side = "alliance"
+    corpse = (-9000.0, 100.0)
+    spawns = [(corpse[0] + dx, corpse[1] + dy, 60.0) for dx, dy in camp]
+    monkeypatch.setattr("jev.run.body.hostiles.near", lambda *a, **k: list(spawns))
+    b._wait_out_sickness = lambda: 0.0
+    calls = []
+    b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+    b.recover.run = lambda corpse: calls.append("corpse") or Recovered.ALIVE
+    b.hearth.run = lambda: calls.append("hearth") or None
+    assert b._recover(ghost_at(corpse, b.client.bounds)).code == "alive"
+    assert calls == [expected]
+
+
+def test_a_ghost_gets_up_clear_of_hostile_spawns_on_a_step_with_none_of_its_own(monkeypatch):
+    """V247: on a travel step the step names no spawns, and the mage got up 25 yards short
+    of its body among the Mangy Wolves that had killed it (session 219)."""
+    import math
+
+    from jev.guide.coords import map_to_world, world_to_map
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._side = "alliance"
+    b.hunt_spawns = {}
+    corpse = (-9000.0, 100.0)
+    wolves = [(-9020.0, 100.0, 60.0), (-9015.0, 110.0, 60.0)]    # on the graveyard's side
+    monkeypatch.setattr("jev.run.body.hostiles.near", lambda *a, **k: list(wolves))
+    b.recover.graveyard = world_to_map(-9100.0, 100.0, b.client.bounds)
+    walked = []
+    b._corpse_walk = lambda point: walked.append(map_to_world(*point, b.client.bounds)) or True
+    assert b._short_of_body(world_to_map(*corpse, b.client.bounds)) is True
+    spot = walked[0]
+    assert math.dist(spot[:2], corpse) == pytest.approx(25.0, abs=0.5)
+    assert min(math.dist(spot[:2], w[:2]) for w in wolves) > 25.0, "not among the wolves"
 
 
 def test_a_service_blocked_for_the_step_does_not_stop_its_grind():
@@ -756,7 +842,7 @@ def test_a_trap_body_the_healer_will_not_raise_us_from_is_reclaimed_from_short_o
     b = body()
     b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
     now = 10_000.0
-    monkeypatch.setattr("jev.run.body.time.monotonic", lambda: now)
+    monkeypatch.setattr("jev.run.body.time.time", lambda: now)
     b._revived_at = now - 30.0
     corpse = world_to_map(-9000.0, 100.0, b.client.bounds)
     b.recover.graveyard = world_to_map(-9100.0, 100.0, b.client.bounds)
@@ -961,6 +1047,31 @@ def test_a_meal_is_taken_out_of_reach_of_the_camps_spawns():
     assert all(math.dist(spot[:2], s[:2]) >= REST_CLEAR_YARDS for s in camp)
     assert math.dist(spot[:2], (3.0, 3.0)) <= 30.0, "the nearest ring with room"
     assert rest_spot((-40.0, -40.0), camp) is None, "already clear of them"
+
+
+def test_a_meal_on_a_step_with_no_spawns_walks_clear_of_hostile_ones(monkeypatch):
+    """V247: all ten attacks on the resting or reviving mage began within 20 yards of a
+    hostile spawn, and a travel or quest step names none of its own (sessions 195-219)."""
+    import math
+
+    from jev.guide.coords import world_to_map
+    from jev.run.body import REST_CLEAR_YARDS
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b.client.position = lambda: world_to_map(-9000.0, 100.0, b.client.bounds)
+    b._side = "alliance"
+    b.hunt_spawns = {}
+    wolves = [(-9005.0, 100.0, 60.0), (-9000.0, 108.0, 60.0)]
+    monkeypatch.setattr("jev.run.body.hostiles.near", lambda *a, **k: list(wolves))
+    walked = []
+    b._approach = lambda point: walked.append(point) or True
+    b._clear_of_spawns()
+    assert len(walked) == 1
+    assert all(math.dist(walked[0][:2], w[:2]) >= REST_CLEAR_YARDS for w in wolves)
+    monkeypatch.setattr("jev.run.body.hostiles.near", lambda *a, **k: [])
+    b._clear_of_spawns()
+    assert len(walked) == 1, "nothing hostile near: eaten where it stands"
 
 
 def test_the_rest_walks_clear_first_only_when_the_step_has_spawns():
