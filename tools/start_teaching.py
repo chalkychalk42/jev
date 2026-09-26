@@ -80,6 +80,8 @@ def run_sessions(args, *, sessions: int = 1, run=None, is_done=route_done) -> in
         from jev.run.cli import main
 
         run = main
+        import time
+        print(f"startup: imported at {time.strftime('%H:%M:%S')}", flush=True)
     completed = 0
     while sessions == 0 or completed < sessions:
         stop = option(args, "--stop-file")
@@ -96,6 +98,10 @@ def run_sessions(args, *, sessions: int = 1, run=None, is_done=route_done) -> in
 
 
 def main(argv=None):
+    if argv is None and "--run" in sys.argv:
+        # Where a live session's first 25 s go, before the run reads its arguments.
+        import time
+        print(f"startup: launcher at {time.strftime('%H:%M:%S')}", flush=True)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=ROOT / "var/teaching-launch.json")
     parser.add_argument("--run", action="store_true", help="attach the game and begin the supervised test")
