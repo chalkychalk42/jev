@@ -6,9 +6,12 @@ the runtime's arm, using the existing planner, locator, quest UI, Fight, Loot an
 
 from __future__ import annotations
 
+import contextlib
+import json
 import math
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import ClassVar
 
 from jev.clients.advance import AdvanceQuestFrame, Goal
@@ -137,6 +140,11 @@ FAILED_MERCHANT_YARDS = 250.0
 # William MacGregor was the Defias Profiteer in Moonbrook, 625 yards among level 15-17
 # Defias, walked for as soon as MacGregor's walk ended in the hearthstone (session 160).
 REPAIRER_NEIGHBOUR_YARDS = 60.0
+# Food and drink are not walked for from farther than this (V205): resting without them is
+# slower, the walk is the danger. With no Darnassian Bleu sold in Northshire, the level 4
+# mage's restock walked for Goldshire's barkeep, 675 yards through the Defias road, as the
+# walk for Ben Trias had through Elwynn's wolves the hour before (26 September).
+SUPPLY_WALK_MAX_YARDS = 400.0
 # Binding the hearthstone (`LiveBody.bindable`): an inn this near the guide's current step,
 # while home is farther than `HOME_FAR_YARDS` from it or unknown. Goldshire's inn is 590
 # yards from Northshire's quests, which bind nowhere, and 360 from Fargodeep Mine's.
@@ -231,7 +239,7 @@ class LiveBody:
                  hunt_timeout: float = 600, say: Callable[[str], None] = print,
                  record_frame: Callable[..., dict] | None = None,
                  hunt_spawns: dict | None = None, gear_memory=None, merchant_memory=None,
-                 home_memory=None, taxi_memory=None):
+                 home_memory=None, taxi_memory=None, purse_memory=None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
         self.client, self.graph = client, graph
@@ -251,6 +259,8 @@ class LiveBody:
         self.home_memory = home_memory
         # The flight nodes this character has visited (`jev.world.taxi`).
         self.taxi_memory = taxi_memory
+        # What the purse could not pay for, kept between sessions (`Context.purse`, V206).
+        self.purse_memory = purse_memory
         self._side: str | None = None
         self._flying = False
         self._gear_checked: object = object()     # the bags' revision last looked through
@@ -1039,6 +1049,10 @@ class LiveBody:
     def policy_context(self, context: Context) -> None:
         # The supervisor hands the body the runtime's context; training is asked of it.
         self._policy_context = context
+        if self.purse_memory is not None:
+            with contextlib.suppress(OSError, ValueError):
+                context.restore_purse(json.loads(Path(self.purse_memory).read_text()))
+            context.saved = self._save_purse
         context.trainable = self.trainable
         context.bindable = self.bindable
         context.discoverable = self.discoverable
@@ -1086,6 +1100,14 @@ class LiveBody:
         placed = self._place_spells(force=True)
         detail = f"{desk.bought} spells bought at {trainer.name}; {placed}"
         return self._result(outcome, detail)
+
+    def _save_purse(self) -> None:
+        if self.purse_memory is None:
+            return
+        from jev.persist import atomic_json
+
+        with contextlib.suppress(OSError):
+            atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse()})
 
     def _go_home(self):
         """Home by hearthstone; where it sets the character down is home from then on."""
@@ -1270,7 +1292,10 @@ class LiveBody:
             home = self._go_home()
             self.say(f"  broken gear and the nearest repairer {distance:.0f} yards off: "
                      f"hearthstone {home.value} {self.hearth.detail}".rstrip())
-        return self._result(self.repair.run(), self.repair.detail)
+        repaired = self.repair.run()
+        if repaired.value == "done":
+            self.policy_context.repaired()
+        return self._result(repaired, self.repair.detail)
 
     def _repairer_yards(self) -> float | None:
         here = self._position()
@@ -1318,7 +1343,14 @@ class LiveBody:
                                    if not wanted or wanted & m.items)
         if not candidates:
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
-        ranked = self._ranked(candidates, map_to_world(*here, self.client.bounds))
+        world = map_to_world(*here, self.client.bounds)
+        ranked = self._ranked(candidates, world)
+        if supplies:
+            walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
+            if walk > SUPPLY_WALK_MAX_YARDS:
+                return Result(SkillOutcome.ABORTED,
+                              f"the nearest merchant with them, {ranked[0].name}, is a "
+                              f"{walk:.0f}-yard walk", "too_far")
         for merchant in ranked:
             def visit(merchant=merchant):
                 return self._open_merchant(merchant.name, merchant.world,
@@ -1339,6 +1371,8 @@ class LiveBody:
                 continue
             if outcome.ok:
                 note_merchant(self.merchant_memory, merchant.entry, failed=False)
+                if supplies:
+                    self.policy_context.restocked()
             if outcome is Vended.TOO_POOR:
                 self.policy_context.supplies_need(vendor.needed_copper)
             return self._result(outcome, vendor.detail or

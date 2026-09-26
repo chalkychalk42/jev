@@ -119,6 +119,25 @@ def test_a_failed_repairer_is_followed_only_by_its_neighbours(tmp_path, monkeypa
     assert [c.args[0] for c in visit.call_args_list] == ["In Town"]
 
 
+def test_a_purse_lesson_outlives_the_session(tmp_path):
+    """V206: what the purse could not pay is kept per character for its next session."""
+    from jev.coach.policy import Context
+
+    b = body()
+    b.purse_memory = tmp_path / "character-1.purse.json"
+    b.policy_context = Context()
+    b.policy_context.repair_failed(45)
+    later = body()
+    later.purse_memory = b.purse_memory
+    later.policy_context = Context()
+    assert not later.policy_context.can_repair(50)
+    later.policy_context.repaired()
+    again = body()
+    again.purse_memory = b.purse_memory
+    again.policy_context = Context()
+    assert again.policy_context.can_repair(0)
+
+
 def test_unread_health_does_not_start_a_leg():
     b = body()
     b.client.read = lambda: {}

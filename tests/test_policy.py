@@ -322,3 +322,29 @@ def test_a_repair_the_purse_could_not_pay_waits_for_the_purse_to_grow():
     short.repair_failed(500)
     assert not short.can_repair(999) and short.can_repair(1000), "or doubled, whichever is more"
     assert not short.can_repair(None)
+
+
+def test_the_purses_lessons_are_kept_and_cleared():
+    """V206: each new session forgot what the purse could not pay, and the level 4 mage's
+    first act every session was its hearthstone and a walk to a smith it still could not
+    pay (26 September)."""
+    from jev.coach.policy import Context
+
+    saves = []
+    first = Context(saved=lambda: saves.append(1))
+    first.repair_failed(45)
+    first.supplies_failed(20)
+    first.supplies_need(25)
+    assert len(saves) == 3
+    later = Context()
+    later.restore_purse(first.purse())
+    assert not later.can_repair(50) and later.can_repair(145)
+    assert not later.can_restock(20) and later.can_restock(25)
+    later.saved = lambda: saves.append(2)
+    later.repaired()
+    later.restocked()
+    assert later.can_repair(0) and later.purse()["supplies_needed"] is None
+    assert saves[-2:] == [2, 2]
+    later.restore_purse({"repair_blocked": "yes", "repair_money": True})
+    assert later.repair_blocked is False and later.repair_money is None, "only its own values"
+

@@ -81,9 +81,19 @@ class Context:
     repair_money: int | None = None
     supplies_blocked: bool = False
     supplies_money: int | None = None
+    # Called when a purse lesson is learned or cleared (`PURSE`), to keep it for the
+    # character's next session (V206).
+    saved: Callable[[], None] | None = None
 
     def repair_failed(self, money: int | None) -> None:
         self.repair_blocked, self.repair_money = True, money
+        self._save()
+
+    def repaired(self) -> None:
+        """A repair that landed: the purse pays for repairs again."""
+        if self.repair_blocked:
+            self.repair_blocked, self.repair_money = False, None
+            self._save()
 
     # A repairer out of reach is not walked to again on this step, as a merchant for
     # supplies is not (V175, V185): the walk out of Sentinel Hill's inn to William MacGregor
@@ -107,6 +117,13 @@ class Context:
 
     def supplies_failed(self, money: int | None) -> None:
         self.supplies_blocked, self.supplies_money = True, money
+        self._save()
+
+    def restocked(self) -> None:
+        """Supplies bought: the purse pays for them again."""
+        if self.supplies_blocked or self.supplies_needed is not None:
+            self.supplies_blocked, self.supplies_money, self.supplies_needed = False, None, None
+            self._save()
 
     # What the purchase that could not be paid needed, when the merchant said (V186): a
     # level 1 mage out of water, too poor to buy more, walked 100 to 150 yards to Northshire's
@@ -116,6 +133,29 @@ class Context:
 
     def supplies_need(self, copper: int | None) -> None:
         self.supplies_needed = copper
+        self._save()
+
+    # What a session learns of the purse is true of the next: each new session forgot it,
+    # and the level 4 mage's first act every session was its hearthstone and a walk to a
+    # smith it still could not pay, 45 copper against broken gear (26 September, V206).
+    PURSE = ("repair_blocked", "repair_money", "supplies_blocked", "supplies_money",
+             "supplies_needed")
+
+    def purse(self) -> dict:
+        return {name: getattr(self, name) for name in self.PURSE}
+
+    def restore_purse(self, raw: dict) -> None:
+        for name in self.PURSE:
+            value = raw.get(name)
+            if name.endswith("blocked"):
+                setattr(self, name, value is True)
+            else:
+                setattr(self, name, value if isinstance(value, int) and not isinstance(value, bool)
+                        else None)
+
+    def _save(self) -> None:
+        if self.saved is not None:
+            self.saved()
 
     # A merchant out of reach (the walk or the talk timed out) is not walked to again on
     # this step, as a trainer is not (V175): Goldshire's innkeeper, upstairs of whom the

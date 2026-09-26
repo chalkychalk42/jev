@@ -368,6 +368,7 @@ def _live(args, graph) -> int:
                         gear_memory=path.with_name(path.stem + ".equipped.json"),
                         merchant_memory=ROOT / "var" / "merchant-memory.json",
                         home_memory=path.with_name(path.stem + ".home.json"),
+                        purse_memory=path.with_name(path.stem + ".purse.json"),
                         taxi_memory=path.with_name(path.stem + ".taxi.json"))
         if recorder is None:
             recorder = Recorder(root=args.runs_dir)

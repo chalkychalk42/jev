@@ -55,6 +55,40 @@ def test_body_buys_exact_empty_profile_supplies_at_nearest_matching_generated_sh
     assert [(s.role, s.item_id) for s in calls[0]["supplies"]] == [("drink", 159)]
 
 
+@pytest.mark.parametrize(("walk", "visited"), [(675.0, False), (200.0, True)])
+def test_food_is_not_walked_for_from_far_off(walk, visited, monkeypatch):
+    """V205: no Darnassian Bleu sold in Northshire, and the mage's restock walked for
+    Goldshire's barkeep, 675 yards through the Defias road (26 September)."""
+    b = body()
+    b.client.read = lambda: {"vitals.hp": 1, "char.class_id": 2, "char.race_id": 1}
+    b.arm = Armed(Decision(goal="supplies", intent=Intent.SERVICE,
+                           skill="BUY_AMMO_REAGENT_FOOD", abort_if=["dead"],
+                           why="empty supplies", confidence=1), ArmedBy.POLICY, 0,
+                  "guide", "d", "quest")
+    vendors = (Merchant(465, "Barkeep", 0, (60, 60, 0), frozenset({2070})),)
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    b.client.plan_to = lambda world: SimpleNamespace(usable=True, points=[(0, 0, 0)] * 2,
+                                                     length_yards=lambda: walk)
+    visit = Mock(return_value=Interacted.VENDOR)
+    b.interact = SimpleNamespace(open_on=visit)
+    class FakeVendor:
+        detail = "observed service"
+        def equip_bags(self, bags, **kw):
+            return 0
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
+            self.open_shop = open_shop
+        def run(self, **kwargs):
+            assert self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    state = seen().model_copy(update={"bags": Bags(food_id=2070, food_count=0)})
+    result = b.execute(b.arm, state, lambda: None)
+    assert visit.called is visited
+    assert (result.code == "too_far") is not visited
+
+
 def test_body_does_not_bind_a_zero_count_to_another_food_identity(monkeypatch):
     b = body()
     b.client.read = lambda: {"vitals.hp": 1, "char.class_id": 2, "char.race_id": 1}
