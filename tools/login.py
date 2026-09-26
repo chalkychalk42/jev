@@ -4,7 +4,9 @@
     /mnt/c/forever-win/Scripts/python.exe tools/login.py
 
 Reads `JEV_WOW_ACCOUNT` and `JEV_WOW_PASSWORD` from the environment or from `.env`, which
-is gitignored. Nothing is printed that would reveal either.
+is gitignored, by the one reader the session's reconnect and `tools/character.py` use
+(`jev.clients.session.credentials`: quotes stripped, the environment first). Nothing is
+printed that would reveal either.
 
 Success is the radio strip painting. A login that "worked" without a character in the
 world is not a login, and this says so rather than exiting zero.
@@ -28,19 +30,6 @@ from jev.clients.session import Session, credentials  # noqa: E402
 from jev.perceive import radio_frame  # noqa: E402
 
 
-def load_dotenv(path: pathlib.Path) -> dict[str, str]:
-    out: dict[str, str] = {}
-    if not path.exists():
-        return out
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        out[key.strip()] = value.strip()
-    return out
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--timeout", type=float, default=180.0)
@@ -50,8 +39,7 @@ def main() -> int:
         print("run this with Windows Python")
         return 2
 
-    env = {**load_dotenv(ROOT / ".env")}
-    creds = credentials(env) or credentials()
+    creds = credentials(path=ROOT / ".env")
     if creds is None:
         print("set JEV_WOW_ACCOUNT and JEV_WOW_PASSWORD in .env")
         return 2
