@@ -8,7 +8,14 @@ from unittest.mock import Mock
 import pytest
 from test_fight import _Hid, _Targeting
 
-from jev.clients.interact import INTERACT_LOOKS, MAX_CANDIDATES, Interact, Result
+from jev.clients.interact import (
+    INTERACT_LOOKS,
+    MAX_CANDIDATES,
+    SETTLE_S,
+    SETTLE_TRIES,
+    Interact,
+    Result,
+)
 from jev.clients.targeting import ClickCode, ClickResult, PaintCode, PaintResult
 from jev.guide.coords import ZoneBounds
 from jev.perceive.radio_frame import name_id
@@ -132,19 +139,37 @@ def test_unconfirmed_selection_paint_prevents_body_action(paint_code):
     assert inter.hid.clicks == [(996, 422, False)]
 
 
-@pytest.mark.parametrize("action_code, expected", [
-    (ClickCode.NOT_VISIBLE, Result.NOT_VISIBLE), (ClickCode.STALE, Result.NOT_VISIBLE),
-    (ClickCode.BLIND, Result.BLIND), (ClickCode.REFUSED, Result.REFUSED),
-    (ClickCode.NO_TARGET, Result.NO_TARGET), (ClickCode.WRONG_TARGET, Result.NO_TARGET),
-    (ClickCode.INTERRUPTED, Result.INTERRUPTED),
+@pytest.mark.parametrize("action_code, expected, aims", [
+    (ClickCode.NOT_VISIBLE, Result.NOT_VISIBLE, 1 + SETTLE_TRIES),
+    (ClickCode.STALE, Result.NOT_VISIBLE, 1 + SETTLE_TRIES),
+    (ClickCode.BLIND, Result.BLIND, 1), (ClickCode.REFUSED, Result.REFUSED, 1),
+    (ClickCode.NO_TARGET, Result.NO_TARGET, 1), (ClickCode.WRONG_TARGET, Result.NO_TARGET, 1),
+    (ClickCode.INTERRUPTED, Result.INTERRUPTED, 1),
 ])
-def test_targeting_refusal_stops_local_interaction_without_another_aim(action_code, expected):
+def test_targeting_refusal_stops_local_interaction_without_another_selection(
+        action_code, expected, aims):
+    """A refusal is final for the selection; only a body point that would not hold still
+    is aimed at again, after a pause (`SETTLE_S`)."""
     inter = _interact(values=SELECTED)
     inter.targeting.action = ClickResult(action_code, None, "unconfirmed body point")
     inter._candidates = lambda: [PLATE, PLATE]
     assert inter.open_on("Supplier", node_map=(0.5, 0.5)) is expected
     assert inter.hid.clicks == [(996, 422, False)]
-    assert len(inter.targeting.requests) == 1
+    assert len(inter.targeting.requests) == aims
+
+
+def test_a_body_point_that_would_not_hold_still_is_aimed_at_again_once_the_view_settles(
+        monkeypatch):
+    """The mage's check: walking up to Khelden Bremen raised the subzone's title across his
+    plate, three proposals went stale, and the training failed with him selected."""
+    pauses = []
+    monkeypatch.setattr("jev.clients.interact.time.sleep", pauses.append)
+    inter = _interact(values={**SELECTED, "ui.trainer": True})
+    answers = [ClickResult(ClickCode.STALE, (1596, 496), "point no longer has current geometry", 3),
+               ClickResult(ClickCode.CLICKED, (1620, 540), "delivered", 1)]
+    inter.targeting.click_selected = lambda **kw: answers.pop(0)
+    assert inter._try(PLATE, name_id("Supplier")) is Result.TRAINER
+    assert SETTLE_S in pauses and not answers
 
 
 @pytest.mark.parametrize("field, expected", [

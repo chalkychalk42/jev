@@ -31,6 +31,14 @@ MAX_CANDIDATES = 3
 # of view, selected and plateless, and the hand-in failed twice (run 20260924T033806-a3254d).
 INTERACT_LOOKS = 4
 QUARTER_TURN_S = math.radians(90.0) / TURN_RATE_SEED
+# A unit selected and proved to be the one wanted whose body point will not hold still is
+# waited for, not given up on: this long between tries, this many more tries. Walking up the
+# Abbey's stairs to Khelden Bremen raised the subzone's title, "Northshire Abbey" in a
+# nameplate's green, across his plate, and three proposals went stale as the plate
+# finder's geometry jumped with it (the mage's check, 26 September). The title fades in a
+# few seconds.
+SETTLE_S = 2.0
+SETTLE_TRIES = 2
 
 # How close the character has to be for an NPC to talk, and therefore what "arrived" means
 # for a node holding a unit.
@@ -202,8 +210,7 @@ class Interact:
         if painted != wanted:
             return None
 
-        action = self._targeting().click_selected(kind="living", expected_name_id=wanted,
-                                                   plate=plate)
+        action = self._click_body(wanted, plate)
         self.detail, self.clicked = action.detail, action.point
         self.sighting = action.proposal if isinstance(action.proposal, Sighting) else None
         event("interact.click", code=action.code.value,
@@ -215,6 +222,19 @@ class Interact:
                     ClickCode.WRONG_TARGET: Result.NO_TARGET}.get(action.code, Result.NOT_VISIBLE)
         time.sleep(0.9)
         return self._window_open() or Result.NO_WINDOW
+
+    def _click_body(self, wanted: int, plate: Plate):
+        """Right-click the selected unit's body, waiting out a view that will not hold
+        still (`SETTLE_S`). Any other refusal is final, as before."""
+        for attempt in range(1 + SETTLE_TRIES):
+            if attempt:
+                event("interact.settle", data={"attempt": attempt, "seconds": SETTLE_S})
+                time.sleep(SETTLE_S)
+            action = self._targeting().click_selected(kind="living", expected_name_id=wanted,
+                                                       plate=plate)
+            if action.delivered or action.code not in (ClickCode.STALE, ClickCode.NOT_VISIBLE):
+                return action
+        return action
 
     # -- pieces --------------------------------------------------------------
 
