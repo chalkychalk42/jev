@@ -88,3 +88,43 @@ def test_a_far_wanderer_carries_its_reach(tmp_path, monkeypatch):
     body = (10.0, 0.0)
     got_up = reclaim_spot(body, (35.0, 0.0), [bear], 25.0)
     assert math.dist(got_up, (0.0, 0.0)) >= 34.0, "the far side of the body from it"
+
+
+def test_a_spawn_whose_creature_is_drawn_from_a_list_is_indexed():
+    """V258: all 103 murloc and 97 Riverpaw spawn points in Elwynn draw their creature from a
+    list as they spawn (`world_creature.id` 0), and an index without them saw none of the
+    camps that killed the level 9 mage 9 times of 13 (sessions 222-228)."""
+    import sqlite3
+
+    from gen_hostile_spawns import generate
+
+    db = sqlite3.connect(":memory:")
+    db.executescript("""
+        create table dbc_FactionTemplate (id, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13);
+        create table dbc_Faction (id, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13,
+                                  c14, c15, c16, c17);
+        create table world_creature_template (Entry, Name, MinLevel, MaxLevel, Faction, UnitFlags);
+        create table world_creature (guid, id, map, position_x, position_y, position_z,
+                                     spawndist, MovementType);
+        create table world_creature_spawn_entry (guid, entry);
+        create table world_spawn_group_spawn (Id, Guid);
+        create table world_spawn_group_entry (Id, Entry);
+        create table world_spawn_group (Id, Type);
+        insert into dbc_FactionTemplate values (18, 19, 1, 8, 0, 1, 0, 0, 0, 0, 19, 0, 0, 0);
+        insert into dbc_FactionTemplate values (7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        insert into dbc_Faction values (19, 4294967295, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                                        0, 0, 0, 0);
+        insert into world_creature_template values (285, 'Murloc', 9, 10, 18, 0);
+        insert into world_creature_template values (732, 'Murloc Lurker', 10, 11, 18, 0);
+        insert into world_creature_template values (721, 'Rabbit', 1, 1, 7, 0);
+        insert into world_creature values (1, 0, 0, '-9500.5', '100.0', '40.0', 5.0, 1);
+        insert into world_creature values (2, 721, 0, '-9510.0', '110.0', '40.0', 0.0, 0);
+        insert into world_creature values (3, 0, 0, '-9520.0', '120.0', '40.0', 0.0, 0);
+        insert into world_creature_spawn_entry values (1, 285);
+        insert into world_creature_spawn_entry values (1, 732);
+        insert into world_spawn_group_spawn values (7, 3);
+        insert into world_spawn_group_entry values (7, 721);
+        insert into world_spawn_group values (7, 0);
+    """)
+    rows = generate(db, maps=(0,))["maps"]["0"]
+    assert rows == [[-9500.5, 100.0, 40.0, 9, 11, 3, 5.0]], "the drawn murloc; no rabbits"

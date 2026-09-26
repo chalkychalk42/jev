@@ -86,29 +86,53 @@ def hostile_sides(template: tuple | None, factions: dict | None = None) -> int:
     return sides
 
 
+# Spawns whose creature is drawn from a list as it spawns (`world_creature.id` is 0): the
+# entries each can be, as `jev.guide.generate.WorldDB` reads them. All 103 murloc and 97
+# Riverpaw spawn points in Elwynn are such, and an index without them saw none of the camps
+# that killed the level 9 mage 9 times of 13 (sessions 222-228, V258).
+RANDOM_CREATURES = (
+    "select guid, entry from world_creature_spawn_entry "
+    "union select s.Guid, e.Entry from world_spawn_group_spawn s "
+    "join world_spawn_group_entry e on e.Id = s.Id "
+    "join world_spawn_group g on g.Id = s.Id where g.Type = 0")
+
+
 def generate(db: sqlite3.Connection, maps=MAPS, max_level: int = MAX_LEVEL) -> dict:
     templates = {row[0]: row[1:] for row in db.execute(
         "select id, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13 "
         "from dbc_FactionTemplate")}
     factions = {row[0]: row[1:] for row in db.execute(
         "select id, " + ", ".join(f"c{i}" for i in range(1, 18)) + " from dbc_Faction")}
+    creatures = {entry: (low, high, faction, flags) for entry, low, high, faction, flags in db.execute(
+        "select Entry, MinLevel, MaxLevel, Faction, UnitFlags from world_creature_template")}
+    drawn: dict[int, list[int]] = {}
+    for guid, entry in db.execute(RANDOM_CREATURES):
+        drawn.setdefault(guid, []).append(entry)
     out: dict[str, list] = {str(m): [] for m in maps}
     rows = db.execute(
-        "select c.map, c.position_x, c.position_y, c.position_z, c.spawndist, c.MovementType, "
-        "t.MinLevel, t.MaxLevel, t.Faction, t.UnitFlags from world_creature c "
-        "join world_creature_template t on t.Entry = c.id "
-        f"where c.map in ({','.join('?' * len(maps))}) and t.MaxLevel <= ? "
-        "order by c.map, c.guid", (*maps, max_level))
-    for map_id, x, y, z, spawndist, movement, low, high, faction, flags in rows:
-        if (flags or 0) & (UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_NOT_SELECTABLE):
-            continue
-        sides = hostile_sides(templates.get(faction), factions)
+        "select c.guid, c.id, c.map, c.position_x, c.position_y, c.position_z, c.spawndist, "
+        "c.MovementType from world_creature c "
+        f"where c.map in ({','.join('?' * len(maps))}) order by c.map, c.guid", maps)
+    for guid, entry, map_id, x, y, z, spawndist, movement in rows:
+        sides, levels = 0, []
+        for kind in ([entry] if entry else drawn.get(guid, [])):
+            facts = creatures.get(kind)
+            if facts is None:
+                continue
+            low, high, faction, flags = facts
+            if high > max_level or (flags or 0) & (UNIT_FLAG_NON_ATTACKABLE
+                                                   | UNIT_FLAG_NOT_SELECTABLE):
+                continue
+            hostile = hostile_sides(templates.get(faction), factions)
+            if hostile:
+                sides |= hostile
+                levels += [int(low), int(high)]
         if not sides:
             continue
         wander = (float(spawndist or 0.0) if movement == MOVE_RANDOM
                   else PATROL_WANDER if movement == MOVE_WAYPOINT else 0.0)
         out[str(map_id)].append([round(float(x), 1), round(float(y), 1), round(float(z), 1),
-                                 int(low), int(high), sides, round(wander, 1)])
+                                 min(levels), max(levels), sides, round(wander, 1)])
     return {"format": 1, "max_level": max_level, "maps": out}
 
 

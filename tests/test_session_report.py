@@ -36,3 +36,15 @@ def test_the_report_reads_the_loops_log_as_the_status_screen_does(tmp_path, monk
     assert session_report._sessions_from_loop(6) == {6: 0, 7: None}
     assert session_report._sessions_from_loop(7) == {7: None}
     assert session_report.session_log is keep_status.session_log
+
+
+def test_a_session_whose_start_is_stamped_still_names_its_run(tmp_path):
+    """The `startup:` stamps came before "recording to" from session 225, and a window of 12
+    lines lost the run of every session since (review, 27 September)."""
+    log = tmp_path / "live-226.log"
+    stamps = [f"startup: phase {i} at 00:0{i}:00" for i in range(8)]
+    lines = ["screenshots every 1s to x", *stamps, "character 73ce06a8: playhead x",
+             "danger: 1 cells learned", "route memory: 4 blocked spots", "choices: 1 visits",
+             "guide g: outgrown", r"recording to \\wsl.localhost\U\home\ash\ForeverV2\runs\20260927T001651-7d3404"]
+    log.write_text("\n".join(lines) + "\n")
+    assert session_report._run_of(log) == "20260927T001651-7d3404"

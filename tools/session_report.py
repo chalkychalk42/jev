@@ -83,7 +83,9 @@ def _sessions_from_loop(since: int) -> dict[int, int | None]:
 
 
 def _run_of(log: Path) -> str | None:
-    for line in log.read_text(encoding="utf-8", errors="replace").splitlines()[:12]:
+    # Among the first lines: the session's `startup:` stamps came before it from session 225,
+    # and a window of 12 lost the run of every session since (review, 27 September).
+    for line in log.read_text(encoding="utf-8", errors="replace").splitlines()[:40]:
         match = re.search(r"recording to .*[\\/]runs[\\/]([0-9T]+-[0-9a-f]+)", line)
         if match:
             return match.group(1)
