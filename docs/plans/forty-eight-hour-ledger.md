@@ -130,6 +130,10 @@ Now
     on its first leg inside Echo Ridge Mine and failed over, then was handed in; level 5.05.
     One death: a Defias Cutpurse behind the mage, between it and the camera, and Fireball
     "not in front" 40 times at full mana (V208).
+  - Sessions 166-168: 166 made 2,373 XP (9,328/h, the run's best) on three quest steps; 167
+    died twice in a Defias pack at the Furlbrow farm (The Forgotten Heirloom), 581 XP; 168 died
+    twice to a level 19 Dust Devil north of Sentinel Hill, the first time fighting a Young
+    Goretusk it had chosen instead (V209), and got up at the body beside it. Testvvi 14.9.
   - Session 148: started a ghost; two deaths to Fleshrippers, one 23 s after getting up at
     half health, one under resurrection sickness after the Spirit Healer.
   - 02:06-02:30, the mage's check (Itheamar, `captures/live-mage-check-1.log`): A Threat
@@ -311,6 +315,7 @@ Trials
 | V206 the purse's lessons kept between sessions | with V205 | no session-start repair walk the purse cannot pay | `character-KEY.purse.json` written; no `too_poor` twice at one purse | | |
 | V207 blind melee steps in on "too far away" | session 164 | no fight lost standing out of reach of a flyer (session 163's death) | an `approach.request` with mode `blind_melee` | | |
 | V208 a cast "not in front" with the plate centred turns round | after the mage's sixth visit | no caster death at full mana with the attacker behind | `engage.realign` then `engage.turn_round` in a caster's fight | | |
+| V209 self-defence with no name wanted takes only attackers | session 169 | no death fighting a bystander while attacked from behind | `selection.expected` with `attackers_only` true and no second pass in self-defence | | |
 
 Issues
 ------
@@ -320,5 +325,6 @@ Issues
 | 25 Sep 12:00 | The adaptive canary-student runtime test failed once in 2 full runs (planning agent) | Not seen in 3 focused runs or 4 full runs since | Watching; remove it with the retired paths (§11) |
 | 26 Sep 04:35 | `test_grade_run.py::test_new_grades_are_not_hidden_by_an_older_parquet_copy` failed once in a full run under load; 5 of 5 alone passed | `dataset.py` compares `st_mtime_ns` of the parquet copy and the JSONL: two writes inside one timestamp tie | Flaky; goes with the decision learner (§11 step 3) |
 | 26 Sep 05:12 | `test_play_learning_integration.py::test_actual_controller_corpus_trains_shadows_hands_over_and_rolls_back` failed once in a full run under load; 2 of 2 alone passed | The motor learner's canary and handover, timing-sensitive | Flaky; goes with the motor handover and canary (§11 step 4) |
+| 26 Sep 09:55 | A hopeless fight is fought where it stands: a level 19 Dust Devil north of Sentinel Hill killed the 14.9 paladin twice in 90 s (session 168), 150 yards from the hill's guards | Candidate: at four levels down with the guards near, run to them (Divine Protection first). V209 now lets V197 see the killer's level | Open |
 | 26 Sep 08:30 | A loot objective's hunt holds too few spawns for its kills: Goretusk Liver Pie (8 livers at 33%, about 24 kills) gets the 8 Goretusks within 150 yards of 99 in Westfall; session 164 made a liver in 12 minutes, 116 of 136 looks with no plate | Sessions 163-164 still made 5,000+ XP/h on what else was there. Sizing the cluster by kills (count / chance) moves the centre and renames the hunt to Young Goretusk (12-13, less XP): the draft (`/tmp/w48/v208-generator.patch`) is shelved. Better: keep the name, add that creature's spawns out to 300 yards | Open; before the mage reaches Westfall |
 | 26 Sep 07:30 | `test_play_runtime.py::test_real_supervisor_reaches_teacher_escape_and_confirms_modal_closed[True]` failed once in a full run under load (two teacher prompts 24 s apart, one expected); 2 of 2 alone and the next full run passed | The teacher escape's timing under load | Flaky; goes with the tutor paths (§11) |
