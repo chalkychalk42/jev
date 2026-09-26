@@ -352,6 +352,8 @@ Trials
 | V233 a ghost gets up out of the camp's reach | session 202 | no death within 30 s of getting up at the body (2 of 4 in sessions 195-197) | `getting up out of the camp's reach` | | |
 | V234 a quest complete in the log is handed in on the way | session 203 | Kobold Candles and Wolves Across the Border handed in when the mage passes William Pestle or Eagan Peltskinner | a detour to a hand-in not in `retried` | | |
 | V235 a unit not found on arrival, on a floor above, is walked up to again | session 204 | trainer visits to Zaldimar and Khelden that end under them fall | `was not found here: walking up to the floor above again` | | |
+| V236 the walk back ends clear of the door, or plans again at it | session 206 | no `backing out ended indoors` without a plan tried after it | `backing out ended indoors (...; at the door, planning again)` | | |
+| V237 a trainer's spells bought by value (schema 18) | decoder session 207; addon 19:19 before session 208 | the mage's next visits buy Frostbolt, Frostbolt 2, Frost Nova before conjures and never Polymorph | a `trainer.row` census read at a trainer, and the rows bought in the value order | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
