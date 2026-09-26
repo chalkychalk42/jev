@@ -293,6 +293,8 @@ Blocks
 | 1 (sessions 134-143, 1.65 h played) | 0-2 | Testvvi | 13.0-13.45 | 2,682 | 4.25 | 52.8 | 2.4 guide steps/h | 0 | V175-V177 at T-0; V178-V181 from 142, V182 from 143 | XP/h above the nine-hour 2,108. Deaths high: two at the Taskmasters (V179), one standing through a restart (V182), two on the road in fights with more than one attacker (next) |
 | 2 (sessions 144-150, about 1.8 h played) | 2-4 | Testvvi | 13.45-13.78 | 2,466 (145-150) | 10.1 | 11.4 | 0 guide steps/h | 0 | V178-V189 | Deaths: Westfall's units two to five levels up (Brutes, Bandits, Dust Devils), and faults fixed as found (V182-V184, V188, V189). Stuck events down about fivefold (V178). Hour-4 checkpoint: deaths missed |
 | 3 (sessions 151-159, 1.83 h played) | 4-7 | Testvvi | 13.78-14.23 | 2,768 (3,973 in 151-155) | 2.7 | 56 (41 of the 103 in 156-159, wedged) | 0 guide steps/h | 0 | V188-V197 | 151-155 the best XP/h of the run with deaths at 2.4/h; 156-159 lost to the Sentinel Hill inn: a repair walk's hearth, the door missed (V198), the corner by the stove and the crate behind the inn |
+| 4 (sessions 160-172, 3.04 h played) | 7-12 | Testvvi | 14.23-15.25 | 4,234 | 2.6 | 30.3 | - | 0 | V198-V210 | The run's best block: quest hand-ins at 9,000+ XP/h in 166 and 172; the mage's worst faults found on its visits (V204, V208) |
+| 5 (sessions 173-188, 3.53 h played) | 12-15 | Testvvi | 15.25-15.87 | 2,365 | 2.8 | 22.9 | - | 0 | V211-V217 | Lost to three things: the Smuggler's facing loop (173-175), V212's crash (176-177), and Jangolode's Smugglers with a bags-full loop (184-187; V217). 181 and 183 made 4,713 and 5,786 |
 
 Trials
 ------
@@ -335,6 +337,9 @@ Trials
 | V213 a ghost that does not get up short of the body goes closer | session 179 | no corpse run repeated "still a ghost" | session 179: still a ghost at 25 yards, then alive at 12.5 (11:57) | | |
 | V214 a step's entry level outlives the session | session 181 | a failover grind ends a level above where it began, whatever the sessions between | the playhead's `entry_level` (15 on Poor Old Blanchy, session 182); session 181 left the rib, 4,713 XP/h, no death | | |
 | V215 a restock keeps what the trainer is owed | session 183 (paladin); the mage from 14:15 | the mage trains at each level it can pay for; no water bought while Conjure Water is untrained and in reach | `TRAIN_CLASS: done` for the mage before its next `BUY_AMMO_REAGENT_FOOD` | | |
+| V216 a person is three inputs inside three seconds | session 184 | no false pause; a person still pauses the run | strays logged "1 of 3" and never confirmed (session 184: one) | | |
+| V217 full bags a merchant cannot help do not stop a hunt | session 188 | no run of `GRIND_UNTIL: bags_full` (583 in session 186, all of 187) | session 188: `no_junk`, then the hunt walked and fought | | |
+| V218 the walk out of reach does not stop for a meal | session 190 | no "not fit to travel: in combat" during a pause | a leg started in combat under the pause at low health | | |
 
 Issues
 ------
