@@ -266,6 +266,10 @@ HEAL_GIVE_UP = 2
 # was pushed back to nothing (run 20260924T122236-108178).
 SAVE_HEAL_WINDOW_S = 3.5
 SAVE_HEAL_BELOW = 0.8
+# A target below this health that has turned from the character (it no longer attacks it)
+# while still in melee is running, and a runner comes back with its camp: it is stunned
+# where it stands (V188).
+RUNNER_HP = 0.3
 # How long a fight begun below the heal's line spends on its save and heal before it
 # looks for the attacker, and how long with nothing pressable before it gives that up.
 HEAL_FIRST_S = 8.0
@@ -1641,6 +1645,19 @@ class Fight:
             return
         if survival_only:
             return
+
+        # 1b. Stop a runner. Gnolls and Defias run at about a fifth of their health and come
+        #     back with their camp: two of session 149's deaths were among four and five
+        #     Riverpaw gnolls, after "Riverpaw Herbalist attempts to run away in fear!".
+        target_hp = values.get("target.hp")
+        if (in_combat and isinstance(target_hp, (int, float)) and 0 < target_hp < RUNNER_HP
+                and values.get("target.attacking_me") is False
+                and values.get("target.in_melee") is True):
+            for stun in profile.by_role(Role.STUN):
+                if pressable(stun) and self._has_mana_for(stun, values):
+                    event("fight.runner", data={"target_hp": round(target_hp, 3)})
+                    self._press(stun)
+                    return
 
         # 2. Keep the buffs up, and only when one is actually lapsing: `bars.ready` says a
         #    seal is pressable on every single tick, so without the interval the

@@ -1787,6 +1787,23 @@ def test_divine_protection_goes_up_before_the_heal_it_protects():
     assert hid2.taps[-1] == "3" and f2._pending_heal is not None
 
 
+def test_a_target_turning_to_run_at_low_health_is_stunned_where_it_stands():
+    """V188: a runner comes back with its camp. Session 149 died among four and five
+    Riverpaw gnolls after "Riverpaw Herbalist attempts to run away in fear!"."""
+    hid = _Hid()
+    f, running = _trained(hid, **{"vitals.hp": 0.8, "vitals.combat": True, "target.hp": 0.15,
+                                  "target.attacking_me": False, "target.in_melee": True})
+    f._rotate(running)
+    assert hid.taps == ["8"], "the stun, not the next swing"
+    # Still fighting back, out of reach, or not low: not a runner the stun can stop.
+    for values in ({**running, "target.attacking_me": True}, {**running, "target.in_melee": False},
+                   {**running, "target.hp": 0.6}):
+        other = _Hid()
+        g, _ = _trained(other)
+        g._rotate(values)
+        assert "8" not in other.taps
+
+
 def test_the_last_resort_is_for_a_fight_about_to_be_lost():
     hid = _Hid()
     f, dying = _trained(hid, **{"vitals.hp": 0.1, "vitals.combat": True})
