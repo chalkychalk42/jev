@@ -612,16 +612,18 @@ FIELDS: tuple[Field, ...] = (
     #
     # The window lists every service the trainer has for the class, learnable or not:
     # Zaldimar Wefhellt in Goldshire teaches a mage 193 spells, so a level 8 mage sees
-    # close to two hundred rows, most of them red. So every other paint describes a header
+    # close to two hundred rows, most of them red. So two paints in three describe a header
     # or a service learnable now, in turn, and `short` says how many of those there are: a
-    # reader has them all within a second or two, where the whole list takes twenty.
+    # reader has them all within a second or two, where the whole list takes a minute.
+    # Which paints, and which row each describes, follow the golden ratio's fractions, so
+    # no steady reading rate sees only some of the rows (session 56's bar census did).
     # Nothing here selects, scrolls or buys.
     Field("trainer.revision", 8, Kind.UINT, "return TRAINER_CENSUS('revision')",
           "changes when the trainer's list does (TRAINER_UPDATE); a census across it is void"),
     Field("trainer.total", 8, Kind.UINT, "return TRAINER_CENSUS('total')",
           "rows in the open trainer's list, headers included, as the stock window lists them"),
     Field("trainer.short", 8, Kind.UINT, "return TRAINER_CENSUS('short')",
-          "of those, the headers and the services learnable now: every other paint's rows"),
+          "of those, the headers and the services learnable now: two paints in three's rows"),
     Field("trainer.selected", 8, Kind.UINT, "return TRAINER_CENSUS('selected')",
           "the row the stock window has selected, which its Train button buys"),
     Field("trainer.top", 8, Kind.UINT, "return TRAINER_CENSUS('top')",

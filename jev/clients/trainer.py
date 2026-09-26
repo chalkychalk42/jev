@@ -50,10 +50,12 @@ MAX_PURCHASES = 40
 
 # The first schema that paints the trainer's list.
 LIST_SCHEMA = 18
-# The rows learnable now and the headers come every other paint: seven rows for the level 8
-# mage, a second and a half at ten paints a second when every paint is read.
-LIST_S = 12.0
-ROW_S = 6.0
+# The rows learnable now and the headers come two paints in three, each row at the golden
+# ratio's turn (Helpers.lua): seven rows for the level 8 mage, all seen in about a second
+# when every paint is read. Worked out for a reader landing on one paint in two, three or
+# four, from any start: twelve rows within 10.2 s, and a row seen again within 14.4 s.
+LIST_S = 20.0
+ROW_S = 15.0
 # From a row's click to the window showing it selected, with Train enabled for it.
 SELECT_S = 3.0
 # From a scroll click to the list showing other rows: the next paint, or two.

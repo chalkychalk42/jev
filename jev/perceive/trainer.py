@@ -5,8 +5,8 @@ As with the spellbook (`jev.perceive.spellbook`), a partial census is **unread**
 a list half seen can leave out the one spell worth buying, and a row number read under one
 list names another row once the list has changed (a purchase takes the bought row out of
 it). So the census is whole only when every row of the short cycle has been seen - the
-headers and the services learnable now, which the addon paints every other paint and
-counts in `trainer.short` - under one unchanged revision, row count and short count. A
+headers and the services learnable now, which two paints in three describe and
+`trainer.short` counts - under one unchanged revision, row count and short count. A
 change to any of the three throws the half-built census away.
 """
 

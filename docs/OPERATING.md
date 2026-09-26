@@ -125,9 +125,10 @@ at a session boundary with the loop held:
 
 The other order would leave every session in between blind: a decoder that does not know the
 new schema refuses the strip, as a checksum or schema fault. To go back, put the backup
-(`captures/addon-backup/<time>-StatusStrip`) back as `Interface/AddOns/StatusStrip` and restart
-the client; the new decoder still reads the old strip. The grid kept in `var/radio-grid.json` (eleven rows) needs no change: the
-decoder reads the twelve-row strip on its position.
+(`captures/addon-backup/<time>-StatusStrip`) back as `Interface/AddOns/StatusStrip` and
+restart the client; the new decoder still reads the old strip. The grid kept in
+`var/radio-grid.json` (eleven rows) needs no change: the decoder reads the twelve-row strip
+on its position.
 
 ## When something is wrong
 

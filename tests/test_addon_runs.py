@@ -15,7 +15,9 @@ should still be able to run the suite.
 
 from __future__ import annotations
 
+import math
 import pathlib
+import re
 import shutil
 import subprocess
 
@@ -591,12 +593,37 @@ def _trainer(ticks: int, **state) -> dict:
                                       ticks=ticks))[:PAYLOAD_CELLS])
 
 
+# Which paint describes which row: Helpers.lua's two constants, read from it, and its rule.
+_HELPERS = (addon_build.SOURCE / "Helpers.lua").read_text(encoding="utf-8")
+GOLDEN = float(re.search(r"^local GOLDEN = ([0-9.]+)$", _HELPERS, re.MULTILINE).group(1))
+_SHARE = re.search(r"^local TRAINER_SHORT_SHARE = (\d+) / (\d+)$", _HELPERS, re.MULTILINE)
+SHORT_SHARE = int(_SHARE.group(1)) / int(_SHARE.group(2))
+FIXTURE_SHORT = (1, 3, 6, 7, 9, 11, 14)       # the three headers and four learnable now
+FIXTURE_ROWS = 16
+
+
+def _trainer_row(tick: int, short=FIXTURE_SHORT, total=FIXTURE_ROWS) -> tuple[str, int]:
+    """The cycle and the row paint `tick` describes: one fraction of the golden ratio's
+    multiples picks both, as `snapshotTrainer` does."""
+    f = (tick * GOLDEN) % 1
+    if f < SHORT_SHARE and short:
+        return "short", short[min(len(short), math.floor(f / SHORT_SHARE * len(short)) + 1) - 1]
+    if short:
+        f = (f - SHORT_SHARE) / (1 - SHORT_SHARE)
+    return "whole", min(total, math.floor(f * total) + 1)
+
+
+def _tick(row: int, cycle: str = "short") -> int:
+    """The first paint describing `row` in `cycle`."""
+    return next(t for t in range(1, 500) if _trainer_row(t) == (cycle, row))
+
+
 def test_the_trainer_list_names_each_row_its_rank_type_price_and_button():
     """The fixture is a level 8 mage's list: 16 rows, of which the three headers and the
     four services learnable now make the short cycle (rows 1, 3, 6, 7, 9, 11, 14)."""
     from jev.perceive.radio_frame import name_id
 
-    missiles = _trainer(4)                              # the short cycle's second row
+    missiles = _trainer(_tick(3))                       # Arcane Missiles, learnable now
     assert (missiles["trainer.total"], missiles["trainer.short"]) == (16, 7)
     assert missiles["trainer.index"] == 3
     assert missiles["trainer.name_id"] == name_id("Arcane Missiles")
@@ -607,44 +634,52 @@ def test_the_trainer_list_names_each_row_its_rank_type_price_and_button():
     assert missiles["trainer.y"] == pytest.approx(1 - 656 / 900, abs=0.001)
     assert missiles["trainer.go_x"] is None
     assert missiles["trainer.top"] == 1, "the list shows rows 1-11"
-    header = _trainer(1)                                # the whole list's first row
+    header = _trainer(_tick(1))                         # the Arcane header
     assert (header["trainer.index"], header["trainer.type"]) == (1, HEADER)
     assert header["trainer.name_id"] == name_id("Arcane") and header["trainer.cost"] is None
-    not_yet = _trainer(3)                               # the whole list's second row
+    not_yet = _trainer(_tick(2, "whole"))               # Arcane Explosion, not yet
     assert (not_yet["trainer.index"], not_yet["trainer.type"], not_yet["trainer.rank"]) == (
         2, UNAVAILABLE, 1)
-    slow_fall = _trainer(31)                            # row 16: no rank at all
+    slow_fall = _trainer(_tick(16, "whole"))            # row 16: no rank at all
     assert (slow_fall["trainer.index"], slow_fall["trainer.rank"]) == (16, 0)
 
 
-def test_every_other_paint_is_a_header_or_a_service_learnable_now():
-    """Most of a city trainer's list is red: the rows a buyer acts on come round in a
-    second or two, not the twenty the whole list takes."""
-    rows = [_trainer(tick)["trainer.index"] for tick in range(2, 16, 2)]
-    assert rows == [1, 3, 6, 7, 9, 11, 14]
-    assert [_trainer(tick)["trainer.index"] for tick in (1, 3, 5)] == [1, 2, 3]
+def test_two_paints_in_three_are_a_header_or_a_service_learnable_now():
+    """Most of the list is red: the rows a buyer acts on come round in a second or two. The
+    addon paints the rows the golden ratio's turn picks, and a reader landing on every
+    second, third or fourth paint, from any start, still sees each of them: session 56's
+    reader at a steady fraction of the paint rate saw the same few bar slots for minutes."""
+    assert [_trainer(t)["trainer.index"] for t in range(1, 16)] == [
+        _trainer_row(t)[1] for t in range(1, 16)]
+    schedule = [_trainer_row(t) for t in range(1, 400)]
+    assert sum(c == "short" for c, _ in schedule) in range(262, 270), "two in three"
+    for step in (1, 2, 3, 4):
+        for start in range(step):
+            seen = {row for cycle, row in schedule[start::step][:70 // step]
+                    if cycle == "short"}
+            assert seen == set(FIXTURE_SHORT), (step, start)
 
 
 def test_a_row_out_of_view_paints_the_scroll_button_toward_it():
-    frostbolt = _trainer(14)                            # row 14, below the eleven shown
+    frostbolt = _trainer(_tick(14))                     # row 14, below the eleven shown
     assert (frostbolt["trainer.index"], frostbolt["trainer.x"]) == (14, None)
     assert frostbolt["trainer.go_x"] == pytest.approx(340 / 1600, abs=0.001)
     assert frostbolt["trainer.go_y"] == pytest.approx(1 - 520 / 900, abs=0.001)
-    scrolled = _trainer(14, trainerOffset=5)            # rows 6-16 shown: row 14 is too
+    scrolled = _trainer(_tick(14), trainerOffset=5)     # rows 6-16 shown: row 14 is too
     assert scrolled["trainer.x"] == pytest.approx(168 / 1600, abs=0.001)
     assert scrolled["trainer.y"] == pytest.approx(1 - (688 - 16 * 8) / 900, abs=0.001)
     assert scrolled["trainer.go_x"] is None
     assert (frostbolt["trainer.top"], scrolled["trainer.top"]) == (1, 6)
-    above = _trainer(2, trainerOffset=5)                # row 1, above them
+    above = _trainer(_tick(1), trainerOffset=5)         # row 1, above them
     assert above["trainer.index"] == 1 and above["trainer.x"] is None
     assert above["trainer.top"] == 6
     assert above["trainer.go_y"] == pytest.approx(1 - 680 / 900, abs=0.001)
-    stuck = _trainer(2, trainerOffset=5, trainerUpDisabled=1)
+    stuck = _trainer(_tick(1), trainerOffset=5, trainerUpDisabled=1)
     assert stuck["trainer.go_x"] is None, "a disabled scroll button is no way to the row"
 
 
 def test_a_folded_header_and_the_selected_row_are_painted():
-    folded = _trainer(8, trainerFolded=7)               # the Fire header, folded shut
+    folded = _trainer(_tick(7), trainerFolded=7)        # the Fire header, folded shut
     assert (folded["trainer.index"], folded["trainer.type"]) == (7, FOLDED)
     assert _trainer(1, trainerSelected=9)["trainer.selected"] == 9
     assert _trainer(1)["trainer.selected"] is None

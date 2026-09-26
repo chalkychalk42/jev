@@ -100,8 +100,19 @@ def test_a_strip_without_the_trainer_list_presses_train_as_before():
 
 # --- schema 18: the list painted, bought by value (V237) ---------------------------------
 
+import math  # noqa: E402
+import re  # noqa: E402
+
 from jev.perceive.radio_frame import name_id  # noqa: E402
 from jev.world import training  # noqa: E402
+from tools.gen_addon_fields import SOURCE  # noqa: E402
+
+# Which row each paint describes: Helpers.lua's own constants (tests/test_addon_runs.py runs
+# the addon against the same rule).
+_HELPERS = (SOURCE / "Helpers.lua").read_text(encoding="utf-8")
+GOLDEN = float(re.search(r"^local GOLDEN = ([0-9.]+)$", _HELPERS, re.MULTILINE).group(1))
+_SHARE = re.search(r"^local TRAINER_SHORT_SHARE = (\d+) / (\d+)$", _HELPERS, re.MULTILINE)
+SHORT_SHARE = int(_SHARE.group(1)) / int(_SHARE.group(2))
 
 ZALDIMAR = next(t for t in training.trainers(8, 1, 0) if t.name == "Zaldimar Wefhellt")
 # The mage as it stood on 26 September: Arcane Intellect, Conjure Water, Conjure Food and
@@ -149,7 +160,7 @@ class TrainerWindow:
         self.money, self.level, self.learned = money, level, set(known)
         self.now, self.open, self.revision = 0.0, False, 0
         self.offset, self.selected = 0, None
-        self.tick = self.short_cursor = self.whole_cursor = 0
+        self.tick = 0
         self.clicks, self.keys, self.bought = [], [], []
         self.ignore_rows = False          # a click that lands and selects nothing
         self.shift_on_click = False       # the list rebuilt as a row is clicked
@@ -204,12 +215,15 @@ class TrainerWindow:
         rows = self.rows()
         short = [i for i, r in enumerate(rows, 1) if self.kind(r) in ("header", "available")]
         self.tick += 1
-        if self.tick % 2 == 0 and short:
-            self.short_cursor = self.short_cursor % len(short) + 1
-            index = short[self.short_cursor - 1]
+        # Helpers.lua's rule: one fraction of the golden ratio's multiples picks the cycle
+        # and the row in it.
+        f = (self.tick * GOLDEN) % 1
+        if f < SHORT_SHARE and short:
+            index = short[min(len(short), math.floor(f / SHORT_SHARE * len(short)) + 1) - 1]
         else:
-            self.whole_cursor = self.whole_cursor % len(rows) + 1
-            index = self.whole_cursor
+            if short:
+                f = (f - SHORT_SHARE) / (1 - SHORT_SHARE)
+            index = min(len(rows), math.floor(f * len(rows)) + 1)
         row, kind = rows[index - 1], self.kind(rows[index - 1])
         v.update({"trainer.revision": self.revision % 255, "trainer.total": len(rows),
                   "trainer.short": len(short), "trainer.selected": self.selected,
@@ -279,6 +293,28 @@ def test_the_mage_buys_frostbolt_then_fireball_rank_2_not_the_window_s_first_row
     assert (trained.bought, trained.spent, window.money) == (2, 200, 0)
     assert DOWN in window.clicks, "Frostbolt is below the eleven rows shown"
     assert window.keys == ["esc"]
+
+
+def test_a_reader_landing_on_one_paint_in_two_three_or_four_still_buys():
+    """Session 56's reader, at a steady fraction of the paint rate, saw the same few bar
+    slots for minutes. Painted in alternation, a reader on every fourth paint never saw
+    half of the six rows left after the first purchase, and the visit ended in a timeout."""
+    for step in (2, 3, 4):
+        for start in range(step):
+            window = TrainerWindow()
+            for _ in range(start):
+                window.read()
+
+            def read(window=window, step=step):
+                for _ in range(step - 1):
+                    window.read()
+                return window.read()
+
+            trained = TrainerDesk(window, read, window.visit, clock=lambda w=window: w.now,
+                                  sleep=window.sleep, trainer=ZALDIMAR, known=MAGE_KNOWN,
+                                  bar=MAGE_BAR)
+            assert trained.run() is Trained.DONE, (step, start, trained.detail)
+            assert window.bought == [116, 143], (step, start)
 
 
 def test_the_old_desk_would_have_bought_the_window_s_first_row():

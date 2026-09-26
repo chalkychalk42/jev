@@ -1031,10 +1031,17 @@ local function TAXI_CENSUS(key) return taxiSnapshot[key] end
 -- scrolling to it and pressing Train are clicks the body makes.
 --
 -- The window lists every service the trainer has for the class, learnable or not, so a
--- mage's list in Goldshire is close to two hundred rows. Every other paint describes a
+-- mage's list in Goldshire is close to two hundred rows. Two paints in three describe a
 -- header or a service learnable now, in turn, and `short` counts those: a reader has them
 -- all within a second or two. A header click folds its group away or opens it, so a
 -- folded one is its own type.
+--
+-- One fraction of the golden ratio's multiples picks both the cycle and the row in it: a
+-- turn of the circle by an irrational step, which a reader landing on every second, third
+-- or fourth paint sees as another such turn, passing through every row's share of it. A
+-- reader at a steady fraction of the paint rate saw the same few bar slots for minutes
+-- (session 56); with an alternation, or a cursor stepping row by row, one landing on
+-- every fourth paint would never see half of a short list of six.
 --
 -- The stock window (Blizzard_TrainerUI 2.4.3) shows eleven rows, ClassTrainerSkill1-11,
 -- and gives each the ID of the service it shows (ClassTrainerFrame_Update), so a row is
@@ -1045,8 +1052,10 @@ local TRAINER_TYPES = { header = 0, available = 1, unavailable = 2, used = 3 }
 local TRAINER_FOLDED = 4
 local TRAINER_ROWS = 11
 local TRAINER_SCROLL = "ClassTrainerListScrollFrameScrollBar"
+local GOLDEN = 0.6180339887498949
+local TRAINER_SHORT_SHARE = 2 / 3
 local trainerRevision = 0
-local trainerTick, trainerShort, trainerWhole = 0, 0, 0
+local trainerTick = 0
 local trainerSnapshot = {}
 
 local function TRAINER_OPEN()
@@ -1071,13 +1080,13 @@ local function snapshotTrainer()
     trainerSnapshot = snap
     if total < 1 then return end
     trainerTick = trainerTick + 1
+    local f = (trainerTick * GOLDEN) % 1
     local i
-    if trainerTick % 2 == 0 and #short > 0 then
-        trainerShort = trainerShort % #short + 1
-        i = short[trainerShort]
+    if f < TRAINER_SHORT_SHARE and #short > 0 then
+        i = short[math.min(#short, math.floor(f / TRAINER_SHORT_SHARE * #short) + 1)]
     else
-        trainerWhole = trainerWhole % total + 1
-        i = trainerWhole
+        if #short > 0 then f = (f - TRAINER_SHORT_SHARE) / (1 - TRAINER_SHORT_SHARE) end
+        i = math.min(total, math.floor(f * total) + 1)
     end
     snap.index = i
     local name, rank, kind, expanded = GetTrainerServiceInfo(i)
