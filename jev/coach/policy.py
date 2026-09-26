@@ -84,7 +84,17 @@ class Context:
     def repair_failed(self, money: int | None) -> None:
         self.repair_blocked, self.repair_money = True, money
 
-    def can_repair(self, money: int | None) -> bool:
+    # A repairer out of reach is not walked to again on this step, as a merchant for
+    # supplies is not (V175, V185): the walk out of Sentinel Hill's inn to William MacGregor
+    # stuck in its doorway, and one failed repair stopped session 144.
+    repair_unreachable_step: str | None = None
+
+    def repair_unreachable(self, step_id: str | None) -> None:
+        self.repair_unreachable_step = step_id
+
+    def can_repair(self, money: int | None, step_id: str | None = None) -> bool:
+        if step_id is not None and step_id == self.repair_unreachable_step:
+            return False
         # An unknown purse cannot establish that an unaffordable repair became payable.
         return not self.repair_blocked or (
             money is not None and self.repair_money is not None and money > self.repair_money
@@ -248,7 +258,7 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
     if state.vitals.combat is not False:
         return None
     b = state.bags
-    can_repair = context is None or context.can_repair(b.money_copper)
+    can_repair = context is None or context.can_repair(b.money_copper, state.guide.step_id)
     can_sell = context is None or context.can_make_space(b.free)
 
     # `is not None` throughout: unknown bags are not full bags, and a service loop on an

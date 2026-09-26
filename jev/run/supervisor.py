@@ -308,6 +308,11 @@ class Supervisor:
                         and result.code not in ("too_poor",)):
                     # A merchant out of reach is not walked to again on this step (V175).
                     self.runtime.policy_context.supplies_unreachable(worker.arm.step_id)
+                if (worker.arm.decision.skill == "VENDOR_REPAIR"
+                        and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
+                        and result.code not in ("too_poor",)):
+                    # Nor a repairer (V185).
+                    self.runtime.policy_context.repair_unreachable(worker.arm.step_id)
                 if result.code == "too_poor":
                     if worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
                         self.runtime.policy_context.supplies_failed(state.bags.money_copper)
@@ -325,7 +330,8 @@ class Supervisor:
                       # still low: one drink too many for its budget stopped session 107.
                       and worker.arm.decision.skill not in ("TRAIN_CLASS", "BIND_HEARTH",
                                                             "DISCOVER_FLIGHT", "EAT_DRINK",
-                                                            "BUY_AMMO_REAGENT_FOOD")
+                                                            "BUY_AMMO_REAGENT_FOOD",
+                                                            "VENDOR_REPAIR")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if self.failures[key] >= self.max_failures:
