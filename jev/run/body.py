@@ -75,6 +75,10 @@ from jev.world.vendor import (
 # this character cannot beat still stands: the next recovery gets up at the graveyard's
 # Spirit Healer instead, and goes home by hearthstone.
 DEATH_TRAP_S = 180.0
+# Killed by a unit this many levels above the character, it gets up at the Spirit Healer and
+# goes home, not beside its body among them (V197): a level 3 mage stranded among level 5-6
+# Mangy Wolves in west Elwynn got up at its body and died five times in one session.
+OUTCLASSED_BY = 3
 # Getting up at the Spirit Healer brings resurrection sickness: three quarters of every
 # stat gone, for a minute a level above ten (ten at most). Walking out under it, a level 13
 # paladin met a Dust Devil 90 s after getting up and died (session 150). It is waited out
@@ -1456,7 +1460,8 @@ class LiveBody:
         # A body where the character keeps dying is not worth getting up at: run
         # 20260923T181209-bc03ba got up beside a level 6 wolf at half health and died,
         # four times. Up at the Spirit Healer instead, and home by hearthstone.
-        if self._revived_at is not None and time.monotonic() - self._revived_at < DEATH_TRAP_S:
+        trapped = self._revived_at is not None and time.monotonic() - self._revived_at < DEATH_TRAP_S
+        if trapped or self._killed_by_stronger(state):
             up = self.recover.run_spirit_healer()
             if up is Recovered.ALIVE:
                 self._revived_at = None
@@ -1479,6 +1484,12 @@ class LiveBody:
         if outcome is Recovered.ALIVE:
             self._revived_at = time.monotonic()
         return self._result(outcome, self.recover.detail)
+
+    def _killed_by_stronger(self, state) -> bool:
+        """The last fight's unit was `OUTCLASSED_BY` levels or more above the character."""
+        killer = getattr(self.fight, "_target_level", None)
+        mine = getattr(getattr(state, "char", None), "level", None)
+        return isinstance(killer, int) and isinstance(mine, int) and killer - mine >= OUTCLASSED_BY
 
     def _wait_out_sickness(self) -> float:
         """Stand still while resurrection sickness lasts, up to `SICKNESS_WAIT_MAX_S`; an

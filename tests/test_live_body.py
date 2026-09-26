@@ -489,6 +489,26 @@ def test_a_service_blocked_for_the_step_does_not_stop_its_grind():
     assert b._service_needed() is None, "blocked for this step: the grind goes on"
 
 
+@pytest.mark.parametrize(("killer", "healer"), [(6, True), (4, False), (None, False)])
+def test_a_character_killed_by_a_far_stronger_unit_gets_up_at_the_spirit_healer(killer, healer):
+    """V197: a level 3 mage stranded among level 5-6 Mangy Wolves got up beside its body,
+    among them, and died five times in one session."""
+    from jev.clients.hearth import Hearthed
+    from jev.world.state_v1 import Char
+
+    b = body()
+    b._revived_at = None
+    b.fight._target_level = killer
+    b._wait_out_sickness = lambda: 0.0
+    calls = []
+    b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+    b.recover.run = lambda corpse: calls.append("corpse") or Recovered.ALIVE
+    b.hearth.run = lambda: calls.append("hearth") or Hearthed.HOME
+    ghost = seen(char=Char(level=3))
+    assert b._recover(ghost).code == "alive"
+    assert calls == (["healer", "hearth"] if healer else ["corpse"])
+
+
 def test_resurrection_sickness_is_waited_out_before_going_on(monkeypatch):
     """V189: walking out under the sickness, a level 13 paladin met a Dust Devil 90 s
     after getting up at the Spirit Healer and died (session 150)."""
