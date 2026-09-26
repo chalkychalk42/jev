@@ -346,8 +346,11 @@ class Client:
                 self._say(f"  already within {stop_short:.0f} yards")
                 return True
             path, world = short, short.points[-1]
+        # Why the way bends, when it keeps clear of something (`route_memory`): a death, a
+        # hot cell, a blocked spot. The walk's trial reads it here.
+        why = path.detail if (path.detail or "").startswith("round ") else ""
         self._say(f"  {path.status.value}: {len(path.points)} waypoints, "
-                  f"{path.length_yards():.1f} yards")
+                  f"{path.length_yards():.1f} yards" + (f", {why}" if why else ""))
         if not path.usable:
             return False
         if self._height_near(hw) is None:

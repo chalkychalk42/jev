@@ -61,6 +61,14 @@ DANGER_DETOUR = 2.0
 # A cell the learned danger map calls hot is kept this far from (`jev.learn.danger`): its
 # half-width and some of a mob's reach.
 HOT_YARDS = 25.0
+# A walk that starts or ends inside a spot's reach keeps the distance it has, less this
+# much room to turn away; one that starts or ends closer than `SPOT_TURN_YARDS` plus
+# `SPOT_MIN_KEEP` is at the spot, and goes by it. A character gets up 32 yards short of
+# where it died (`TRAP_RECLAIM_YARDS`), inside the 35 kept from a death, and the walk on
+# used to be let straight back through what had killed it: it died there again 42 s after
+# getting up (session 142).
+SPOT_TURN_YARDS = 10.0
+SPOT_MIN_KEEP = 10.0
 
 
 @dataclass
@@ -280,8 +288,9 @@ class DangerAvoidingQuery:
     """The planner, asked for routes that keep clear of where the character recently died
     (`RouteMemory.died`, `DANGER_YARDS`) and of where it keeps being attacked (`hot`, a
     learned `jev.learn.danger.DangerMap`'s cells, `HOT_YARDS`). A walk that starts or ends
-    near such a place goes by it: a corpse run is a walk to one, and a hunt's camp is where
-    it hunts. Anything that goes wrong here plans as before."""
+    at such a place goes by it: a corpse run is a walk to one, and a hunt's camp is where it
+    hunts. One that starts or ends inside its reach keeps the distance it has
+    (`SPOT_TURN_YARDS`). Anything that goes wrong here plans as before."""
 
     def __init__(self, inner, memory: RouteMemory, clock: Callable[[], float] = time.time,
                  hot: Callable[[int], list] | None = None):
@@ -307,8 +316,13 @@ class DangerAvoidingQuery:
     def _round(self, map_id: int, start: Point, end: Point, direct: Path) -> Path:
         if not direct.usable or start[:2] == end[:2]:
             return direct
-        spots = [(x, y, reach, why) for x, y, reach, why in self._spots(map_id)
-                 if math.dist((x, y), start[:2]) > reach and math.dist((x, y), end[:2]) > reach]
+
+        def kept(x, y, reach) -> float:
+            return min(reach, math.dist((x, y), start[:2]) - SPOT_TURN_YARDS,
+                       math.dist((x, y), end[:2]) - SPOT_TURN_YARDS)
+
+        spots = [(x, y, r, why) for x, y, reach, why in self._spots(map_id)
+                 if (r := kept(x, y, reach)) >= SPOT_MIN_KEEP]
         hit = next((spot for spot in spots if near_route(direct, spot[0], spot[1], spot[2])), None)
         if hit is None:
             return direct

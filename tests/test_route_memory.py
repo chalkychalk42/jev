@@ -196,6 +196,22 @@ def test_a_walk_to_or_from_where_it_died_goes_there(tmp_path):
     assert len(way_out.points) == 2
 
 
+def test_a_walk_from_inside_the_reach_of_a_death_keeps_the_distance_it_has(tmp_path):
+    """Getting up 32 yards short of the body (`TRAP_RECLAIM_YARDS`) is inside the 35 kept
+    from a death, and the walk on was let straight back through what had killed the
+    character: it died there again 42 s after getting up (session 142)."""
+    from jev.guide.route_memory import SPOT_TURN_YARDS, DangerAvoidingQuery, near_route
+
+    memory = RouteMemory()
+    memory.died(0, (50.0, 0.0), now=1000.0)
+    query = DangerAvoidingQuery(_OpenGround(), memory, clock=lambda: 1100.0)
+    way_on = query.path(0, (18.0, 0.0, 60.0), (100.0, 0.0, 60.0))
+    assert len(way_on.points) > 2, "straight back through the camp"
+    assert not near_route(way_on, 50.0, 0.0, 32.0 - SPOT_TURN_YARDS)
+    back = query.path(0, (100.0, 0.0, 60.0), (18.0, 0.0, 60.0))
+    assert not near_route(back, 50.0, 0.0, 32.0 - SPOT_TURN_YARDS), "the corpse run's end too"
+
+
 def test_an_old_death_is_walked_past_again(tmp_path):
     from jev.guide.route_memory import DANGER_S, DangerAvoidingQuery
 

@@ -65,6 +65,10 @@ Now
     and 1-12 marked finished again. V181 starts a run on the guide the playhead names.
   - 00:55 deploy of V178-V181 (c7cf1cc). Session 142 began dead: 141's run had ended as a
     fight began, since a finished guide stopped the run at once and would not fight. V182.
+  - Session 142 (905 s, +0.102): two deaths on the road to the Mongrels among four attackers,
+    the second 42 s after getting up 32 yards short of the first body. Of the seven deaths in
+    play since T-0, four came within 45 s of getting up: the walk after getting up was exempt
+    from keeping clear of the death, being inside its 35 yards. V183.
 
 - **25 Sep 14:10.** Pre-flight A is under way, with the loop stopped and the client closed.
   - The operator logged Testvvi out at 09:13, in Goldshire, at level 13.
@@ -211,6 +215,7 @@ Trials
 | V178 walks no longer go by learned passages | next boundary after session 141 | stuck events a walk (7.0 over 215 walks, sessions 88-140) and walks not arrived (15 of 215) fall or hold; guards XP/h and deaths | `route memory: N blocked spots kept clear of; 151 old passages not taken` | | |
 | V179 item droppers within two levels of the quest; 12-20 regenerated | with V178 | deaths/h on 12-20 objectives fall; Patrolling Westfall done with no death | the hunt's target is Riverpaw Mongrel (`hunt.request` wanted_name_id) | | |
 | V180 a moved plate is found again when it is the only one of its colour | with V178 | `target-no-proposal` frames (7 in the last 80 runs) and "no eligible target geometry" failures fall | a `target.proposal` after a selection whose plate moved | | |
+| V183 a walk from inside a death's reach keeps the distance it has | session 144 | deaths within 60 s of getting up (4 of 7 in sessions 134-142) fall | a walk after getting up that bends round the body (`round where the character died`) | | |
 
 Issues
 ------
