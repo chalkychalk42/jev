@@ -1205,6 +1205,25 @@ def test_what_the_bar_conjures_is_remembered_while_its_census_is_read_again():
     assert b.conjured_roles() == {"food", "drink"}, "the bar unread is not a bar without them"
 
 
+def test_what_the_bar_conjured_outlives_the_session(tmp_path):
+    """V244: each session begins with its bar unread, and session 217's first act was a
+    restock of the food and water the mage conjures."""
+    from jev.coach.policy import Context
+    from jev.world.combat import Ability, CombatProfile, Role
+
+    b = body()
+    b.purse_memory = tmp_path / "character-1.purse.json"
+    b.policy_context = Context()
+    b.fight.profile = CombatProfile(name="mage", abilities=(
+        Ability(slot=5, role=Role.CONJURE, name="Conjure Water", spell_id=5504, creates=5350),))
+    assert b.conjured_roles() == {"drink"}
+    later = body()
+    later.purse_memory = b.purse_memory
+    later.policy_context = Context()
+    later.fight.profile = None
+    assert later.conjured_roles() == {"drink"}, "the bar not yet read this session"
+
+
 def test_the_trainer_s_gossip_line_is_chosen_by_its_text():
     from jev.world.training import trainers
 

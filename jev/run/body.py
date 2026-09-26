@@ -1089,7 +1089,14 @@ class LiveBody:
         self._policy_context = context
         if self.purse_memory is not None:
             with contextlib.suppress(OSError, ValueError):
-                context.restore_purse(json.loads(Path(self.purse_memory).read_text()))
+                raw = json.loads(Path(self.purse_memory).read_text())
+                context.restore_purse(raw)
+                # What the bar conjured when the last session ended stands until the bar is
+                # read (V244): each session begins with its bar unread, and session 217's
+                # first act was a restock of the food and water the mage conjures.
+                kept = raw.get("conjured") if isinstance(raw, dict) else None
+                if isinstance(kept, list):
+                    self._conjured_last = frozenset(k for k in kept if k in ("food", "drink"))
             context.saved = self._save_purse
         context.trainable = self.trainable
         context.reserve = self.training_reserve
@@ -1116,7 +1123,9 @@ class LiveBody:
         for row in profile.by_role(Role.CONJURE):
             kind = consumable_role(row.creates)
             roles |= {"food", "drink"} if kind == "both" else {kind} if kind else set()
-        self._conjured_last = frozenset(roles)
+        if frozenset(roles) != self._conjured_last:
+            self._conjured_last = frozenset(roles)
+            self._save_purse()
         return self._conjured_last
 
     def _train(self, state) -> Result:
@@ -1153,12 +1162,13 @@ class LiveBody:
         return self._result(outcome, detail)
 
     def _save_purse(self) -> None:
-        if self.purse_memory is None:
+        if self.purse_memory is None or getattr(self, "_policy_context", None) is None:
             return
         from jev.persist import atomic_json
 
         with contextlib.suppress(OSError):
-            atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse()})
+            atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse(),
+                                                  "conjured": sorted(self._conjured_last)})
 
     def _go_home(self):
         """Home by hearthstone; where it sets the character down is home from then on."""
