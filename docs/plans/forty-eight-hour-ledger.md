@@ -117,6 +117,14 @@ Now
     blind melee swinging "too far away" (V207); then 1,259 XP, the run's best rate (5,038/h).
     Where 161-163's skill time went: hunting 42% (walks between stations 24%), fights 23%,
     the level-14 training trip to Goldshire 14%.
+  - Sessions 164-165: 1,356 and 1,162 XP (5,424 and 4,650/h), 0 deaths; V207 stepped in 4
+    times in 164. Testvvi about 14.66 at 08:38, past hour 12's 14.6.
+  - 08:38-09:12, the mage's sixth visit (`captures/live-mage-6.log.1-2`): the first V206
+    session remembered nothing yet, took the hearthstone and was too poor at 24 copper, then
+    wrote `character-73ce06a8.purse.json`; Skirmish at Echo Ridge done, its hand-in walk stuck
+    on its first leg inside Echo Ridge Mine and failed over, then was handed in; level 5.05.
+    One death: a Defias Cutpurse behind the mage, between it and the camera, and Fireball
+    "not in front" 40 times at full mana (V208).
   - Session 148: started a ghost; two deaths to Fleshrippers, one 23 s after getting up at
     half health, one under resurrection sickness after the Spirit Healer.
   - 02:06-02:30, the mage's check (Itheamar, `captures/live-mage-check-1.log`): A Threat
@@ -297,6 +305,7 @@ Trials
 | V205 no restock walk over 400 yards | after the mage's fifth visit | no restock walk through another level band | `BUY_AMMO_REAGENT_FOOD: aborted ... too_far` | | |
 | V206 the purse's lessons kept between sessions | with V205 | no session-start repair walk the purse cannot pay | `character-KEY.purse.json` written; no `too_poor` twice at one purse | | |
 | V207 blind melee steps in on "too far away" | session 164 | no fight lost standing out of reach of a flyer (session 163's death) | an `approach.request` with mode `blind_melee` | | |
+| V208 a cast "not in front" with the plate centred turns round | after the mage's sixth visit | no caster death at full mana with the attacker behind | `engage.realign` then `engage.turn_round` in a caster's fight | | |
 
 Issues
 ------
