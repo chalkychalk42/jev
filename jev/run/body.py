@@ -75,6 +75,12 @@ from jev.world.vendor import (
 # this character cannot beat still stands: the next recovery gets up at the graveyard's
 # Spirit Healer instead, and goes home by hearthstone.
 DEATH_TRAP_S = 180.0
+# Getting up at the Spirit Healer brings resurrection sickness: three quarters of every
+# stat gone, for a minute a level above ten (ten at most). Walking out under it, a level 13
+# paladin met a Dust Devil 90 s after getting up and died (session 150). It is waited out
+# where the hearthstone took the character, inside the corpse run's own 420 s (V189).
+SICKNESS_FROM_LEVEL = 10
+SICKNESS_WAIT_MAX_S = 300.0
 # Where a ghost gets up: this far short of the body, on the graveyard's side. A body can be
 # reclaimed from inside the server's 39-yard radius and the character stands up where the
 # ghost stood; at the body itself the Mangy Wolves round it killed a character at half
@@ -1448,6 +1454,7 @@ class LiveBody:
                 self._revived_at = None
                 home = self._go_home()
                 self.say(f"  up at the Spirit Healer; hearthstone: {home.value} {self.hearth.detail}")
+                self._wait_out_sickness()
                 return self._result(up, f"up at the Spirit Healer; hearthstone {home.value}")
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body, "
                      f"to get up {TRAP_RECLAIM_YARDS:.0f} yards short of it")
@@ -1464,6 +1471,22 @@ class LiveBody:
         if outcome is Recovered.ALIVE:
             self._revived_at = time.monotonic()
         return self._result(outcome, self.recover.detail)
+
+    def _wait_out_sickness(self) -> float:
+        """Stand still while resurrection sickness lasts, up to `SICKNESS_WAIT_MAX_S`; an
+        attack ends the wait, and the fight is the policy's. The seconds waited."""
+        level = (self._read() or {}).get("char.level")
+        if not isinstance(level, int) or level <= SICKNESS_FROM_LEVEL:
+            return 0.0
+        wait = min(60.0 * min(level - SICKNESS_FROM_LEVEL, 10), SICKNESS_WAIT_MAX_S)
+        self.say(f"  resurrection sickness: waiting {wait / 60:.0f} min before going on")
+        started = time.monotonic()
+        while time.monotonic() - started < wait:
+            self.checkpoint()
+            if (self._read() or {}).get("vitals.combat") is True:
+                break
+            time.sleep(1.0)
+        return time.monotonic() - started
 
     def _release(self, state) -> Result:
         # Released where it died: walks keep clear of the spot for a while

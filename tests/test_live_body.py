@@ -475,6 +475,26 @@ def test_a_body_that_killed_the_character_again_is_left_for_the_spirit_healer(
     assert DEATH_TRAP_S > 60.0
 
 
+def test_resurrection_sickness_is_waited_out_before_going_on(monkeypatch):
+    """V189: walking out under the sickness, a level 13 paladin met a Dust Devil 90 s
+    after getting up at the Spirit Healer and died (session 150)."""
+    from jev.run.body import SICKNESS_WAIT_MAX_S
+
+    b = body()
+    clock = {"t": 1000.0}
+    monkeypatch.setattr("jev.run.body.time.monotonic", lambda: clock["t"])
+    monkeypatch.setattr("jev.run.body.time.sleep", lambda s: clock.update(t=clock["t"] + s))
+    readings = {"char.level": 13, "vitals.combat": False}
+    b._read = lambda: dict(readings)
+    assert 180.0 <= b._wait_out_sickness() < 182.0, "a minute a level above ten"
+    readings["char.level"] = 25
+    assert b._wait_out_sickness() < SICKNESS_WAIT_MAX_S + 2.0, "inside the corpse run's time"
+    readings["char.level"] = 9
+    assert b._wait_out_sickness() == 0.0, "no sickness at level 10 and below"
+    readings.update({"char.level": 13, "vitals.combat": True})
+    assert b._wait_out_sickness() < 2.0, "an attack ends the wait"
+
+
 def test_a_unit_with_no_nameplate_on_show_is_talked_to_where_a_hover_finds_it():
     """The Spirit Healer's plate was behind the strip (run 20260923T182125-9c54ea)."""
     from jev.clients.targeting import HoverCode, HoverResult
