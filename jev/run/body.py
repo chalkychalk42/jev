@@ -92,8 +92,11 @@ SICKNESS_WAIT_MAX_S = 300.0
 # reclaimed from inside the server's 39-yard radius and the character stands up where the
 # ghost stood; at the body itself the Mangy Wolves round it killed a character at half
 # health three times running, the Spirit Healer answering nothing each time (run
-# 20260924T041014-a9781c).
-TRAP_RECLAIM_YARDS = 32.0
+# 20260924T041014-a9781c). 25, not 32: on Sentinel Hill's slope a ghost stopped 32 yards
+# short (34 by the walk's own slack) was out of the radius with the height, and walked there
+# again and again, "still a ghost" (session 178). After each such get-up that did not come,
+# the next stops half as far short (V213).
+TRAP_RECLAIM_YARDS = 25.0
 # Broken gear this far from the nearest repairer goes home by hearthstone first.
 BROKEN_DURABILITY = 0.05
 HEARTH_TO_REPAIR_YARDS = 150.0
@@ -302,6 +305,7 @@ class LiveBody:
         self.hearth = Hearth(hid=client.hid, read=self._read,
                              window_origin=client.origin, window_size=client.size)
         self._revived_at: float | None = None
+        self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
         self._wedged = 0
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
@@ -1490,9 +1494,9 @@ class LiveBody:
         body = map_to_world(*point, self.client.bounds)
         start = map_to_world(*origin, self.client.bounds)
         apart = math.dist(body, start)
-        if apart <= TRAP_RECLAIM_YARDS:
+        if apart <= self._reclaim_yards:
             return True
-        share = TRAP_RECLAIM_YARDS / apart
+        share = self._reclaim_yards / apart
         short = (body[0] + (start[0] - body[0]) * share, body[1] + (start[1] - body[1]) * share)
         return self._corpse_walk(world_to_map(*short, self.client.bounds))
 
@@ -1569,6 +1573,10 @@ class LiveBody:
             self.recover.walk_to = walk
         if outcome is Recovered.ALIVE:
             self._revived_at = time.monotonic()
+            self._reclaim_yards = TRAP_RECLAIM_YARDS
+        elif outcome is Recovered.STILL_GHOST:
+            # Out of the body's reach from there, it seems: half as far short next time.
+            self._reclaim_yards = self._reclaim_yards / 2 if self._reclaim_yards > 4 else 0.0
         return self._result(outcome, self.recover.detail)
 
     def _killed_by_stronger(self, state) -> bool:

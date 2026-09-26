@@ -771,6 +771,37 @@ def test_every_body_is_reclaimed_short_of_it_from_where_the_ghost_stands(monkeyp
     assert walked[0][1] > 100.0, "on the side the ghost comes from"
 
 
+def test_a_ghost_that_does_not_get_up_short_of_the_body_goes_closer(monkeypatch):
+    """V213: on Sentinel Hill's slope a ghost 32 yards short (34 by the walk's slack) was out
+    of the body's 39-yard reach with the height, and walked there again and again, "still
+    a ghost" (session 178). Each get-up that does not come halves the next stop."""
+    import math
+
+    from jev.guide.coords import map_to_world, world_to_map
+    from jev.run.body import TRAP_RECLAIM_YARDS
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._revived_at = None
+    b.recover.corpse = world_to_map(-9000.0, 100.0, b.client.bounds)
+    b.client.position = lambda: world_to_map(-9000.0, 300.0, b.client.bounds)
+    walked = []
+    b._corpse_walk = lambda point: walked.append(map_to_world(*point, b.client.bounds)) or True
+    outcomes = iter([Recovered.STILL_GHOST, Recovered.STILL_GHOST, Recovered.ALIVE])
+
+    def run(corpse_point):
+        b.recover.walk_to(corpse_point)
+        return next(outcomes)
+
+    b.recover.run = run
+    for _ in range(3):
+        b._recover(seen())
+    shorts = [math.dist(w, (-9000.0, 100.0)) for w in walked]
+    assert shorts == pytest.approx([TRAP_RECLAIM_YARDS, TRAP_RECLAIM_YARDS / 2,
+                                    TRAP_RECLAIM_YARDS / 4], abs=0.5)
+    assert b._reclaim_yards == TRAP_RECLAIM_YARDS, "up at last: the next death starts afresh"
+
+
 def test_a_ghost_already_inside_the_short_ring_stays_where_it_is():
     from jev.guide.coords import world_to_map
 
