@@ -104,3 +104,42 @@ def test_real_suppliers_pass_zone_predicate_and_nearest_world_yard_ranking():
     assert math.isfinite(math.dist(nearest.world[:2], here))
     point = world_to_map(*nearest.world[:2], elwynn)
     assert map_to_world(*point, elwynn) == pytest.approx(nearest.world[:2])
+
+
+def test_a_merchant_that_mends_gear_is_marked_so():
+    """The server's repair flag, for choosing a repairer as merchants are chosen (V201)."""
+    with sqlite3.connect(":memory:") as db:
+        db.executescript("""
+            CREATE TABLE world_item_template (
+                entry INT, class INT, Quality INT, SellPrice INT, InventoryType INT, startquest INT,
+                subclass INT, ContainerSlots INT, BagFamily INT);
+            CREATE TABLE world_quest_template (SrcItemId INT);
+            CREATE TABLE world_creature_template (
+                Entry INT, Name TEXT, NpcFlags INT, VendorTemplateId INT, Faction INT,
+                GossipMenuId INT);
+            INSERT INTO world_creature_template VALUES (78,'Fixture Smith',4224,0,12,0);
+            INSERT INTO world_creature_template VALUES (152,'Fixture Grocer',128,0,12,0);
+            CREATE TABLE world_gossip_menu_option (menu_id INT, id INT, option_id INT,
+                option_text TEXT);
+            CREATE TABLE dbc_FactionTemplate (id INT, c3 INT, c4 INT, c5 INT);
+            CREATE TABLE world_creature (
+                guid INT, id INT, map INT, position_x TEXT, position_y TEXT, position_z TEXT);
+            INSERT INTO world_creature VALUES (1,78,0,'1','2','3');
+            INSERT INTO world_creature VALUES (2,152,0,'4','5','6');
+            CREATE TABLE world_game_event_creature (guid INT, event INT);
+            CREATE TABLE world_npc_vendor (entry INT,item INT,ExtendedCost INT,condition_id INT);
+            CREATE TABLE world_npc_vendor_template (
+                entry INT,item INT,ExtendedCost INT,condition_id INT);
+        """)
+        result = generate(db, {})
+    smith, grocer = result["vendors"]
+    assert smith["repairs"] is True and "repairs" not in grocer
+
+
+def test_loader_reads_the_repair_flag(monkeypatch):
+    monkeypatch.setattr(vendor, "catalog", lambda: {"vendors": [
+        {"entry": 78, "name": "Fixture Smith", "map_id": 0, "world": [1, 2, 3], "items": [],
+         "repairs": True},
+        {"entry": 152, "name": "Fixture Grocer", "map_id": 0, "world": [4, 5, 6], "items": []}]})
+    smith, grocer = vendor.merchants(0)
+    assert smith.repairs is True and grocer.repairs is False

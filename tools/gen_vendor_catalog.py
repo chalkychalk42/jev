@@ -15,6 +15,9 @@ import json
 import pathlib
 import sqlite3
 
+# The server's repair flag (`UNIT_NPC_FLAG_REPAIR`): which merchants mend gear.
+NPC_REPAIR = 0x1000
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Faction template masks, as in tools/gen_trainer_catalog.py.
 MASK_PLAYER, MASK_ALLIANCE, MASK_HORDE = 1, 2, 4
@@ -70,12 +73,13 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
     # empty grounds by Goldshire for Stamp Thunderhorn, Sylannia and Professor Thaddeus
     # Paleo, found none of them, and the session stopped (session 63).
     for row in db.execute(
-        "select distinct t.Entry,t.Name,c.map,c.position_x,c.position_y,c.position_z "
+        "select distinct t.Entry,t.Name,c.map,c.position_x,c.position_y,c.position_z,"
+        "t.NpcFlags "
         "from world_creature_template t join world_creature c on c.id=t.Entry "
         "where (t.NpcFlags & 128)!=0 and c.guid not in "
         "(select guid from world_game_event_creature where event > 0) "
         "order by t.Entry,c.map,c.position_x,c.position_y"):
-        entry, name, map_id, x, y, z = row
+        entry, name, map_id, x, y, z, flags = row
         if not name or name.startswith("["):
             # "[DND] TAR Pedestal - Trainer, Druid" and 779 others: developer placeholders the
             # server flags as vendors. The nearest one was walked to on a sale.
@@ -85,10 +89,13 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
             "and condition_id=0 union select v.item from world_npc_vendor_template v "
             "join world_creature_template t on t.VendorTemplateId=v.entry "
             "where t.Entry=? and v.ExtendedCost=0 and v.condition_id=0", (entry, entry))}
-        vendors.append({"entry": entry, "name": name, "map_id": map_id,
-                        # The mirrored world DB stores coordinates as TEXT. Emit
-                        # numeric yards, matching the guide generator's contract.
-                        "world": [float(x), float(y), float(z)], "items": sorted(sold)})
+        vendor = {"entry": entry, "name": name, "map_id": map_id,
+                  # The mirrored world DB stores coordinates as TEXT. Emit
+                  # numeric yards, matching the guide generator's contract.
+                  "world": [float(x), float(y), float(z)], "items": sorted(sold)}
+        if int(flags or 0) & NPC_REPAIR:
+            vendor["repairs"] = True
+        vendors.append(vendor)
     prices = {str(row[0]): int(row[1]) for row in db.execute(
         "select entry,SellPrice from world_item_template") if row[0] in set(junk)}
     # White and green gear, trade goods and recipes that no quest asks for or hands over:

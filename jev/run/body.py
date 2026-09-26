@@ -1272,9 +1272,10 @@ class LiveBody:
         if here is None:
             return None
         world = map_to_world(*here, self.client.bounds)
-        placed = [n for n in self.graph.nodes if n.kind is StepKind.REPAIR
-                  and n.world is not None and n.map_id == self.client.bounds.map_id]
-        return min((math.dist(n.world[:2], world) for n in placed), default=None)
+        placed = [m.world for m in self._repairers()] or [
+            n.world for n in self.graph.nodes if n.kind is StepKind.REPAIR
+            and n.world is not None and n.map_id == self.client.bounds.map_id]
+        return min((math.dist(w[:2], world) for w in placed), default=None)
 
     def _vendor(self, state) -> Result:
         values, here = self._read(), self._position()
@@ -1308,23 +1309,11 @@ class LiveBody:
                                            if i in surplus and i not in keep}}
                 min_free = SELL_ALL
         wanted = {s.item_id for s in supplies}
-        candidates = [m for m in merchants(self.client.bounds.map_id)
-                      if (not wanted or wanted & m.items)
-                      and (point := world_to_map(*m.world[:2], self.client.bounds)) is not None
-                      and all(0 <= value <= 1 for value in point)]
+        candidates = self._in_zone(m for m in merchants(self.client.bounds.map_id)
+                                   if not wanted or wanted & m.items)
         if not candidates:
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
-        world = map_to_world(*here, self.client.bounds)
-        failed = load_merchant_failures(self.merchant_memory)
-        # The shortest walk, each failure since the last sale counted in yards.
-        near = sorted(candidates, key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_PLANS]
-        walks = {m.entry: self._walk_yards(m.world, math.dist(m.world[:2], world)) for m in near}
-        ranked = sorted(near, key=lambda m: walks[m.entry]
-                        + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
-        ranked += sorted((m for m in candidates if m.entry not in walks),
-                         key=lambda m: math.dist(m.world[:2], world)
-                         + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
-        ranked = ranked[:MERCHANT_TRIES]
+        ranked = self._ranked(candidates, map_to_world(*here, self.client.bounds))
         for merchant in ranked:
             def visit(merchant=merchant):
                 return self._open_merchant(merchant.name, merchant.world,
@@ -1350,6 +1339,29 @@ class LiveBody:
             return self._result(outcome, vendor.detail or
                                 f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
         raise AssertionError("unreachable: the last merchant returns or raises")
+
+    def _in_zone(self, candidates) -> list:
+        """The merchants standing inside the measured zone's map box."""
+        return [m for m in candidates
+                if (point := world_to_map(*m.world[:2], self.client.bounds)) is not None
+                and all(0 <= value <= 1 for value in point)]
+
+    def _ranked(self, candidates, world) -> list:
+        """The first `MERCHANT_TRIES` merchants to try from `world`: the shortest walk,
+        each failure since the last sale counted in yards (V199)."""
+        failed = load_merchant_failures(self.merchant_memory)
+        near = sorted(candidates, key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_PLANS]
+        walks = {m.entry: self._walk_yards(m.world, math.dist(m.world[:2], world)) for m in near}
+        ranked = sorted(near, key=lambda m: walks[m.entry]
+                        + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
+        ranked += sorted((m for m in candidates if m.entry not in walks),
+                         key=lambda m: math.dist(m.world[:2], world)
+                         + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
+        return ranked[:MERCHANT_TRIES]
+
+    def _repairers(self) -> list:
+        """The merchants in the zone that mend gear (the catalog's repair flag)."""
+        return self._in_zone(m for m in merchants(self.client.bounds.map_id) if m.repairs)
 
     def _walk_yards(self, world, straight: float) -> float:
         """What walking to `world` costs, in yards: its plan's length and corners."""
@@ -1378,10 +1390,33 @@ class LiveBody:
         return opened is Interacted.VENDOR
 
     def _visit_repairer(self) -> bool:
+        """Open a repairer's window: every one in the zone, ranked as merchants are, the
+        next tried when one cannot be clicked (V201). The guide's REPAIR nodes named one
+        smith a place - Janos Hammerknuckle in Northshire, whose awning took every probe
+        (26 September), with Dermot Johns and Godric Rothgar in twenty yards - and from
+        Stormwind the nearest was 1,281 yards off, a walk the repair ran out of time on."""
         here = self._position()
         if here is None:
             return False
         world = map_to_world(*here, self.client.bounds)
+        repairers = self._repairers()
+        if repairers:
+            ranked = self._ranked(repairers, world)
+            for merchant in ranked:
+                try:
+                    opened = self._open_merchant(
+                        merchant.name, merchant.world,
+                        world_to_map(*merchant.world[:2], self.client.bounds))
+                except BodyFailure as failure:
+                    if failure.result.code in MERCHANT_UNREACHABLE:
+                        note_merchant(self.merchant_memory, merchant.entry, failed=True)
+                    if merchant is ranked[-1] or failure.result.code not in MERCHANT_UNREACHABLE:
+                        raise
+                    self.say(f"  {failure.result.detail}; trying the next repairer")
+                    continue
+                if opened:
+                    note_merchant(self.merchant_memory, merchant.entry, failed=False)
+                return opened
         candidates = [n for n in self.graph.nodes if n.kind is StepKind.REPAIR
                       and n.world is not None and n.map_id == self.client.bounds.map_id
                       and n.target_kind == "creature" and n.target_name]

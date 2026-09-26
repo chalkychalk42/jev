@@ -27,6 +27,7 @@ class Merchant:
     map_id: int
     world: tuple[float, float, float]
     items: frozenset[int]
+    repairs: bool = False            # mends gear (the server's repair flag)
 
 
 @lru_cache(maxsize=1)
@@ -148,7 +149,7 @@ def merchants(map_id: int, *, items: frozenset[int] = frozenset()) -> tuple[Merc
                           # Normalize older catalog files too; a dataclass annotation
                           # does not convert JSON strings into world-yard numbers.
                           world=tuple(float(value) for value in v["world"]),
-                          items=frozenset(v["items"]))
+                          items=frozenset(v["items"]), repairs=v.get("repairs") is True)
                  for v in catalog()["vendors"]
                  if v["map_id"] == map_id and items <= set(v["items"])
                  and not str(v["name"]).startswith("["))       # "[DND]" placeholders

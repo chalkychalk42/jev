@@ -80,6 +80,27 @@ def test_nearest_repairer_compares_world_yards_and_filters_maps():
     assert visit.call_args.args[0] == "Near"
 
 
+def test_a_repairer_that_cannot_be_clicked_is_passed_over_for_the_next(tmp_path, monkeypatch):
+    """Janos Hammerknuckle's awning took every probe, and Dermot Johns and Godric Rothgar
+    stood twenty yards off; the guide named only him (26 September). Every repairer in the
+    zone is ranked as merchants are, and a failure is remembered (V201)."""
+    from jev.world.vendor import Merchant, load_merchant_failures
+
+    b = body()
+    b.merchant_memory = tmp_path / "merchant-memory.json"
+    vendors = (Merchant(78, "Under The Awning", 0, (50, 51, 0), frozenset(), repairs=True),
+               Merchant(1213, "In Plain View", 0, (52, 52, 0), frozenset(), repairs=True),
+               Merchant(152, "Sells Only", 0, (50, 50, 0), frozenset()))
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    answers = {"Under The Awning": Interacted.NOT_VISIBLE, "In Plain View": Interacted.VENDOR}
+    visit = Mock(side_effect=lambda name, **kw: answers[name])
+    b.interact = SimpleNamespace(open_on=visit, detail="hover: ground")
+    assert b._visit_repairer()
+    assert [c.args[0] for c in visit.call_args_list] == ["Under The Awning", "In Plain View"]
+    assert load_merchant_failures(b.merchant_memory) == {78: 1}
+    assert b._repairer_yards() == pytest.approx(1.0), "the smith a yard off, not the grocer"
+
+
 def test_unread_health_does_not_start_a_leg():
     b = body()
     b.client.read = lambda: {}
