@@ -97,15 +97,15 @@ class Tutor:
                                  calls=(TeacherResult("ok", model="served", tokens_in=10, tokens_out=5),))
 
 
-def setup(tmp_path, actions, *, learner=None, mode="teach", **config):
+def setup(tmp_path, actions, *, learner=None, **config):
     env = Environment()
     teacher = Tutor(actions)
     journal = PlayJournal(tmp_path / "run", run_id="run")
     controller = PlayController(observer=env, executor=env, teacher=teacher,
                                 learner=learner, journal=journal, controls={},
                                 controls_fingerprint="c" * 64, knowledge_fingerprint="d" * 64,
-                                config=PlayConfig(mode=mode, outcome_wait_s=0.001,
-                                                  poll_s=0.001, **config), say=lambda _: None)
+                                config=PlayConfig(outcome_wait_s=0.001, poll_s=0.001, **config),
+                                say=lambda _: None)
     return env, teacher, journal, controller
 
 
@@ -137,9 +137,8 @@ def test_teacher_corrects_failed_approach_and_real_learner_receives_joined_outco
     assert controller.learning_error is None
     learned = learner.records()
     assert len(learned) == 4 and all(row["episode_outcome"]["success"] for row in learned)
-    # This is an integration fixture, never production promotion evidence.
-    learner.update()
-    assert not learner.status()["models"]
+    assert all(row["shadow"] == {"model": None, "action": None, "confidence": 0.0,
+                                 "expected_effect": None} for row in learned), "no student yet"
     assert len(env.retained) < len(env.views)  # polling did not persist every full PNG
 
 
@@ -257,33 +256,22 @@ def attack_prediction(mode="active"):
                            model="motor:test", mode=mode, confidence=1, expected_effect="target_dead")
 
 
-def test_evaluated_student_acts_without_teacher_and_uses_refreshed_view(tmp_path):
-    learner = Student([attack_prediction(), attack_prediction()])
-    env, teacher, journal, controller = setup(tmp_path, [], learner=learner, mode="adaptive")
-    env.values["target.in_melee"] = True
-    assert controller.run(arm(), lambda: None).outcome is SkillOutcome.SUCCEEDED
-    assert teacher.requests == []
-    row = result_rows(journal)[0]
-    assert row["author"] == "student" and row["cost"]["teacher_calls"] == 0
-    assert row["before"]["id"] == row["execution_before"]["id"] == "o2"
-
-
-def test_novel_refreshed_scene_returns_authority_to_teacher_before_input(tmp_path):
-    learner = Student([attack_prediction(), MotorPrediction(reason="novel screen")])
-    env, teacher, journal, controller = setup(tmp_path, [CORRECTION[-1]], learner=learner, mode="adaptive")
-    env.values["target.in_melee"] = True
-    assert controller.run(arm(), lambda: None).outcome is SkillOutcome.SUCCEEDED
-    assert len(teacher.requests) == 1 and len(env.actions) == 1
-    assert result_rows(journal)[0]["author"] == "teacher"
-
-
 @pytest.mark.parametrize("mode", ["shadow", "active", "canary"])
-def test_teach_mode_never_executes_even_a_promoted_student(tmp_path, mode):
+def test_a_proposal_is_only_the_tutors_shadow_whatever_mode_it_claims(tmp_path, mode):
+    """No student acts (V225): even one a registry once promoted is recorded beside the
+    tutor's action and never executed."""
     learner = Student([attack_prediction(mode)])
     env, teacher, journal, controller = setup(tmp_path, [CORRECTION[-1]], learner=learner)
     env.values["target.in_melee"] = True
     assert controller.run(arm(), lambda: None).outcome is SkillOutcome.SUCCEEDED
-    assert len(teacher.requests) == 1 and result_rows(journal)[0]["author"] == "teacher"
+    row = result_rows(journal)[0]
+    assert len(teacher.requests) == 1 and row["author"] == "teacher"
+    assert row["shadow"]["model"] == "motor:test" and row["shadow"]["action"]["control"] == "attack_target"
+
+
+def test_the_adaptive_mode_is_refused():
+    with pytest.raises(ValueError, match="teach"):
+        PlayConfig(mode="adaptive")
 
 
 def test_no_target_death_from_disappearance_even_after_delivered_attack(tmp_path):

@@ -1,5 +1,11 @@
 # Motor learning and teacher handover
 
+**Status, 26 September (V225).** The training, the live evaluation, the canary and the
+handover described here went: no student is trained in a session (V174) or acts. The
+evidence contract below holds as written (`record`, `finish_episode`, `ingest_run`), and
+`predict` still gives the proposal of a student training published before, recorded as
+the tutor's shadow. The rest is the record of what was built.
+
 `jev.play.learning.MotorLearner` learns complete bounded actions from measured effects
 and successful completed episodes. It complements the existing coach learner: the coach
 chooses guide-level work, while this student learns controls such as direction, duration,

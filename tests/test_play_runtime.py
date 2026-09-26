@@ -27,7 +27,7 @@ from jev.play.actions import KeyAction, SkillAction
 from jev.play.controller import PlayConfig
 from jev.play.learning import MotorPrediction
 from jev.play.observation import SCALE_BORDER_PX
-from jev.play.runtime import MotorLearningService, PlayingBody
+from jev.play.runtime import PlayingBody
 from jev.play.teacher import PlayTeacherResult
 from jev.run.body import LiveBody
 from jev.run.client import Client, ClientSource
@@ -55,14 +55,14 @@ class PaintedCapture:
 
 
 class Learner:
-    def __init__(self, directory, *, mode="shadow"):
-        self.directory, self.mode = Path(directory), mode
+    def __init__(self, directory):
+        self.directory = Path(directory)
         self.requests, self.records, self.episodes = [], [], []
 
     def predict(self, observation, capability, **kwargs):
         self.requests.append(kwargs)
         return MotorPrediction(action={"kind": "key", "control": "move_forward", "duration_s": 0.2},
-                               mode=self.mode, expected_effect="arrived", model="fixture-student",
+                               mode="shadow", expected_effect="arrived", model="fixture-student",
                                confidence=1.0)
 
     def record(self, row):
@@ -88,8 +88,7 @@ class Teacher:
                                  requested_model="fixture", actual_model="fixture")
 
 
-def composition(tmp_path, *, mode="teach", prediction="shadow", node=None, config=None,
-                tutor_first=True):
+def composition(tmp_path, *, node=None, config=None, tutor_first=True):
     cap, hid = PaintedCapture(), Hid()
     hid.position = (100, 100)
     hid.keys_down = lambda: sorted(hid.held)
@@ -107,13 +106,13 @@ def composition(tmp_path, *, mode="teach", prediction="shadow", node=None, confi
     spine = LiveBody(client, graph, say=lambda text: None)
     recorder = SimpleNamespace(dir=tmp_path / "runs" / "fixture", run_id="fixture")
     screenshots = Screenshots(client.frame, recorder.dir / "screenshots")
-    teacher, learner = Teacher(), Learner(tmp_path / "learning", mode=prediction)
+    teacher, learner = Teacher(), Learner(tmp_path / "learning")
     playing = PlayingBody(spine, recorder=recorder, store=tmp_path / "store",
-                          screenshots=screenshots, mode=mode, teacher=teacher, learner=learner,
+                          screenshots=screenshots, teacher=teacher, learner=learner,
                           # The outcome loop stops as soon as the effect is seen; the ceiling
                           # only matters on a loaded machine, where 0.05 s missed the paint.
-                          config=config or PlayConfig(mode=mode, max_actions=2, outcome_wait_s=0.5,
-                                                      poll_s=0.01), start_learning=False)
+                          config=config or PlayConfig(max_actions=2, outcome_wait_s=0.5,
+                                                      poll_s=0.01))
     if tutor_first:
         # The tutor takes every objective here, as the tutor-first dispatch gave it them
         # before V223: these tests drive the tutor's own episode. The hybrid rule itself,
@@ -129,12 +128,8 @@ def composition(tmp_path, *, mode="teach", prediction="shadow", node=None, confi
                            recorder=recorder)
 
 
-@pytest.mark.parametrize(("mode", "prediction", "author"), [
-    ("teach", "active", "teacher"), ("adaptive", "shadow", "teacher"),
-    ("adaptive", "canary", "student"), ("adaptive", "active", "student"),
-])
-def test_real_worker_controller_and_executor_use_one_input_owner(tmp_path, mode, prediction, author):
-    f = composition(tmp_path, mode=mode, prediction=prediction)
+def test_real_worker_controller_and_executor_use_one_input_owner(tmp_path):
+    f = composition(tmp_path)
     owners = []
     def move():
         owners.append(threading.current_thread().name)
@@ -148,9 +143,9 @@ def test_real_worker_controller_and_executor_use_one_input_owner(tmp_path, mode,
         assert not worker.thread.is_alive()
         assert worker.result.outcome is SkillOutcome.SUCCEEDED, worker.result
         assert owners == ["jev-body"]
-        assert bool(f.teacher.requests) is (author == "teacher")
-        assert f.learner.requests[0]["allow_student"] is (mode == "adaptive")
-        assert f.learner.records[0]["author"] == author
+        assert f.teacher.requests, "the tutor chose; the student's proposal is its shadow"
+        assert f.learner.records[0]["author"] == "teacher"
+        assert f.learner.records[0]["shadow"]["model"] == "fixture-student"
         assert f.learner.records[0]["outcome"]["verified"]
         assert f.learner.records[0]["outcome"]["success"]
         assert f.learner.records[0]["delivery"]["delivered"]
@@ -266,15 +261,10 @@ def test_invalid_arm_and_focus_loss_never_call_teacher(tmp_path):
         f.screenshots.close()
 
 
-def test_mode_and_config_cannot_disagree_about_student_authority(tmp_path):
-    with pytest.raises(ValueError, match="mode"):
-        composition(tmp_path, mode="teach", config=PlayConfig(mode="adaptive"))
-
-
-def test_background_stops_before_journal_and_close_is_idempotent(tmp_path):
+def test_close_settles_a_held_episode_before_the_journal_and_is_idempotent(tmp_path):
     f = composition(tmp_path)
     events = []
-    f.playing.learning_service = SimpleNamespace(close=lambda: events.append("trainer stopped"))
+    f.playing.controller.settle = lambda observation: events.append("settled")
     old_close = f.playing.journal.close
     def close_journal():
         events.append("journal closed")
@@ -283,35 +273,7 @@ def test_background_stops_before_journal_and_close_is_idempotent(tmp_path):
     f.playing.close()
     f.playing.close()
     f.screenshots.close()
-    assert events == ["trainer stopped", "journal closed"]
-
-
-def test_background_ingests_finished_runs_and_honours_shutdown(tmp_path):
-    runs, store = tmp_path / "runs", tmp_path / "learning"
-    store.mkdir()
-    (runs / "with-motor").mkdir(parents=True)
-    (runs / "with-motor" / "play-actions.jsonl").write_text("")
-    (runs / "ordinary").mkdir()
-    updated = threading.Event()
-    ingested, owners = [], []
-    class OfflineLearner:
-        directory = store
-        def ingest_run(self, directory):
-            ingested.append(directory.name)
-            return {"errors": []}
-        def update(self, *, cancelled):
-            owners.append(threading.current_thread().name)
-            assert callable(cancelled)
-            updated.set()
-            return {"candidates": 0}
-    service = MotorLearningService(OfflineLearner(), runs, interval_s=60).start()
-    try:
-        assert updated.wait(3)
-    finally:
-        service.close()
-    assert not service.thread.is_alive()
-    assert ingested == ["with-motor"] and owners == ["jev-motor-learner"]
-    assert json.loads((store / "latest-cycle.json").read_text())["cycle"] == {"candidates": 0}
+    assert events == ["settled", "journal closed"]
 
 
 @pytest.mark.parametrize("combat", [False, True])
@@ -581,101 +543,6 @@ def test_the_hunt_loop_is_not_a_step_of_itself_but_its_steps_are_offered():
     assert "TURNIN_QUEST" in delegable_skills("TURNIN_QUEST", LiveBody.available), \
         "an interaction routine is still the objective's own step"
     assert delegable_skills("CORPSE_RUN", LiveBody.available) == ("CORPSE_RUN",)
-
-
-def test_background_rereads_a_run_only_when_its_play_files_change(tmp_path):
-    """Re-reading every run each cycle took the store's lock once per recorded row, forty
-    runs over, and a cycle failed on Windows' ten-second lock (run 20260923T232300)."""
-    runs, store = tmp_path / "runs", tmp_path / "learning"
-    store.mkdir()
-    (runs / "quiet").mkdir(parents=True)
-    (runs / "quiet" / "play-actions.jsonl").write_text("")
-    (runs / "live").mkdir()
-    actions = runs / "live" / "play-actions.jsonl"
-    actions.write_text("")
-    cycles = threading.Semaphore(0)
-    ingested = []
-
-    class OfflineLearner:
-        directory = store
-        def ingest_run(self, directory):
-            ingested.append(directory.name)
-            return {"errors": []}
-        def update(self, *, cancelled):
-            cycles.release()
-            return {"candidates": 0}
-
-    service = MotorLearningService(OfflineLearner(), runs, interval_s=0.05).start()
-    try:
-        assert cycles.acquire(timeout=3) and cycles.acquire(timeout=3)
-        assert sorted(ingested) == ["live", "quiet"], "an unchanged run was read again"
-        actions.write_text('{"event": "request"}\n')
-        assert cycles.acquire(timeout=3) and cycles.acquire(timeout=3)
-    finally:
-        service.close()
-    assert sorted(ingested) == ["live", "live", "quiet"]
-
-
-def test_a_new_session_does_not_read_again_the_runs_an_earlier_one_read(tmp_path):
-    """Every new session read all 170 runs again, a lock per row, and met the lock's ten
-    seconds at its start (sessions 112 and 117)."""
-    runs, store = tmp_path / "runs", tmp_path / "learning"
-    store.mkdir()
-    for name in ("old", "older"):
-        (runs / name).mkdir(parents=True)
-        (runs / name / "play-actions.jsonl").write_text("")
-    ingested = []
-
-    class OfflineLearner:
-        directory = store
-        def __init__(self):
-            self.cycled = threading.Event()
-        def ingest_run(self, directory):
-            ingested.append(directory.name)
-            return {"errors": []}
-        def update(self, *, cancelled):
-            self.cycled.set()
-            return {"candidates": 0}
-
-    for session in range(2):
-        learner = OfflineLearner()
-        service = MotorLearningService(learner, runs, interval_s=60).start()
-        try:
-            assert learner.cycled.wait(3)
-        finally:
-            service.close()
-        if session == 0:
-            (runs / "new").mkdir()
-            (runs / "new" / "play-actions.jsonl").write_text("")
-    assert sorted(ingested) == ["new", "old", "older"]
-
-
-def test_background_leaves_the_run_in_progress_to_its_own_controller(tmp_path):
-    """The live run's controller records every row itself; re-reading it each cycle held
-    the store's lock in bursts the controller had to wait through (Errno 13 on Windows)."""
-    runs, store = tmp_path / "runs", tmp_path / "learning"
-    store.mkdir()
-    for name in ("earlier", "live"):
-        (runs / name).mkdir(parents=True)
-        (runs / name / "play-actions.jsonl").write_text("")
-    cycled = threading.Event()
-    ingested = []
-
-    class OfflineLearner:
-        directory = store
-        def ingest_run(self, directory):
-            ingested.append(directory.name)
-            return {"errors": []}
-        def update(self, *, cancelled):
-            cycled.set()
-            return {"candidates": 0}
-
-    service = MotorLearningService(OfflineLearner(), runs, interval_s=60, live=runs / "live").start()
-    try:
-        assert cycled.wait(3)
-    finally:
-        service.close()
-    assert ingested == ["earlier"]
 
 
 def test_hybrid_dispatch_runs_the_routine_first_and_the_tutor_on_its_failure(tmp_path):

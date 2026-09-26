@@ -1,7 +1,8 @@
-"""Observe, choose one action, execute, measure; teach only from joined outcomes.
+"""Observe, choose one action, execute, measure; record only joined outcomes.
 
 The guide still owns the objective and the supervisor still owns cancellation. This
-loop gives the visual tutor and evaluated student the decisions *inside* that objective.
+loop gives the visual tutor the decisions *inside* that objective. No student acts (V225);
+one training published before is asked for a proposal, recorded as the action's shadow.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from collections import deque
 from dataclasses import asdict, dataclass
 
 from jev.learn.episode import SkillOutcome
-from jev.play.actions import action_dict, parse_action
+from jev.play.actions import action_dict
 from jev.play.observation import capability, judge, measured_effects
 from jev.run.supervisor import Cancelled, Result
 
@@ -38,8 +39,9 @@ class PlayConfig:
     poll_s: float = 0.1
 
     def __post_init__(self):
-        if self.mode not in {"teach", "adaptive"}:
-            raise ValueError("playing mode must be teach or adaptive")
+        # `adaptive`, which let evaluated students act, went with V225.
+        if self.mode != "teach":
+            raise ValueError("playing mode must be teach")
         if any(not math.isfinite(v) or v <= 0 for v in (
                 self.teacher_timeout_s, self.outcome_wait_s, self.poll_s,
                 self.max_actions, self.max_no_effect, self.max_repeats)):
@@ -247,8 +249,8 @@ class PlayController:
     def _learning_failed(self, exc: Exception) -> None:
         """A store another writer held past Windows' ten-second lock is busy, not broken.
 
-        The row is in this run's journal, and the learner service ingests the run after it
-        ends; the student is only silenced until the next row the store takes. It was
+        The row is in this run's journal, which `MotorLearner.ingest_run` can read into the
+        store later; the store is only silenced until the next row it takes. It was
         disabled for the rest of the session, twice in four sessions (runs of sessions 52
         and 54, `PermissionError: [Errno 13]`). Anything else still disables it.
         """
@@ -260,15 +262,14 @@ class PlayController:
         self.learning_error = f"{type(exc).__name__}: {exc}"
         self.say(f"motor learning unavailable: {self.learning_error}")
 
-    def _prediction(self, observation, bucket, decision_id):
+    def _prediction(self, observation, bucket):
+        """A published student's proposal for this view: recorded as the shadow of the
+        tutor's action, never executed (V225)."""
         if self.learner is None or self.learning_error or self._learning_busy:
             return None
         try:
-            return self.learner.predict(
-                observation, bucket, decision_id=decision_id,
-                controls_fingerprint=self.controls_fingerprint,
-                knowledge_fingerprint=self.knowledge_fingerprint,
-                allow_student=self.config.mode == "adaptive")
+            return self.learner.predict(observation, bucket,
+                                        controls_fingerprint=self.controls_fingerprint)
         except Exception as exc:
             self._learning_failed(exc)
             return None
@@ -346,47 +347,31 @@ class PlayController:
                     return result
                 bucket = capability(current.data)
                 decision_id = uuid.uuid4().hex
-                prediction = self._prediction(current.data, bucket, decision_id)
-                student = (prediction is not None and prediction.action is not None
-                           and prediction.mode in {"canary", "active"}
-                           and self.config.mode == "adaptive")
-                if student:
-                    # A cached final view from the previous action can already have
-                    # changed. Infer again on the actual pre-input picture; novelty
-                    # returns ownership to Jev before any student input is sent.
-                    current = self._observe(arm, checkpoint)
-                    bucket = capability(current.data)
-                    prediction = self._prediction(current.data, bucket, decision_id)
-                    student = bool(prediction and prediction.action and prediction.can_execute)
-                author, model, reply = "student" if student else "teacher", None, None
+                prediction = self._prediction(current.data, bucket)
+                author = "teacher"
                 chosen_at = time.time()
                 self.journal.append("actions", {"event": "request", "decision_id": decision_id,
                                                 "episode_id": episode_id, "t": chosen_at,
                                                 "observation_id": current.id, "author": author})
-                if student:
-                    action = parse_action(prediction.action)
-                    expected = getattr(prediction, "expected_effect", None)
-                    model = prediction.model
-                else:
-                    reply = _await_checked(self.teacher.decide(
-                        current.data, current.png, controls=self.controls,
-                        recent=list(self.recent), timeout_s=self.config.teacher_timeout_s,
-                        skills=self.skills_for(arm)), checkpoint)
-                    reply_doc = asdict(reply)
-                    reply_doc["action"] = action_dict(reply.action) if reply.action else None
-                    self.journal.append("teacher", {"decision_id": decision_id,
-                                                     "episode_id": episode_id, "t": time.time(),
-                                                     **reply_doc})
-                    if not reply.ok:
-                        result = Result(SkillOutcome.ABORTED,
-                                        f"visual teacher {reply.status}: {reply.detail}", "teacher_unavailable")
-                        return result
-                    action, expected, model = reply.action, reply.expected_effect, reply.actual_model
+                reply = _await_checked(self.teacher.decide(
+                    current.data, current.png, controls=self.controls,
+                    recent=list(self.recent), timeout_s=self.config.teacher_timeout_s,
+                    skills=self.skills_for(arm)), checkpoint)
+                reply_doc = asdict(reply)
+                reply_doc["action"] = action_dict(reply.action) if reply.action else None
+                self.journal.append("teacher", {"decision_id": decision_id,
+                                                 "episode_id": episode_id, "t": time.time(),
+                                                 **reply_doc})
+                if not reply.ok:
+                    result = Result(SkillOutcome.ABORTED,
+                                    f"visual teacher {reply.status}: {reply.detail}", "teacher_unavailable")
+                    return result
+                action, expected, model = reply.action, reply.expected_effect, reply.actual_model
                 doc = action_dict(action)
                 expected = expected_for(doc, expected, bucket)
                 # Models can take seconds. Fresh values govern execution, and both the
                 # requested and actual starting views remain in the evidence.
-                before = current if student else self._observe(arm, checkpoint)
+                before = self._observe(arm, checkpoint)
                 if before.data["context"]["step_id"] != current.data["context"]["step_id"]:
                     result = Result(SkillOutcome.PREEMPTED, "guide objective changed", "preempted")
                     return result
@@ -400,13 +385,13 @@ class PlayController:
                        "controls_fingerprint": self.controls_fingerprint,
                        "knowledge_fingerprint": self.knowledge_fingerprint,
                        "synthetic": before.data.get("synthetic", False),
-                       "cost": {"teacher_calls": len(reply.calls) if reply else 0,
-                                "input_tokens": reply.tokens_in if reply else 0,
-                                "output_tokens": reply.tokens_out if reply else 0},
+                       "cost": {"teacher_calls": len(reply.calls),
+                                "input_tokens": reply.tokens_in,
+                                "output_tokens": reply.tokens_out},
                        "shadow": ({"model": prediction.model, "action": prediction.action,
                                    "confidence": prediction.confidence,
                                    "expected_effect": prediction.expected_effect}
-                                  if prediction and not student else None)}
+                                  if prediction else None)}
                 self.journal.append("actions", {"event": "accepted", **row})
                 delivery = after = None
                 nonfatal_loot = False
@@ -456,7 +441,7 @@ class PlayController:
                                     "author": author, "action": doc, "expected_effect": expected,
                                     "outcome": outcome,
                                     "delivery": asdict(delivery),
-                                    "rationale": reply.rationale if reply else "evaluated student"})
+                                    "rationale": reply.rationale})
                 self.say(f"play {author} {bucket}: {doc['kind']} -> {outcome['reason']}")
                 if outcome["fatal"]:
                     result = Result(SkillOutcome.PREEMPTED, "death observed", "died")

@@ -1,24 +1,31 @@
-"""Motor learning tests exercise the full evidence→fit→shadow→canary→handover path."""
+"""The motor corpus, and the shadow proposals of the students training published.
+
+No student trains or acts any more (V174, V225). The corpus keeps every tutor action with
+its observed and episode outcomes, and a model already in the store is still asked for a
+proposal, recorded as the tutor's shadow. Nothing can train a model now, so `frozen`
+writes one here as training wrote them: examples by their features, scales and a radius.
+"""
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
-import threading
-from dataclasses import replace
 
 import pytest
 
-from jev.play.learning import LearningConfig, MotorLearner, _grouped_split
-
-
-def config(**changes):
-    return replace(LearningConfig(), min_train_runs=2, min_train_examples=4,
-                   min_holdout_runs=1, min_holdout_examples=2,
-                   min_support=2, min_support_runs=2,
-                   min_shadow_examples=4, min_shadow_runs=2,
-                   min_canary_examples=4, min_canary_runs=2,
-                   min_teacher_baseline=4, retrain_new_runs=100, **changes)
+from jev.persist import atomic_json
+from jev.play.learning import (
+    FORMAT,
+    MotorLearner,
+    _digest,
+    _features,
+    _label,
+    _parameters,
+    _qualified,
+    _spatial,
+    _template,
+)
 
 
 def observation(identifier="now", *, side=0, target=77, hp=1.0):
@@ -60,60 +67,73 @@ def finish(learner, run, *, success=True, verified=True, progress=1):
                                     "elapsed_s": max(seconds, 1)})
 
 
-def teach(learner, *, capability="approach", action=None, synthetic=False):
+def failure(row):
+    """An observed failure, as a model keeps it: its context and its action."""
+    action = _label(row["action"])
+    return {"features": _features(row["before"], visual=_spatial(action)), "action": action}
+
+
+def frozen(learner, rows, *, capability="approach", controls="controls-v1", radius=0.05,
+           failures=(), mode="shadow", reason="fixture"):
+    """A student as training left it in the store, and the registry entry `predict` reads."""
+    examples = []
+    for row in rows:
+        action = _label(row["action"])
+        examples.append({"features": _features(row["before"], visual=_spatial(action)),
+                         "action": action, "expected_effect": row["expected_effect"],
+                         "run_id": row["run_id"], "decision_id": row["decision_id"]})
+    scales = {f"{block}.{key}": 1.0 for example in examples
+              for block in ("numeric", "visual") for key in example["features"][block]}
+    parameter_scales = {f"{_digest(_template(example['action']))}.{key}": 1.0
+                        for example in examples for key in _parameters(example["action"])}
+    model = {"format": FORMAT, "examples": examples, "scales": scales, "radius": radius,
+             "parameter_scales": parameter_scales, "parameter_radii": {}, "failures": [],
+             "evaluation": {"eligible": True}}
+    model_id = "motor-" + _digest(model)[:24]
+    path = learner.directory / "models" / f"{model_id}.json"
+    atomic_json(path, model)
+    atomic_json(learner.registry_path, {
+        "format": FORMAT, "generation": 1,
+        "models": {model_id: {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                              "capability": capability}},
+        "capabilities": {capability: {"model": model_id, "mode": mode, "reason": reason,
+                                      "controls_fingerprint": controls,
+                                      "failures": list(failures)}}})
+    return model_id
+
+
+def taught(learner, *, capability="approach", action=None, failures=()):
+    """Two rows a side from each of three runs, recorded, and a student frozen from the
+    qualified ones, as training took them."""
     for run in ("fit-a", "fit-b", "fit-c"):
         for side in range(2):
             for index in range(2):
                 learner.record(record(run, side * 2 + index, side=side, capability=capability,
-                                      action=action, synthetic=synthetic))
+                                      action=action))
         finish(learner, run)
-    learner.update()
-    return learner.status()["capabilities"].get(capability, {}).get("model")
+    qualified = [row for row in learner.records() if _qualified(row) and _label(row["action"])]
+    return frozen(learner, qualified, capability=capability, failures=failures)
 
 
-def predict(learner, *, side=0, observation_value=None, capability="approach", decision_id="now", **kw):
+def predict(learner, *, side=0, observation_value=None, capability="approach",
+            controls="controls-v1"):
     return learner.predict(observation_value or observation(side=side), capability,
-                           decision_id=decision_id, controls_fingerprint="controls-v1",
-                           knowledge_fingerprint="knowledge-v1", **kw)
+                           controls_fingerprint=controls)
 
 
-def shadow_runs(learner, model):
-    for run in ("shadow-a", "shadow-b"):
-        for side in range(2):
-            action = predict(learner, side=side).action
-            learner.record(record(run, side, side=side,
-                                  shadow={"model": model, "action": action,
-                                          "expected_effect": "scene_changed"}))
-        finish(learner, run)
-    learner.update()
-
-
-def canary_runs(learner, model):
-    for run in ("canary-a", "canary-b"):
-        for side in range(2):
-            learner.record(record(run, side, side=side, author="student", model=model))
-        finish(learner, run)
-    learner.update()
-
-
-def test_student_learns_direction_and_duration_and_survives_reload(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    assert model
-    other = MotorLearner(tmp_path, config=config())
+def test_a_published_student_proposes_each_sides_turn_as_a_shadow_after_a_reload(tmp_path):
+    model = taught(MotorLearner(tmp_path))
+    other = MotorLearner(tmp_path)
     left, right = predict(other), predict(other, side=1)
     assert left.action == {"kind": "key", "control": "turn_left", "duration_s": 0.2}
     assert right.action == {"kind": "key", "control": "turn_right", "duration_s": 0.4}
-    assert left.mode == "shadow" and not left.can_execute
+    assert left.mode == right.mode == "shadow" and left.model == model
     assert left.expected_effect == "scene_changed"
-    info = json.loads((tmp_path / "models" / f"{model}.json").read_text())
-    assert not set(info["train_runs"]) & set(info["holdout_runs"])
-    assert info["evaluation"]["precision"] == 1
 
 
 def test_same_radio_different_screen_is_not_direction_evidence(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    teach(learner)
+    learner = MotorLearner(tmp_path)
+    taught(learner)
     assert predict(learner, side=0.5).action is None
     obs = observation()
     obs["features"] = {}
@@ -124,22 +144,21 @@ def test_same_radio_different_screen_is_not_direction_evidence(tmp_path):
 
 
 def test_unknown_state_missingness_and_changed_bindings_abstain(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    teach(learner)
+    learner = MotorLearner(tmp_path)
+    taught(learner)
     obs = observation()
     del obs["values"]["vitals.dead"]
     assert predict(learner, observation_value=obs).action is None
-    obs = observation(hp=0.2)
-    assert predict(learner, observation_value=obs).action is None
-    assert learner.predict(observation(), "approach", decision_id="new",
-                           controls_fingerprint="changed", knowledge_fingerprint="knowledge-v1").action is None
+    assert predict(learner, observation_value=observation(hp=0.2)).action is None
+    rebound = predict(learner, controls="changed")
+    assert rebound.action is None and "controls" in rebound.reason
 
 
 def test_transfer_ignores_quest_ids_names_goals_and_binds_current_click_identity(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
+    learner = MotorLearner(tmp_path)
     click = {"kind": "click", "button": "right", "intent": "interact", "x": 0.5, "y": 0.6,
              "expected_target_id": 77}
-    teach(learner, action=click)
+    taught(learner, action=click)
     obs = observation(target=999)
     obs["context"].update(goal="repair a different quest", step_id="quest-5261")
     proposal = predict(learner, observation_value=obs)
@@ -149,9 +168,64 @@ def test_transfer_ignores_quest_ids_names_goals_and_binds_current_click_identity
     assert predict(learner, observation_value=obs).action is None
 
 
+def test_an_observed_failure_vetoes_the_same_action_in_its_context(tmp_path):
+    learner = MotorLearner(tmp_path)
+    taught(learner, failures=[failure(record("veto", 0, success=False))])
+    vetoed = predict(learner)
+    assert vetoed.action is None and "vetoes" in vetoed.reason
+    assert predict(learner, side=1).action is not None, "another context keeps its proposal"
+
+
+def test_modified_model_fails_closed(tmp_path):
+    learner = MotorLearner(tmp_path)
+    model = taught(learner)
+    path = tmp_path / "models" / f"{model}.json"
+    path.write_text(path.read_text() + " ")
+    assert predict(learner).action is None
+    assert "checksum" in predict(learner).reason
+
+
+def test_a_blocked_student_or_a_synthetic_view_gets_no_proposal(tmp_path):
+    learner = MotorLearner(tmp_path)
+    rows = [record(run, index) for run in ("a", "b", "c") for index in range(2)]
+    frozen(learner, rows, mode="blocked", reason="student expected effect failed")
+    blocked = predict(learner)
+    assert blocked.action is None and blocked.reason == "student expected effect failed"
+    learner = MotorLearner(tmp_path / "other")
+    taught(learner)
+    synthetic = observation()
+    synthetic["synthetic"] = True
+    assert predict(learner, observation_value=synthetic).action is None
+
+
+def test_a_state_decision_transfers_across_scenery_but_a_turn_does_not(tmp_path):
+    """Running COMBAT_PROFILE with a wolf selected is the same decision beside any tree;
+    how far to turn depends on the picture."""
+    routine = {"kind": "skill", "name": "COMBAT_PROFILE", "params": {}}
+    learner = MotorLearner(tmp_path / "routine")
+    taught(learner, capability="combat", action=routine)
+    elsewhere = observation(side=0)
+    elsewhere["features"] = {f"screen.{i}": 0.9 for i in range(12)}      # unfamiliar scene
+    elsewhere["screen"] = {"sha256": "screen-elsewhere"}
+    assert predict(learner, capability="combat", observation_value=elsewhere).action == routine
+
+    turns = MotorLearner(tmp_path / "turns")
+    taught(turns)
+    assert predict(turns, observation_value=elsewhere).action is None, \
+        "a turn learned in one picture was proposed for a different one"
+
+
+def test_a_routine_with_graph_parameters_is_not_a_label():
+    """Only a routine without parameters of its own is a whole action; its parameters
+    would be graph facts the coach owns."""
+    assert _label({"kind": "skill", "name": "COMBAT_PROFILE", "params": {}}) == {
+        "kind": "skill", "name": "COMBAT_PROFILE", "params": {}}
+    assert _label({"kind": "skill", "name": "TRAVEL_TO", "params": {"x": 0.5, "y": 0.4}}) is None
+
+
 @pytest.mark.parametrize("bad", ["synthetic", "no_episode", "no_progress", "no_effect", "unverified", "wrong_effect"])
-def test_nontraining_evidence_retained_without_success_labels(tmp_path, bad):
-    learner = MotorLearner(tmp_path, config=config())
+def test_every_attempt_is_kept_but_only_qualified_ones_could_teach(tmp_path, bad):
+    learner = MotorLearner(tmp_path)
     for run in ("a", "b", "c"):
         for i in range(4):
             row = record(run, i, synthetic=bad == "synthetic", verified=bad != "unverified",
@@ -161,108 +235,29 @@ def test_nontraining_evidence_retained_without_success_labels(tmp_path, bad):
             learner.record(row)
         if bad != "no_episode":
             finish(learner, run, progress=0 if bad == "no_progress" else 1)
-    learner.update()
-    assert len(learner.records()) == 12
-    assert predict(learner).action is None
+    rows = learner.records()
+    assert len(rows) == 12
+    assert not any(_qualified(row) for row in rows)
+
+
+def test_a_qualified_attempt_needs_its_own_verified_effect_and_its_episodes_progress(tmp_path):
+    learner = MotorLearner(tmp_path)
+    learner.record(record("a", 0))
+    assert not _qualified(learner.records()[0]), "no episode yet"
+    finish(learner, "a")
+    assert _qualified(learner.records()[0])
 
 
 def test_unknown_final_episode_cannot_be_injected_by_action_author(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
+    learner = MotorLearner(tmp_path)
     row = record("a", 1)
     row["episode_outcome"] = {"success": True, "verified": True, "progress": 100}
     learner.record(row)
     assert learner.records()[0]["episode_outcome"] is None
 
 
-def test_complete_measured_handover_and_immediate_capability_rollback(tmp_path):
-    learner = MotorLearner(tmp_path, config=config(), clock=lambda: 100)
-    model = teach(learner)
-    shadow_runs(learner, model)
-    assert learner.status()["capabilities"]["approach"]["mode"] == "canary"
-    draws = [predict(learner, decision_id=str(i)).mode for i in range(1000)]
-    assert 50 < draws.count("canary") < 150
-    canary_runs(learner, model)
-    state = learner.status()["capabilities"]["approach"]
-    assert state["mode"] == "active"
-    assert state["metrics"]["student_cost"]["teacher_calls"] == 0
-    assert state["metrics"]["teacher_baseline"]["teacher_calls"] == 4
-    draws = [predict(learner, decision_id=str(i)).mode for i in range(100)]
-    assert "active" in draws and "shadow" in draws
-    learner.record(record("failure", 1, author="student", model=model, success=False))
-    assert predict(learner).action is None
-    assert learner.status()["capabilities"]["approach"]["mode"] == "blocked"
-
-
-def test_student_failed_episode_rejects_motor_effect_success(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    shadow_runs(learner, model)
-    learner.record(record("walked-nowhere", 1, author="student", model=model))
-    finish(learner, "walked-nowhere", success=False, progress=0)
-    assert learner.status()["capabilities"]["approach"]["mode"] == "blocked"
-
-
-def test_interruption_quarantines_without_blacklisting_candidate(tmp_path):
-    learner = MotorLearner(tmp_path, config=config(), clock=lambda: 100)
-    model = teach(learner)
-    shadow_runs(learner, model)
-    learner.record(record("cancel", 1, author="student", model=model,
-                          success=False, verified=False, timestamp=99))
-    state = learner.status()["capabilities"]["approach"]
-    assert state["mode"] == "shadow"
-    assert model not in state["blocked"]
-    learner.update()
-    assert learner.status()["capabilities"]["approach"]["mode"] == "shadow"
-
-
-def test_no_cost_measurement_no_promotion(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    shadow_runs(learner, model)
-    for run in ("canary-a", "canary-b"):
-        for side in range(2):
-            row = record(run, side, side=side, author="student", model=model)
-            del row["cost"]
-            learner.record(row)
-        finish(learner, run)
-    learner.update()
-    assert learner.status()["capabilities"]["approach"]["mode"] == "canary"
-
-
-def test_training_or_holdout_rows_never_count_as_live_shadow(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    for run in ("fit-a", "fit-b", "fit-c"):
-        for side in range(2):
-            learner.record(record(run, 100 + side, side=side,
-                                  shadow={"model": model, "action": predict(learner, side=side).action,
-                                          "expected_effect": "scene_changed"}))
-    learner.update()
-    assert learner.status()["capabilities"]["approach"]["metrics"]["shadow_examples"] == 0
-
-
-def test_linked_encounters_cannot_cross_holdout_runs():
-    rows = [record("a", 1), record("b", 1), record("c", 1), record("d", 1)]
-    rows[0]["encounter_id"] = rows[1]["encounter_id"] = "same-encounter"
-    train, test = _grouped_split(rows, 1)
-    assert not ({"a", "b"} & {r["run_id"] for r in train}
-                and {"a", "b"} & {r["run_id"] for r in test})
-
-
-def test_the_held_out_runs_grow_until_they_hold_enough_examples():
-    """About five qualified examples a run: two held-out runs never held twenty, and acquire
-    sat at 55 of 60 behind the split however many runs it earned."""
-    rows = [record(f"run-{r}", i) for r in range(12) for i in range(5)]
-    train, test = _grouped_split(rows, 2, 20)
-    held = {row["run_id"] for row in test}
-    assert len(test) >= 20 and len(held) >= 2
-    assert len(test) < 25, "no more runs than the minimums need"
-    assert not held & {row["run_id"] for row in train}
-    assert _grouped_split(rows, 2) == _grouped_split(rows, 2, 0), "the examples bound is optional"
-
-
 def test_duplicate_conflict_and_episode_idempotence(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
+    learner = MotorLearner(tmp_path)
     row = record("a", 1)
     assert learner.record(row)
     assert not learner.record(row)
@@ -277,7 +272,7 @@ def test_duplicate_conflict_and_episode_idempotence(tmp_path):
 
 
 def test_journal_recovery_ignores_unfinished_requests_and_partial_line(tmp_path):
-    learner = MotorLearner(tmp_path / "learning", config=config())
+    learner = MotorLearner(tmp_path / "learning")
     run = tmp_path / "run"
     run.mkdir()
     row = record("recovered", 1)
@@ -292,415 +287,33 @@ def test_journal_recovery_ignores_unfinished_requests_and_partial_line(tmp_path)
     assert learner.records()[0]["episode_outcome"]["success"]
 
 
-def test_modified_model_fails_closed(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    path = tmp_path / "models" / f"{model}.json"
-    path.write_text(path.read_text() + " ")
-    assert predict(learner).action is None
-    assert "checksum" in predict(learner).reason
-
-
-def test_cancelled_training_does_not_publish(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    for run in ("a", "b", "c"):
-        for i in range(4):
-            learner.record(record(run, i))
-        finish(learner, run)
-    learner.update(cancelled=lambda: True)
-    assert not learner.status()["models"]
-
-
-def test_background_fit_cannot_block_record_or_overwrite_live_rollback(tmp_path, monkeypatch):
-    from jev.play import learning
-
-    learner = MotorLearner(tmp_path, config=replace(config(), retrain_new_runs=1))
-    model = teach(learner)
-    learner.record(record("new-run", 1))
-    finish(learner, "new-run")
-    fitting, release = threading.Event(), threading.Event()
-    original = learning._fit
-
-    def wait_fit(*args, **kwargs):
-        fitting.set()
-        assert release.wait(5)
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(learning, "_fit", wait_fit)
-    worker = threading.Thread(target=learner.update)
-    worker.start()
-    assert fitting.wait(5)
-    try:
-        learner.record(record("bad-live", 1, author="student", model=model, success=False))
-    finally:
-        release.set()
-        worker.join(5)
-    assert not worker.is_alive()
-    assert learner.status()["capabilities"]["approach"]["mode"] == "blocked"
-
-
-def test_new_runs_retrain_frozen_candidate_without_promoting_the_new_weights(tmp_path):
-    learner = MotorLearner(tmp_path, config=replace(config(), retrain_new_runs=1))
-    old = teach(learner)
-    for side in range(2):
-        learner.record(record("new-fit", side, side=side))
-    finish(learner, "new-fit")
-    learner.update()
-    state = learner.status()["capabilities"]["approach"]
-    assert state["model"] != old
-    assert state["previous"] == old
-    assert state["mode"] == "shadow"
-
-
-def test_other_capabilities_keep_their_authority_after_failure(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    for run in ("service-a", "service-b", "service-c"):
-        for i in range(4):
-            learner.record(record(run, i, capability="service"))
-        finish(learner, run)
-    learner.update()
-    before = learner.status()["capabilities"]["service"]
-    learner.record(record("bad", 1, author="student", model=model, success=False))
-    assert learner.status()["capabilities"]["service"] == before
-
-
-def test_canary_expires_without_silent_promotion(tmp_path):
-    now = [0]
-    learner = MotorLearner(tmp_path, config=config(), clock=lambda: now[0])
-    model = teach(learner)
-    shadow_runs(learner, model)
-    now[0] = 10000
-    assert predict(learner).mode == "shadow"
-    learner.update()
-    assert learner.status()["capabilities"]["approach"]["mode"] == "blocked"
-
-
-def test_failed_training_examples_veto_replaying_successful_action(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    for run in ("a", "b", "c"):
-        for i in range(4):
-            learner.record(record(run, i))
-        learner.record(record(run, 100, success=False))
-        finish(learner, run)
-    learner.update()
-    assert predict(learner).action is None
-
-
-def test_action_authorship_never_proves_success(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    for run in ("teacher-a", "teacher-b", "teacher-c"):
-        for i in range(4):
-            learner.record(record(run, i, author="teacher", success=False))
-        finish(learner, run)
-    learner.update()
-    assert not learner.status()["models"]
-
-
-@pytest.mark.parametrize("kind", ["duration", "click", "pointer", "camera"])
-def test_continuous_parameters_share_support_without_rounding_or_inventing_outputs(tmp_path, kind):
-    learner = MotorLearner(tmp_path, config=config())
-    names = ["jitter-a", "jitter-b", "jitter-c", "jitter-d", "jitter-e"]
-    _, holdout = _grouped_split([record(run, 0) for run in names], 1)
-    heldout_run = holdout[0]["run_id"]
-    training_actions = []
-    index = 0
-    for run in names:
-        if run == heldout_run:
-            amount = 1.5
-        else:
-            amount = index
-            index += 1
-        if kind == "duration":
-            action = {"kind": "key", "control": "turn_left", "duration_s": 0.2 + amount * 0.01}
-            expected = "scene_changed"
-        elif kind in {"click", "pointer"}:
-            action = {"kind": kind, "x": 0.45 + amount * 0.005, "y": 0.6 + amount * 0.004}
-            expected = "observed"
-            if kind == "click":
-                action.update(button="right", intent="interact", expected_target_id=77)
-                expected = "ui_opened"
-        else:
-            action = {"kind": "camera", "axis": "yaw", "pixels": -80 - int(amount * 6)}
-            expected = "scene_changed"
-        if run != heldout_run:
-            training_actions.append(action)
-        for i in range(4):
-            row = record(run, i, action=action)
-            row["expected_effect"] = expected
-            row["outcome"]["effects"] = [expected]
-            learner.record(row)
-        finish(learner, run)
-    learner.update()
-    prediction = predict(learner)
-    assert prediction.action is not None
-    # Default values may be present in parsed actions; compare every meaningful
-    # teacher parameter and require one entire actually observed action, not axis-wise
-    # interpolation which could point somewhere no successful click ever occurred.
-    assert any(all(prediction.action.get(key) == value for key, value in action.items())
-               for action in training_actions)
-    evaluation = learner.status()["capabilities"]["approach"]["evaluation"]
-    assert evaluation["eligible"]
-    assert evaluation["structural_agreement"] == evaluation["parameter_coverage"] == 1
-    assert evaluation["exact_agreement"] == 0
-
-
-def test_unknown_episode_does_not_restore_authority_after_observed_action_failure(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    shadow_runs(learner, model)
-    learner.record(record("failed", 1, author="student", model=model, success=False))
-    finish(learner, "failed", success=False, verified=False, progress=0)
-    assert learner.status()["capabilities"]["approach"]["mode"] == "blocked"
-
-
-def test_verified_wait_is_learnable_without_claiming_hid_input_was_delivered(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    for run in ("a", "b", "c"):
-        for index in range(4):
-            row = record(run, index, action={"kind": "observe", "wait_s": 0.5})
-            row.update(expected_effect="observed", delivery={"code": "observed", "delivered": False})
-            row["outcome"]["effects"] = ["observed"]
-            learner.record(row)
-        finish(learner, run)
-    learner.update()
-    prediction = predict(learner)
-    assert prediction.action == {"kind": "observe", "wait_s": 0.5}
-    assert prediction.expected_effect == "observed"
-
-
-def test_partial_coverage_can_handover_only_supported_contexts(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    for i in range(10):
-        learner.record(record("novel", i, side=0.5,
-                              shadow={"model": model, "action": None, "expected_effect": None}))
-    finish(learner, "novel")
-    shadow_runs(learner, model)
-    state = learner.status()["capabilities"]["approach"]
-    assert state["mode"] == "canary"
-    assert state["metrics"]["shadow_examples"] == 4
-    assert state["metrics"]["shadow_coverage"] == 4 / 14
-    assert predict(learner, side=0.5).action is None
-
-
-def test_teacher_corrections_in_other_capabilities_are_part_of_student_episode_cost(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    shadow_runs(learner, model)
-    for run in ("canary-a", "canary-b"):
-        for side in range(2):
-            row = record(run, side, side=side, author="student", model=model)
-            row["elapsed_s"] = 1
-            learner.record(row)
-        for i in range(3):
-            correction = record(run, 100 + i, capability="service")
-            correction["elapsed_s"] = 0.1
-            learner.record(correction)
-        finish(learner, run)
-    learner.update()
-    state = learner.status()["capabilities"]["approach"]
-    assert state["mode"] == "canary"
-    assert state["metrics"]["student_cost"]["teacher_calls"] == 6
-    assert state["metrics"]["student_cost"]["progress_per_hour"] > state["metrics"]["teacher_baseline"]["progress_per_hour"]
-    assert state["metrics"]["student_cost"]["teacher_calls_per_progress"] == 3
-
-
-def test_zero_teacher_calls_cannot_promote_slower_task_progress(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    shadow_runs(learner, model)
-    for run in ("canary-a", "canary-b"):
-        for side in range(2):
-            row = record(run, side, side=side, author="student", model=model)
-            row["elapsed_s"] = 10
-            learner.record(row)
-        finish(learner, run)
-    learner.update()
-    state = learner.status()["capabilities"]["approach"]
-    assert state["mode"] == "canary"
-    assert state["metrics"]["student_cost"]["teacher_calls"] == 0
-    assert state["metrics"]["student_cost"]["progress_per_hour"] < state["metrics"]["teacher_baseline"]["progress_per_hour"]
-
-
-def test_invalid_negative_cost_cannot_be_presented_as_teacher_savings(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    model = teach(learner)
-    shadow_runs(learner, model)
-    for run in ("canary-a", "canary-b"):
-        for side in range(2):
-            row = record(run, side, side=side, author="student", model=model)
-            row["cost"]["teacher_calls"] = -1
-            learner.record(row)
-        finish(learner, run)
-    learner.update()
-    assert learner.status()["capabilities"]["approach"]["mode"] == "canary"
-
-
-def test_active_policy_rolls_back_when_successful_work_becomes_slower(tmp_path):
-    learner = MotorLearner(tmp_path, config=config(), clock=lambda: 100)
-    model = teach(learner)
-    shadow_runs(learner, model)
-    canary_runs(learner, model)
-    assert learner.status()["capabilities"]["approach"]["mode"] == "active"
-    for run in ("slow-a", "slow-b"):
-        for side in range(2):
-            row = record(run, side, side=side, author="student", model=model, timestamp=101)
-            row["elapsed_s"] = 10
-            learner.record(row)
-        finish(learner, run)
-    learner.update()
-    assert learner.status()["capabilities"]["approach"]["mode"] == "blocked"
-    assert "throughput" in learner.status()["capabilities"]["approach"]["reason"]
-
-
-def test_a_routine_jev_chose_is_learned_as_a_whole_action(tmp_path):
-    """Delegating COMBAT_PROFILE in the right situation is a decision the student can take
-    over; only routines without parameters of their own become labels."""
-    learner = MotorLearner(tmp_path / "motor", config=config())
-    routine = {"kind": "skill", "name": "COMBAT_PROFILE", "params": {}}
-    model = teach(learner, capability="combat", action=routine)
-    assert model is not None
-    prediction = predict(learner, capability="combat")
-    assert prediction.action == routine
-
-
-def test_a_routine_with_graph_parameters_is_not_a_label(tmp_path):
-    learner = MotorLearner(tmp_path / "motor", config=config())
-    routine = {"kind": "skill", "name": "TRAVEL_TO", "params": {"x": 0.5, "y": 0.4}}
-    assert teach(learner, capability="travel", action=routine) is None
-
-
-def test_a_state_decision_transfers_across_scenery_but_a_turn_does_not(tmp_path):
-    """Running COMBAT_PROFILE with a wolf selected is the same decision beside any tree;
-    how far to turn depends on the picture."""
-    routine = {"kind": "skill", "name": "COMBAT_PROFILE", "params": {}}
-    learner = MotorLearner(tmp_path / "routine", config=config())
-    teach(learner, capability="combat", action=routine)
-    elsewhere = observation(side=0)
-    elsewhere["features"] = {f"screen.{i}": 0.9 for i in range(12)}      # unfamiliar scene
-    elsewhere["screen"] = {"sha256": "screen-elsewhere"}
-    assert predict(learner, capability="combat", observation_value=elsewhere).action == routine
-
-    turns = MotorLearner(tmp_path / "turns", config=config())
-    teach(turns)
-    assert predict(turns, observation_value=elsewhere).action is None, \
-        "a turn learned in one picture was proposed for a different one"
-
-
-def test_a_new_guide_does_not_start_the_corpus_again(tmp_path):
-    """Knowledge shaped which actions the tutor chose, but every label is graded by its
-    observed outcome and none of it is a model input. Tied to it, the corpus restarted at
-    every guide change - a regenerated guide or the next level band (V71)."""
-    learner = MotorLearner(tmp_path, config=config())
-    for number, run in enumerate(("fit-a", "fit-b", "fit-c")):
-        knowledge = "knowledge-v1" if number < 2 else "knowledge-v2"      # the guide moved on
-        for side in range(2):
-            for index in range(2):
-                learner.record(record(run, side * 2 + index, side=side, knowledge=knowledge))
-        finish(learner, run)
-    learner.update()
-    state = learner.status()["capabilities"].get("approach")
-    assert state and state["model"], "runs from before the guide changed were thrown away"
-    assert state["knowledge_fingerprint"] == "knowledge-v2", "the newest is kept, for audit"
-    moved_on = learner.predict(observation(side=1), "approach", decision_id="now",
-                               controls_fingerprint="controls-v1",
-                               knowledge_fingerprint="knowledge-v3")
-    assert moved_on.action == {"kind": "key", "control": "turn_right", "duration_s": 0.4}
-
-
 TURNS = {"turn_left": {"command": "TURNLEFT", "keys": ["a"], "mode": "hold", "executable": True},
          "turn_right": {"command": "TURNRIGHT", "keys": ["d"], "mode": "hold", "executable": True}}
 MANIFEST = {"bindings": TURNS, "skills": ["HUNT"], "limits": {"max_hold_s": 2.0}}
 
 
-def two_generations(learner, v2):
-    """Runs a and b under one controls generation, run c under the next."""
-    learner.remember_controls("controls-v1", MANIFEST)
-    learner.remember_controls("controls-v2", v2)
-    for number, run in enumerate(("fit-a", "fit-b", "fit-c")):
-        for side in range(2):
-            for index in range(2):
-                learner.record(record(run, side * 2 + index, side=side,
-                                      controls="controls-v1" if number < 2 else "controls-v2"))
-        finish(learner, run)
-    learner.update()
-    return learner.status()["capabilities"].get("approach")
-
-
-def test_a_new_routine_does_not_start_the_corpus_again(tmp_path):
-    """A generation is the whole controls manifest, which changed five times in two days
-    as routines were added and spells reached the bar; each restarted the corpus."""
-    learner = MotorLearner(tmp_path, config=config())
-    state = two_generations(learner, {**MANIFEST, "skills": ["HUNT", "BIND_HEARTH"]})
-    assert state and state["controls_fingerprint"] == "controls-v2"
-    assert set(state["corpus_runs"]) == {"fit-a", "fit-b", "fit-c"}, "earlier runs thrown away"
-    now = learner.predict(observation(side=1), "approach", decision_id="now",
-                          controls_fingerprint="controls-v2", knowledge_fingerprint="knowledge-v1")
-    assert now.action == {"kind": "key", "control": "turn_right", "duration_s": 0.4}
-
-
-def test_a_rebound_key_leaves_only_its_own_records_behind(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    rebound = {**TURNS, "turn_left": {**TURNS["turn_left"], "keys": ["q"]}}
-    state = two_generations(learner, {**MANIFEST, "bindings": rebound})
-    model = learner._load(state["model"], learner.status())
-    old_turns = [e for e in model["examples"] if e["action"]["control"] == "turn_left"
-                 and e["run_id"] != "fit-c"]
-    assert not old_turns, "a turn pressed with another key was taught as this one"
-    assert any(e["run_id"] != "fit-c" for e in model["examples"]), "the unchanged key's kept"
-    assert predict_v2(learner, side=0).action is None, "one run is not independent support"
-    assert predict_v2(learner, side=1).action is not None
-
-
-def predict_v2(learner, *, side):
-    return learner.predict(observation(side=side), "approach", decision_id=f"now-{side}",
-                           controls_fingerprint="controls-v2", knowledge_fingerprint="knowledge-v1")
-
-
 def test_a_run_brings_the_controls_it_played_under(tmp_path):
     from jev.play.observation import fingerprint
 
-    learner = MotorLearner(tmp_path / "store", config=config())
+    store = tmp_path / "store"
+    learner = MotorLearner(store)
     run = tmp_path / "run"
     run.mkdir()
     (run / "play-config.json").write_text(json.dumps(
         {"controls": MANIFEST, "controls_fingerprint": fingerprint(MANIFEST)}))
     learner.ingest_run(run)
-    assert learner._manifests() == {fingerprint(MANIFEST): MANIFEST}
+    kept = store / "controls" / f"{fingerprint(MANIFEST)}.json"
+    assert json.loads(kept.read_text()) == MANIFEST
     (run / "play-config.json").write_text(json.dumps(
         {"controls": MANIFEST, "controls_fingerprint": "not-its-print"}))
     learner.ingest_run(run)
-    assert "not-its-print" not in learner._manifests()
+    assert not (store / "controls" / "not-its-print.json").exists()
 
 
-def test_an_unknown_generation_is_still_kept_apart(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    learner.remember_controls("controls-v2", MANIFEST)       # v1's manifest never recorded
-    for number, run in enumerate(("fit-a", "fit-b", "fit-c")):
-        for side in range(2):
-            for index in range(2):
-                learner.record(record(run, side * 2 + index, side=side,
-                                      controls="controls-v1" if number < 2 else "controls-v2"))
-        finish(learner, run)
-    learner.update()
-    assert "approach" not in learner.status()["capabilities"]
-
-
-def test_new_key_bindings_still_start_a_new_generation(tmp_path):
-    learner = MotorLearner(tmp_path, config=config())
-    teach(learner)
-    assert predict(learner).action is not None
-    rebound = learner.predict(observation(side=0), "approach", decision_id="now",
-                              controls_fingerprint="controls-v2",
-                              knowledge_fingerprint="knowledge-v1")
-    assert rebound.action is None and "controls" in rebound.reason
-
-
-def test_an_unfinished_episode_reads_no_records_when_no_student_can_have_acted(tmp_path, monkeypatch):
+def test_an_unfinished_episode_reads_no_records(tmp_path, monkeypatch):
     """Scanning every record under the store's lock, for a student that was not playing,
     made other writers wait past Windows' ten-second lock (PermissionError [Errno 13])."""
-    learner = MotorLearner(tmp_path, config=config())
+    learner = MotorLearner(tmp_path)
     learner.record(record("run-a", 0))
     monkeypatch.setattr(learner, "records", lambda: (_ for _ in ()).throw(AssertionError("scanned")))
     assert learner.finish_episode("episode-run-a", run_id="run-a",

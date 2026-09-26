@@ -4,9 +4,10 @@
 
 Every number comes from the run's own records (`executions.jsonl`, `ticks.jsonl`,
 `play-*.jsonl`); nothing is inferred from logs or screenshots. `learner` is what the motor
-learner holds and what this run added to it, by the learner's own qualification rules and
-training gates: game progress alone does not say whether the tutor's play taught anything.
-The store defaults to the one the teaching launcher records (`var/teaching-launch.json`).
+corpus holds and what this run added to it, by the corpus's own qualification rules: game
+progress alone does not say whether the tutor's play left anything to learn from. The
+training gates it once counted toward went with V225. The store defaults to the one the
+teaching launcher records (`var/teaching-launch.json`).
 """
 
 from __future__ import annotations
@@ -108,24 +109,21 @@ def default_store() -> Path | None:
 
 
 def learner(run_id: str, store: Path | None) -> dict | None:
-    """What the motor learner holds, and what this run added, by its own rules and gates."""
+    """What the motor corpus holds, and what this run added, by its own rules."""
     if store is None or not (store / "motor").exists():
         return None
     sys.path.insert(0, str(ROOT))
-    from jev.play.learning import LearningConfig, MotorLearner, _label, _qualified
+    from jev.play.learning import MotorLearner, _label, _qualified
 
     motor = MotorLearner(store / "motor")
-    config = LearningConfig()
-    need_runs = config.min_train_runs + config.min_holdout_runs
-    need_rows = config.min_train_examples + config.min_holdout_examples
     records = motor.records()
     usable = [r for r in records if _qualified(r) and _label(r.get("action") or {})]
     progress = {}
     for capability in sorted({r.get("capability") for r in records if r.get("capability")}):
         mine = [r for r in usable if r.get("capability") == capability]
         progress[capability] = {
-            "runs": f"{len({r['run_id'] for r in mine})}/{need_runs}",
-            "examples": f"{len(mine)}/{need_rows}",
+            "runs": len({r["run_id"] for r in mine}),
+            "examples": len(mine),
             "this_run": sum(r["run_id"] == run_id for r in mine),
             "this_run_actions": sum(r["run_id"] == run_id and r.get("capability") == capability
                                     for r in records),

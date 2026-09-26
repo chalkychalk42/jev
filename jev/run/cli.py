@@ -87,8 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--teacher-effort", choices=("low", "medium", "high", "xhigh", "max"),
                         help="Claude reasoning effort; unset leaves the CLI default")
     parser.add_argument("--teacher-calls-per-hour", type=int, default=12)
-    parser.add_argument("--play-mode", choices=("off", "teach", "adaptive"), default="off",
-                        help="visual Jev actions inside guide skills; adaptive enables evaluated motor handover")
+    parser.add_argument("--play-mode", choices=("off", "teach"), default="off",
+                        help="visual Jev actions inside guide skills, from the tutor")
     parser.add_argument("--play-teacher-calls-per-hour", type=int, default=240,
                         help="separate motor tutor budget, counting each actual request/lookup")
     parser.add_argument("--play-decision-timeout", type=float, default=30,
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args.teacher_model = model_for(args.teacher_provider, args.teacher_model)
     if args.teacher_provider != "claude" and args.play_mode == "off":
-        parser.error("GLM is available for visual playing; select --play-mode teach or adaptive")
+        parser.error("GLM is available for visual playing; select --play-mode teach")
     if args.learning_store is None:
         try:
             args.learning_store = default_learning_store(ROOT)
@@ -154,7 +154,6 @@ def main(argv: list[str] | None = None) -> int:
                           "visual_teacher": args.play_mode != "off",
                           "motor_learning": False,          # recorded, not trained (V174)
                           "motor_recording": args.play_mode != "off",
-                          "motor_handover": args.play_mode == "adaptive",
                           "play_teacher_calls_per_hour": args.play_teacher_calls_per_hour,
                           "teacher_provider": args.teacher_provider,
                           "teacher_requested": args.teacher_model,
@@ -381,15 +380,13 @@ def _live(args, graph) -> int:
 
             playing = PlayingBody(
                 body, recorder=recorder, store=args.learning_store, screenshots=screenshots,
-                mode=args.play_mode, teacher_model=args.teacher_model,
-                teacher_binary=args.teacher_binary,
+                teacher_model=args.teacher_model, teacher_binary=args.teacher_binary,
                 teacher_provider=args.teacher_provider, teacher_base_url=args.teacher_base_url,
                 teacher_env_file=args.teacher_env_file, teacher_key_env=args.teacher_key_env,
                 teacher_effort=args.teacher_effort,
                 teacher_calls_per_hour=args.play_teacher_calls_per_hour,
                 binding_paths=args.bindings, world_db=args.world_db,
-                config=PlayConfig(mode=args.play_mode, teacher_timeout_s=args.play_decision_timeout),
-                start_learning=False)
+                config=PlayConfig(teacher_timeout_s=args.play_decision_timeout))
             # After a routine fails: the tutor, or the routine again, learned (V158).
             playing.recovery = Choice(choices, "recover.after_failure", log=choice_log)
             body = playing
@@ -475,8 +472,6 @@ def _live(args, graph) -> int:
                     if fault not in teacher_faults:
                         teacher_faults.add(fault)
                         print(fault)
-            if playing is not None:
-                playing.poll(state)
 
         supervisor = Supervisor(runtime, body, max_failures=args.retries,
                                 has_focus=body.has_focus,

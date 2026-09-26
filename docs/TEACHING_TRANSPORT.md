@@ -45,10 +45,10 @@ Z.AI uses `https://api.z.ai/api/paas/v4`; BigModel uses
 `--teacher-base-url https://open.bigmodel.cn/api/paas/v4`. The smoke command sends one
 saved image but cannot send game input. The normal default check makes no API request.
 
-In `teach` mode, the model chooses every action, including requests to run existing
-skills. It is not called for each screenshot or radio tick. In `adaptive` mode, a
-qualified local capability can execute covered actions; novel situations and teacher
-audits still require a model. A new installation has no proven student to replace it.
+In `teach` mode, the model chooses every action of an objective it is given, including
+requests to run existing skills. It is not called for each screenshot or radio tick. The
+`adaptive` mode, in which a qualified local capability executed covered actions, went
+with V225: no student replaces the model.
 
 ### Reply contract and replay evidence, 23 September 2026
 

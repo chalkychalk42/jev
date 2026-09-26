@@ -53,10 +53,10 @@ for measured outcomes and the teaching-loop document for the next acceptance seq
 
 On Windows, `python tools/probe_slice.py` remains the live entry point and delegates to
 `jev.run.cli`. It attaches the client and can send input. It uses the scripted floor by
-default; `--play-mode teach` enables visual tuition and `--play-mode adaptive` permits
-evaluated student capabilities. Synthetic and replay examples are excluded from training
-by default. [Operating instructions](docs/OPERATING.md) cover the explicit supported
-route, evidence gates, reconnect, files and remaining live acceptance work.
+default; `--play-mode teach` enables visual tuition (the evaluated students that could
+take capabilities over went with V225). [Operating instructions](docs/OPERATING.md) cover
+the explicit supported route, evidence gates, reconnect, files and remaining live
+acceptance work.
 
 ### Platform split
 The brain is pure Python and runs anywhere. Capture and input are Windows-only — they

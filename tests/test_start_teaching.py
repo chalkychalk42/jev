@@ -9,7 +9,7 @@ from tools import start_teaching
 
 def test_repeated_clean_sessions_preserve_identical_playhead_store_and_stop_configuration():
     calls = []
-    args = ["--play-mode", "adaptive", "--playhead", "progress.json", "--learning-store", "models"]
+    args = ["--play-mode", "teach", "--playhead", "progress.json", "--learning-store", "models"]
     assert start_teaching.run_sessions(args, sessions=3,
                                        run=lambda values: calls.append(values) or 0,
                                        is_done=lambda _: False) == 0

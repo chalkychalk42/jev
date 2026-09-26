@@ -3,6 +3,12 @@
 This is the current implementation contract. It supersedes the original assumption that
 the teacher only selects whole skills or writes suggestions after failure.
 
+**Status, 26 September.** The tutor takes an objective only after its routine failed
+(V158; the hybrid dispatch is the only one, V223). No student is trained in a session
+(V174) or acts (V225): the student path in the diagram, and the handover below, are the
+record of what was built. Every tutor action is still recorded with its outcome, and a
+student training published before is still asked for a proposal, kept as its shadow.
+
 The guide chooses the objective. Jev receives an owned screenshot and a compact text
 account of the same capture: the goal and quest progress, character and target state,
 where nameplates are drawn, open windows and the last game error, bags, and the measured
@@ -85,9 +91,9 @@ Direct portable entrypoint:
 python tools/probe_slice.py --play-mode teach --route-mode supported --run-for 180 --retries 1 --reconnect --no-progress 120 --stop-file captures/teaching/STOP --bindings ACCOUNT_BINDINGS --bindings CHARACTER_BINDINGS
 ```
 
-`--play-mode teach` and `adaptive` both enable screenshots and continuous learning.
-`teach` always gives Jev control while comparing students in shadow. `adaptive` permits
-only evidence-qualified student canaries and active capabilities. `--teacher` remains the
+`--play-mode teach` enables screenshots and records every tutor action with its outcome.
+Jev keeps control; a published student's proposal is recorded as its shadow. The
+`adaptive` mode, which let evaluated students act, went with V225. `--teacher` remains the
 older strategic suggestion mode when playing mode is off; it does not start a second
 strategic model queue alongside the visual tutor.
 
@@ -103,7 +109,7 @@ timeouts. These are operational limits, not measured game timing. They can be se
 waiting for the model. Actual served model and token counts are recorded separately
 from the requested `sonnet` alias.
 
-## Continued collection and handover
+## Continued collection
 
 After the initial live test has established useful play, the same launcher can collect
 successive clean sessions while keeping the playhead and learning store:
@@ -116,13 +122,12 @@ Zero sessions means repeat until operator stop, failure or completion of the sup
 quest route. Each session fully closes its recorder, worker, capture and input lease
 before the next begins. Failures never auto-restart. Separate real recordings satisfy
 independent evaluation groups; one continuous recorder is not relabelled into fake runs.
-The worker trains during collection and recovers persisted evidence after restart.
+Nothing trains during collection; `MotorLearner.ingest_run` reads a run's persisted
+evidence into the store.
 
-Handover requires enough successful episodes in independent training, held-out, shadow
-and canary runs. One evening may produce useful data without any promoted student.
-Teacher use falls only for capabilities that demonstrate useful outcomes and lower
-teacher cost; fresh context and failures hand decisions back to Jev. See
-[the exact learning gates](MOTOR_LEARNING.md).
+There is no handover any more (V225): the training, the held-out, shadow and canary gates
+and the promotion that let a student take a capability over went, and the tutor keeps
+the objectives it is given. [The learning gates](MOTOR_LEARNING.md) record what they were.
 
 ## Evidence and limits
 
@@ -140,9 +145,9 @@ invented take, empty-corpse assertion or positive learning reward. An unknown re
 type cannot mark rest complete. Modal dismissal uses the same input worker, including
 during combat, while death, guide failure and normal combat preemption retain priority.
 
-The native store's `motor/` directory contains atomic records, episode outcomes,
-versioned model data, registry and `latest-cycle.json`. Failed, unknown and interrupted
-attempts remain reviewable. Synthetic fixtures cannot promote a production student.
+The native store's `motor/` directory contains atomic records, episode outcomes, the
+controls manifests, and the model data and registry training left (it no longer writes
+`latest-cycle.json`). Failed, unknown and interrupted attempts remain reviewable.
 
 The initial student uses a small visual descriptor and conservative novelty checks. It
 does not have general game understanding or trained live competence at installation.

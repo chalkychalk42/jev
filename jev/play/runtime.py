@@ -1,9 +1,8 @@
-"""Production composition of the visual tutor, existing body and continuous learner."""
+"""Production composition of the visual tutor, the existing body and the motor corpus."""
 
 from __future__ import annotations
 
 import math
-import threading
 import time
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -59,113 +58,25 @@ def delegable_skills(current: str, available) -> tuple[str, ...]:
 # found them (session 118).
 STALL_REST_S = 600.0
 
-# The runs already read into the store, by their play files' sizes and times, kept in the
-# store beside what they gave it: every new session read all 170 runs again, a lock per row,
-# while its controller wrote through the same lock, and met the lock's ten seconds at the
-# start (sessions 112 and 117).
-INGESTED = "ingested-runs.json"
-
-
-class MotorLearningService:
-    """Training never owns HID and cannot block the supervisor's stop clock."""
-
-    def __init__(self, learner, runs: Path, *, interval_s: float = 30, live: Path | None = None):
-        self.learner, self.runs, self.interval_s = learner, Path(runs), interval_s
-        # The run in progress: its controller records every row itself, and re-reading it
-        # each cycle held the store's lock in bursts the controller had to wait through.
-        self.live = Path(live) if live is not None else None
-        self.stop = threading.Event()
-        self.thread = threading.Thread(target=self._run, name="jev-motor-learner", daemon=True)
-        self.error = None
-
-    def start(self):
-        self.thread.start()
-        return self
-
-    def _run(self):
-        # A run is re-read only when its play files changed. Re-reading all of them every
-        # cycle took and released the store's lock once per recorded row, forty runs over,
-        # and a blocking lock on Windows gives up after ten seconds: a cycle failed with
-        # `PermissionError: [Errno 13]` (run 20260923T232300-e3b21c), and the teaching
-        # controller writes through the same lock.
-        seen: dict[Path, tuple] = self._ingested()
-        while not self.stop.is_set():
-            phase = "listing runs"
-            try:
-                recovered = []
-                kept = dict(seen)
-                for directory in sorted(self.runs.iterdir()) if self.runs.exists() else ():
-                    if self.stop.is_set():
-                        break
-                    if directory == self.live:
-                        continue
-                    if directory.is_dir() and (directory / "play-actions.jsonl").exists():
-                        stamp = tuple((p.stat().st_size, p.stat().st_mtime_ns) if p.exists() else None
-                                      for p in (directory / "play-actions.jsonl",
-                                                directory / "play-episodes.jsonl"))
-                        if seen.get(directory) == stamp:
-                            continue
-                        phase = f"ingesting {directory.name}"
-                        report = self.learner.ingest_run(directory)
-                        if report.get("errors"):
-                            recovered.append({"run": directory.name, "errors": report["errors"]})
-                        else:
-                            seen[directory] = stamp
-                if seen != kept:
-                    phase = "keeping the runs read"
-                    atomic_json(self.learner.directory / INGESTED,
-                                {d.name: [list(e) if e is not None else None for e in stamp]
-                                 for d, stamp in seen.items()})
-                phase = "training"
-                report = self.learner.update(cancelled=self.stop.is_set)
-                phase = "writing the cycle record"
-                atomic_json(self.learner.directory / "latest-cycle.json",
-                            {"t": time.time(), "cycle": report, "ingest_errors": recovered})
-                self.error = None
-            except Exception as exc:
-                # Where, for the intermittent `PermissionError: [Errno 13]` a cycle sometimes
-                # meets on Windows (sessions 93 and 101, no file named: a store lock that
-                # waited out its ten seconds) and the next one does not.
-                self.error = f"{type(exc).__name__}: {exc} ({phase})"
-            self.stop.wait(self.interval_s)
-
-    def _ingested(self) -> dict[Path, tuple]:
-        """The runs an earlier session read in full (`INGESTED`); none if unreadable."""
-        import json
-
-        try:
-            kept = json.loads((self.learner.directory / INGESTED).read_text(encoding="utf-8"))
-            return {self.runs / name: tuple(tuple(e) if e is not None else None for e in stamp)
-                    for name, stamp in kept.items()}
-        except (OSError, ValueError, TypeError, AttributeError):
-            return {}
-
-    def close(self):
-        self.stop.set()
-        self.thread.join(timeout=5)
-        if self.thread.is_alive():
-            self.error = "motor learner still finishing optional offline work"
-
 
 class PlayingBody:
-    """The same supervisor/guide, with teacher/student ownership inside an armed skill."""
+    """The same supervisor/guide, with the tutor's ownership inside an armed skill."""
 
     handles_modal = True
     executes_wait = True
 
-    def __init__(self, spine, *, recorder, store: Path, screenshots, mode: str = "teach",
+    def __init__(self, spine, *, recorder, store: Path, screenshots,
                  teacher_model: str | None = None, teacher_binary: str | None = None,
                  teacher_provider: str = "claude", teacher_base_url: str | None = None,
                  teacher_env_file: Path | None = None, teacher_key_env: str = "GLM_API_KEY",
                  teacher_effort: str | None = None,
                  teacher_calls_per_hour: int = 240, binding_paths=(),
                  config: PlayConfig | None = None, teacher=None, learner=None,
-                 start_learning: bool = True, world_db: Path | None = DEFAULT_WORLD_DB):
-        if config is not None and mode != config.mode:
-            raise ValueError("playing mode and configuration disagree")
-        # An ordinary objective goes to the guide's own routine first, and to the tutor only
-        # after its routine failed (`_ask_tutor`, hybrid dispatch). The tutor-first dispatch
-        # and the loop's A/B between the two went with V223.
+                 world_db: Path | None = DEFAULT_WORLD_DB):
+        # The tutor plays; no student acts or trains in the session (V174, V225), and the
+        # motor corpus is still recorded. An ordinary objective goes to the guide's own
+        # routine first, and to the tutor only after its routine failed (`_ask_tutor`,
+        # hybrid dispatch). The tutor-first dispatch and the loop's A/B went with V223.
         # The objectives whose routine just failed, and how it failed (`_note_routine`).
         self._routine_failed: dict[tuple[str | None, str | None], str] = {}
         # Whether such an objective goes to the tutor or back to its routine, learned from
@@ -184,7 +95,6 @@ class PlayingBody:
         self._checkpoint = lambda: None
         self._closed = False
         self.journal = PlayJournal(recorder.dir, run_id=recorder.run_id)
-        self.learning_service = None
         values = self.client.read()
         if values is None:
             raise ValueError("playing setup requires observed character controls")
@@ -217,9 +127,9 @@ class PlayingBody:
             learner=self.learner, journal=self.journal, controls=self.manifest.to_dict(),
             controls_fingerprint=self.controls_fingerprint,
             knowledge_fingerprint=self.knowledge.fingerprint,
-            config=config or PlayConfig(mode=mode), say=spine.say, skills_for=self.delegable)
+            config=config or PlayConfig(), say=spine.say, skills_for=self.delegable)
         atomic_json(recorder.dir / "play-config.json", {
-            "mode": mode, "config": asdict(self.controller.config),
+            "mode": self.controller.config.mode, "config": asdict(self.controller.config),
             "controls": self.manifest.to_dict(), "controls_fingerprint": self.controls_fingerprint,
             "knowledge_fingerprint": self.knowledge.fingerprint,
             # The reports tell runs apart by it: the runs before V223 may say "tutor".
@@ -228,9 +138,6 @@ class PlayingBody:
             "teacher_provider": teacher_provider,
             "learning_store": str(self.learner.directory), "live_validated": False,
         })
-        if start_learning:
-            self.learning_service = MotorLearningService(self.learner, recorder.dir.parent,
-                                                         live=recorder.dir).start()
 
     @property
     def travelling(self):
@@ -445,11 +352,6 @@ class PlayingBody:
             self._delegating = None
             self.spine.arm = arm
 
-    def poll(self, state):
-        if self.learning_service and self.learning_service.error:
-            self.spine.say(f"motor learner: {self.learning_service.error}")
-            self.learning_service.error = None
-
     def release(self):
         self.spine.release()
 
@@ -459,7 +361,5 @@ class PlayingBody:
         self._closed = True
         try:
             self.controller.settle(None)          # nothing left to judge a held episode by
-            if self.learning_service:
-                self.learning_service.close()
         finally:
             self.journal.close()
