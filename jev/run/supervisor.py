@@ -265,13 +265,6 @@ class Supervisor:
             worker, self.worker = self.worker, None
             worker.thread.join()
             result = worker.result or Result(SkillOutcome.ABORTED, "worker returned no result", "error")
-            model_fault = (worker.arm is not None and worker.arm.rule.startswith("learned:")
-                           and result.code in {"error", "unsupported"})
-            if model_fault and self.runtime.policy_failed:
-                try:
-                    self.runtime.policy_failed(worker.state, result.detail or result.code)
-                except Exception:
-                    self.runtime.learned = None
             if worker.maintenance is not None:
                 self.say(f"session: {result.detail}")
                 if self.watchdog:
@@ -347,7 +340,7 @@ class Supervisor:
                         exhausted = key, result.detail
             if (result.code in {"error", "unsupported", "no_food", "refused",
                                 "teacher_unavailable", "teaching_stalled"}
-                    and not model_fault and worker.maintenance is None):
+                    and worker.maintenance is None):
                 self.failure = result.detail or result.code
                 self.stopped.set()
 

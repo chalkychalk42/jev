@@ -49,7 +49,6 @@ for measured outcomes and the teaching-loop document for the next acceptance seq
 ```bash
 .venv/bin/python -m jev.run.cli --check  # graph/capability report; never attaches a client
 .venv/bin/python -m jev.run.cli --check --play-mode teach --route-mode supported
-.venv/bin/python -m jev.learn.grade runs/<run-id> --closed  # derive outcome grades
 ```
 
 On Windows, `python tools/probe_slice.py` remains the live entry point and delegates to
@@ -72,13 +71,12 @@ jev/perceive/   JevRadio field table and codec, vision heads, fusion
 jev/coach/      decision schema, verifier, situation_key
 jev/teacher/    the queue, dedup and prompt templates
 jev/play/       visual tutor, bounded controls, observed effects and motor learning
-jev/learn/      episode store, grading, distillation
+jev/learn/      episode store, outcome-learned choices, danger map
 jev/guide/      GuideGraph generation, tracker, recorder
 jev/skills/     skill catalog, combat profiles, paths
 jev/clients/    window binding, capture, HID
 jev/orch/       shared coach/tracker runtime and decision recording
 jev/run/        live client composition, body worker, supervisor, CLI
-jev/eval/       dashboard counters
 addons/JevRadio state painted into pixels; Fields.lua is generated, never edited; the
                 client gets one built file under a neutral name (build/addon/)
 tools/          codegen and one-off scripts

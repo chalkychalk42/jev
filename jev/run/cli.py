@@ -26,7 +26,6 @@ from jev.learn.danger import DangerMap, count_runs
 from jev.learn.episode import Recorder
 from jev.orch.runtime import ClientRuntime
 from jev.persist import atomic_json, file_lock, input_lock_path
-from jev.run.background import Background
 from jev.run.body import LiveBody
 from jev.run.client import FOCUS_QUICK_S, ClientSource, NotRunning, attach, with_travel
 from jev.run.paths import default_learning_store
@@ -76,10 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--jevpath", default="/home/ash/ForeverV2/tools/jevpath/jevpath")
     parser.add_argument("--route-mode", choices=("full", "supported"), default="full",
                         help="explicitly select the source guide or its executable subset")
-    parser.add_argument("--learn", action="store_true", help="grade and train in the background")
     parser.add_argument("--learning-store", type=Path)
-    parser.add_argument("--policy-mode", choices=("shadow", "adaptive"), default="shadow",
-                        help="adaptive permits evidence-gated canaries and promotion")
     parser.add_argument("--teacher", action="store_true", help="enable bounded Claude subscription queue")
     parser.add_argument("--teacher-model", help="defaults to Sonnet for Claude or GLM-4.6V-Flash for GLM")
     parser.add_argument("--teacher-provider", choices=("claude", "glm"), default="claude")
@@ -153,7 +149,6 @@ def main(argv: list[str] | None = None) -> int:
                           "coordinate_frame": graph.coord_zone_id,
                           "supported_quests": len({n.quest_id for n in route.graph.nodes if n.quest_id}),
                           "route_exclusions": [asdict(e) for e in route.excluded],
-                          "learning": args.learn, "policy_mode": args.policy_mode,
                           "teacher": args.teacher, "reconnect": args.reconnect,
                           "play_mode": args.play_mode,
                           "visual_teacher": args.play_mode != "off",
@@ -286,7 +281,7 @@ def _live(args, graph) -> int:
     except NotRunning as exc:
         print(exc)
         return 2
-    recorder = supervisor = background = screenshots = playing = None
+    recorder = supervisor = bridge = screenshots = playing = None
 
     def operator_checkpoint():
         if args.stop_file is not None and args.stop_file.exists():
@@ -424,18 +419,22 @@ def _live(args, graph) -> int:
         if runtime.outgrown_at is not None:
             print(f"guide {route.source_graph_id}: outgrown at level {runtime.outgrown_at}, "
                   f"then {NEXT_GUIDE[route.source_graph_id].name}")
-        teacher = None
+        # The strategic teacher's queue, without visual play: the runtime asks it and takes
+        # its answers on later ticks, and only the supervisor's thread appends its rows (`poll`).
         if args.teacher and args.play_mode == "off":
             try:
+                from jev.teacher.bridge import TeacherBridge
                 from jev.teacher.client import ClaudeSubscriptionClient
                 teacher = ClaudeSubscriptionClient(binary=args.teacher_binary, model=args.teacher_model,
                                                    effort=args.teacher_effort)
+                bridge = TeacherBridge(teacher, runtime.graph, runtime.recorder,
+                                       runtime.available_skills,
+                                       budget_path=Path(args.learning_store) / "teacher-budget.sqlite",
+                                       calls_per_hour=args.teacher_calls_per_hour)
+                runtime.ask, runtime.take = bridge.ask, bridge.take
             except Exception as exc:
                 print(f"teacher unavailable; scripted floor continues: {type(exc).__name__}: {exc}")
-        background = Background(runtime, runs=args.runs_dir, store=args.learning_store,
-                                learn=args.learn, adaptive=args.policy_mode == "adaptive",
-                                teacher_client=teacher, calls_per_hour=args.teacher_calls_per_hour)
-        if args.learn or args.policy_mode == "adaptive" or args.teacher:
+        if args.teacher:
             print(f"learning store: {args.learning_store}")
         watchdog = Watchdog(blind_grace_s=args.blind_grace, no_progress_s=args.no_progress,
                             reconnect_limit=args.reconnect_limit,
@@ -443,6 +442,7 @@ def _live(args, graph) -> int:
                                                                          env_file=args.env_file))
                             if args.reconnect else None)
         stop_seen = []
+        teacher_faults: set[str] = set()
 
         def housekeeping(state):
             # An operator stop waits out a fight, up to `STOP_COMBAT_GRACE_S`: a session
@@ -466,7 +466,15 @@ def _live(args, graph) -> int:
                 if supervisor.worker is not None:
                     supervisor.worker.cancel(screenshots.error)
                 return
-            background.poll(state)
+            if bridge is not None:
+                try:
+                    bridge.poll()
+                except Exception as exc:
+                    # An optional queue never stops the scripted floor; each new fault is said once.
+                    fault = f"teacher: {type(exc).__name__}: {exc}"
+                    if fault not in teacher_faults:
+                        teacher_faults.add(fault)
+                        print(fault)
             if playing is not None:
                 playing.poll(state)
 
@@ -510,8 +518,10 @@ def _live(args, graph) -> int:
                         screenshots.close()
             finally:
                 try:
-                    if background is not None:
-                        background.close()
+                    if bridge is not None:
+                        bridge.close()
+                except Exception as exc:
+                    print(f"teacher: {type(exc).__name__}: {exc}")
                 finally:
                     try:
                         if recorder is not None:

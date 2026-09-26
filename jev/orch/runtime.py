@@ -9,11 +9,11 @@ Four properties this loop must have, and each is a line you can point at:
    picked up by a later tick. Awaiting a rate-limited subscription inside a 2 Hz loop
    attached to a live character is how a character stands in a field for ninety seconds.
 
-2. **It records every tick, including the boring ones.** `armed_by` on all of them, and a
-   shadow prediction on all of them. Both are unrecoverable after the fact
-   (`ARCHITECTURE.md` §4) and both are worthless if they are only written when something
-   interesting happened, because "interesting" is exactly the sampling bias that ruins a
-   training set.
+2. **It records every tick, including the boring ones.** `armed_by` on all of them: it is
+   unrecoverable after the fact (`ARCHITECTURE.md` §4) and worthless if it is only written
+   when something interesting happened, because "interesting" is exactly the sampling bias
+   that ruins a training set. The shadow columns stay in every row as an abstention: the
+   decision student that filled them went with V224.
 
 3. **It cannot stop because something above it failed.** A missing teacher, a refused
    plan, an unreadable frame and an empty queue all continue. The only things that end a
@@ -35,7 +35,7 @@ from jev.coach import policy as scripted
 from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
-from jev.guide.graph import Graph, Node
+from jev.guide.graph import Graph
 from jev.guide.objectives import progress
 from jev.guide.tracker import SHORT_RIB_S, Event, Tracker
 from jev.guide.tracker import Verdict as TrackVerdict
@@ -129,11 +129,6 @@ class ClientRuntime:
 
     ask: AskFn | None = None
     take: TakeFn | None = None
-    shadow: Callable[[State], tuple[str | None, str | None, float]] | None = None
-    shadow_model: Callable[[], str | None] | None = None
-    learned: Callable[[State, Node | None, frozenset[str]], Decision | None] | None = None
-    policy_model: Callable[[], str | None] | None = None
-    policy_failed: Callable[[State, str], None] | None = None
     validate_action: Callable[[Decision, str | None], str | None] | None = None
 
     available_skills: frozenset[str] = NAMES
@@ -710,21 +705,6 @@ class ClientRuntime:
                 except Exception:
                     pass  # optional queue failure never removes the scripted floor
 
-        if self.learned is not None and not protected:
-            try:
-                candidate = self.learned(state, node, self.available_skills)
-                if candidate is not None:
-                    check = self._verify(candidate, state)
-                    model = self.policy_model() if self.policy_model else None
-                    if check.ok and model:
-                        return candidate, ArmedBy.POLICY, f"learned:{model}", ""
-                    self.counters.rejected += 1
-                    if self.policy_failed:
-                        self.policy_failed(state, f"verifier: {check.rule}: {check.reason}")
-            except Exception:
-                # Optional inference and registry faults never remove the scripted floor.
-                pass
-
         plan = floor.decision
         by = ArmedBy.S1_PREEMPT if preempt else ArmedBy.POLICY
         check = self._verify(plan, state)
@@ -754,7 +734,7 @@ class ClientRuntime:
             run_id=self.recorder.run_id, decision_id=decision_id,
             tick_id=self.recorder._tick_id + 1, t=state.t, client_id=self.client_id,
             situation_key=state.situation_key or "", author=by,
-            model=rule.removeprefix("learned:") if rule.startswith("learned:") else f"scripted:{rule}",
+            model=f"scripted:{rule}",
             intent=plan.intent.value, skill=plan.skill, params=dict(plan.params),
             confidence=plan.confidence, why=plan.why,
             status="ok" if check.ok else "rejected",
@@ -904,16 +884,6 @@ class ClientRuntime:
         return decision_id
 
     def _record(self, state: State) -> None:
-        # No model is an explicit abstention, the same contract as cold_start.predict.
-        intent = skill = None
-        confidence = 0.0
-        model = None
-        if self.shadow is not None:
-            try:
-                intent, skill, confidence = self.shadow(state)
-                model = self.shadow_model() if self.shadow_model else None
-            except Exception:
-                intent, skill, confidence = None, None, 0.0
         arm = self.armed
         state = state.model_copy(update={"control": state.control.model_copy(update={
             "armed_skill": arm.decision.skill if arm else None,
@@ -930,8 +900,9 @@ class ClientRuntime:
             decision_id=arm.decision_id if arm else None,
             arm_id=(arm.arm_id or None) if arm else None,
             keys=self.keys_down() if self.keys_down is not None else [],
-            shadow_intent=intent, shadow_skill=skill, shadow_confidence=confidence,
-            shadow_model=model,
+            # No local policy predicts any more: every tick abstains, as every live tick did
+            # since V174, and the corpus keeps one schema.
+            shadow_intent=None, shadow_skill=None, shadow_confidence=0.0, shadow_model=None,
             tracker_event=self._tracker_event, tracker_from=self._tracker_from,
         ))
 

@@ -18,8 +18,9 @@ eyes = [
     "windows-capture>=1.4; sys_platform == 'win32'",
     "mss>=9.0; sys_platform == 'win32'",
 ]
-# Episode store, grading, distillation.
-learn = ["pyarrow>=16.0", "scikit-learn>=1.4", "numpy>=1.26"]
+# The motor learner (`jev.play.learning`). The episode store is JSONL and needs nothing; the
+# decision student's grading, parquet and distillation went with V224.
+learn = ["numpy>=1.26"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [build-system]

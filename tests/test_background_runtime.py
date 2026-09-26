@@ -8,7 +8,6 @@ from test_runtime_records import answer, runtime, seen
 from test_supervisor import Body
 from test_teacher import reply_json
 
-from jev.coach.schema import Intent
 from jev.learn.episode import SkillOutcome, read
 from jev.run.supervisor import Result, Supervisor
 from jev.run.watchdog import Watchdog
@@ -87,27 +86,14 @@ def test_failed_budget_store_does_not_call_the_subscription(tmp_path):
     assert response.status == "abstained" and client.calls == 0
 
 
-def test_runtime_records_model_and_distinct_shadow_identity(tmp_path):
-    decision = answer("ACCEPT_QUEST").model_copy(update={"intent": Intent.ADVANCE})
-    rt = runtime(tmp_path, [seen()], learned=lambda *args: decision,
-                 policy_model=lambda: "policy:v2", shadow_model=lambda: "policy:v3",
-                 shadow=lambda state: ("advance", "ACCEPT_QUEST", 0.95))
-    rt.tick()
-    assert rt.armed.rule == "learned:policy:v2"
-    assert read(rt.recorder.dir / "decisions.jsonl")[0]["model"] == "policy:v2"
-    assert read(rt.recorder.dir / "ticks.jsonl")[0]["shadow_model"] == "policy:v3"
-
-
 @pytest.mark.parametrize("override", [
     {"bags": Bags(free=0)}, {"vitals": Vitals(dead=True)},
     {"vitals": Vitals(hp=0.1, combat=True)}, {"sense": Sense(addon_ok=False)},
 ])
-def test_optional_models_cannot_override_protected_floor(tmp_path, override):
-    calls = []
-    rt = runtime(tmp_path, [seen(**override)], learned=lambda *args: calls.append(args),
-                 take=lambda key: answer("ACCEPT_QUEST"))
+def test_a_teacher_answer_cannot_override_the_protected_floor(tmp_path, override):
+    rt = runtime(tmp_path, [seen(**override)], take=lambda key: answer("ACCEPT_QUEST"))
     rt.tick()
-    assert not calls and rt.counters.teacher_applied == 0
+    assert rt.counters.teacher_applied == 0
 
 
 def test_body_contract_refusal_keeps_teacher_artifacts_and_scripted_plan(tmp_path):

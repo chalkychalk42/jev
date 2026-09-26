@@ -17,7 +17,7 @@ def test_play_check_is_read_only_and_forces_evidence_not_learning(tmp_path, monk
     graph = route_file(tmp_path)
     monkeypatch.setattr(cli, "ROOT", tmp_path)
     prohibited = []
-    for name in ("attach", "input_lock_path", "file_lock", "Recorder", "MmapQuery", "Background",
+    for name in ("attach", "input_lock_path", "file_lock", "Recorder", "MmapQuery",
                  "reconnect_client", "Screenshots", "atomic_json"):
         mock = Mock(side_effect=AssertionError(f"--check invoked {name}"))
         monkeypatch.setattr(cli, name, mock)
@@ -40,7 +40,7 @@ def test_play_check_is_read_only_and_forces_evidence_not_learning(tmp_path, monk
     report = json.loads(capsys.readouterr().out)
     assert report["play_mode"] == mode and report["motor_recording"] and report["visual_teacher"]
     # Evidence, not learning: no student is trained inside a live session (V174).
-    assert report["screenshots"] and not report["learning"] and not report["motor_learning"]
+    assert report["screenshots"] and not report["motor_learning"]
     assert report["motor_handover"] is (mode == "adaptive")
     assert report["play_teacher_calls_per_hour"] == 3
     assert report["bindings"] == [str(tmp_path / "account-bindings.wtf"),
@@ -149,8 +149,8 @@ def test_interrupt_stops_worker_then_visual_learning_and_capture(tmp_path, monke
     assert cli.main(["--graph", str(graph), "--play-mode", "teach", "--run-for", "1",
                      "--runs-dir", str(tmp_path / "runs"),
                      "--learning-store", str(tmp_path / "learning")]) == 130
-    assert events[-5:] == ["supervisor closed", "playing closed", "screenshots closed",
-                           "background closed", "client closed"]
+    assert events[-4:] == ["supervisor closed", "playing closed", "screenshots closed",
+                           "client closed"]
 
 
 def test_visual_setup_failure_releases_input_and_capture_without_starting_worker(tmp_path, monkeypatch):
@@ -164,7 +164,7 @@ def test_visual_setup_failure_releases_input_and_capture_without_starting_worker
         cli.main(["--graph", str(graph), "--play-mode", "teach", "--run-for", "1",
                   "--runs-dir", str(tmp_path / "runs"),
                   "--learning-store", str(tmp_path / "learning")])
-    assert "supervisor created" not in events and "background created" not in events
+    assert "supervisor created" not in events
     assert events[-2:] == ["screenshots closed", "client closed"]
     client.hid.release_all.assert_called_once()
     assert client.hid.checkpoint is None

@@ -1,12 +1,10 @@
-"""Shared production runtime -> worker -> observed state -> grades -> dataset.
+"""Shared production runtime -> worker -> observed state -> recorded ticks.
 
 Only the physical game is replaced. The fixture changes state in response to executed
 skills; a replay that advances regardless of which skill ran would not test this seam.
 """
 from jev.guide.graph import Graph, Node
-from jev.learn.dataset import build
 from jev.learn.episode import Recorder, SkillOutcome, read
-from jev.learn.grade import grade_run
 from jev.orch.runtime import ClientRuntime
 from jev.run.supervisor import Result, Supervisor
 from jev.world.state_v1 import (
@@ -70,7 +68,7 @@ class Body:
         self.releases += 1
 
 
-def test_recorded_slice_is_gradable_and_synthetic_proof_stays_out_of_live_training(tmp_path):
+def test_a_recorded_slice_advances_only_by_observed_change(tmp_path):
     nodes = tuple(Node(id=step, kind=kind, zone="zone", zone_id=1, pos=(0.5, 0.5),
                        quest_id=7, skills=(skill,), next=(next_step,) if next_step else ())
                   for step, kind, skill, next_step in (
@@ -95,10 +93,6 @@ def test_recorded_slice_is_gradable_and_synthetic_proof_stays_out_of_live_traini
     finally:
         supervisor.close()
         recorder.close()
-    report = grade_run(recorder.dir, closed=True)
-    assert report.good == 3
-    assert len(build([recorder.dir], include_synthetic=True)) == 3
-    assert len(build([recorder.dir])) == 0
     ticks = read(recorder.dir / "ticks.jsonl")
     assert all(t["client_id"] == t["state"]["client_id"] == "fixture" for t in ticks)
     assert {t["state"]["guide"]["step_id"] for t in ticks} == {"accept", "objective", "turnin"}

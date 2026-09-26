@@ -109,11 +109,10 @@ def test_artifact_only_reply_is_kept_without_inventing_an_action(tmp_path):
     assert rt.armed.by is ArmedBy.POLICY
 
 
-def test_optional_queue_and_shadow_failures_do_not_remove_the_floor(tmp_path):
+def test_optional_queue_failures_do_not_remove_the_floor(tmp_path):
     def unavailable(*args):
         raise RuntimeError("offline")
-    rt = runtime(tmp_path, [State(t=0, client_id="c")],
-                 take=unavailable, ask=unavailable, shadow=unavailable)
+    rt = runtime(tmp_path, [State(t=0, client_id="c")], take=unavailable, ask=unavailable)
     rt.tick()
     assert rt.armed is not None
     assert read(rt.recorder.dir / "ticks.jsonl")[0]["shadow_confidence"] == 0

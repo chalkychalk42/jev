@@ -4,14 +4,10 @@ import threading
 from enum import StrEnum
 
 import pytest
-from test_grade_run import corpus
 from test_runtime_records import runtime, seen
 
 from jev.coach.schema import Decision, Intent
-from jev.learn.dataset import build
-from jev.learn.episode import Recorder, SkillOutcome, Stream, read
-from jev.learn.grade import grade_run
-from jev.learn.parquet import convert_run, read_parquet
+from jev.learn.episode import Recorder, SkillOutcome, read
 from jev.orch.runtime import Armed
 from jev.run.evidence import bind, event, operation, traced
 from jev.run.supervisor import Result, Worker
@@ -207,33 +203,6 @@ def test_context_and_recorder_are_safe_across_independent_producer_threads(tmp_p
     rec.close()
     with pytest.raises(RuntimeError, match="closed"), bind(rec, arm(), client_id="c"):
         event("late")
-
-
-def test_execution_parquet_roundtrip_and_old_corpus_remain_supported(tmp_path):
-    rec = Recorder(tmp_path / "new")
-    with bind(rec, arm(), client_id="c"), operation("fight", data={"point": [10, 20]}):
-        event("radio", data={"target": {"hp": None}, "observed": False})
-    rec.close()
-    original = rows(rec)
-    converted = convert_run(rec.dir)
-    assert read_parquet(converted[Stream.EXECUTIONS]) == original
-    old = corpus(tmp_path / "old")
-    assert Stream.EXECUTIONS not in convert_run(old)
-    assert grade_run(old).good == 1
-    assert len(build([old])) == 1
-
-
-def test_recoverable_child_failure_cannot_disqualify_parent_decision(tmp_path):
-    directory = corpus(tmp_path)
-    rec = Recorder(tmp_path / "child-evidence", run_id=directory.name)
-    original = arm()
-    original.decision_id = "d"
-    with bind(rec, original, client_id="c"), operation("fight") as span:
-        span.finish(code="unreachable", detail="eight approaches without damage")
-    rec.close()
-    (directory / "executions.jsonl").write_bytes((rec.dir / "executions.jsonl").read_bytes())
-    assert grade_run(directory).good == 1
-    assert len(build([directory])) == 1
 
 
 def test_runtime_arm_identity_is_stable_until_rearmed(tmp_path):

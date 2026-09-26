@@ -43,7 +43,7 @@ def test_all_optional_flags_check_remains_read_only_and_never_attaches(tmp_path,
     graph = route_file(tmp_path)
     monkeypatch.setattr(cli, "ROOT", tmp_path)
     touched = {}
-    for name in ("attach", "input_lock_path", "file_lock", "Recorder", "MmapQuery", "Background", "reconnect_client", "Screenshots"):
+    for name in ("attach", "input_lock_path", "file_lock", "Recorder", "MmapQuery", "reconnect_client", "Screenshots"):
         touched[name] = Mock(side_effect=AssertionError(f"--check invoked {name}"))
         monkeypatch.setattr(cli, name, touched[name])
     teacher = Mock(side_effect=AssertionError("--check constructed teacher"))
@@ -52,7 +52,7 @@ def test_all_optional_flags_check_remains_read_only_and_never_attaches(tmp_path,
     monkeypatch.setattr("jev.run.watchdog.credentials", credentials)
     before = sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*"))
     result = cli.main(["--check", "--graph", str(graph), "--route-mode", route_mode,
-                       "--client-id", "offline", "--learn", "--policy-mode", "adaptive",
+                       "--client-id", "offline",
                        "--teacher", "--teacher-binary", "/missing/never-execute",
                        "--teacher-model", "fixture", "--teacher-calls-per-hour", "1",
                        "--reconnect", "--env-file", str(tmp_path / "secret.env"),
@@ -63,7 +63,7 @@ def test_all_optional_flags_check_remains_read_only_and_never_attaches(tmp_path,
                        "--screenshots", "--stop-file", str(tmp_path / "STOP")])
     assert result == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["learning"] and report["teacher"] and report["reconnect"]
+    assert report["teacher"] and report["reconnect"]
     assert report["screenshots"]
     assert report["stop_file"] == str(tmp_path / "STOP")
     assert report["live_tested"] is False
@@ -72,19 +72,16 @@ def test_all_optional_flags_check_remains_read_only_and_never_attaches(tmp_path,
         mock.assert_not_called()
 
 
-def test_input_contention_never_attaches_or_constructs_background(tmp_path, monkeypatch, capsys):
+def test_input_contention_never_attaches(tmp_path, monkeypatch, capsys):
     graph = route_file(tmp_path)
     monkeypatch.setattr(cli, "ROOT", tmp_path)
     monkeypatch.setattr(cli, "input_lock_path", lambda: tmp_path / "input.lock")
     attach = Mock(side_effect=AssertionError("contended launch attached a client"))
     monkeypatch.setattr(cli, "attach", attach)
-    background = Mock(side_effect=AssertionError("contended launch started background services"))
-    monkeypatch.setattr(cli, "Background", background)
     with file_lock(tmp_path / "input.lock", blocking=False):
         assert cli.main(["--graph", str(graph), "--run-for", "1"]) == 2
     assert "no client was attached" in capsys.readouterr().out
     attach.assert_not_called()
-    background.assert_not_called()
 
 
 def fake_live(monkeypatch, tmp_path, *, disconnected=False, character=0x26A9640B):
@@ -120,14 +117,6 @@ def fake_live(monkeypatch, tmp_path, *, disconnected=False, character=0x26A9640B
             events.append("body reconnect")
             return cli.reconnect_client(self.client, checkpoint, env_file=env_file)
     monkeypatch.setattr(cli, "LiveBody", FakeBody)
-    class FakeBackground:
-        def __init__(self, *args, **kwargs):
-            events.append("background created")
-        def poll(self, state):
-            pass
-        def close(self):
-            events.append("background closed")
-    monkeypatch.setattr(cli, "Background", FakeBackground)
     class FakeSupervisor:
         failure = None
         def __init__(self, runtime, body, **kwargs):
@@ -168,7 +157,7 @@ def test_initial_reconnect_uses_session_env_file_and_restores_before_body_setup(
                      "--env-file", str(secret), "--runs-dir", str(tmp_path / "runs")]) == 0
     assert events.index("session restored radio") < events.index("body created")
     assert events.index("quest log reset") < events.index("body created")
-    assert events[-3:] == ["supervisor closed", "background closed", "client closed"]
+    assert events[-2:] == ["supervisor closed", "client closed"]
     run = next((tmp_path / "runs").iterdir())
     assert (run / "route.json").is_file()
     assert "fixture-password" not in "".join(p.read_text() for p in run.iterdir() if p.is_file())
@@ -195,6 +184,48 @@ def test_unavailable_teacher_constructor_does_not_prevent_live_floor_start(tmp_p
     assert "supervisor ran" in events
     assert "scripted floor continues" in capsys.readouterr().out
     assert events[-1] == "client closed"
+
+
+def test_the_strategic_teacher_is_asked_through_its_bridge_and_closed(tmp_path, monkeypatch):
+    """Without visual play, `--teacher` puts its queue behind the runtime's ask and take;
+    only the supervisor's thread appends its rows (`poll`), and it closes before the client."""
+    graph = route_file(tmp_path)
+    _client, events = fake_live(monkeypatch, tmp_path)
+    monkeypatch.setattr("jev.teacher.client.ClaudeSubscriptionClient", lambda **kwargs: "claude")
+
+    class FakeBridge:
+        def __init__(self, teacher, graph, recorder, skills, *, budget_path, calls_per_hour):
+            assert teacher == "claude" and calls_per_hour == 3
+            assert budget_path == tmp_path / "learning" / "teacher-budget.sqlite"
+        def ask(self, state, key):
+            return True
+        def take(self, key):
+            return None
+        def poll(self):
+            events.append("bridge polled")
+        def close(self):
+            events.append("bridge closed")
+
+    monkeypatch.setattr("jev.teacher.bridge.TeacherBridge", FakeBridge)
+    seen = {}
+
+    class Supervisor:
+        failure = None
+        def __init__(self, runtime, body, *, housekeeping, **kwargs):
+            seen["runtime"], seen["housekeeping"] = runtime, housekeeping
+        def run(self, *args, **kwargs):
+            seen["housekeeping"](None)
+        def close(self):
+            events.append("supervisor closed")
+
+    monkeypatch.setattr(cli, "Supervisor", Supervisor)
+    assert cli.main(["--graph", str(graph), "--run-for", "1", "--teacher",
+                     "--teacher-calls-per-hour", "3", "--runs-dir", str(tmp_path / "runs"),
+                     "--learning-store", str(tmp_path / "learning")]) == 0
+    runtime = seen["runtime"]
+    assert isinstance(runtime.ask.__self__, FakeBridge)
+    assert runtime.take.__self__ is runtime.ask.__self__
+    assert events[-4:] == ["bridge polled", "supervisor closed", "bridge closed", "client closed"]
 
 
 def test_screenshots_stop_before_capture_closes_even_when_supervisor_fails(tmp_path, monkeypatch):
@@ -224,7 +255,7 @@ def test_screenshots_stop_before_capture_closes_even_when_supervisor_fails(tmp_p
     assert cli.main(["--graph", str(graph), "--run-for", "1", "--screenshots",
                      "--runs-dir", str(tmp_path / "runs")]) == 130
     assert events.index("screenshots started") < events.index("supervisor created")
-    assert events[-4:] == ["supervisor closed", "screenshots closed", "background closed", "client closed"]
+    assert events[-3:] == ["supervisor closed", "screenshots closed", "client closed"]
 
 
 def test_screenshot_storage_failure_cancels_worker_and_stops_test(tmp_path, monkeypatch):
@@ -292,7 +323,7 @@ def test_new_stop_file_uses_termination_cleanup_without_screenshots(tmp_path, mo
     monkeypatch.setattr(cli, "Screenshots", Mock(side_effect=AssertionError("screenshots not requested")))
     assert cli.main(["--graph", str(graph), "--run-for", "1", "--stop-file", str(stop),
                      "--runs-dir", str(tmp_path / "runs")]) == 130
-    assert events[-3:] == ["supervisor closed", "background closed", "client closed"]
+    assert events[-2:] == ["supervisor closed", "client closed"]
     assert stop.exists()
 
 

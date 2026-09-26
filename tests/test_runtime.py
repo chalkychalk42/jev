@@ -108,17 +108,16 @@ def test_every_tick_is_recorded_with_an_author(tmp_path):
     assert all(r["situation_key"] for r in rows)
 
 
-def test_a_shadow_prediction_is_written_on_every_tick_including_ones_it_did_not_drive(tmp_path):
-    """Gate C's agreement number is only measurable if it was measured throughout."""
+def test_every_tick_keeps_the_shadow_columns_as_an_abstention(tmp_path):
+    """No decision policy predicts since V224; the corpus keeps one schema all the same."""
     graph = Graph.load(GRAPH)
     node = graph.get(graph.entry)
-    rt = _runtime([_at(node, float(i)) for i in range(4)], tmp_path,
-                  shadow=lambda s: ("advance", "TRAVEL_TO", 0.42))
+    rt = _runtime([_at(node, float(i)) for i in range(4)], tmp_path)
     rt.run(ticks=4, period_s=0)
 
     rows = read(rt.recorder.dir / "ticks.jsonl")
-    assert all(r["shadow_intent"] == "advance" for r in rows)
-    assert all(r["shadow_confidence"] == 0.42 for r in rows)
+    assert all(r["shadow_intent"] is None and r["shadow_model"] is None for r in rows)
+    assert all(r["shadow_confidence"] == 0.0 for r in rows)
 
 
 def test_the_loop_runs_with_no_teacher_at_all(tmp_path):
