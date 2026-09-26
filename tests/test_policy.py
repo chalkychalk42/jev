@@ -437,3 +437,20 @@ def test_fights_that_never_engage_pause_combat_so_the_walk_goes_on():
     assert decide(critical, context=context).decision.skill == "COMBAT_PROFILE", "the panic"
     later = hit.model_copy(update={"t": hit.t + FIGHT_PAUSE_S + 1})
     assert decide(later, context=context).decision.skill == "COMBAT_PROFILE"
+
+
+@pytest.mark.parametrize("bags", [Bags(free=1, durability_min=1.0),        # bags nearly full
+                                  Bags(free=10, durability_min=0.2),       # worn
+                                  Bags(free=10, durability_min=0.0)])      # broken
+def test_a_walk_to_a_merchant_or_a_smith_waits_for_a_meal(bags):
+    """V259: of the bag and repair walks begun below 60% health or 50% mana in sessions
+    205-228, 16 of 26 were attacked on the way and 7 ended in a death, against 1 death in 42
+    begun healthy."""
+    from jev.coach.policy import Context, service
+
+    hurt = _s(bags=bags, vitals=Vitals(hp=0.5, power=1.0, dead=False, ghost=False, combat=False))
+    assert service(hurt, context=Context()) is None
+    assert decide(hurt, context=Context()).decision.skill == "EAT_DRINK"
+    healthy = _s(bags=bags)
+    assert service(healthy, context=Context()).decision.skill in ("BAG_MAKE_SPACE",
+                                                                   "VENDOR_REPAIR")

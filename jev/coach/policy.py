@@ -371,13 +371,19 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
     can_repair = context is None or context.can_repair(b.money_copper, state.guide.step_id)
     can_sell = context is None or context.can_make_space(b.free)
 
+    # A walk to a merchant or a smith waits for a meal first, as training does (V259): of the
+    # bag and repair walks begun below 60% health or 50% mana in sessions 205-228, 16 of 26
+    # were attacked on the way and 7 ended in a death, against 1 death in 42 begun healthy.
+    hurt = _recover(state, context) is not None
+
     # `is not None` throughout: unknown bags are not full bags, and a service loop on an
     # unread number is the failure the verifier's `no_service_loop` rule also guards.
-    if can_repair and b.durability_min is not None and b.durability_min <= 0.05:
+    if (can_repair and not hurt and b.durability_min is not None
+            and b.durability_min <= 0.05):
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "equipment is broken", 0.85,
                        ("dead", "combat"), service="repair"), True, "service.broken")
 
-    if can_sell and b.free is not None and b.free <= BAGS_LOW:
+    if can_sell and not hurt and b.free is not None and b.free <= BAGS_LOW:
         return Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are nearly full",
                        0.75, ("dead", "combat"), service="bags"), True, "service.bags_full")
 
@@ -390,7 +396,7 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
         return Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
                        0.6, ("dead", "combat"), service="train"), True, "service.train")
 
-    if can_repair and b.durability_min is not None and b.durability_min < 0.35:
+    if can_repair and not hurt and b.durability_min is not None and b.durability_min < 0.35:
         return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is low", 0.65,
                        ("dead", "combat"), service="repair"), True, "service.durability")
 
