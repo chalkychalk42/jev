@@ -955,6 +955,32 @@ def test_a_marker_merged_with_its_neighbour_is_still_found():
 
 
 
+MISLED = pathlib.Path(__file__).parent / "fixtures" / "live-strip-misled-by-scenery.npz"
+
+
+def test_a_strip_the_scenery_misleads_the_locator_on_is_read_on_its_remembered_grid():
+    """Session 145, the character dead at Stendel's Pond: behind the strip's top-right
+    corner a patch of scenery passed the cyan marker's mask, the marker's blob came out
+    40 px wide for a 14 px cell, and every read failed its checksum on a grid 4.5% too
+    large. In the fight before, the strip had come and gone every other second and each
+    loss cut the fight off. On the grid the strip was last read on, the frame reads whole."""
+    frame = np.load(MISLED)["frame"]
+    assert not radio_frame.read(frame).ok, "the locator alone is misled here"
+    remembered = radio_frame.Grid(x0=121.45, y0=6.55, dx=14.1, dy=14.1,
+                                  cell_w=14.1, cell_h=14.1)
+    reading = radio_frame.read(frame, grid=remembered)
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    assert reading.values["vitals.dead"] is True and reading.grid == remembered
+
+
+def test_a_remembered_grid_that_no_longer_fits_falls_back_to_the_locator():
+    frame = _paint(_values())
+    moved = radio_frame.Grid(x0=5.0, y0=5.0, dx=9.0, dy=9.0, cell_w=9.0, cell_h=9.0)
+    reading = radio_frame.read(frame, grid=moved)
+    assert reading.ok, f"{reading.fault}: {reading.detail}"
+    assert reading.grid != moved
+
+
 def test_the_strip_reads_while_the_character_is_a_ghost():
     """Dying applies a full-screen desaturation shader that turns the world blue-green,
     and the marker masks were purely relative — Elwynn ground reads (100, 140, 153), which

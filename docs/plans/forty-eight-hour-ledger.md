@@ -69,6 +69,14 @@ Now
     the second 42 s after getting up 32 yards short of the first body. Of the seven deaths in
     play since T-0, four came within 45 s of getting up: the walk after getting up was exempt
     from keeping clear of the death, being inside its 35 yards. V183.
+  - Session 144 (exit 1, 758 s): two deaths to a Dust Devil (18-19) wandering into the
+    Mongrels' camp, the second after getting up 32 yards off; the Spirit Healer, the hearth
+    to Sentinel Hill, and a repair walk stuck in the inn's doorway stopped the session.
+  - Sessions 145-147: at Stendel's Pond the strip reader was misled by scenery behind the
+    strip's corner; the fight went blind every other second, the character died, and the
+    next two sessions could not read the strip at all. V184 reads the strip on the grid of
+    its last good read, kept in `var/radio-grid.json`; the file was seeded from the
+    measured grid for the restart.
 
 - **25 Sep 14:10.** Pre-flight A is under way, with the loop stopped and the client closed.
   - The operator logged Testvvi out at 09:13, in Goldshire, at level 13.

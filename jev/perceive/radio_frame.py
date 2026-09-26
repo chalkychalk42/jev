@@ -670,12 +670,29 @@ class RadioReading:
     transform: tuple[tuple[float, float], ...] | None = None
 
 
-def read(frame: np.ndarray, *, prev_seq: int | None = None) -> RadioReading:
-    """The whole pipeline: locate, sample, solve the transform, invert, unpack."""
-    grid = locate(frame)
-    if grid is None:
-        return RadioReading(None, False, SenseFault.NOT_FOUND, detail="no marker pair")
+def read(frame: np.ndarray, *, prev_seq: int | None = None,
+         grid: Grid | None = None) -> RadioReading:
+    """The whole pipeline: locate, sample, solve the transform, invert, unpack.
 
+    `grid`, where the strip was last read whole, is tried first: the strip does not move
+    while the window does not, and the locator can be misled where the grid cannot. Behind
+    the strip's top-right corner a patch of Westfall's scenery passed the cyan marker's
+    mask, the marker's blob came out 40 px wide for a 14 px cell, and the grid it implied
+    was 4.5% too large: every read failed its checksum, a fight was cut off by blindness
+    every other second until the character died, and the session sat blind beside the body
+    (session 145). On the remembered grid those frames read whole.
+    """
+    if grid is not None:
+        hinted = _read_on(frame, grid, prev_seq)
+        if hinted.ok or hinted.fault is SenseFault.STALE:
+            return hinted
+    located = locate(frame)
+    if located is None:
+        return RadioReading(None, False, SenseFault.NOT_FOUND, detail="no marker pair")
+    return _read_on(frame, located, prev_seq)
+
+
+def _read_on(frame: np.ndarray, grid: Grid, prev_seq: int | None) -> RadioReading:
     observed = sample(frame, grid)
 
     # Row 0 is [marker, ten swatches, marker]; only the swatches constrain the transform.

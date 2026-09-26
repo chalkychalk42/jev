@@ -16,6 +16,9 @@ already take, and it keeps them testable with a lambda.
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
+import json
 import math
 import threading
 import time
@@ -40,6 +43,7 @@ from jev.guide.route_memory import AvoidingQuery, DangerAvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
 from jev.perceive.spellbook import SpellCensus
+from jev.persist import atomic_json
 from jev.world.state_v1 import Pos, SenseFault
 
 # Taking the window back: short waits first, doubling, capped.
@@ -62,6 +66,10 @@ FOCUS_QUICK_S = 6.0            # mid-run, where standing still costs stations
 # Both look like a position that never changes. An hour went into terrain that was never
 # the problem before anyone looked at `seq`.
 STALE_AFTER_S = 4.0
+# Where the strip was last read whole (`radio_frame.read`'s `grid`), kept across runs: a
+# session's first read must not rest on the locator, which the scenery behind the strip
+# can mislead (session 145).
+GRID_MEMORY = Path(__file__).resolve().parents[2] / "var" / "radio-grid.json"
 
 # Heights to start a plan at, the radio painting none: the ground where the last walk ended
 # when that is near, then the destination's height, then either side of it. From beside
@@ -140,6 +148,10 @@ class Client:
     log: QuestLog = field(default_factory=QuestLog)
     # The main bar and the spellbook, assembled from their one-entry-per-paint censuses.
     spells: SpellCensus = field(default_factory=SpellCensus)
+    # The file the strip's grid is kept in (`GRID_MEMORY` when attached; none in tests).
+    grid_memory: Path | None = None
+    _grid: radio_frame.Grid | None = field(default=None, init=False)
+    _grid_loaded: bool = field(default=False, init=False)
     _seq: int | None = field(default=None, init=False)
     _seq_at: float = field(default=0.0, init=False)
     _paint_generation: int = field(default=0, init=False)
@@ -181,8 +193,9 @@ class Client:
         """
         for _ in range(tries):
             with self._capturing:
-                r = radio_frame.read(self.cap.grab().rgb)
+                r = radio_frame.read(self.cap.grab().rgb, grid=self._remembered_grid())
                 if r.ok:
+                    self._remember_grid(r.grid)
                     self._note_seq(r.values.get("seq"))
                     if self.frozen_for() > STALE_AFTER_S:
                         return None
@@ -191,6 +204,20 @@ class Client:
                     return r
             time.sleep(0.05)
         return None
+
+    def _remembered_grid(self) -> radio_frame.Grid | None:
+        if not self._grid_loaded:
+            self._grid_loaded = True
+            if self._grid is None and self.grid_memory is not None:
+                self._grid = load_grid(self.grid_memory)
+        return self._grid
+
+    def _remember_grid(self, grid: radio_frame.Grid | None) -> None:
+        if grid is None or grid == self._grid:
+            return
+        self._grid = grid
+        if self.grid_memory is not None:
+            save_grid(self.grid_memory, grid)
 
     def _note_seq(self, seq: int | None) -> None:
         now = time.monotonic()
@@ -523,7 +550,22 @@ def attach(client_id: str = "run", *, title: str = "World of Warcraft",
         origin=(ox, oy),
         size=(w, h),
         client_id=client_id,
+        grid_memory=GRID_MEMORY,
     )
+
+
+def load_grid(path: Path) -> radio_frame.Grid | None:
+    """The strip's grid as last kept, or `None` for no file or a bad one."""
+    try:
+        return radio_frame.Grid(**json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def save_grid(path: Path, grid: radio_frame.Grid) -> None:
+    """Keep the strip's grid for the next run. Best effort: forgetting it costs a locate."""
+    with contextlib.suppress(OSError):
+        atomic_json(path, dataclasses.asdict(grid))
 
 
 # Heights a spot's floors are looked for from, and how far apart two floors are. The

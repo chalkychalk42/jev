@@ -51,7 +51,7 @@ def _client(seqs):
     seq = list(seqs)
     state = {"i": 0}
 
-    def fake_read(_pixels, prev_seq=None):
+    def fake_read(_pixels, prev_seq=None, grid=None):
         n = seq[min(state["i"], len(seq) - 1)]
         state["i"] += 1
         return radio_frame.RadioReading(values={"seq": n}, ok=True,
@@ -133,3 +133,32 @@ def test_taking_the_window_back_backs_off_rather_than_waiting_flat():
 
     body = inspect.getsource(_C.approach)
     assert "FOCUS_QUICK_S" in body, "a refused walk waits the start-up patience"
+
+
+def test_the_strip_grid_is_remembered_across_runs(tmp_path, monkeypatch):
+    """A session's first read rests on the grid the last one read the strip on, not on the
+    locator, which the scenery behind the strip misled for a whole session (145)."""
+    from jev.perceive import radio_frame
+
+    asked = []
+    good = radio_frame.Grid(x0=1.0, y0=2.0, dx=3.0, dy=3.0, cell_w=3.0, cell_h=3.0)
+
+    def fake_read(_pixels, prev_seq=None, grid=None):
+        asked.append(grid)
+        return radio_frame.RadioReading(values={"seq": len(asked)}, ok=True,
+                                        fault=radio_frame.SenseFault.NONE,
+                                        seq=len(asked), grid=good)
+
+    monkeypatch.setattr(radio_frame, "read", fake_read)
+    memory = tmp_path / "radio-grid.json"
+    first = Client(hwnd=1, hid=None, cap=_Cap(), origin=(0, 0), size=(1600, 900),
+                   grid_memory=memory)
+    assert first.reading() is not None and asked == [None]
+    assert first.reading() is not None and asked[-1] == good, "remembered within the run"
+    second = Client(hwnd=1, hid=None, cap=_Cap(), origin=(0, 0), size=(1600, 900),
+                    grid_memory=memory)
+    assert second.reading() is not None and asked[-1] == good, "and across runs"
+    memory.write_text("not json")
+    third = Client(hwnd=1, hid=None, cap=_Cap(), origin=(0, 0), size=(1600, 900),
+                   grid_memory=memory)
+    assert third.reading() is not None and asked[-1] is None, "a bad file is no memory"
