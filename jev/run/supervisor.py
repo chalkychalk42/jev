@@ -168,6 +168,7 @@ class Worker:
 
 
 def interruption(arm: Armed, state: State, *, travelling: bool = False,
+                 combat_paused: bool = False,
                  completion_observed: bool = False, handles_modal: bool = False,
                  falling_s: float = FALL_GRACE_S,
                  routine_age_s: float | None = None, exposed: bool = False,
@@ -194,7 +195,10 @@ def interruption(arm: Armed, state: State, *, travelling: bool = False,
     fighting = skill in {"COMBAT_PROFILE", "APPROACH_TARGET", "ACQUIRE_TARGET", "GRIND_UNTIL", "LOOT"}
     modal_cleanup = (handles_modal and skill == "ABORT_WAIT"
                      and (state.ui.modal is True or completion_observed))
-    if (state.vitals.combat is True and (travelling or exposed or not fighting)
+    # Not while combat is paused after fights that never engaged: the walk is the way out
+    # of reach (V212).
+    if (state.vitals.combat is True and not combat_paused
+            and (travelling or exposed or not fighting)
             and not recovery and not modal_cleanup):
         return "combat interrupted the leg or service"
     if arm.step_id != state.guide.step_id and not recovery and not completion_observed:
@@ -286,6 +290,11 @@ class Supervisor:
             else:
                 self.runtime.finish(result.outcome, result.detail, state=state)
                 self.say(f"{worker.arm.decision.skill}: {result.code or result.outcome.value} {result.detail}")
+                if worker.arm.decision.skill == "COMBAT_PROFILE" and state is not None:
+                    # The state's wall clock, as the policy reads it (`_fight`).
+                    self.runtime.policy_context.fight_ended(result.code, state.t)
+                    if self.runtime.policy_context.fight_paused(state.t):
+                        self.say("  fights that never engaged: combat paused, walking on")
                 if result.code == "no_junk":
                     self.runtime.policy_context.bags_failed(
                         state.bags.free if state is not None else None)
@@ -434,6 +443,7 @@ class Supervisor:
             self.worker._walk_seen = now if walking else None
             reason = "operator active" if operator else interruption(
                 self.worker.arm, state, travelling=self.body.travelling,
+                combat_paused=self.runtime.policy_context.fight_paused(state.t),
                 completion_observed=self.worker.completion_observed,
                 handles_modal=getattr(self.body, "handles_modal", False),
                 falling_s=falling_s, routine_age_s=routine_age,

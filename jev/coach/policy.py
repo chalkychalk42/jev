@@ -89,6 +89,22 @@ class Context:
         self.repair_blocked, self.repair_money = True, money
         self._save()
 
+    fight_unengaged: int = 0
+    fight_paused_until: float = 0.0
+
+    def fight_ended(self, code: str | None, now: float) -> None:
+        """Count fights that never engaged; `UNENGAGED_FIGHTS` in a row pause combat (V212)."""
+        if code not in UNENGAGED_CODES:
+            self.fight_unengaged = 0
+            return
+        self.fight_unengaged += 1
+        if self.fight_unengaged >= UNENGAGED_FIGHTS:
+            self.fight_unengaged = 0
+            self.fight_paused_until = now + FIGHT_PAUSE_S
+
+    def fight_paused(self, now: float) -> bool:
+        return now < self.fight_paused_until
+
     def repaired(self) -> None:
         """A repair that landed: the purse pays for repairs again."""
         if self.repair_blocked:
@@ -308,6 +324,14 @@ def preempt(state: State) -> Plan | None:
 BAGS_LOW = 2
 # After a repair the purse could not pay, how much more it must hold before the next (V196).
 REPAIR_RETRY_COPPER = 100
+# Fights that ended without ever engaging - nothing faced, nothing found, nothing reached. After
+# `UNENGAGED_FIGHTS` of them in a row, combat does not take the floor for `FIGHT_PAUSE_S`, and
+# the step's walk carries the character out of reach of what it cannot reach (V212). A Defias
+# Smuggler at 6% health threw knives from out of sight while the paladin turned and healed,
+# 74 and 41 fights "not visible" in two sessions, 45 minutes (sessions 173-175).
+UNENGAGED_CODES = frozenset({"not_visible", "no_target", "unreachable"})
+UNENGAGED_FIGHTS = 3
+FIGHT_PAUSE_S = 30.0
 
 # --------------------------------------------------------------------------- soft tier
 
@@ -392,9 +416,11 @@ def _recover(state: State, context: Context | None = None) -> Plan | None:
     return None
 
 
-def _fight(state: State) -> Plan | None:
+def _fight(state: State, context: Context | None = None) -> Plan | None:
     if state.vitals.combat is not True:
         return None
+    if context is not None and context.fight_paused(state.t):
+        return None                     # walking out of reach of what cannot be fought (V212)
     # Fight already owns acquisition, closing, facing and the rotation. Splitting its
     # phases into separate arms would put the old duel-range heuristic back in charge
     # and interrupt a proven engagement whenever the target moves.
@@ -478,7 +504,7 @@ def decide(state: State, node: Node | None = None, *, context: Context | None = 
     """
     # Safety first, and safety is not derated: a preempt fires on a positive observation
     # (`is True`), so if one matched, something was read.
-    for plan in (preempt(state), _fight(state), service(state, context=context),
+    for plan in (preempt(state), _fight(state, context), service(state, context=context),
                  _recover(state, context)):
         if plan is not None:
             return plan

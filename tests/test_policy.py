@@ -348,3 +348,26 @@ def test_the_purses_lessons_are_kept_and_cleared():
     later.restore_purse({"repair_blocked": "yes", "repair_money": True})
     assert later.repair_blocked is False and later.repair_money is None, "only its own values"
 
+
+
+def test_fights_that_never_engage_pause_combat_so_the_walk_goes_on():
+    """V212: a Defias Smuggler at 6% health threw knives from out of sight; the paladin
+    turned and healed through 74 and 41 fights "not visible" in two sessions. After three
+    fights that never engaged, combat stays off the floor for a while, save the panic."""
+    from jev.coach.policy import FIGHT_PAUSE_S, Context
+
+    context = Context()
+    hit = _s(vitals=Vitals(hp=0.6, combat=True), target=Target(has=True, in_melee=False))
+    assert decide(hit, context=context).decision.skill == "COMBAT_PROFILE"
+    for _ in range(2):
+        context.fight_ended("not_visible", hit.t)
+    context.fight_ended("killed", hit.t)
+    assert not context.fight_paused(hit.t), "a kill between them starts the count again"
+    for _ in range(3):
+        context.fight_ended("not_visible", hit.t)
+    assert context.fight_paused(hit.t)
+    assert decide(hit, context=context).decision.skill != "COMBAT_PROFILE"
+    critical = _s(vitals=Vitals(hp=0.1, combat=True), target=Target(has=True, in_melee=False))
+    assert decide(critical, context=context).decision.skill == "COMBAT_PROFILE", "the panic"
+    later = hit.model_copy(update={"t": hit.t + FIGHT_PAUSE_S + 1})
+    assert decide(later, context=context).decision.skill == "COMBAT_PROFILE"

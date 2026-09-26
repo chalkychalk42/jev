@@ -882,3 +882,15 @@ def test_a_merchant_out_of_reach_is_not_walked_to_again_on_the_step_and_never_st
         assert rt.policy_context.can_restock(500, "another step")
     finally:
         supervisor.close()
+
+
+def test_a_walk_is_not_interrupted_by_combat_while_it_is_paused(tmp_path):
+    """V212: while combat is paused after fights that never engaged, the walk goes on."""
+    from dataclasses import replace
+
+    rt = runtime(tmp_path, [seen(vitals=Vitals(hp=0.6, combat=True))])
+    state = rt.tick()
+    hunt = replace(rt.armed, decision=rt.armed.decision.model_copy(update={"skill": "GRIND_UNTIL"}))
+    assert interruption(hunt, state, travelling=True) == "combat interrupted the leg or service"
+    assert interruption(hunt, state, travelling=True, combat_paused=True) is None
+
