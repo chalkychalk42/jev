@@ -155,6 +155,23 @@ def test_a_leg_starts_in_combat_only_while_combat_is_paused():
     b.client.approach.assert_called()
 
 
+def test_a_leg_out_of_reach_does_not_stop_for_a_meal():
+    """V218: in combat with combat paused, a hurt character walks on; session 188 asked for
+    a meal six times running, "in combat; not a moment to eat", and stood still."""
+    import time as clock
+
+    from jev.coach.policy import Context
+
+    b = body()
+    b.client.read = lambda: {"vitals.hp": 0.3, "vitals.combat": True}
+    b.policy_context = Context()
+    b.policy_context.fight_paused_until = clock.time() + 30
+    b.rest = SimpleNamespace(until=lambda *a, **k: pytest.fail("a meal in combat"), detail="")
+    b.fight.top_up = lambda: pytest.fail("a heal before the way out")
+    b._approach((50, 50, 0))
+    b.client.approach.assert_called()
+
+
 def test_unread_health_does_not_start_a_leg():
     b = body()
     b.client.read = lambda: {}

@@ -455,13 +455,16 @@ class LiveBody:
                 raise Cancelled("dead before travel")
             # Not while combat is paused after fights that never engaged: this walk is the
             # way out of reach (V212). In session 176 the pause was met here sixteen times.
-            if (v.get("vitals.combat") is True
-                    and not self.policy_context.fight_paused(time.time())):
+            leaving = (v.get("vitals.combat") is True
+                       and self.policy_context.fight_paused(time.time()))
+            if v.get("vitals.combat") is True and not leaving:
                 raise Cancelled("combat before travel")
             hp = v.get("vitals.hp")
             if hp is None:
                 raise Cancelled("health unread before travel")
-            if hp < HEAL_OUT_OF_COMBAT and not self.fight.top_up():
+            # Nor does that walk wait for a meal no fight allows (V218): session 188 asked
+            # for one six times running, "in combat; not a moment to eat", standing still.
+            if hp < HEAL_OUT_OF_COMBAT and not leaving and not self.fight.top_up():
                 rested = self.rest.until(0.9)
                 if not rested.ok:
                     raise BodyFailure(self._result(rested, f"not fit to travel: {self.rest.detail}"))
