@@ -91,6 +91,23 @@ def test_full_bags_yield_before_another_pull_without_walking_the_camp():
     assert hunt.fight.calls == 0 and walked == []
 
 
+def test_full_bags_the_merchant_cannot_help_do_not_stop_the_hunt():
+    """V217: with the bag service blocked (nothing a merchant buys), the hunt fought on; before,
+    session 186 handed the step back 583 times in a row until the watchdog failed it over."""
+    hunt, walked = _hunt([Fought.KILLED], [(0, 1), (0, 1), (1, 1)])
+    hunt.read = lambda: {"bags.free": 0, "vitals.combat": False}
+    asked = []
+    hunt.service_needed = lambda: asked.append(1) and None
+    hunt.loot = SimpleNamespace(run=lambda **_: Looted.BAGS_FULL, detail="bags are full")
+    assert hunt.run((0, 0, 0), 30) is Hunted.DONE, "fought on past a corpse it could not loot"
+    assert hunt.fight.calls >= 1 and asked
+    hunt, _ = _hunt([Fought.KILLED], [(0, 8)])
+    hunt.read = lambda: {"bags.free": 0, "vitals.combat": False}
+    hunt.service_needed = lambda: "bags are nearly full"
+    assert hunt.run((0, 0, 0), 30) is Hunted.SERVICE_NEEDED
+    assert hunt.fight.calls == 0 and hunt.detail == "bags are nearly full"
+
+
 def test_full_bags_do_not_interrupt_an_existing_fight_or_hide_completion():
     hunt, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)])
     hunt.read = lambda: {"bags.free": 0, "vitals.combat": True}

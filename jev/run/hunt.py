@@ -249,12 +249,18 @@ class Hunt:
                 self.say(f"  objective complete: {have}/{need}")
                 return Hunted.DONE
 
-            if v is not None and v.get("bags.free") == 0 and v.get("vitals.combat") is False:
+            if self.service_needed is not None:
+                # The policy's services own full bags (V217): a merchant visit that found
+                # nothing to sell is not asked for again until the bags change, and the hunt
+                # goes on without the loot. Handed back regardless, session 186 asked 583
+                # times in a row, "bags are full; service before the next pull", until the
+                # watchdog failed the step over.
+                if reason := self.service_needed():
+                    self.detail = reason
+                    return Hunted.SERVICE_NEEDED
+            elif v is not None and v.get("bags.free") == 0 and v.get("vitals.combat") is False:
                 self.detail = "bags are full; service before the next pull"
                 return Hunted.BAGS_FULL
-            if self.service_needed is not None and (reason := self.service_needed()):
-                self.detail = reason
-                return Hunted.SERVICE_NEEDED
 
             if not stood:
                 if post >= len(posts):
@@ -346,6 +352,9 @@ class Hunt:
         stopped = {Looted.BLIND: Hunted.BLIND, Looted.REFUSED: Hunted.REFUSED,
                    Looted.INTERRUPTED: Hunted.INTERRUPTED, Looted.BAGS_FULL: Hunted.BAGS_FULL,
                    Looted.WINDOW_OPEN: Hunted.WINDOW_OPEN}.get(outcome)
+        if (stopped is Hunted.BAGS_FULL and self.service_needed is not None
+                and not self.service_needed()):
+            return None                      # no merchant can make room: hunt on (V217)
         if stopped is not None:
             self.detail = f"loot: {self.loot.detail}"
         return stopped
