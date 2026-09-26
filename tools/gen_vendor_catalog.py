@@ -45,8 +45,14 @@ def generate(db: sqlite3.Connection, profiles: dict) -> dict:
         "select entry from world_item_template where Quality=0 and SellPrice>0 "
         "and class not in (0,1,2,4,6,11,12,13,15,16) "
         "and InventoryType=0 and startquest=0 order by entry") if row[0] not in protected]
+    # What a purchase of each costs (one `BuyCount` stack): a restock is not walked to with
+    # less in the purse (V195).
+    items = sorted({r["item"] for profile in profiles.values() for r in profile["rows"]
+                    if r["role"] in ("food", "drink")})
+    price = dict(db.execute("select entry, BuyPrice from world_item_template where entry in ("
+                            + ",".join("?" * len(items)) + ")", items)) if items else {}
     supplies = {key: {r["role"]: {"item_id": r["item"], "name": r["name"],
-                                 "slot": r["slot"]}
+                                 "slot": r["slot"], "price": int(price.get(r["item"]) or 0)}
                       for r in profile["rows"] if r["role"] in ("food", "drink")}
                 for key, profile in profiles.items()}
     # Poor misc (class 15) drops are the usual vendor trash. Permit them only after

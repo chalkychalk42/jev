@@ -79,6 +79,12 @@ def flightmasters(map_id: int, side: str | None) -> tuple[FlightMaster, ...]:
                  if f["map_id"] == map_id and (side is None or side in f.get("sides", ())))
 
 
+def supply_prices() -> dict[int, int]:
+    """What one purchase of each food and drink the profiles use costs, in copper (V195)."""
+    return {int(r["item_id"]): int(r.get("price") or 0)
+            for roles in (catalog().get("supplies") or {}).values() for r in roles.values()}
+
+
 def surplus_prices() -> dict[int, int]:
     """White and green gear, trade goods and recipes no quest needs, with their sell prices."""
     return {int(k): int(v) for k, v in (catalog().get("surplus_prices") or {}).items()}

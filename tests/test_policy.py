@@ -289,3 +289,21 @@ def test_a_purchase_the_purse_could_not_pay_waits_for_the_purse_it_needed():
     context.supplies_need(60)
     assert not context.can_restock(11) and not context.can_restock(59)
     assert context.can_restock(60)
+
+
+def test_a_restock_is_not_walked_to_without_one_purchase_in_the_purse():
+    """V195: a level 2 mage with 10 copper and water at 25 a stack walked from Northshire to
+    Goldshire's merchants and on, 2,000 yards, for water it could not buy."""
+    from test_runtime_records import seen
+
+    from jev.coach.policy import service
+    from jev.world.state_v1 import Bags
+
+    def with_purse(copper):
+        return seen(bags=Bags(free=10, durability_min=1.0, money_copper=copper, food_id=2070,
+                              food_count=5, drink_id=159, drink_count=0))
+
+    assert service(with_purse(10)) is None, "one stack of water is 25 copper"
+    plan = service(with_purse(25))
+    assert plan is not None and plan.decision.skill == "BUY_AMMO_REAGENT_FOOD"
+    assert service(with_purse(None)) is not None, "a purse not read is not a reason to stay"

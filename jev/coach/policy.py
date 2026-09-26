@@ -35,6 +35,7 @@ from jev.guide.graph import Node
 from jev.skills.catalog import NAMES
 from jev.world.combat import HEAL_OUT_OF_COMBAT, is_caster, rest_mana
 from jev.world.state_v1 import PowerType, State, StepKind
+from jev.world.vendor import supply_prices
 
 # Below this, a decision is worth a teacher call if one is affordable. Above it, asking
 # would be spending a rate-limited resource on something already known.
@@ -265,6 +266,14 @@ BAGS_LOW = 2
 # --------------------------------------------------------------------------- soft tier
 
 
+def _affordable(item_id: int, money: int | None) -> bool:
+    """Is one purchase of this food or drink in the purse? A purse or price not known is not
+    a reason to stay (V195). A level 2 mage with 10 copper and water at 25 walked from
+    Northshire to Goldshire's merchants and on for it, 2,000 yards (the mage's third check)."""
+    price = supply_prices().get(item_id)
+    return money is None or not price or money >= price
+
+
 def service(state: State, *, context: Context | None = None) -> Plan | None:
     """The service priority, shared by idle selection and long-skill handoff."""
     if state.vitals.combat is not False:
@@ -289,9 +298,10 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
 
     conjured = context.conjured() if context is not None else frozenset()
     if ((context is None or context.can_restock(b.money_copper, state.guide.step_id))
-            and ((b.food_id is not None and b.food_count == 0 and "food" not in conjured)
+            and ((b.food_id is not None and b.food_count == 0 and "food" not in conjured
+                  and _affordable(b.food_id, b.money_copper))
                  or (b.drink_id is not None and b.drink_count == 0
-                     and "drink" not in conjured))):
+                     and "drink" not in conjured and _affordable(b.drink_id, b.money_copper)))):
         return Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD", "confirmed food or drink is empty",
                        0.8, ("dead", "combat"), service="supplies"), True, "service.supplies")
 
