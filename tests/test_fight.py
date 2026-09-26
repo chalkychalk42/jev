@@ -1356,7 +1356,8 @@ def test_self_defence_turns_round_once_when_tab_finds_nothing_in_front():
     f.read_frame = lambda: _plate_frame(None)
     assert f.acquire(1161, defend=True) is Fought.NO_TARGET
     assert hid.holds == [("d", math.pi / TURN_RATE_SEED)], "turned round once, and only once"
-    assert hid.taps == ["tab"] * (2 * MAX_SELECTS), "a Tab burst either side of the turn"
+    assert hid.taps == ["tab"] * (3 * MAX_SELECTS), ("a Tab burst either side of the turn, "
+                                                      "and one for anything at all (V210)")
 
 
 def test_a_refused_turn_stops_the_look_round():
@@ -1829,6 +1830,20 @@ def test_an_attacker_found_nowhere_leaves_the_plate_in_view_as_the_fight():
     f = Fight(hid=hid, read=read, read_frame=lambda: frame, window_origin=(10, 38),
               targeting=_Targeting(read, hid))
     assert f.acquire(None, defend=True) is None, "the kobold in view, after the search"
+    assert [key for key, _ in hid.holds] == ["d"], "turned round once first"
+
+
+def test_an_attacker_found_nowhere_with_no_plate_in_view_leaves_tabs_pick():
+    """V210: something unfound hit the paladin by Jangolode Mine all session while Tab
+    offered only a Defias Smuggler that was not attacking; self-defence refused it and
+    turned round 33 times in four minutes (sessions 169-170)."""
+    hid = _Hid()
+    smuggler = {**ALIVE, "vitals.combat": True, "target.name_id": 52250,
+                "target.attacking_me": False}
+    f = _fight([smuggler], hid=hid)
+    f.read_frame = lambda: _plate_frame(None)
+    assert f.acquire(1161, defend=True) is None, "the Smuggler, after the search"
+    assert f._selected_name_id == 52250
     assert [key for key, _ in hid.holds] == ["d"], "turned round once first"
 
 

@@ -887,11 +887,17 @@ class Fight:
                     return chosen
                 if turned_round:
                     # Nothing attacking could be found either side, only what is in view:
-                    # fight that. A Kobold Geomancer casting from inside Jangolode Mine went
-                    # unfound, and with nothing else taken the paladin turned round 33
-                    # times in four minutes, healing, and fought nothing (session 169).
+                    # fight that, and with no plate in view whatever Tab picks. Something
+                    # unfound hit the paladin by Jangolode Mine for 4-5% every four seconds;
+                    # with nothing else taken it turned round 33 times in four minutes and
+                    # then again all the next session, healing, fighting nothing, while Tab
+                    # offered a Defias Smuggler (sessions 169-170, V209-V210). A fight moves
+                    # the character: out of a hidden caster's sight, or into its partner's.
                     last = self._pick_plate(name_id, defend, any_plate=True)
-                    return chosen if last is False else last
+                    if last is False:
+                        event("acquire.anything", data={"wanted_name_id": name_id})
+                        last = self.select(None)
+                    return last
                 turned_round = True
                 seconds = math.pi / TURN_RATE_SEED
                 event("acquire.turn_round", data={"key": turn, "seconds": round(seconds, 3)})
