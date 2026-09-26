@@ -33,7 +33,7 @@ from jev.clients.taxi import TaxiDesk
 from jev.clients.trainer import TrainerDesk
 from jev.clients.vendor import Vended, Vendor
 from jev.clients.windows import close_observed
-from jev.coach.policy import Context, service
+from jev.coach.policy import BAGS_LOW, Context, service
 from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
@@ -181,6 +181,11 @@ FLIGHT_YARDS_PER_S = 10.0
 # Free slots a bag service asks the merchant for: every stack it may sell (`Vendor._sell`
 # stops when all of them are gone).
 SELL_ALL = 999
+# What the bags' goods must fetch for a walk to a merchant while a slot is still free (V250):
+# the mage's bag trips in sessions 205-213 fetched 0 copper six times and 4-19 seven times,
+# each about 55 s and 240 yards when it arrived, and 19 of 42 were cut off by a fight on
+# the way. With no slot free the walk is made whatever they fetch.
+SALE_WORTH_COPPER = 30
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
 # Walks in a row that ended with the character wedged before it goes home by hearthstone.
@@ -1448,6 +1453,13 @@ class LiveBody:
                 # bags stayed full through sessions 208-211, "no_junk" each visit.
                 event("bags.census", data={"items": sorted(items), "keep": sorted(keep),
                                            "eligible": sorted(eligible)})
+                counted = getattr(equipper, "last_census", None) or {}
+                worth = sum(eligible.get(item, 0) * count for item, count in counted.values())
+                free = values.get("bags.free")
+                if counted and isinstance(free, int) and free > 0 and worth < SALE_WORTH_COPPER:
+                    return Result(SkillOutcome.ABORTED,
+                                  f"the bags' goods fetch {worth} copper, not worth the walk "
+                                  f"with {free} slot{'s' if free > 1 else ''} free", "no_junk")
         wanted = {s.item_id for s in supplies}
         candidates = self._in_zone(m for m in merchants(self.client.bounds.map_id)
                                    if not wanted or wanted & m.items)
@@ -1485,6 +1497,13 @@ class LiveBody:
                 note_merchant(self.merchant_memory, merchant.entry, failed=False)
                 if supplies:
                     self.policy_context.restocked()
+                elif self.arm.decision.skill == "BAG_MAKE_SPACE":
+                    # Sold, and the bags still nearly full: what is left does not sell, and
+                    # the service is not asked again until something new is in them (V250).
+                    # Five of the mage's visits in 205-217 were armed again at the counter.
+                    free = (self._read() or {}).get("bags.free")
+                    if isinstance(free, int) and free <= BAGS_LOW:
+                        self.policy_context.bags_failed(free)
             if outcome is Vended.TOO_POOR:
                 self.policy_context.supplies_need(vendor.needed_copper)
             return self._result(outcome, vendor.detail or

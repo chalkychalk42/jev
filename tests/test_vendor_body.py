@@ -253,6 +253,67 @@ def test_a_bag_service_offers_every_stack_the_character_has_no_use_for(monkeypat
     assert offered["min_free"] > 34, "every eligible stack, not just six slots' worth"
 
 
+def _bag_service(monkeypatch, census, free_before, free_after=None):
+    """A BAG_MAKE_SPACE visit with this census ((item, count) per slot) and free slots."""
+    b = body()
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+    reads = iter([{"bags.free": free_before, "char.class_id": 8, "char.race_id": 1}]
+                 + [{"bags.free": free_after if free_after is not None else free_before}] * 20)
+    b.client.read = lambda: next(reads)
+    monkeypatch.setattr("jev.run.body.merchants",
+                        lambda map_id: (Merchant(2, "Smith", 0, (50, 50, 0), frozenset()),))
+    monkeypatch.setattr("jev.run.body.junk_prices", lambda: {3299: 48})
+    monkeypatch.setattr("jev.run.body.surplus_prices", lambda: {2589: 13, 774: 15})
+    monkeypatch.setattr("jev.run.body.gear_keep", lambda items, worn, **kw: frozenset())
+    visit = Mock(return_value=Interacted.VENDOR)
+    b.interact = SimpleNamespace(open_on=visit)
+
+    class FakeVendor:
+        detail = ""
+        sold_stacks, bought_units = 1, 0
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
+            self.open_shop = open_shop
+            self.last_census = {}
+        def equip_bags(self, bags, **kw):
+            return 0
+        def bag_items(self, **kw):
+            self.last_census = {(0, i): pair for i, pair in enumerate(census)}
+            return {item for item, _ in census}
+        def run(self, **kwargs):
+            assert self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    return b, visit
+
+
+@pytest.mark.parametrize(("census", "free", "walked"), [
+    ([(2589, 1), (6948, 1), (772, 5)], 2, False),     # 13 copper of cloth: not worth it
+    ([(2589, 1), (6948, 1), (772, 5)], 0, True),      # no slot free: made whatever it fetches
+    ([(3299, 2), (774, 1), (6948, 1)], 1, True),      # 111 copper of junk and a gem
+])
+def test_a_walk_to_a_merchant_is_made_when_the_sale_pays(monkeypatch, census, free, walked):
+    """V250: the mage's bag trips in sessions 205-213 fetched 0 copper six times and 4-19
+    seven times, each about 55 s and 240 yards, and 19 of 42 were cut off on the way."""
+    b, visit = _bag_service(monkeypatch, census, free)
+    result = b.execute(b.arm, seen(), lambda: None)
+    assert visit.called is walked
+    assert (result.code == "no_junk") is (not walked)
+    if not walked:
+        assert "not worth the walk" in result.detail
+
+
+def test_a_sale_that_leaves_the_bags_nearly_full_blocks_the_service(monkeypatch):
+    """V250: five of the mage's visits in 205-217 were armed again at the counter."""
+    b, _visit = _bag_service(monkeypatch, [(3299, 2), (774, 1)], 1, free_after=2)
+    assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
+    assert b.policy_context.bags_blocked
+    b2, _ = _bag_service(monkeypatch, [(3299, 2), (774, 1)], 1, free_after=6)
+    b2.execute(b2.arm, seen(), lambda: None)
+    assert not b2.policy_context.bags_blocked, "room made: nothing to block"
+
+
 def test_merchants_are_ranked_by_their_walk_not_their_distance(monkeypatch):
     """Goldshire's warlock trainer sells from the inn's cellar: nearest in a straight line,
     and the way back out took 155 turns and 18 stuck events (session 90)."""

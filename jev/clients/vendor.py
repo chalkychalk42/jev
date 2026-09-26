@@ -64,6 +64,8 @@ class Vendor:
     # What the purse needed for the offer a purchase could not pay: its price and the
     # reserve (V186).
     needed_copper: int | None = field(default=None, init=False)
+    # The last full bag census `bag_items` took: (bag, slot) -> (item id, count).
+    last_census: dict = field(default_factory=dict, init=False)
     _deadline: float = field(default=0, init=False)
     _merchant: int = field(default=0, init=False)
 
@@ -216,6 +218,7 @@ class Vendor:
     def bag_items(self, *, timeout_s: float = 10.0) -> set[int] | None:
         """Every item id in the bags, from one full census; `None` if it did not complete."""
         slots = self.census(timeout_s=timeout_s)
+        self.last_census = dict(slots)
         return {item for item, _ in slots.values() if item} if slots else None
 
     @traced("vendor.equip_items")
