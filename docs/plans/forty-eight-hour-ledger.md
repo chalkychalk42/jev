@@ -119,6 +119,11 @@ Now
     the level-14 training trip to Goldshire 14%.
   - Sessions 164-165: 1,356 and 1,162 XP (5,424 and 4,650/h), 0 deaths; V207 stepped in 4
     times in 164. Testvvi about 14.66 at 08:38, past hour 12's 14.6.
+  - **Deviation from §8:** before hour 15 the plan allows the mage its T-0 dry run and one
+    more check. It has played about 14 sessions (about 3.3 h, level 1 to 5.41): four in the
+    paladin's hearthstone cooldowns (sessions 156-159, the paladin wedged), the rest to check
+    caster fixes live (V195-V208, found on them). No more before the switch; the switch is
+    V208's live check. Testvvi reached 5 at 2.1 h of play; the mage at about 3.2 h.
   - 08:38-09:12, the mage's sixth visit (`captures/live-mage-6.log.1-2`): the first V206
     session remembered nothing yet, took the hearthstone and was too poor at 24 copper, then
     wrote `character-73ce06a8.purse.json`; Skirmish at Echo Ridge done, its hand-in walk stuck
