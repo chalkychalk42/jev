@@ -401,10 +401,7 @@ class ClientRuntime:
         if (node is None or node.kind is not StepKind.QUEST_ACCEPT or node.quest_id is None
                 or not node.quest_prerequisites or node.quest_id in self.completed):
             return None
-        lost = {n.quest_id for n in self.graph.nodes
-                if n.kind is StepKind.QUEST_TURNIN and n.quest_id is not None
-                and n.quest_id not in self.completed
-                and self._detour_spent(n.id, state.char.level)}
+        lost = self._lost_quests(state)
         # Alternatives of quests all required, as the route reads them (`compile_route`):
         # impossible only when every alternative holds a lost one.
         if not all(any(q in lost for q in group) for group in node.quest_prerequisites):
@@ -413,6 +410,39 @@ class ClientRuntime:
         while step is not None and step.quest_id == node.quest_id and step.next:
             step = self.graph.get(step.next[0])
         return step.id if step is not None and step.quest_id != node.quest_id else None
+
+    def _lost_quests(self, state: State) -> set[int]:
+        """Quests this route will not finish: a hand-in passed over with its detour for the
+        level spent (V144); one in the log, not complete, whose objective was passed over, as
+        `_unfinished_hand_in` reads it (V219); and every quest not yet taken whose
+        prerequisites all need a lost one. The mage's Wolves Across the Border (33) sat at 4 of
+        8 with its objective passed over, and the accept of Milly Osworth, which needs it, was
+        tried anyway: Deputy Willem offered his only other quest, which was accepted instead,
+        and the step failed over to a rib (session 189)."""
+        lost = {n.quest_id for n in self.graph.nodes
+                if n.kind is StepKind.QUEST_TURNIN and n.quest_id is not None
+                and n.quest_id not in self.completed
+                and self._detour_spent(n.id, state.char.level)}
+        if state.quests is None:
+            return lost                  # an unread log says nothing of what is under way
+        held = {q.quest_id: q for q in state.quests}
+        lost |= {n.quest_id for n in self.graph.nodes
+                 if n.kind is StepKind.QUEST_OBJECTIVE and n.id in self._retried
+                 and n.quest_id is not None and n.quest_id not in self.completed
+                 and (quest := held.get(n.quest_id)) is not None and quest.complete is False}
+        waiting = [n for n in self.graph.nodes
+                   if n.kind is StepKind.QUEST_ACCEPT and n.quest_id is not None
+                   and n.quest_prerequisites and n.quest_id not in self.completed
+                   and n.quest_id not in held]
+        grew = True
+        while grew:
+            grew = False
+            for n in waiting:
+                if n.quest_id not in lost and all(any(q in lost for q in group)
+                                                  for group in n.quest_prerequisites):
+                    lost.add(n.quest_id)
+                    grew = True
+        return lost
 
     def _unfinished_hand_in(self, state: State) -> str | None:
         """A hand-in for a quest the log reads as not complete, whose objective was passed

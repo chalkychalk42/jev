@@ -606,6 +606,46 @@ def test_an_accept_waiting_on_a_lost_hand_in_is_passed_by(tmp_path, retried, exp
     assert rt.tracker.step_id == expected
 
 
+def blocked_chain_graph():
+    """Quest 1 under way; quest 2 needs it, and quest 3 needs quest 2."""
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    return Graph(graph_id="g", faction="alliance", entry="do", nodes=(
+        Node(id="do", kind=StepKind.QUEST_OBJECTIVE, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "GRIND_UNTIL"), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("next_accept",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="next_accept", kind=StepKind.QUEST_ACCEPT, quest_id=2, next=("next_turnin",),
+             quest_prerequisites=((1,),), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="next_turnin", kind=StepKind.QUEST_TURNIN, quest_id=2, next=("chain_accept",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="chain_accept", kind=StepKind.QUEST_ACCEPT, quest_id=3, next=("chain_turnin",),
+             quest_prerequisites=((2,),), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="chain_turnin", kind=StepKind.QUEST_TURNIN, quest_id=3, next=("after",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=4,
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+    ))
+
+
+@pytest.mark.parametrize(("complete", "retried", "expected"), [
+    (False, frozenset({"do"}), "after"),            # never finished: the chain on it goes too
+    (True, frozenset({"do"}), "next_accept"),       # finished after all: it can be offered
+    (False, frozenset(), "next_accept"),            # not passed over: the accept is tried
+])
+def test_an_accept_needing_a_quest_whose_objective_was_passed_over_is_passed_by(
+        tmp_path, complete, retried, expected):
+    """V219: Wolves Across the Border sat at 4 of 8, its objective passed over, and the
+    accept of Milly Osworth, which needs it, took Deputy Willem's other quest instead and
+    failed over to a rib (session 189). Milly's Harvest and the Grape Manifest need it in
+    turn."""
+    states = [seen(t, quests=(Quest(quest_id=1, complete=complete),)) for t in range(3)]
+    rt = ClientRuntime("c", blocked_chain_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       start_step="next_accept", start_retried=retried)
+    for _ in states:
+        rt.tick(choose=False)
+    assert rt.tracker.step_id == expected
+
+
 def objective_graph():
     base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
     return Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
