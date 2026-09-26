@@ -2839,3 +2839,65 @@ NEXT (backlog, by expected value):
   - a Frost Armor press read as unanswered and cast twice;
   - no out-of-combat buffing.
 - Testvvi resumed at 23:54 (session 137).
+
+## 26 Sep 2026 03:05 — hour four: Westfall's deaths, the mage checked, V178-V189
+
+The hour-4 checkpoint:
+
+| Go if | Result |
+|---|---|
+| Testvvi 13.5 or higher | **Met**: 13.8 |
+| No stop over 15 minutes | **Met.** The longest was 7 minutes (sessions 145-147, the blind strip); the mage's check held the loop 18 minutes on purpose |
+| 6 or fewer deaths since T-0 | **Missed**: about 16 in 2.9 hours played |
+
+The fallback, "revert the newest change", does not fit: no change caused the deaths. The causes, in
+order of cost:
+
+- Westfall's gnoll country holds units two to five levels above a 13.8 paladin in quest gear:
+  Riverpaw Brutes (15-16), Bandits (16-17) and wandering Dust Devils (18-19). One Brute outlasted
+  four Holy Lights and all the mana (session 150). The learned danger map counts each attack at
+  the next session's start; walks bend round the cells it calls hot.
+- Faults, each fixed as it was found:
+  - V179: the 12-20 guide sent the paladin to level 17-18 Taskmasters for a level 14 quest's
+    Gnoll Paws. Item droppers are now kept within two levels of the quest.
+  - V182: a finished guide ended the run mid-fight, and the character died standing through
+    the restart.
+  - V183: walks after getting up 32 yards short of the body went straight back through what
+    had killed it (4 of 7 deaths came within 45 s of getting up).
+  - V184: the strip reader was misled by scenery behind the strip's corner, and the fight went
+    blind every other second.
+  - V188: fleeing gnolls came back with their camp (up to five attackers).
+  - V189: a Spirit Healer revive walked out under resurrection sickness.
+
+| Block | Sessions | Played | XP/h | Deaths/h | Stuck/h |
+|---|---|---|---|---|---|
+| 1 | 134-144 | 2.10 h | 2,887 | 4.3 | 54.8 |
+| 2 so far | 145-150 | 0.79 h | 2,466 | 10.1 | 11.4 |
+
+Stuck events fell about fivefold after V178 stopped walks going by learned escape points.
+
+**The mage's check** (02:08-02:23, Itheamar):
+- A Threat Within was handed in to Marshal McBride at once, where the dry run failed (V178,
+  V180).
+- Kobold Camp Cleanup was done by Fireball from range, with no walk into melee.
+- Level 1.0 to 2.4 in 15 minutes, no deaths.
+- Faults found and fixed: with no water and no money, the grind walked to the merchant and back
+  after every kill (V186); Khelden Bremen's click failed under the subzone title "Northshire
+  Abbey", drawn in a friendly nameplate's green across his plate (V187).
+
+**Also fixed tonight:** V180, V181, V185.
+- V180: a plate the view moved off its anchor.
+- V181: every other session played the old 1-12 guide.
+- V185: a failed repair stopped the session.
+
+**Learner gain since T-0:**
+- The heal line has 110 tries, paying off 89% (single attackers) and 69% (packs).
+- Hunt stations have 318 visits. The Mongrel camp's 8 stations pay off 6% (4 barren), so the
+  chooser is learning to leave it.
+- The danger map grew from 1,217 to 1,628 cells.
+
+**NEXT:**
+1. Judge V178-V189 on block 3.
+2. A second mage check near 05:00, to level 4: Frostbolt and Conjure Water from the trainer
+   upstairs (V187), and conjuring (V166).
+3. The paladin's pulls into camps when no plate shows (Tab picks any unit).

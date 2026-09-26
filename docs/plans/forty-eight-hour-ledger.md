@@ -221,6 +221,7 @@ Blocks
 | Block | Hours | Character | Level from-to | XP/h | Deaths/h | Stuck/h | Quests/h | Tutor calls/h | Change under trial | Verdict |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 (sessions 134-143, 1.65 h played) | 0-2 | Testvvi | 13.0-13.45 | 2,682 | 4.25 | 52.8 | 2.4 guide steps/h | 0 | V175-V177 at T-0; V178-V181 from 142, V182 from 143 | XP/h above the nine-hour 2,108. Deaths high: two at the Taskmasters (V179), one standing through a restart (V182), two on the road in fights with more than one attacker (next) |
+| 2 (sessions 144-150, about 1.8 h played) | 2-4 | Testvvi | 13.45-13.78 | 2,466 (145-150) | 10.1 | 11.4 | 0 guide steps/h | 0 | V178-V189 | Deaths: Westfall's units two to five levels up (Brutes, Bandits, Dust Devils), and faults fixed as found (V182-V184, V188, V189). Stuck events down about fivefold (V178). Hour-4 checkpoint: deaths missed |
 
 Trials
 ------
