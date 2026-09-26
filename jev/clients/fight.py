@@ -137,6 +137,11 @@ PRESS_TELL_S = 1.4
 # two seconds, three presses; a press the client will never answer - an aura already up,
 # a Judgement on a unit out of reach - must not hold the rotation on that one row.
 PRESS_GIVE_UP = 3
+# A slot the client refused as "not ready" while the bar painted it ready is left this long,
+# and the rotation presses another row meanwhile (V251): the mage pressed one spell 19 times
+# in 19 s against a murloc at 23% (session 201) and 12 in 13 s against two wolves (214),
+# "Spell is not ready yet" each time, and died both times.
+NOT_READY_HOLD_S = 4.0
 
 # After a target vanishes, how long to watch for the experience that proves a kill.
 SETTLE_LOOKS = 3
@@ -440,6 +445,8 @@ class Fight:
     _pending_press: tuple | None = field(default=None, init=False)
     # The slot whose presses have gone unanswered, and how many times in a row.
     _dropped: tuple[int, int] = field(default=(0, 0), init=False)
+    # Slots the client refused as not ready, and until when they are left (V251).
+    _held: dict[int, float] = field(default_factory=dict, init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
     _race: list[tuple] = field(default_factory=list, init=False)
     # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
@@ -517,6 +524,7 @@ class Fight:
         self._pending_heal = None
         self._pending_press = None
         self._dropped = (0, 0)
+        self._held = {}
         self._race = []
         self._look_at = None
         self._damage_mark = None
@@ -1737,9 +1745,12 @@ class Fight:
                                             values.get("char.race_id"))
         self._watch_heal(values, ready)
 
+        looked = time.monotonic()
+
         def pressable(a: Ability) -> bool:
             bit = 1 << (a.slot - 1)
-            return bool(ready & bit) and bool(usable & bit)
+            return (bool(ready & bit) and bool(usable & bit)
+                    and self._held.get(a.slot, 0.0) <= looked)
 
         hp = values.get("vitals.hp")
         in_combat = values.get("vitals.combat") is True
@@ -2016,11 +2027,13 @@ class Fight:
         # With the client's last error, which says why when it said anything: a quarter of
         # the mage's presses went unanswered in sessions 201 and 214.
         error = values.get("ui.error_last")
+        key = (UI_ERROR_KEYS[error] if isinstance(error, int) and 0 < error < len(UI_ERROR_KEYS)
+               else None)
         event("ability.unanswered", data={
-            "slot": ability.slot, "role": ability.role.value, "times": times,
-            "error": (UI_ERROR_KEYS[error] if isinstance(error, int)
-                      and 0 < error < len(UI_ERROR_KEYS) else None),
+            "slot": ability.slot, "role": ability.role.value, "times": times, "error": key,
             "error_count": values.get("ui.error_count"), "in_melee": values.get("target.in_melee")})
+        if key == "not_ready":
+            self._held[ability.slot] = time.monotonic() + NOT_READY_HOLD_S
         if times >= PRESS_GIVE_UP:
             self._dropped = (0, 0)
             return True                        # counted after all, as before

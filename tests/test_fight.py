@@ -2543,6 +2543,36 @@ def test_against_a_pack_the_heal_line_is_drawn_and_learned_apart():
 
 
 
+def test_a_spell_the_client_refuses_as_not_ready_is_left_while_another_is_pressed(
+        monkeypatch):
+    """V251: the mage pressed one spell 19 times in 19 s against a murloc at 23% (session
+    201), "Spell is not ready yet" each time, while the bar painted it ready."""
+    from jev.clients.fight import NOT_READY_HOLD_S
+    from jev.perceive.radio_frame import UI_ERROR_KEYS
+    from jev.world.combat import Ability, CombatProfile, Role
+
+    clock = [100.0]
+    monkeypatch.setattr("jev.clients.fight.time.monotonic", lambda: clock[0])
+    hid = _Hid()
+    f = _fight([AT_RANGE], hid=hid)
+    f.profile = CombatProfile(name="mage", abilities=(
+        Ability(slot=2, role=Role.ATTACK, name="Fireball", spell_id=133, mana=30),
+        Ability(slot=3, role=Role.ATTACK, name="Frostbolt", spell_id=116, mana=25)))
+    near = {**AT_RANGE, "target.in_melee": True, "target.attacking_me": True,
+            "bars.ready": 0b111, "bars.usable": 0b111}
+    f._rotate(near)
+    assert hid.taps[-1] == "2"
+    clock[0] += 1.0                             # no cast, no cooldown: refused
+    refused = {**near, "ui.error_last": UI_ERROR_KEYS.index("not_ready"), "ui.error_count": 5}
+    f._rotate(refused)
+    f._rotate(refused)
+    assert hid.taps[-1] == "3", "the refused spell left, another pressed"
+    clock[0] += NOT_READY_HOLD_S + 0.1
+    f._pending_press = None
+    f._rotate(near)
+    assert hid.taps[-1] == "2", "pressed again once the hold is over"
+
+
 def test_a_press_is_answered_by_its_mana_leaving():
     """V176: Frost Armor was cast (60 of 165 mana gone) with the bar and the global
     cooldown unpainted, read as dropped, and cast again."""

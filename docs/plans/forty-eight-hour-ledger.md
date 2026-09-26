@@ -297,6 +297,10 @@ Blocks
 | 3 (sessions 151-159, 1.83 h played) | 4-7 | Testvvi | 13.78-14.23 | 2,768 (3,973 in 151-155) | 2.7 | 56 (41 of the 103 in 156-159, wedged) | 0 guide steps/h | 0 | V188-V197 | 151-155 the best XP/h of the run with deaths at 2.4/h; 156-159 lost to the Sentinel Hill inn: a repair walk's hearth, the door missed (V198), the corner by the stove and the crate behind the inn |
 | 4 (sessions 160-172, 3.04 h played) | 7-12 | Testvvi | 14.23-15.25 | 4,234 | 2.6 | 30.3 | - | 0 | V198-V210 | The run's best block: quest hand-ins at 9,000+ XP/h in 166 and 172; the mage's worst faults found on its visits (V204, V208) |
 | 5 (sessions 173-188, 3.53 h played) | 12-15 | Testvvi | 15.25-15.87 | 2,365 | 2.8 | 22.9 | - | 0 | V211-V217 | Lost to three things: the Smuggler's facing loop (173-175), V212's crash (176-177), and Jangolode's Smugglers with a bags-full loop (184-187; V217). 181 and 183 made 4,713 and 5,786 |
+| 6 (sessions 189-196, 2.01 h played) | 15-17 | Itheamar | 5.41-6.48 | 1,681 | 2.0 | 96.5 | 4.0 guide steps/h | 0 | V215-V221 | The mage's first block: it trained once it could pay (V215, Conjure Water in 189), and V219-V220 took it off the kobold rib that waited on the Milly chain |
+| 7 (sessions 197-204, 2.01 h played) | 17-19 | Itheamar | 6.48-7.28 | 1,576 | 4.0 | 185 | 3.0 guide steps/h | 0 | V222-V234 (the consolidation at hour 17) | Fargodeep's kobolds: deaths to two and three at once, gear broken, too poor to repair; the stuck count from walks wedged in William Pestle's house and the like (V230-V232) |
+| 8 (sessions 205-213, 2.25 h played) | 19-21 | Itheamar | 7.28-8.34 | 2,256 | 7.6 | 52.5 | 3.6 guide steps/h | 0 | V235-V240 (and V237's schema 18) | Its best XP/h to then and its worst deaths: Mangy Wolves, bears and boars two and three at a time; Frostbolt bought by value (V237) |
+| 9 (sessions 214-221, 2.00 h played) | 21-23 | Itheamar | 8.34-8.93 | 1,583 | 3.5 | 104 | 0 guide steps/h | 0 | V241-V246 | 45 minutes wedged in the Westbrook Garrison (214-217), four deaths in 219 on the Goldshire road; then 2,369, 2,723 and 3,907 XP/h in 219-221 once V245 left the dead chain and V246 looted with the bags full (15 of 16 corpses in 221) |
 
 Trials
 ------
@@ -367,6 +371,7 @@ Trials
 | V248 walks go round units that attack on sight where that costs less | session 222 (with V247) | fewer attacks on a walking mage (103 of 110 began within 20 yards of a hostile spawn in 195-219) and fewer walk deaths (23 of 34) | routes `round N units that attack on sight`; attacks per walking minute from `session_report` and the deaths profiler | | |
 | V249 self-defence takes no bystander while something attacks, nothing once combat has ended | session 222 (with V247, V248) | no `acquire.anything` out of combat; no idle unit taken while defending | `acquire.anything` events only with `vitals.combat` true | | |
 | V250 a walk for bag space only when the sale pays | session 223 | BAG_MAKE_SPACE's share of time (12% in 205-217) falls | `not worth the walk` with slots free; no BAG_MAKE_SPACE armed again at the counter | | |
+| V251 a spell refused as not ready is left 4 s | session 223 (with V250) | no run of unanswered presses of one slot with `not_ready` | `ability.unanswered` with `not_ready` followed by another slot's press | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
