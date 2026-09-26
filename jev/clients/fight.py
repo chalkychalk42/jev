@@ -291,6 +291,9 @@ HEAL_LINES = ("0.40", "0.50", "0.60")
 # A caster whose spell does not reach yet (the client's "out of range") steps this long
 # toward the unit, facing it first, at most this many times a fight (V164).
 RANGED_STEP_S = 0.8
+# A blind melee's step at an attacker the client says is too far away (V207): about three
+# yards, less than the reach it is short of.
+BLIND_STEP_S = 0.4
 MAX_RANGED_STEPS = 8
 # After a root at contact (Frost Nova) a caster backs off this long, still facing: about
 # nine yards at the walk backwards, out of the held unit's reach (V169).
@@ -771,7 +774,8 @@ class Fight:
             in_reach = melee is True or (melee is None and reached)
             stalled = now - max(self._damage_at, self._last_aim_at,
                                 self._reach_at or 0.0) > REAIM_AFTER_S
-            wrong_way = self._new_error(v) == "not_facing"
+            error = self._new_error(v)
+            wrong_way = error == "not_facing"
             if wrong_way and not self._blind_melee and self._aim_code is FaceCode.FACED:
                 # "Facing the wrong way" is the client saying the unit is in reach and
                 # behind, while its plate stands on the centre line. Two causes: a unit
@@ -806,6 +810,19 @@ class Fight:
                 # character died (run 20260924T082110-0f56c6). Four quarters face anything.
                 if wrong_way and not self._turn_quarter():
                     return Fought.REFUSED
+                if error == "out_of_range":
+                    # "Too far away" is the client saying it is not in reach after all: the
+                    # strip's `in_melee` is the ten-yard duel check, and a Fleshripper hovering
+                    # eight yards off hit from there while the swings at it failed, 45 s from
+                    # 100% to 88%, and the character died (session 163). A step ahead, bounded
+                    # as closing is; the next error says whether to turn (V207).
+                    if self._strides >= MAX_CLOSE_BURSTS:
+                        self.detail = (f"stepped in {self._strides} times blind and it is still "
+                                       "too far away; cannot reach it")
+                        return Fought.UNREACHABLE
+                    self._strides += 1
+                    if not self._blind_close():
+                        return Fought.REFUSED
             elif in_reach:
                 # Stand and swing. Turn back only on evidence the swings are not landing.
                 if ((wrong_way or stalled) and not self.engage(v)
@@ -1566,6 +1583,17 @@ class Fight:
         event("approach.request", data={"key": "w", "mode": "blind_step",
                                         "duration_s": RANGED_STEP_S, "steps": self._ranged_steps})
         if not self.hid.hold("w", RANGED_STEP_S):
+            self._input_refused = True
+            self.detail = "approach input refused"
+            return False
+        self.closed += 1
+        return True
+
+    def _blind_close(self) -> bool:
+        """A short step ahead at a blind melee's attacker the client says is too far (V207)."""
+        event("approach.request", data={"key": "w", "mode": "blind_melee",
+                                        "duration_s": BLIND_STEP_S, "strides": self._strides})
+        if not self.hid.hold("w", BLIND_STEP_S):
             self._input_refused = True
             self.detail = "approach input refused"
             return False

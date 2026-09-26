@@ -1464,6 +1464,23 @@ def test_blind_melee_turns_quarters_the_same_way_until_the_errors_stop(combat_cl
     assert len(turns) == 3 and {k for k, _ in turns} == {"d"}, "quarters, the same way"
 
 
+def test_blind_melee_steps_in_when_the_client_says_too_far(combat_clock):
+    """V207: a Fleshripper hovering eight yards off, inside the strip's ten-yard `in_melee`,
+    hit the character while every swing was "too far away"; 45 s took it from 100% to 88%,
+    and the character died (session 163)."""
+    from jev.clients.fight import BLIND_STEP_S
+
+    hit = {**ALIVE, "vitals.combat": True, "target.attacking_me": True, "target.in_melee": True,
+           "target.hp": 0.9, "ui.error_count": 3, "ui.error_last": 0, "bars.attacking": True}
+    far = {**hit, "ui.error_count": 4, "ui.error_last": 2}             # 2 = out_of_range
+    dead = {**far, "target.hp": 0.0}
+    f = _fight([hit, hit, hit, far, far, dead])
+    f.targeting.face = NOT_VISIBLE
+    assert f.run(1161, timeout_s=10.0) is Fought.KILLED, f.detail
+    steps = [h for h in f.hid.holds if h[0] == "w"]
+    assert steps == [("w", BLIND_STEP_S)], "one step on the one new 'too far'"
+
+
 def test_an_attacker_whose_plate_never_settles_on_the_centre_is_fought_where_it_stands(
         combat_clock):
     """A Mangy Wolf in melee drifted faster than the pulses turned; eight turns left its
