@@ -15,8 +15,8 @@ def _write(path: Path, rows) -> None:
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
 
 
-def _tick(t, hp):
-    return {"t": t, "state": {"t": t, "vitals": {"hp": hp}}}
+def _tick(t, hp, power=None):
+    return {"t": t, "state": {"t": t, "vitals": {"hp": hp, "power": power}}}
 
 
 def _fight(op, start, end, code):
@@ -26,8 +26,9 @@ def _fight(op, start, end, code):
 
 def test_fights_are_told_apart_by_the_most_attackers_counted(tmp_path):
     """A single Prowler won at 20% of health, a pair lost; a fight with no target is no fight."""
-    _write(tmp_path / "ticks.jsonl", [_tick(10.0, 1.0), _tick(15.0, 0.8), _tick(22.0, 0.9),
-                                      _tick(30.0, 1.0), _tick(35.0, 0.3), _tick(40.0, 0.0)])
+    _write(tmp_path / "ticks.jsonl", [_tick(10.0, 1.0, 1.0), _tick(15.0, 0.8, 0.7),
+                                      _tick(22.0, 0.9, 0.55), _tick(30.0, 1.0, 0.9),
+                                      _tick(35.0, 0.3, 0.2), _tick(40.0, 0.0, 0.04)])
     look = {"operation": "combat.observed"}
     _write(tmp_path / "executions.jsonl", [
         *_fight("a", 10.0, 22.0, "killed"),
@@ -41,6 +42,7 @@ def test_fights_are_told_apart_by_the_most_attackers_counted(tmp_path):
     assert (won["attackers"], round(won["lost"], 2), won["seconds"], won["died"],
             won["rooted"]) == (1, 0.2, 12.0, False, False)
     assert (lost["attackers"], lost["died"], lost["rooted"]) == (2, True, True)
+    assert (won["mana"], lost["mana"]) == (0.55, 0.04), "the mana left as each ended"
 
 
 def test_a_root_is_answered_by_its_slot_cooling_or_its_mana_gone(tmp_path):

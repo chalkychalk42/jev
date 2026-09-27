@@ -28,14 +28,20 @@ from session_report import RUNS, _jsonl, _run_of, session_log  # noqa: E402
 ANSWER_S = 4.0
 # A fall in the mana share at least this large after a root's press is its cost.
 ROOT_SPENT = 0.05
+# A fight that ends with less than this share of mana left ran dry.
+DRY_MANA = 0.1
 
 
 def fights(run: Path) -> list[dict]:
     """Each fight won or lost in a run: the most attackers counted, the share of health lost,
-    the seconds it took, and whether a root was pressed in it."""
-    hp = [((t.get("state") or {}).get("t"), ((t.get("state") or {}).get("vitals") or {}).get("hp"))
-          for t in _jsonl(run / "ticks.jsonl")]
-    hp = [(t, h) for t, h in hp if isinstance(t, (int, float)) and isinstance(h, (int, float))]
+    the seconds it took, whether a root was pressed in it, and the share of mana left at its
+    end (`None` for a character without mana)."""
+    vitals = [((t.get("state") or {}).get("t"), (t.get("state") or {}).get("vitals") or {})
+              for t in _jsonl(run / "ticks.jsonl")]
+    hp = [(t, v.get("hp")) for t, v in vitals
+          if isinstance(t, (int, float)) and isinstance(v.get("hp"), (int, float))]
+    power = [(t, v.get("power")) for t, v in vitals
+             if isinstance(t, (int, float)) and isinstance(v.get("power"), (int, float))]
     rows = list(_jsonl(run / "executions.jsonl"))
     looks = [(r["t"], (r.get("data") or {}).get("combat.attackers") or 0)
              for r in rows if r.get("operation") == "combat.observed"]
@@ -61,6 +67,7 @@ def fights(run: Path) -> list[dict]:
             "seconds": end - start,
             "died": r.get("code") == "died",
             "rooted": any(start <= t <= end for t in roots),
+            "mana": next((m for t, m in reversed(power) if t <= end + 1.0), None),
         })
     return out
 
@@ -99,7 +106,9 @@ def _row(label: str, won: list[dict]) -> str:
     lost = statistics.median(f["lost"] for f in won)
     seconds = statistics.median(f["seconds"] for f in won)
     rooted = sum(f["rooted"] for f in won)
-    return f"  {label:<10} {len(won):>5} {lost:>12.2f} {seconds:>8.0f} {rooted:>6}"
+    mana = [f["mana"] for f in won if f.get("mana") is not None]
+    left = f"{statistics.median(mana):>10.2f} {sum(m < DRY_MANA for m in mana):>4}" if mana else ""
+    return f"  {label:<10} {len(won):>5} {lost:>12.2f} {seconds:>8.0f} {rooted:>6} {left}"
 
 
 def main(argv=None) -> int:
@@ -119,11 +128,13 @@ def main(argv=None) -> int:
     won = [f for f in all_fights if not f["died"]]
     died = [f for f in all_fights if f["died"]]
     print(f"sessions {args.first}-{args.last}: {len(won)} fights won, {len(died)} lost")
-    print(f"  {'attackers':<10} {'won':>5} {'health lost':>12} {'seconds':>8} {'roots':>6}")
+    print(f"  {'attackers':<10} {'won':>5} {'health lost':>12} {'seconds':>8} {'roots':>6} "
+          f"{'mana left':>10} {'dry':>4}")
     print(_row("0-1", [f for f in won if f["attackers"] <= 1]))
     print(_row("2+", [f for f in won if f["attackers"] >= 2]))
     crowded = sum(f["attackers"] >= 2 for f in died)
-    print(f"  lost: {len(died)} ({crowded} with two attackers or more)")
+    dry = sum(f.get("mana") is not None and f["mana"] < DRY_MANA for f in died)
+    print(f"  lost: {len(died)} ({crowded} with two attackers or more, {dry} out of mana)")
     print(f"  roots answered: {answered} of {pressed}")
     return 0
 
