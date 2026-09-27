@@ -741,10 +741,29 @@ def save_grid(path: Path, grid: radio_frame.Grid) -> None:
 # floor over a spot; one found beside it rather than under it is some other surface.
 PROBE_HEIGHTS = (-40.0, 0.0, 40.0, 80.0, 120.0, 160.0, 200.0, 240.0, 280.0)
 FLOOR_GAP = 3.0
+# A spot with fewer than two floors under it also reads the floors round it, this far off
+# (V264): the navmesh stops short of walls and furniture, and a character stands there.
+AROUND_YARDS = 3.0
+AROUND_BEARINGS = 8
 
 
 def surfaces_under(query: PathQuery, map_id: int, x: float, y: float) -> list[float]:
-    """The navmesh's floors under a spot, lowest first."""
+    """The navmesh's floors under a spot, lowest first. With fewer than two under the spot
+    itself, the floors round it are added (V264): at 6 of the 11 spots the mage stood wedged
+    at in the Lion's Pride Inn's hall only the roof was under it, the hall 3 yards off, and a
+    walk blocked again there planned from the roof (session 238)."""
+    found = _floors(query, map_id, x, y)
+    if len(found) < 2:
+        for k in range(AROUND_BEARINGS):
+            angle = 2 * math.pi * k / AROUND_BEARINGS
+            for height in _floors(query, map_id, x + AROUND_YARDS * math.cos(angle),
+                                  y + AROUND_YARDS * math.sin(angle)):
+                if all(abs(height - known) > FLOOR_GAP for known in found):
+                    found.append(height)
+    return sorted(found)
+
+
+def _floors(query: PathQuery, map_id: int, x: float, y: float) -> list[float]:
     found: list[float] = []
     for z in PROBE_HEIGHTS:
         snapped = query.path(map_id, (x, y, z), (x, y, z))
@@ -753,7 +772,7 @@ def surfaces_under(query: PathQuery, map_id: int, x: float, y: float) -> list[fl
             height = snapped.points[0][2]
             if all(abs(height - known) > FLOOR_GAP for known in found):
                 found.append(height)
-    return sorted(found)
+    return found
 
 
 def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,

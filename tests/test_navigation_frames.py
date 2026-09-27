@@ -637,3 +637,26 @@ def test_blocked_again_upstairs_the_re_plan_tries_the_floor_below_before_the_roo
     client.travel.follow = follow
     client.approach((here[0] - 40.0, here[1] + 5.0, 57.0))
     assert starts[0] == 64.0 and starts[-1] == 57.0, starts
+
+
+def test_a_spot_off_the_navmesh_reads_the_floors_round_it():
+    """V264: in the Lion's Pride Inn's hall the mesh stops short of the walls and furniture;
+    at 6 of the 11 spots the mage stood wedged at only the roof was under it, the hall 3
+    yards off, and the re-plan went to the roof (session 238)."""
+    from jev.guide.path import Path, PathStatus
+    from jev.run.client import PROBE_HEIGHTS, surfaces_under
+
+    asked = []
+
+    def path(map_id, start, end):
+        # A hall at 57 whose mesh stops at y 31, and a roof at 74.7 over everything.
+        asked.append(start)
+        x, y, z = start
+        hall, roof = (x, min(y, 31.0), 57.0), (x, y, 74.7)
+        return Path(PathStatus.COMPLETE, (hall if abs(z - 57.0) <= abs(z - 74.7) else roof,))
+
+    mesh = SimpleNamespace(path=path)
+    assert surfaces_under(mesh, 0, -9471.1, 32.9) == [57.0, 74.7]
+    asked.clear()
+    assert surfaces_under(mesh, 0, -9471.1, 29.0) == [57.0, 74.7]
+    assert len(asked) == len(PROBE_HEIGHTS), "two floors under the spot: nothing round it read"
