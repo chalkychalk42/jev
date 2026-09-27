@@ -196,7 +196,13 @@ class Loot:
         wanted = name_id if moved_on or not selected else v.get("target.name_id")
         fighting = v.get("vitals.combat") is True
         hp = v.get("vitals.hp")
-        if fighting and moved_on and isinstance(hp, (int, float)) and hp < LOOT_IN_COMBAT_HP:
+        # Something still attacking: the selection moved on to it, or another unit counted
+        # among those that hit or missed in the last six seconds, the one just killed being
+        # one of them (V269). The selection cleared at a Mangy Wolf's kill, the level 10 mage
+        # spent three seconds on its corpse at 44% health with a Murloc Streamrunner at it,
+        # and died with the murloc at half health (session 244).
+        attacked = moved_on or (v.get("combat.attackers") or 0) >= 2
+        if fighting and attacked and isinstance(hp, (int, float)) and hp < LOOT_IN_COMBAT_HP:
             self.detail = f"at {hp:.0%} health with something still attacking; not now"
             return Looted.NO_CORPSE
         action = targeting.click_corpse(

@@ -388,6 +388,7 @@ Trials
 | V265 a route's corner kept however close, reached near enough to pass it | session 243 | the mage's next walk for Frost Nova goes in by the inn's door; fewer stuck events on walks into buildings | TRAIN_CLASS without `approach_failed`; `stuck` counts per walk in `session_report` | | |
 | V266 the character read once a plan for the spawns a route passes | session 244 | more walks `round N units that attack on sight`; fewer deaths on walks past camps | the share of `complete:` lines with `round N units`; walk deaths per hour | | |
 | V267 the tracked height kept across sessions; V268 a trail-less indoor wedge tries the next floor | session 245 | sessions that begin indoors walk out | `the next plan starts on the floor at N` followed by a complete walk outdoors | | |
+| V269 below half health a corpse waits while anything else attacks | session 246 | fewer deaths in two-attacker fights | `corpse looted: no_corpse - at N% health with something still attacking; not now` after a kill with the selection cleared | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues

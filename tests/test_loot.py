@@ -365,6 +365,21 @@ def test_in_combat_the_corpse_search_is_short_and_waits_below_half_health(monkey
     assert skill.targeting.requests == [] and "not now" in skill.detail
 
 
+
+def test_in_combat_below_half_health_a_corpse_waits_whoever_is_selected(monkeypatch):
+    """V269: the selection cleared at a Mangy Wolf's kill, and the level 10 mage spent three
+    seconds on its corpse at 44% health with a Murloc Streamrunner at it (session 244). The
+    count holds the one just killed for six seconds: one counted is that one."""
+    monkeypatch.setattr("jev.clients.loot.time.sleep", lambda _: None)
+    cleared = {**HAVE, "target.has": False, "target.hp": None, "vitals.combat": True,
+               "vitals.hp": 0.44, "combat.attackers": 2}
+    skill = _loot([cleared])
+    assert skill.run(settle_s=1.0, name_id=2685) is Looted.NO_CORPSE
+    assert skill.targeting.requests == [] and "not now" in skill.detail
+    alone = {**cleared, "combat.attackers": 1}
+    skill = _loot([alone, {**alone, "bags.money_silver": 4}])
+    assert skill.run(settle_s=1.0, name_id=2685) is Looted.TOOK, "the one killed: looted"
+
 @pytest.mark.parametrize(("results", "too_far", "steps", "final"), [
     ([Looted.NOTHING, Looted.TOOK], True, 1, Looted.TOOK),     # too far: a step, then taken
     ([Looted.NOTHING, Looted.TOOK], False, 0, Looted.NOTHING),  # empty: not walked into camp
