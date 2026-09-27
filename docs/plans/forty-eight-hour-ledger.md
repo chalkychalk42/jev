@@ -381,6 +381,7 @@ Trials
 | V258 spawns drawn from a list are in the hostile index | session 230 | fewer deaths to murlocs and gnolls; detours round their camps | murloc and Riverpaw deaths per hour; `round N units` walks near Stone Cairn Lake | **First session**: 230 made 18 kills, no deaths, +0.165 level (about 4,300 XP an hour), 8 rests moved clear of camps; 222-229 had averaged 1.6 deaths a session | |
 | V259 a walk to a merchant or a smith waits for a meal | session 231 | no BAG_MAKE_SPACE or VENDOR_REPAIR begun below the rest line | services' starting health and mana | | |
 | V260 a bag bought when the purse can spare it | session 231 or 232 | the belt grows from 16 slots; bag walks fewer | `bought a bag (4496): on the belt`; `inventory.total` above 16 | | |
+| V261 talent points spent on the class's build (schema 19) | decoder first; addon installed at a boundary with a client restart | the mage's points go to Improved Fireball | `talents: done, 1 spent [Improved Fireball 1]`; the strip reads schema 19 | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues

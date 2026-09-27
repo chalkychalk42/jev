@@ -71,11 +71,13 @@ def test_appended_fields_fit_the_existing_grid():
     Schema 15's revision byte, bar census and spellbook census add one row more; schema
     16's flight map census fits the row that left, and so do schema 17's range masks and
     attacker count. Schema 18's trainer census, 136 bits against the 23 left, adds one
-    row more, deliberately (V237)."""
+    row more, deliberately (V237), and so does schema 19's talent census, 43 bits against
+    the 31 left (V261)."""
     lay = layout()
-    assert (lay["cols"], lay["rows"]) == (12, 12)
-    assert lay["payload_bits"] == 1537
-    assert lay["field_count"] == 171
+    assert (lay["cols"], lay["rows"]) == (12, 13)
+    assert lay["payload_bits"] == 1580
+    assert lay["field_count"] == 180
+    assert sum(f.bits for f in SCHEMA_FIELDS[18]) == 1537, "schema 18 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[17]) == 1401, "schema 17 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[16]) == 1371, "schema 16 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[15]) == 1317, "schema 15 is a preserved prefix"
@@ -108,11 +110,11 @@ def test_every_field_round_trips_at_its_boundaries(field):
 
 def test_the_schema_names_itself_in_the_revision_byte():
     """The 4-bit header ran out at 14: from 15 it says EXTENDED and the number follows."""
-    bits = radio.pack_bits({"schema": 18, "seq": 7})
+    bits = radio.pack_bits({"schema": 19, "seq": 7})
     assert int(bits[:4], 2) == 0
-    assert int(bits[4:12], 2) == 18
+    assert int(bits[4:12], 2) == 19
     decoded = radio.unpack_bits(bits)
-    assert decoded["schema"] == 18 and decoded["schema_rev"] == 18 and decoded["seq"] == 7
+    assert decoded["schema"] == 19 and decoded["schema_rev"] == 19 and decoded["seq"] == 7
 
 
 def test_a_schema_15_strip_still_decodes_without_the_flight_map():
@@ -147,8 +149,8 @@ def test_a_schema_17_strip_still_decodes_without_the_trainer_list():
 
 
 def test_a_revision_this_decoder_does_not_know_is_a_schema_error():
-    fields = SCHEMA_FIELDS[18]
-    values = {"schema": 0, "schema_rev": 19, "seq": 1}
+    fields = SCHEMA_FIELDS[19]
+    values = {"schema": 0, "schema_rev": 20, "seq": 1}
     bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
                    for f in fields)
     with pytest.raises(radio.DecodeError) as err:
@@ -290,3 +292,15 @@ def test_the_markers_are_not_unique_and_the_format_does_not_pretend_otherwise():
     assert radio.cells_to_bits([MARKER_L]) == "111100001111"
     assert radio.cells_to_bits([MARKER_R]) == "000011111111"
     assert producible is not None
+
+
+def test_a_schema_18_strip_still_decodes_without_the_talents():
+    """V261: the decoder goes live first; the client paints schema 18 until the addon is
+    installed, and reads as before, the talents unknown."""
+    fields = SCHEMA_FIELDS[18]
+    values = {"schema": 0, "schema_rev": 18, "seq": 9, "char.level": 10}
+    bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
+                   for f in fields)
+    decoded = radio.unpack_bits(bits + format(checksum(bits), "016b"))
+    assert decoded["schema_rev"] == 18 and decoded["char.level"] == 10
+    assert decoded.get("char.talent_points") is None and decoded.get("talents.tab") is None

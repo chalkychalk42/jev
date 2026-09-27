@@ -28,6 +28,7 @@ from jev.clients.repair import Repair
 from jev.clients.rest import SLOT_KEYS as REST_KEYS
 from jev.clients.rest import Rest
 from jev.clients.spellbook import Spellbook
+from jev.clients.talents import TALENTS_SCHEMA, TalentDesk, build_for
 from jev.clients.targeting import FaceCode, Targeting
 from jev.clients.taxi import TaxiDesk
 from jev.clients.trainer import TrainerDesk
@@ -339,6 +340,7 @@ class LiveBody:
                              window_origin=client.origin, window_size=client.size)
         self._revived_at: float | None = None
         self._hearth_ready_at: float | None = None      # wall time, in the purse file (V253)
+        self._talents_failed: int | None = None           # the level a visit failed at (V261)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
         self._wedged = 0
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
@@ -905,6 +907,7 @@ class LiveBody:
         self._clear_of_spawns()
         self._wear_upgrades()
         self._place_spells()
+        self._spend_talents()
         self._bar_profile()
         # The policy's line (`jev.coach.policy._recover`): below it, drink; a caster sooner
         # and fuller (V164), or its rest would stop short and be armed again at once.
@@ -925,6 +928,25 @@ class LiveBody:
         self._conjure()
         self.fight.buff_up()
         return rested
+
+    def _spend_talents(self) -> None:
+        """Talent points unspent go to the class's build, at a meal (V261): the paladin
+        reached 15.87 with six unspent. A visit that fails is not made again this level."""
+        values = self._read() or {}
+        level = values.get("char.level")
+        if (not values.get("char.talent_points") or (values.get("schema") or 0) < TALENTS_SCHEMA
+                or values.get("vitals.combat") is not False or level == self._talents_failed):
+            return
+        build = build_for(values.get("char.class_id"))
+        if not build:
+            return
+        desk = TalentDesk(self.client.hid, self._read, self.client.origin, self.client.size)
+        outcome = desk.run(build)
+        if not outcome.ok:
+            self._talents_failed = level
+        self.say(f"  talents: {outcome.value}, {desk.spent} spent"
+                 + (f" [{', '.join(desk.learned)}]" if desk.learned else "")
+                 + (f" ({desk.detail})" if desk.detail else ""))
 
     def _use_consumable(self, role: Role) -> bool:
         """Eat or drink the best of `role` the bags hold, for a meal whose bar slot is empty:

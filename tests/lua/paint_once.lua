@@ -142,6 +142,43 @@ if STATE.taxiFixture then
     end
 end
 
+-- A talent frame as the stock client draws it (Blizzard_TalentUI): three tabs, a mage's
+-- trees cut short, a button per talent of the tab shown, numbered as GetTalentInfo numbers
+-- them. 2.4.3 names it TalentFrame; later clients PlayerTalentFrame (`talentFrameName`).
+if STATE.talentFixture then
+    local trees = {
+        {{"Arcane Subtlety", 1, 1, 0, 2}, {"Arcane Focus", 1, 2, 0, 5}},
+        {{"Improved Fireball", 1, 2, STATE.fireballRank or 0, 5}, {"Impact", 1, 3, 0, 5},
+         {"Ignite", 2, 1, 0, 5}},
+        {{"Frost Warding", 1, 1, 0, 2}},
+    }
+    function GetNumTalentTabs() return #trees end
+    function GetNumTalents(t) return trees[t] and #trees[t] or 0 end
+    function GetTalentInfo(t, i)
+        local x = trees[t] and trees[t][i]
+        if not x then return nil end
+        return x[1], "icon", x[2], x[3], x[4], x[5]
+    end
+    function UnitCharacterPoints(unit) return STATE.talentPoints or 0, 0 end
+    local name = STATE.talentFrameName or "TalentFrame"
+    local frame = CreateFrame("Frame", name)
+    function frame:IsVisible() return STATE.talentsOpen == 1 end
+    frame.selectedTab = STATE.talentTab or 2
+    function PanelTemplates_GetSelectedTab(f) return f.selectedTab end
+    for t = 1, 3 do
+        local b = CreateFrame("Button", name .. "Tab" .. t)
+        function b:IsVisible() return STATE.talentsOpen == 1 end
+        function b:IsEnabled() return 1 end
+        function b:GetCenter() return 100 + 60 * t, 120 end
+    end
+    for i = 1, 3 do
+        local b = CreateFrame("Button", name .. "Talent" .. i)
+        function b:IsVisible() return STATE.talentsOpen == 1 end
+        function b:IsEnabled() return 1 end
+        function b:GetCenter() return 80 + 60 * i, 600 end
+    end
+end
+
 -- A class trainer's window as the stock 2.4.3 frame draws it (Blizzard_TrainerUI): a mage's
 -- list at level 8 with the used filter off, three skill lines sorted by name, eleven rows
 -- shown from `trainerOffset`, each row button carrying the ID of the service it shows, and

@@ -1,0 +1,422 @@
+{
+ "format": 1,
+ "classes": {
+  "2": [
+   {
+    "name": "Benediction",
+    "tab": 3,
+    "tier": 0,
+    "column": 2,
+    "rank": 1
+   },
+   {
+    "name": "Benediction",
+    "tab": 3,
+    "tier": 0,
+    "column": 2,
+    "rank": 2
+   },
+   {
+    "name": "Benediction",
+    "tab": 3,
+    "tier": 0,
+    "column": 2,
+    "rank": 3
+   },
+   {
+    "name": "Benediction",
+    "tab": 3,
+    "tier": 0,
+    "column": 2,
+    "rank": 4
+   },
+   {
+    "name": "Benediction",
+    "tab": 3,
+    "tier": 0,
+    "column": 2,
+    "rank": 5
+   },
+   {
+    "name": "Improved Judgement",
+    "tab": 3,
+    "tier": 1,
+    "column": 0,
+    "rank": 1
+   },
+   {
+    "name": "Improved Judgement",
+    "tab": 3,
+    "tier": 1,
+    "column": 0,
+    "rank": 2
+   },
+   {
+    "name": "Deflection",
+    "tab": 3,
+    "tier": 1,
+    "column": 2,
+    "rank": 1
+   },
+   {
+    "name": "Deflection",
+    "tab": 3,
+    "tier": 1,
+    "column": 2,
+    "rank": 2
+   },
+   {
+    "name": "Deflection",
+    "tab": 3,
+    "tier": 1,
+    "column": 2,
+    "rank": 3
+   },
+   {
+    "name": "Seal of Command",
+    "tab": 3,
+    "tier": 2,
+    "column": 2,
+    "rank": 1
+   },
+   {
+    "name": "Conviction",
+    "tab": 3,
+    "tier": 2,
+    "column": 1,
+    "rank": 1
+   },
+   {
+    "name": "Conviction",
+    "tab": 3,
+    "tier": 2,
+    "column": 1,
+    "rank": 2
+   },
+   {
+    "name": "Conviction",
+    "tab": 3,
+    "tier": 2,
+    "column": 1,
+    "rank": 3
+   },
+   {
+    "name": "Conviction",
+    "tab": 3,
+    "tier": 2,
+    "column": 1,
+    "rank": 4
+   },
+   {
+    "name": "Conviction",
+    "tab": 3,
+    "tier": 2,
+    "column": 1,
+    "rank": 5
+   },
+   {
+    "name": "Improved Blessing of Might",
+    "tab": 3,
+    "tier": 0,
+    "column": 1,
+    "rank": 1
+   },
+   {
+    "name": "Improved Blessing of Might",
+    "tab": 3,
+    "tier": 0,
+    "column": 1,
+    "rank": 2
+   },
+   {
+    "name": "Improved Blessing of Might",
+    "tab": 3,
+    "tier": 0,
+    "column": 1,
+    "rank": 3
+   },
+   {
+    "name": "Improved Blessing of Might",
+    "tab": 3,
+    "tier": 0,
+    "column": 1,
+    "rank": 4
+   },
+   {
+    "name": "Improved Blessing of Might",
+    "tab": 3,
+    "tier": 0,
+    "column": 1,
+    "rank": 5
+   },
+   {
+    "name": "Vindication",
+    "tab": 3,
+    "tier": 2,
+    "column": 0,
+    "rank": 1
+   },
+   {
+    "name": "Vindication",
+    "tab": 3,
+    "tier": 2,
+    "column": 0,
+    "rank": 2
+   },
+   {
+    "name": "Vindication",
+    "tab": 3,
+    "tier": 2,
+    "column": 0,
+    "rank": 3
+   },
+   {
+    "name": "Deflection",
+    "tab": 3,
+    "tier": 1,
+    "column": 2,
+    "rank": 4
+   },
+   {
+    "name": "Deflection",
+    "tab": 3,
+    "tier": 1,
+    "column": 2,
+    "rank": 5
+   },
+   {
+    "name": "Pursuit of Justice",
+    "tab": 3,
+    "tier": 2,
+    "column": 3,
+    "rank": 1
+   },
+   {
+    "name": "Pursuit of Justice",
+    "tab": 3,
+    "tier": 2,
+    "column": 3,
+    "rank": 2
+   },
+   {
+    "name": "Pursuit of Justice",
+    "tab": 3,
+    "tier": 2,
+    "column": 3,
+    "rank": 3
+   }
+  ],
+  "8": [
+   {
+    "name": "Improved Fireball",
+    "tab": 2,
+    "tier": 0,
+    "column": 1,
+    "rank": 1
+   },
+   {
+    "name": "Improved Fireball",
+    "tab": 2,
+    "tier": 0,
+    "column": 1,
+    "rank": 2
+   },
+   {
+    "name": "Improved Fireball",
+    "tab": 2,
+    "tier": 0,
+    "column": 1,
+    "rank": 3
+   },
+   {
+    "name": "Improved Fireball",
+    "tab": 2,
+    "tier": 0,
+    "column": 1,
+    "rank": 4
+   },
+   {
+    "name": "Improved Fireball",
+    "tab": 2,
+    "tier": 0,
+    "column": 1,
+    "rank": 5
+   },
+   {
+    "name": "Ignite",
+    "tab": 2,
+    "tier": 1,
+    "column": 0,
+    "rank": 1
+   },
+   {
+    "name": "Ignite",
+    "tab": 2,
+    "tier": 1,
+    "column": 0,
+    "rank": 2
+   },
+   {
+    "name": "Ignite",
+    "tab": 2,
+    "tier": 1,
+    "column": 0,
+    "rank": 3
+   },
+   {
+    "name": "Ignite",
+    "tab": 2,
+    "tier": 1,
+    "column": 0,
+    "rank": 4
+   },
+   {
+    "name": "Ignite",
+    "tab": 2,
+    "tier": 1,
+    "column": 0,
+    "rank": 5
+   },
+   {
+    "name": "Burning Soul",
+    "tab": 2,
+    "tier": 2,
+    "column": 3,
+    "rank": 1
+   },
+   {
+    "name": "Burning Soul",
+    "tab": 2,
+    "tier": 2,
+    "column": 3,
+    "rank": 2
+   },
+   {
+    "name": "Flame Throwing",
+    "tab": 2,
+    "tier": 1,
+    "column": 1,
+    "rank": 1
+   },
+   {
+    "name": "Flame Throwing",
+    "tab": 2,
+    "tier": 1,
+    "column": 1,
+    "rank": 2
+   },
+   {
+    "name": "Improved Fire Blast",
+    "tab": 2,
+    "tier": 1,
+    "column": 2,
+    "rank": 1
+   },
+   {
+    "name": "Improved Fire Blast",
+    "tab": 2,
+    "tier": 1,
+    "column": 2,
+    "rank": 2
+   },
+   {
+    "name": "Improved Fire Blast",
+    "tab": 2,
+    "tier": 1,
+    "column": 2,
+    "rank": 3
+   },
+   {
+    "name": "Impact",
+    "tab": 2,
+    "tier": 0,
+    "column": 2,
+    "rank": 1
+   },
+   {
+    "name": "Impact",
+    "tab": 2,
+    "tier": 0,
+    "column": 2,
+    "rank": 2
+   },
+   {
+    "name": "Impact",
+    "tab": 2,
+    "tier": 0,
+    "column": 2,
+    "rank": 3
+   },
+   {
+    "name": "Impact",
+    "tab": 2,
+    "tier": 0,
+    "column": 2,
+    "rank": 4
+   },
+   {
+    "name": "Impact",
+    "tab": 2,
+    "tier": 0,
+    "column": 2,
+    "rank": 5
+   },
+   {
+    "name": "Incineration",
+    "tab": 2,
+    "tier": 2,
+    "column": 0,
+    "rank": 1
+   },
+   {
+    "name": "Incineration",
+    "tab": 2,
+    "tier": 2,
+    "column": 0,
+    "rank": 2
+   },
+   {
+    "name": "Master of Elements",
+    "tab": 2,
+    "tier": 3,
+    "column": 3,
+    "rank": 1
+   },
+   {
+    "name": "Master of Elements",
+    "tab": 2,
+    "tier": 3,
+    "column": 3,
+    "rank": 2
+   },
+   {
+    "name": "Master of Elements",
+    "tab": 2,
+    "tier": 3,
+    "column": 3,
+    "rank": 3
+   },
+   {
+    "name": "Critical Mass",
+    "tab": 2,
+    "tier": 4,
+    "column": 1,
+    "rank": 1
+   },
+   {
+    "name": "Critical Mass",
+    "tab": 2,
+    "tier": 4,
+    "column": 1,
+    "rank": 2
+   },
+   {
+    "name": "Critical Mass",
+    "tab": 2,
+    "tier": 4,
+    "column": 1,
+    "rank": 3
+   }
+  ]
+ }
+}

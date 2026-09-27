@@ -783,3 +783,33 @@ def test_the_attackers_are_counted_from_the_combat_log():
     later = radio.unpack(payload(paint({"events": events, "paintTime": 1010.0}))
                          [:PAYLOAD_CELLS])
     assert later["combat.attackers"] == 0, "six seconds on, they are not attacking"
+
+
+def _talents(ticks: int, **state) -> dict:
+    return radio.unpack(payload(paint({"talentFixture": True, "talentsOpen": 1, **state},
+                                      ticks=ticks))[:PAYLOAD_CELLS])
+
+
+@pytest.mark.parametrize("frame", ["TalentFrame", "PlayerTalentFrame"])
+def test_the_talents_are_painted_one_a_paint_with_their_buttons(frame):
+    """V261: the paladin reached 15.87 with six talent points unspent. The fixture's six
+    talents come round in turn: Arcane's two, Fire's three, Frost's one."""
+    fireball = _talents(3, talentFrameName=frame, talentPoints=2, fireballRank=1)
+    assert fireball["char.talent_points"] == 2 and fireball["ui.talents"] is True
+    assert (fireball["talents.tab"], fireball["talents.tier"], fireball["talents.column"],
+            fireball["talents.rank"]) == (2, 0, 1, 1)
+    assert fireball["talents.shown"] is True, "Fire is the tab the frame shows"
+    assert fireball["talents.x"] == pytest.approx(140 / 1600, abs=0.001)
+    assert fireball["talents.y"] == pytest.approx(1 - 600 / 900, abs=0.001)
+    ignite = _talents(5, talentFrameName=frame)
+    assert (ignite["talents.tab"], ignite["talents.tier"], ignite["talents.column"]) == (2, 1, 0)
+    focus = _talents(2, talentFrameName=frame)            # Arcane: its tab is not shown
+    assert (focus["talents.tab"], focus["talents.shown"]) == (1, False)
+    assert focus["talents.x"] == pytest.approx(160 / 1600, abs=0.001), "Arcane's tab button"
+
+
+def test_a_shut_talent_frame_paints_the_points_and_the_talents_but_no_button():
+    shut = _talents(3, talentsOpen=0, talentPoints=5)
+    assert shut["ui.talents"] is False and shut["char.talent_points"] == 5
+    assert shut["talents.tab"] == 2 and shut["talents.x"] is None
+    assert shut["talents.shown"] is False, "no open frame shows its tab (tri paints no unknown)"

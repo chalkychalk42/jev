@@ -1031,21 +1031,21 @@ def test_a_schema_17_strip_reads_whole_on_the_schema_18_decoder():
     radio_frame.forget_grid()
 
 
-def test_a_grid_kept_from_the_eleven_row_strip_reads_the_twelve_row_one(monkeypatch):
-    """Once schema 18 is installed, the grid kept from schema 17's strip is still where the
-    strip is: read on it with this layout's twelve rows, not nine cells short and handed
-    to the locator the scenery can mislead."""
+def test_a_grid_kept_from_the_shorter_strip_reads_the_taller_one(monkeypatch):
+    """Once schema 19 is installed (and 18 before it), the grid kept from the last strip is
+    still where the strip is: read on it with this layout's thirteen rows, not a row of
+    cells short and handed to the locator the scenery can mislead."""
     values = _values()
     frame = _paint(values)
     located = radio_frame.locate(frame)
-    assert located is not None and located.rows == GRID_ROWS == 12
-    kept = radio_frame.Grid(**{**located.__dict__, "rows": 11})
+    assert located is not None and located.rows == GRID_ROWS == 13
+    kept = radio_frame.Grid(**{**located.__dict__, "rows": 12})
     radio_frame.forget_grid()
     monkeypatch.setattr(radio_frame, "locate", lambda frame: None)
     reading = radio_frame.read(frame, grid=kept)
     assert reading.ok, f"{reading.fault}: {reading.detail}"
     assert reading.values == radio.unpack(radio.pack(values))
-    assert reading.grid.rows == 12
+    assert reading.grid.rows == 13
     radio_frame.forget_grid()
 
 

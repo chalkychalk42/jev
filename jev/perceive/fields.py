@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 18                                   # bump when the field table changes shape
+SCHEMA = 19                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -76,6 +76,8 @@ flown to, by name hash, and where each node's button is.
 17: the selected unit's range per main-bar slot, and the attackers (V171).
 18: the class trainer's list, one row per paint: each row's name hash, rank, type, price
 and button, the scroll button toward a row out of view, and the row Train buys (V237).
+19: the talent points unspent, and the talents one per paint: tab, tier, column, rank, and
+the button that spends a point in it, or its tab's (V261).
 Old schemas remain readable, with appended observations unknown: `SCHEMA_FIELDS`."""
 LAST_HEADER_SCHEMA = 14
 EXTENDED = 0
@@ -644,6 +646,31 @@ FIELDS: tuple[Field, ...] = (
     Field("trainer.go_x", 11, Kind.FRAC, "return TRAINER_CENSUS('go_x')",
           "out of view: the list's scroll button toward it, while it can scroll that way"),
     Field("trainer.go_y", 11, Kind.FRAC, "return TRAINER_CENSUS('go_y')"),
+
+    # -- schema 19: talents (V261) --------------------------------------------------------
+    #
+    # A talent point a level from 10, and the bot spent none: the paladin reached 15.87
+    # with six unspent. A point is spent by a click on its talent's button in the stock
+    # talent frame, so the strip paints the points unspent always, and the talents one per
+    # paint: each one's tab as the frame orders them, its tier and column counted from 0,
+    # the points in it, and while the frame is open its button when its tab shows, else
+    # the tab's button. Nothing here opens the frame or spends a point.
+    Field("char.talent_points", 6, Kind.UINT, "return TALENT_POINTS()",
+          "talent points not yet spent (UnitCharacterPoints)"),
+    _tri("ui.talents", "return tri(TALENTS_OPEN())", "the talent frame is open"),
+    Field("talents.tab", 2, Kind.UINT, "return TALENT_CENSUS('tab')",
+          "the talent the next fields describe: its tab, 1-3 as the frame orders them"),
+    Field("talents.tier", 4, Kind.UINT, "return TALENT_CENSUS('tier')",
+          "its tier, 0 at the top of the tree"),
+    Field("talents.column", 2, Kind.UINT, "return TALENT_CENSUS('column')",
+          "its column, 0 at the left"),
+    Field("talents.rank", 3, Kind.UINT, "return TALENT_CENSUS('rank')",
+          "the points in it"),
+    _tri("talents.shown", "return tri(TALENT_CENSUS('shown'))",
+         "its tab is the one the open frame shows: the x and y are its button's, else the tab's"),
+    Field("talents.x", 11, Kind.FRAC, "return TALENT_CENSUS('x')",
+          "fraction across the interface of its button, or of its tab's, while the frame is open"),
+    Field("talents.y", 11, Kind.FRAC, "return TALENT_CENSUS('y')"),
 )
 
 # --------------------------------------------------------------------------- layout
@@ -656,7 +683,7 @@ _LEGACY = FIELDS[:1] + FIELDS[2:131]
 SCHEMA_FIELDS = {6: _LEGACY[:75], 7: _LEGACY[:112], 8: _LEGACY[:117], 9: _LEGACY[:121],
                  10: _LEGACY[:125], 11: _LEGACY[:126], 12: _LEGACY[:127], 13: _LEGACY[:128],
                  14: _LEGACY, 15: FIELDS[:147], 16: FIELDS[:154], 17: FIELDS[:157],
-                 18: FIELDS}
+                 18: FIELDS[:171], 19: FIELDS}
 # Schema 14 was the last the 4-bit header could name (15 is its not-available code), and
 # was redefined once, within the hour it was installed on one client, to add `target.guid`.
 # From 15 the header says EXTENDED and the number is in `schema_rev`; a new layout appends
@@ -679,6 +706,8 @@ assert sum(f.bits for f in SCHEMA_FIELDS[16]) == 1371
 assert SCHEMA_FIELDS[16][-1].name == "taxi.y"
 assert sum(f.bits for f in SCHEMA_FIELDS[17]) == 1401
 assert SCHEMA_FIELDS[17][-1].name == "combat.attackers"
+assert sum(f.bits for f in SCHEMA_FIELDS[18]) == 1537
+assert SCHEMA_FIELDS[18][-1].name == "trainer.go_y"
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

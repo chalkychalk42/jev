@@ -1508,3 +1508,33 @@ def test_a_new_characters_home_is_where_it_began(tmp_path):
     assert load_home(b.home_memory) is not None, "where it stands, remembered"
     b.home_memory.unlink()
     assert b.bindable(seen(char=Char(level=5))) is True, "later, home unknown: bind"
+
+
+def test_talent_points_are_spent_at_a_meal_on_a_schema_19_strip_once_a_level(monkeypatch):
+    """V261: the paladin reached 15.87 with six talent points unspent."""
+    from jev.clients.talents import Spent
+
+    b = body()
+    runs = []
+
+    class Desk:
+        def __init__(self, *a, **k):
+            self.spent, self.learned, self.detail = 0, [], "never came round"
+
+        def run(self, build):
+            runs.append(len(build))
+            return Spent.NOT_SEEN
+
+    monkeypatch.setattr("jev.run.body.TalentDesk", Desk)
+    reading = {"schema": 18, "char.talent_points": 1, "char.level": 10, "char.class_id": 8,
+               "vitals.combat": False}
+    b.client.read = lambda: dict(reading)
+    b._spend_talents()
+    assert runs == [], "an addon before schema 19 paints no talents"
+    reading["schema"] = 19
+    b._spend_talents()
+    b._spend_talents()
+    assert len(runs) == 1, "a visit that failed is not made again this level"
+    reading["char.level"] = 11
+    b._spend_talents()
+    assert len(runs) == 2

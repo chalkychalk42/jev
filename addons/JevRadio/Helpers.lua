@@ -982,6 +982,72 @@ local function snapshotSpells()
     end
 end
 
+-- --------------------------------------------------------------------- talents
+--
+-- The talent points unspent, and one talent per paint (fields.py, schema 19): its tab as
+-- the frame orders them, its tier and column counted from 0, the points in it, and while
+-- the frame is open its button when its tab shows, else the tab's button. Only stock
+-- reads: UnitCharacterPoints, GetNumTalentTabs, GetNumTalents, GetTalentInfo and the stock
+-- buttons' own position. The frame is named as the client names it (TalentFrame here,
+-- PlayerTalentFrame in later clients). Spending a point is a click the body makes.
+
+local talentCursor = 0
+local talentSnapshot = {}
+
+local function talentFrame()
+    local frame = PlayerTalentFrame or TalentFrame
+    local prefix = (PlayerTalentFrame and frame == PlayerTalentFrame) and "PlayerTalentFrame"
+        or "TalentFrame"
+    return frame, prefix
+end
+
+local function TALENTS_OPEN()
+    local frame = talentFrame()
+    return frame ~= nil and frame:IsVisible() and true or false
+end
+
+local function TALENT_POINTS()
+    if not UnitCharacterPoints then return nil end
+    local points = UnitCharacterPoints("player")
+    return points
+end
+
+local function snapshotTalents()
+    talentSnapshot = {}
+    if not GetNumTalentTabs or not GetNumTalents or not GetTalentInfo then return end
+    local counts, total = {}, 0
+    for t = 1, GetNumTalentTabs() do
+        counts[t] = GetNumTalents(t) or 0
+        total = total + counts[t]
+    end
+    if total == 0 then return end
+    talentCursor = talentCursor % total + 1
+    local tab, i = 1, talentCursor
+    while tab <= #counts and i > counts[tab] do
+        i = i - counts[tab]
+        tab = tab + 1
+    end
+    if tab > #counts then return end
+    local _, _, tier, column, rank = GetTalentInfo(tab, i)
+    if not tier or not column then return end
+    talentSnapshot.tab, talentSnapshot.tier, talentSnapshot.column = tab, tier - 1, column - 1
+    talentSnapshot.rank = rank
+    if not TALENTS_OPEN() then return end
+    local frame, prefix = talentFrame()
+    local shown = PanelTemplates_GetSelectedTab and PanelTemplates_GetSelectedTab(frame)
+    local btn
+    if shown == tab then
+        talentSnapshot.shown = true
+        btn = _G[prefix .. "Talent" .. i]
+    else
+        talentSnapshot.shown = false
+        btn = _G[prefix .. "Tab" .. tab]
+    end
+    talentSnapshot.x, talentSnapshot.y = point(btn, "x"), point(btn, "y")
+end
+
+local function TALENT_CENSUS(key) return talentSnapshot[key] end
+
 local function BAR_CENSUS(key) return barSnapshot[key] end
 local function SPELL_CENSUS(key) return spellSnapshot[key] end
 
@@ -1390,6 +1456,10 @@ return {
     snapshotTaxi = snapshotTaxi,
     TRAINER_CENSUS = TRAINER_CENSUS,
     snapshotTrainer = snapshotTrainer,
+    TALENT_POINTS = TALENT_POINTS,
+    TALENTS_OPEN = TALENTS_OPEN,
+    TALENT_CENSUS = TALENT_CENSUS,
+    snapshotTalents = snapshotTalents,
     GCD_FRAC = GCD_FRAC,
     CASTING = CASTING,
     ATTACKING = ATTACKING,
