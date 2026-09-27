@@ -1359,7 +1359,10 @@ class LiveBody:
 
     def _under(self, world) -> bool:
         """The character stands under `world`, a floor or more below it: then the tracked
-        height is put on the lowest floor here, where the next plan starts."""
+        height is put on the lowest floor here, where the next plan starts. With fewer than
+        two floors read under the character, the floors are the unit's own (V263): the
+        navmesh stops short of walls and furniture, and in the Lion's Pride Inn's hall the
+        mage stood under Zaldimar Wefhellt where only the roof was read (session 238)."""
         query, bounds = getattr(self.client, "query", None), self.client.bounds
         here = self._position()
         if query is None or bounds is None or here is None or world is None or len(world) < 3:
@@ -1368,6 +1371,8 @@ class LiveBody:
         if math.dist((hx, hy), world[:2]) > UNDER_UNIT_YARDS:
             return False
         floors = surfaces_under(query, bounds.map_id, hx, hy)
+        if len(floors) < 2:
+            floors = surfaces_under(query, bounds.map_id, world[0], world[1])
         if len(floors) < 2 or world[2] - floors[0] < UPPER_FLOOR_YARDS:
             return False
         self.client._ground = (hx, hy, floors[0])

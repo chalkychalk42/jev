@@ -1335,6 +1335,26 @@ def test_a_unit_not_found_on_the_floor_below_it_is_walked_up_to_again(monkeypatc
     assert level._open_on("Zaldimar Wefhellt", zaldimar, (0.43, 0.66)) is Interacted.NO_TARGET
 
 
+def test_a_spot_off_the_navmesh_reads_the_units_floors(monkeypatch):
+    """V263: in the hall under Zaldimar Wefhellt the mage stood where the navmesh has only
+    the roof (74.7), the hall's edge 3 yards off; under him are the hall and the roof
+    (session 238)."""
+    import jev.run.body as body_module
+    from jev.guide.coords import world_to_map
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4166, -1935.4166, -7939.583, -10254.166)
+    zaldimar = (-9471.7, 34.5, 63.9)
+    b.client.position = lambda: world_to_map(-9471.1, 32.9, b.client.bounds)
+    b.client.query = object()
+    monkeypatch.setattr(body_module, "surfaces_under",
+                        lambda q, m, x, y: [57.6, 74.8] if (x, y) == zaldimar[:2] else [74.7])
+    answers = iter([Interacted.NO_TARGET, Interacted.TRAINER])
+    b.interact = SimpleNamespace(open_on=lambda *a, **kw: next(answers), detail="")
+    assert b._open_on("Zaldimar Wefhellt", zaldimar, (0.43, 0.66)) is Interacted.TRAINER
+    assert b.client._ground[2] == 57.6, "the unit's lowest floor: the hall"
+
+
 def test_what_the_bar_conjures_is_remembered_while_its_census_is_read_again():
     """V243: after Frostbolt was placed the profile went blank, a restock of the food and
     water the mage conjures was asked for, and the walk wedged it for a session (215)."""
