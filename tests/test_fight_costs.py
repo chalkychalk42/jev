@@ -45,6 +45,17 @@ def test_fights_are_told_apart_by_the_most_attackers_counted(tmp_path):
     assert (won["mana"], lost["mana"]) == (0.55, 0.04), "the mana left as each ended"
 
 
+def test_a_fight_the_death_cancelled_is_lost(tmp_path):
+    """Session 283: the supervisor saw the death first, and the fight ended cancelled."""
+    _write(tmp_path / "ticks.jsonl", [_tick(10.0, 0.7, 0.5), _tick(20.0, 0.0, 0.3)])
+    _write(tmp_path / "executions.jsonl", [
+        {"operation": "fight", "operation_id": "a", "phase": "begin", "t": 10.0},
+        {"operation": "fight", "operation_id": "a", "phase": "end", "t": 20.0,
+         "code": "exception", "detail": "Cancelled: dead or ghost"}])
+    (lost,) = fights(tmp_path)
+    assert lost["died"] is True
+
+
 def test_a_root_is_answered_by_its_slot_cooling_or_its_mana_gone(tmp_path):
     """V282: five Frost Nova presses in session 275, the client answering only the last."""
     look = {"operation": "combat.observed"}

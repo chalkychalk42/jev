@@ -53,7 +53,10 @@ def fights(run: Path) -> list[dict]:
     for r in rows:
         if r.get("operation") != "fight" or r.get("phase") != "end":
             continue
-        if r.get("code") not in ("killed", "died"):
+        # A death the supervisor saw first cancels the fight: that fight was lost too.
+        died = r.get("code") == "died" or (r.get("code") == "exception"
+                                           and "dead or ghost" in (r.get("detail") or ""))
+        if r.get("code") != "killed" and not died:
             continue
         start, end = begun.get(r.get("operation_id")), r["t"]
         if start is None:
@@ -65,7 +68,7 @@ def fights(run: Path) -> list[dict]:
             "attackers": max([a for t, a in looks if start <= t <= end] or [0]),
             "lost": health[0] - min(health),
             "seconds": end - start,
-            "died": r.get("code") == "died",
+            "died": died,
             "rooted": any(start <= t <= end for t in roots),
             "mana": next((m for t, m in reversed(power) if t <= end + 1.0), None),
         })
