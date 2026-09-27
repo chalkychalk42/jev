@@ -775,6 +775,14 @@ def _floors(query: PathQuery, map_id: int, x: float, y: float) -> list[float]:
     return found
 
 
+# How long the character's level, side and ghost state read for the spawns a route passes
+# serve (V266). Read at every point looked along, a read being a capture of the screen, the
+# search for a way round spent its second on the first few candidates: live, a walk past
+# 24 spawns at Stone Cairn Lake went straight through, where the search takes 968 yards
+# past 6, and the mage died there to three Murloc Lurkers (session 243).
+HOSTILE_FACTS_S = 5.0
+
+
 def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                 arrival_yards: float, say: Callable[[str], None] | None = None,
                 zones: dict[int, ZoneBounds] | None = None,
@@ -798,9 +806,15 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                                              hot=hot))
     if route_memory is not None:
         # ...and of the spawns of units that attack it on sight, where a way round costs less
-        # than passing them (`jev.guide.exposure`, V248). A ghost passes them unharmed.
+        # than passing them (`jev.guide.exposure`, V248). A ghost passes them unharmed. Who
+        # the character is is read once a plan, not at every point looked along (V266).
+        facts = {"at": -math.inf, "values": {}}
+
         def hostile(map_id, x, y, radius):
-            values = client.read() or {}
+            now = time.monotonic()
+            if now - facts["at"] > HOSTILE_FACTS_S:
+                facts["values"], facts["at"] = client.read() or {}, now
+            values = facts["values"]
             if values.get("vitals.ghost") is True:
                 return []
             race = radio_frame.RACE_BY_ID.get(values.get("char.race_id"))

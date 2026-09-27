@@ -447,19 +447,26 @@ def test_a_walks_cost_is_planned_without_the_search_for_a_way_round():
 
 
 def test_the_planner_asks_for_the_spawns_that_attack_this_character(monkeypatch):
-    """V248: the side from the race read now, the level too, and none for a ghost."""
+    """V248: the side from the race read now, the level too, and none for a ghost. V266: read
+    once a plan, not at every point looked along, a read being a capture of the screen."""
+    import jev.run.client as client_module
     from jev.guide.route_memory import RouteMemory
 
     client, values = client_in("Elwynn", (0.5, 0.5))
     values["char.level"] = 8
     values["char.race_id"] = 1
-    asked = []
+    asked, reads = [], []
+    read = client.read
+    client.read = lambda: reads.append(1) or read()
     monkeypatch.setattr("jev.run.client.hostiles.near",
                         lambda *a, **k: asked.append((a, k)) or [(1.0, 2.0, 3.0)])
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory())
-    assert client.query.hostile(0, 10.0, 20.0, 50.0) == [(1.0, 2.0, 3.0)]
+    for _ in range(20):
+        assert client.query.hostile(0, 10.0, 20.0, 50.0) == [(1.0, 2.0, 3.0)]
+    assert len(reads) == 1, "twenty points looked along, one read"
     assert asked[-1] == ((0, 10.0, 20.0, 50.0), {"side": "alliance", "level": 8})
     values["vitals.ghost"] = True
+    monkeypatch.setattr(client_module, "HOSTILE_FACTS_S", -1.0)
     assert client.query.hostile(0, 10.0, 20.0, 50.0) == []
 
 
