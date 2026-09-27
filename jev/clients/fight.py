@@ -318,6 +318,13 @@ STEP_ASIDE_S = 1.5
 # when a second attacker came: fights with two or more went from 33% of health lost to 47%, and
 # the level 10 mage's deaths were such fights (sessions 239-253).
 ROOT_HP = 0.5
+# A root is stepped clear of only once the client has answered its press (V282): its slot
+# cooling, the global cooldown or its mana gone, looked for this often until `PRESS_ANSWER_S`.
+# At 45% health against one Prowler the mage pressed Frost Nova five times in 11 s, "Spell is
+# not ready yet" four times while the bar painted it ready, and backed off two seconds after
+# each: the Prowler followed and bit, 48% to 29% of the mage's health (session 275). One in
+# nine of the mage's roots went so (18 of 167, sessions 246-279), in runs within a fight.
+ROOT_LOOK_S = 0.15
 UNHURT_MANA = 0.35
 UNHURT_S = 60.0
 # A press whose ability's mana has at least this share gone since it was pressed was
@@ -1569,24 +1576,54 @@ class Fight:
     def _root(self, profile: CombatProfile, values: dict) -> bool:
         """At contact, hold what is round the caster (Frost Nova) and back off, still facing,
         to cast again out of its reach (V169); with more than one attacker counted, step aside,
-        left and right in turn (V271). `True` if a root was pressed."""
+        left and right in turn (V271). `True` if a root was pressed and the client answered it:
+        one it did not is not stepped clear of, and its slot is left while the rotation goes
+        on (V282)."""
+        if not self._press_answered(values):
+            return False
         usable, ready = values.get("bars.usable"), values.get("bars.ready")
+        now = time.monotonic()
         for row in profile.by_role(Role.ROOT):
             bit = 1 << (row.slot - 1)
-            if (usable is not None and not usable & bit) or (ready is not None and not ready & bit):
+            if ((usable is not None and not usable & bit) or (ready is not None and not ready & bit)
+                    or self._held.get(row.slot, 0.0) > now):
                 continue
             if self._mana_left_after(row, values) < 0 or not self._press(row):
                 continue
+            if not self._root_landed(row):
+                return False
             many = (values.get("combat.attackers") or 0) >= 2
             self._asides += many
             key, seconds = (("q" if self._asides % 2 else "e", STEP_ASIDE_S) if many
                             else ("s", STEP_CLEAR_S))
             event("engage.root", data={"slot": row.slot, "step": key, "step_s": seconds})
-            time.sleep(pace(self.hid, 0.3))    # the root lands with the press: no cast time
             if not self.hid.hold(key, seconds):
                 self._input_refused = True
                 self.detail = "step-clear input refused"
             return True
+        return False
+
+    def _root_landed(self, row: Ability) -> bool:
+        """The client's answer to a root's press, looked for until `PRESS_ANSWER_S` (V282).
+        Unanswered, the press is settled as dropped and the slot left for `NOT_READY_HOLD_S`.
+        A strip with no bar to read cannot tell, and the root counts as landed, as before."""
+        pressed = time.monotonic()
+        while True:
+            time.sleep(pace(self.hid, ROOT_LOOK_S))
+            v = self.read()
+            self._observe(v)
+            if v is not None and v.get("bars.ready") is None:
+                return True
+            if v is not None and self._pending_press is not None and self._answer_in(v):
+                self._press_answered(v)
+                return True
+            if time.monotonic() - pressed >= PRESS_ANSWER_S:
+                break
+        if v is not None:
+            self._press_answered(v)
+        self._pending_press = None
+        self._held[row.slot] = time.monotonic() + NOT_READY_HOLD_S
+        event("engage.root_unanswered", data={"slot": row.slot})
         return False
 
     @staticmethod
@@ -2096,16 +2133,7 @@ class Fight:
         if self._pending_press is None:
             return True
         ability, when, last_use, lasting, saved_at, power_before = self._pending_press
-        ready = values.get("bars.ready")
-        gcd = values.get("bars.gcd")
-        power, pool = values.get("vitals.power"), values.get("vitals.power_max")
-        # Its mana gone is an answer too (V176): a mage's Frost Armor, cast, left the bar and
-        # the global cooldown unpainted, was read as dropped and cast again, 60 of 165 mana.
-        spent = (bool(ability.mana) and isinstance(power_before, (int, float))
-                 and isinstance(power, (int, float)) and bool(pool)
-                 and (power_before - power) * pool >= ANSWER_SPENT * ability.mana)
-        if (values.get("bars.casting") is True or (gcd is not None and gcd > 0.0)
-                or (ready is not None and not ready & (1 << (ability.slot - 1))) or spent):
+        if self._answer_in(values):
             self._pending_press = None
             self._dropped = (0, 0)
             return True
@@ -2135,6 +2163,21 @@ class Fight:
         if ability.role is Role.HEAL:
             self._pending_heal = None
         return True
+
+    def _answer_in(self, values: dict) -> bool:
+        """The client acted on the pending press: a cast, the global cooldown, the slot's own
+        cooldown, or the ability's mana gone."""
+        ability, _, _, _, _, power_before = self._pending_press
+        ready = values.get("bars.ready")
+        gcd = values.get("bars.gcd")
+        power, pool = values.get("vitals.power"), values.get("vitals.power_max")
+        # Its mana gone is an answer too (V176): a mage's Frost Armor, cast, left the bar and
+        # the global cooldown unpainted, was read as dropped and cast again, 60 of 165 mana.
+        spent = (bool(ability.mana) and isinstance(power_before, (int, float))
+                 and isinstance(power, (int, float)) and bool(pool)
+                 and (power_before - power) * pool >= ANSWER_SPENT * ability.mana)
+        return (values.get("bars.casting") is True or (gcd is not None and gcd > 0.0)
+                or (ready is not None and not ready & (1 << (ability.slot - 1))) or spent)
 
     @staticmethod
     def _mana_reserve(profile) -> int:

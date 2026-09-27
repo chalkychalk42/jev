@@ -2397,12 +2397,12 @@ def test_at_contact_a_caster_roots_and_backs_off(combat_clock):
     mage = replace(MAGE, abilities=(*MAGE.abilities, nova))
     contact = {**AT_RANGE, "target.in_melee": True, "bars.usable": 0b100111,
                "bars.ready": 0b100111}
+    cooling = {**contact, "bars.ready": 0b000111}
     hid = _Hid()
-    f = _fight([contact], hid=hid)
+    f = _fight([cooling], hid=hid)
     f.profile = mage
     assert f._root(mage, contact) is True
     assert hid.taps == ["6"] and hid.holds == [("s", 2.0)]
-    cooling = {**contact, "bars.ready": 0b000111}
     assert f._root(mage, cooling) is False, "on its cooldown: the rotation goes on"
 
 
@@ -2416,7 +2416,7 @@ def test_with_more_than_one_attacker_a_caster_steps_aside_after_its_root(combat_
     pair = {**AT_RANGE, "target.in_melee": True, "bars.usable": 0b100111,
             "bars.ready": 0b100111, "combat.attackers": 2}
     hid = _Hid()
-    f = _fight([pair], hid=hid)
+    f = _fight([{**pair, "bars.ready": 0b000111}], hid=hid)
     f.profile = mage
     assert f._root(mage, pair) is True and f._root(mage, pair) is True
     assert hid.holds == [("q", 1.5), ("e", 1.5)]
@@ -2670,6 +2670,34 @@ def test_a_casters_mana_spent_on_a_unit_that_takes_nothing_ends_the_fight(combat
     f._power_start = None                       # the next fight, begun on the kept selection
     assert f._unhurt_by({**evading, "vitals.power": 0.6}) is True, "no more mana on it (270)"
     assert "a moment ago" in f.detail
+
+
+def test_a_root_the_client_does_not_answer_is_not_stepped_clear_of(combat_clock):
+    """V282: at 45% health against one Prowler the mage pressed Frost Nova five times in 11 s,
+    "Spell is not ready yet" four times while the bar painted it ready, and backed off two
+    seconds after each while the Prowler followed and bit (session 275). Unanswered, a root is
+    not stepped clear of, and its slot is left while the rotation goes on."""
+    from dataclasses import replace
+
+    from jev.clients.fight import NOT_READY_HOLD_S
+    from jev.perceive.radio_frame import UI_ERROR_KEYS
+
+    nova = Ability(slot=6, role=Role.ROOT, name="Frost Nova", mana=55, spell_id=122)
+    mage = replace(MAGE, abilities=(*MAGE.abilities, nova))
+    contact = {**AT_RANGE, "target.in_melee": True, "vitals.hp": 0.45, "bars.usable": 0b100111,
+               "bars.ready": 0b100111}
+    refused = {**contact, "ui.error_count": 5, "ui.error_last": UI_ERROR_KEYS.index("not_ready")}
+    hid = _Hid()
+    f = _fight([refused], hid=hid)
+    f.profile = mage
+    assert f._root(mage, contact) is False
+    assert hid.taps == ["6"] and hid.holds == [], "not answered: no step back"
+    assert f._pending_press is None, "settled: the rotation is not held on it"
+    assert f._root(mage, contact) is False and hid.taps == ["6"], "left while held"
+    combat_clock[0] += NOT_READY_HOLD_S
+    f.read = lambda: {**contact, "bars.ready": 0b000111}
+    assert f._root(mage, contact) is True
+    assert hid.taps == ["6", "6"] and hid.holds == [("s", 2.0)], "answered: stepped clear"
 
 
 def test_the_root_is_held_for_a_second_attacker_or_a_fight_going_badly(combat_clock):
