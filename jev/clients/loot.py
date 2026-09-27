@@ -60,10 +60,9 @@ from jev.run.evidence import event, traced
 SETTLE_S = 2.0
 # Hover probes for a corpse (`corpse_probe_points`). In combat the next attacker is hitting
 # the character while it searches, and every corpse found on 24 September was within seven
-# probes; below half health with an attacker still on it, the search waits for another time.
+# probes; with an attacker still on it, the search waits for another time (V269, V283).
 LOOT_PROBES = 24
 LOOT_IN_COMBAT_PROBES = 6
-LOOT_IN_COMBAT_HP = 0.5
 # A kill made from range (`Fight.ended_far`, V164) lies out there: a corpse that gave
 # nothing is walked toward, a step of this long at a time, and clicked again, this often.
 FAR_STEP_S = 1.0
@@ -200,10 +199,13 @@ class Loot:
         # among those that hit or missed in the last six seconds, the one just killed being
         # one of them (V269). The selection cleared at a Mangy Wolf's kill, the level 10 mage
         # spent three seconds on its corpse at 44% health with a Murloc Streamrunner at it,
-        # and died with the murloc at half health (session 244).
+        # and died with the murloc at half health (session 244). At any health (V283): of the
+        # mage's 30 corpses searched so, one was looted, in 4.4 s and 5.6% of its health each
+        # (sessions 250-279), where 180 of 277 were with nothing else attacking.
         attacked = moved_on or (v.get("combat.attackers") or 0) >= 2
-        if fighting and attacked and isinstance(hp, (int, float)) and hp < LOOT_IN_COMBAT_HP:
-            self.detail = f"at {hp:.0%} health with something still attacking; not now"
+        if fighting and attacked:
+            health = f"at {hp:.0%} health " if isinstance(hp, (int, float)) else ""
+            self.detail = f"{health}with something still attacking; not now"
             return Looted.NO_CORPSE
         action = targeting.click_corpse(
             expected_name_id=wanted, anchor=anchor, past_selection=moved_on,

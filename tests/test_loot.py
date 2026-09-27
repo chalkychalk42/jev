@@ -353,16 +353,18 @@ def test_a_selection_moved_on_to_a_living_packmate_does_not_hide_the_corpse(monk
                                          "past_selection": True, "max_probes": 24}]
 
 
-def test_in_combat_the_corpse_search_is_short_and_waits_below_half_health(monkeypatch):
+def test_in_combat_the_corpse_search_is_short_and_waits_while_something_attacks(monkeypatch):
+    """V283: of the mage's 30 corpses searched with another attacker counted, one was looted,
+    in 4.4 s and 5.6% of its health each (sessions 250-279), whatever its health."""
     monkeypatch.setattr("jev.clients.loot.time.sleep", lambda _: None)
-    fighting = {**HAVE, "target.hp": 1.0, "vitals.combat": True, "vitals.hp": 0.8}
+    fighting = {**HAVE, "vitals.combat": True, "vitals.hp": 0.8, "combat.attackers": 1}
     skill = _loot([fighting, {**fighting, "bags.money_silver": 4}])
     assert skill.run(settle_s=1.0, name_id=1161) is Looted.TOOK
-    assert skill.targeting.requests[0]["max_probes"] == 6
-    hurt = {**fighting, "vitals.hp": 0.3}
-    skill = _loot([hurt])
-    assert skill.run(settle_s=1.0, name_id=1161) is Looted.NO_CORPSE
-    assert skill.targeting.requests == [] and "not now" in skill.detail
+    assert skill.targeting.requests[0]["max_probes"] == 6, "only the one killed: looted"
+    for attacked in ({**fighting, "target.hp": 1.0}, {**fighting, "combat.attackers": 2}):
+        skill = _loot([attacked])
+        assert skill.run(settle_s=1.0, name_id=1161) is Looted.NO_CORPSE
+        assert skill.targeting.requests == [] and "not now" in skill.detail
 
 
 
