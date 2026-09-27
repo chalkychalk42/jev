@@ -134,7 +134,7 @@ class Tracker:
     @classmethod
     def resume(cls, graph: Graph, state: State, *, start: str | None = None,
                completed: frozenset[int] = frozenset(),
-               rejoin_to: str | None = None) -> Tracker:
+               rejoin_to: str | None = None, keep_rib: bool = False) -> Tracker:
         """A playhead placed on the first step the world does not already satisfy.
 
         Cold start: nothing knows how far a character got, so the chain is walked from the
@@ -154,8 +154,8 @@ class Tracker:
         """
         start_node = graph.get(start or "")
         if (start_node is not None and start_node.kind is StepKind.GRIND
-                and graph.get(rejoin_to or "") is None):
-            start = None
+                and graph.get(rejoin_to or "") is None and not keep_rib):
+            start = None                # `keep_rib`: a finished guide grinding on (V262)
         tracker = cls(graph=graph, step_id=start or graph.entry)
         tracker.enter(tracker.step_id, state,
                       rejoin_to=rejoin_to if start is not None and graph.get(rejoin_to or "") else None)

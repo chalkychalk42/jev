@@ -659,7 +659,7 @@ def test_a_guide_run_out_below_the_next_ones_first_level_grinds_until_then(
         return
     assert graph.graph_id == "alli_human_1_12.supported", "not on to Westfall at 10"
     rib = graph.get(memory.step_id)
-    assert rib is not None and rib.kind is StepKind.GRIND and not memory.finished
+    assert rib is not None and rib.kind is StepKind.GRIND and memory.finished, "the mark kept"
     assert rib.level[1] <= level + 1, "a grind for its level"
     assert memory.entry_level == cli.entry_level(cli.NEXT_GUIDE["alli_human_1_12"]) - 1 == 11
     assert "grinding" in capsys.readouterr().out

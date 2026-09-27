@@ -143,6 +143,10 @@ class ClientRuntime:
     # When a short rib the run resumes on rejoins, as wall time (`playhead.Remembered`).
     start_rib_until: float | None = None
     start_entry_level: int | None = None
+    # A guide run out below the next guide's first level, playing its own grind for the
+    # character until then (V262): the grind is resumed without a way back, and when it is
+    # done the guide is finished again, not scanned from its entry.
+    start_grind_then_finish: bool = False
     # (step, completed quests, where the step leads back to when that is not its next,
     # deaths on the step, steps already retried, when a short rib rejoins)
     on_progress: Callable[..., None] | None = None
@@ -219,7 +223,8 @@ class ClientRuntime:
             start = self.start_step if self.graph.get(self.start_step or "") is not None else None
             self.tracker = Tracker.resume(self.graph, state, start=start,
                                           completed=frozenset(self.completed),
-                                          rejoin_to=self.start_rejoin)
+                                          rejoin_to=self.start_rejoin,
+                                          keep_rib=self.start_grind_then_finish)
             if start is not None and self.tracker.step_id == start:
                 self.tracker.memory.deaths = self.start_deaths
                 self.tracker.memory.until = self.start_rib_until
@@ -562,7 +567,8 @@ class ClientRuntime:
         self.on_progress(self.tracker.step_id, set(self.completed),
                          self.tracker.memory.rejoin_to, self.tracker.memory.deaths,
                          frozenset(self._retried), self.tracker.memory.until,
-                         finished=self.finished, entry_level=self.tracker.memory.level_at_entry)
+                         finished=self.finished or self.start_grind_then_finish,
+                         entry_level=self.tracker.memory.level_at_entry)
 
     def _apply(self, verdict, state: State) -> None:
         match verdict.event:
@@ -575,6 +581,9 @@ class ClientRuntime:
                     self.completed.add(node.quest_id)
                 if verdict.goto:
                     self.tracker.enter(verdict.goto, state)
+                elif (node is not None and node.kind is StepKind.GRIND
+                      and self.start_grind_then_finish):
+                    self.finished = True        # the level it ground for: the guide is done
                 elif node is not None and node.kind is StepKind.GRIND:
                     # A rib with no way back is a detour, not the end of the guide: find
                     # the first step not yet done, as a fresh run would.

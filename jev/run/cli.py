@@ -292,7 +292,7 @@ def remembered(args, graph, key: int | None, level: int | None = None):
             if rib is not None:
                 print(f"guide {graph.graph_id} finished at level {level}, below "
                       f"{following.name}'s {entry}: grinding {rib.id} until then")
-                return path, replace(memory, step_id=rib.id, finished=False, rejoin_to=None,
+                return path, replace(memory, step_id=rib.id, finished=True, rejoin_to=None,
                                      rib_until=None, entry_level=entry - 1), route, used
         # This character finished the guide: the next one takes over, its quests carried.
         print(f"guide {graph.graph_id} finished; continuing with {following.name}")
@@ -446,6 +446,10 @@ def _live(args, graph) -> int:
             start_rejoin=memory.rejoin_to, start_deaths=memory.deaths,
             start_retried=memory.retried, start_rib_until=memory.rib_until,
             start_entry_level=memory.entry_level,
+            # A finished guide's grind (V262): resumed, and finished again when done.
+            start_grind_then_finish=bool(memory.finished and graph.get(memory.step_id or "")
+                                         is not None
+                                         and graph.get(memory.step_id).kind is StepKind.GRIND),
             completed=set(memory.completed),
             on_progress=lambda step, done, rejoin, deaths, retried=frozenset(), until=None,
             finished=False, entry_level=None: playhead.save(

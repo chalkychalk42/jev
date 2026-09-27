@@ -850,3 +850,38 @@ def test_the_quest_under_way_when_the_band_applies_is_handed_in_however_far():
     for _ in range(3):
         rt.tick(choose=False)
     assert rt.tracker.step_id == "turnin" and not rt.finished, "its hand-in, 0.63 away"
+
+
+def finished_guide_graph():
+    """Two quest steps behind the character, and a grind of its level."""
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    return Graph(graph_id="g", faction="alliance", entry="old_accept", nodes=(
+        Node(id="old_accept", kind=StepKind.QUEST_ACCEPT, quest_id=40, next=("last",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="last", kind=StepKind.QUEST_TURNIN, quest_id=59,
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="rib_9_11", kind=StepKind.GRIND, level=(9, 11),
+             skills=("TRAVEL_TO", "GRIND_UNTIL"), **base),
+    ))
+
+
+@pytest.mark.parametrize(("flag", "levels", "expected_step", "finished"), [
+    (True, (10, 10, 10), "rib_9_11", False),     # grinding on for its level
+    (True, (10, 11, 12), "rib_9_11", True),      # the level reached: the guide done again
+    (False, (10, 10, 10), "old_accept", False),  # before V262: scanned from the entry
+])
+def test_a_finished_guides_grind_is_resumed_and_finishes_it(tmp_path, flag, levels,
+                                                            expected_step, finished):
+    """V262: a playhead put on a finished guide's grind was scanned from the entry, and the
+    level 9 mage walked 2,000 yards back to Milly Osworth's quest, passed over long before
+    (session 237)."""
+    from jev.world.state_v1 import Char
+
+    states = [seen(t, char=Char(level=lvl), quests=()) for t, lvl in enumerate(levels)]
+    rt = ClientRuntime("c", finished_guide_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       start_step="rib_9_11", start_entry_level=11,
+                       start_grind_then_finish=flag, completed={59})
+    for _ in states:
+        rt.tick(choose=False)
+    assert rt.tracker.step_id == expected_step
+    assert rt.finished is finished
