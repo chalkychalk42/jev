@@ -84,6 +84,11 @@ class PlayingBody:
         # asks the tutor. And the attempt being judged: (objective, option, since).
         self.recovery = None
         self._recovering: tuple[str, str, float] | None = None
+        # An objective whose routine failed its step's last attempt gets one more before the
+        # step fails over, the choice made then (`rescue`, V286): (objective, option) for its
+        # next arm. Once a step and skill a session: a rescue that fails, fails over.
+        self._rescue_pending: dict[tuple[str | None, str | None], tuple[str, str]] = {}
+        self._rescued: set[tuple[str | None, str | None]] = set()
         self._stalled: dict[tuple[str | None, str], float] = {}
         teacher_model = model_for(teacher_provider, teacher_model)
         self.spine, self.client, self.graph = spine, spine.client, spine.graph
@@ -246,6 +251,7 @@ class PlayingBody:
         # dismiss stays a stop for a human.
         self.spine.say(f"tutor unavailable ({result.detail}); "
                        f"the scripted {arm.decision.skill} routine plays this objective")
+        self._recovering = None          # the tutor made no attempt: nothing learned of it
         self.journal.append("actions", {"event": "scripted_fallback", "t": time.time(),
                                         "arm_id": arm.arm_id, "skill": arm.decision.skill,
                                         "reason": result.detail})
@@ -272,6 +278,11 @@ class PlayingBody:
         recovery choice gives it to the tutor (V160).
         """
         key = (arm.step_id, arm.decision.skill)
+        if key in self._rescue_pending:
+            objective, option = self._rescue_pending.pop(key)
+            self._routine_failed.pop(key, None)
+            self._recovering = (objective, option, time.monotonic())
+            return option == "tutor"
         if key in self._routine_failed:
             code = self._routine_failed.pop(key)
             if self.recovery is None:
@@ -281,6 +292,28 @@ class PlayingBody:
             self._recovering = (objective, option, time.monotonic())
             return option == "tutor"
         return False
+
+    def rescue(self, arm, result) -> bool:
+        """One more attempt at an objective whose routine has failed its step's last attempt,
+        before the step fails over (V286): the tutor's, or the routine's again, as the learned
+        recovery choice picks (V160). With one attempt a session the step failed over first,
+        and the tutor, armed on the step it had left, was cancelled "playhead changed" within
+        a tenth of a second, 15 times of 15 since T-0; the choice learned nothing. Once a step
+        and skill a session, never for a reflex or a routine-only service. `True` if taken."""
+        key = (arm.step_id, arm.decision.skill)
+        if (key in self._rescued or reflex(arm.rule) or routine_only(arm.rule)
+                or result.outcome not in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
+                or result.code in ROUTINE_NOT_FAILED):
+            return False
+        self._rescued.add(key)
+        code = self._routine_failed.pop(key, None) or result.code or "failed"
+        objective = f"{arm.decision.skill}:{code}"
+        option = ("tutor" if self.recovery is None
+                  else self.recovery.pick(objective, ("tutor", "routine")))
+        self._rescue_pending[key] = (objective, option)
+        self.spine.say(f"  {arm.decision.skill} failed on {arm.step_id}: one more attempt, "
+                       f"the {option}'s, before the step fails over")
+        return True
 
     def _note_routine(self, arm, result) -> None:
         """A routine that could not do its objective hands the next attempt to the tutor.

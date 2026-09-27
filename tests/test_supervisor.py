@@ -894,3 +894,64 @@ def test_a_walk_is_not_interrupted_by_combat_while_it_is_paused(tmp_path):
     assert interruption(hunt, state, travelling=True) == "combat interrupted the leg or service"
     assert interruption(hunt, state, travelling=True, combat_paused=True) is None
 
+
+
+def _failing_body():
+    body = Body(result=Result(SkillOutcome.ABORTED, "stuck on the stairs", "unreachable"))
+    body.allow_finish.set()
+    steps = []
+    execute = body.execute
+    body.execute = lambda arm, state, checkpoint: (steps.append(arm.step_id)
+                                                   or execute(arm, state, checkpoint))
+    return body, steps
+
+
+def test_a_body_that_rescues_gets_one_more_attempt_before_the_step_fails(tmp_path):
+    """V286: with one attempt a session the step failed over first, and the tutor, armed on
+    the step it had left, was cancelled "playhead changed" within a tenth of a second: 15
+    times of 15 since T-0. The body's rescue comes before the fail edge."""
+    rt = runtime(tmp_path, [seen(t / 4) for t in range(12)])
+    body, steps = _failing_body()
+    rescues = []
+    body.rescue = lambda arm, result: rescues.append((arm.step_id, result.code)) or len(rescues) == 1
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        for t in range(10):
+            supervisor.step(t / 4)
+            if supervisor.worker is not None:
+                assert supervisor.worker.done.wait(1)
+            if supervisor.stopped.is_set():
+                break
+        assert steps == ["accept", "accept"], "one more attempt at the same step, then no more"
+        assert rescues == [("accept", "unreachable")] * 2
+        assert supervisor.stopped.is_set() and "failed attempts" in supervisor.failure
+    finally:
+        supervisor.close()
+
+
+def test_a_step_failed_over_starts_nothing_on_the_step_it_left(tmp_path):
+    """V286: what the tick armed before the fail edge was armed on the step it left, and
+    started only to be cancelled, "playhead changed"."""
+    from jev.guide.graph import FailEdge, FailWhen
+    from jev.guide.tracker import Tracker
+
+    rt = runtime(tmp_path, [seen(t / 2) for t in range(8)])
+    first, second = rt.graph.nodes
+    first = first.model_copy(update={"on_fail": (FailEdge(when=FailWhen.TIMEOUT, value=600,
+                                                          goto=second.id),)})
+    rt.graph = rt.graph.model_copy(update={"nodes": (first, second)})
+    rt.tracker = Tracker(rt.graph, first.id)
+    body, steps = _failing_body()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(0.5)                      # the failure, and a look that chooses
+        assert rt.tracker.step_id == second.id, "out of attempts: failed over"
+        assert supervisor.worker is None, "a worker started on the step it left"
+        supervisor.step(1.0)
+        assert supervisor.worker is not None and supervisor.worker.arm.step_id == second.id
+        assert supervisor.worker.done.wait(1)
+        assert steps == [first.id, second.id]
+    finally:
+        supervisor.close()

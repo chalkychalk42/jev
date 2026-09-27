@@ -620,3 +620,62 @@ def test_after_a_routine_fails_the_retry_is_a_learned_choice(tmp_path, option, t
     assert bool(asked) is tutor_asked
     assert env.playing.recovery.picks == [("TRAVEL_TO:unreachable", ("tutor", "routine"))]
     assert env.playing.recovery.outcomes == [("TRAVEL_TO:unreachable", option, True)]
+
+
+def test_a_routine_failing_its_steps_last_attempt_is_rescued_once(tmp_path):
+    """V286: with one attempt a session the step failed over before the objective came back,
+    and the tutor, armed on the step it had left, was cancelled "playhead changed" 15 times
+    of 15 since T-0. The choice is made at the failure, for the attempt the step waits on."""
+    env = composition(tmp_path, tutor_first=False)
+    env.playing.recovery = _Picks("tutor")
+    asked = []
+    env.playing.controller.run = lambda arm, checkpoint: asked.append(arm) or Result(
+        SkillOutcome.SUCCEEDED, "tutor played", "done")
+    failed = Result(SkillOutcome.ABORTED, "stuck", "unreachable")
+    try:
+        assert env.playing.rescue(env.arm, failed) is True
+        assert env.playing.rescue(env.arm, failed) is False, "once a step and skill a session"
+        result = env.playing.execute(env.arm, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert asked == [env.arm] and result.outcome is SkillOutcome.SUCCEEDED
+    assert env.playing.recovery.picks == [("TRAVEL_TO:unreachable", ("tutor", "routine"))]
+    assert env.playing.recovery.outcomes == [("TRAVEL_TO:unreachable", "tutor", True)]
+
+
+def test_no_rescue_after_a_success_an_interruption_or_for_a_routine_only_service(tmp_path):
+    from dataclasses import replace
+
+    env = composition(tmp_path, tutor_first=False)
+    env.playing.recovery = _Picks("tutor")
+    train = replace(env.arm, rule="service.train")
+    try:
+        for result in (Result(SkillOutcome.SUCCEEDED, "arrived", "arrived"),
+                       Result(SkillOutcome.PREEMPTED, "combat", "interrupted"),
+                       Result(SkillOutcome.ABORTED, "nothing to sell", "no_junk")):
+            assert env.playing.rescue(env.arm, result) is False, result.code
+        assert env.playing.rescue(train, Result(SkillOutcome.ABORTED, "x", "approach_failed")) is False
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert env.playing.recovery.picks == []
+
+
+def test_an_attempt_the_tutor_could_not_make_teaches_nothing_of_it(tmp_path):
+    """V286: the tutor unavailable, the scripted routine plays the rescue; its result is not
+    the tutor's."""
+    env = composition(tmp_path, tutor_first=False)
+    env.playing.recovery = _Picks("tutor")
+    env.playing.controller.run = lambda arm, checkpoint: Result(
+        SkillOutcome.ABORTED, "provider down", "teacher_unavailable")
+    env.spine.execute = lambda arm, state, checkpoint: Result(
+        SkillOutcome.SUCCEEDED, "scripted travel arrived", "arrived")
+    try:
+        assert env.playing.rescue(env.arm, Result(SkillOutcome.ABORTED, "stuck", "unreachable"))
+        result = env.playing.execute(env.arm, None, lambda: None)
+    finally:
+        env.screenshots.close()
+        env.playing.close()
+    assert result.outcome is SkillOutcome.SUCCEEDED
+    assert env.playing.recovery.outcomes == []

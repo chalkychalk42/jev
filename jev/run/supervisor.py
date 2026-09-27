@@ -263,6 +263,9 @@ class Supervisor:
         routine_age = (None if clock is None else 0.0 if clock == math.inf
                        else max(0.0, now - clock))
         exhausted = None
+        # A step failed over this look arms nothing more in it: what the tick armed was armed
+        # on the step it left, and would start only to be cancelled, "playhead changed" (V286).
+        failed_over = False
         if self.worker and self.worker.done.is_set():
             worker, self.worker = self.worker, None
             worker.thread.join()
@@ -340,7 +343,17 @@ class Supervisor:
                                                             "VENDOR_REPAIR")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
-                    if self.failures[key] >= self.max_failures:
+                    # A body that can rescue the objective takes one more attempt at it before
+                    # the step fails over: the tutor's, or the routine's again, as its learned
+                    # recovery choice picks (V286). With one attempt a session the step failed
+                    # over first, and the tutor, armed on the step it had left, was cancelled
+                    # as "playhead changed" within a tenth of a second: 15 of 15 times since
+                    # T-0, and the choice never learned (sessions 134-289).
+                    rescue = getattr(self.body, "rescue", None)
+                    if (self.failures[key] >= self.max_failures and rescue is not None
+                            and rescue(worker.arm, result)):
+                        self.failures[key] -= 1
+                    elif self.failures[key] >= self.max_failures:
                         exhausted = key, result.detail
             if (result.code in {"error", "unsupported", "no_food", "refused",
                                 "teacher_unavailable", "teaching_stalled"}
@@ -382,6 +395,7 @@ class Supervisor:
                 self.watchdog.escalate = False
                 step = self.runtime.tracker.step_id
                 if self.runtime.expire_step():
+                    failed_over = True
                     self.say(f"watchdog: no progress on {step}; failing it over")
                     if self.worker and self.worker.arm is not None:
                         self.worker.cancel("no quest or experience progress; step failed over")
@@ -401,6 +415,7 @@ class Supervisor:
         if exhausted and self.runtime.tracker.step_id == exhausted[0][0]:
             fail_over = getattr(self.runtime, "fail_over", None)
             if fail_over is not None and fail_over(exhausted[0][1], exhausted[1] or ""):
+                failed_over = True
                 self.say(f"{exhausted[0][1]} out of attempts on {exhausted[0][0]}; "
                          f"failed over to {self.runtime.tracker.step_id}")
                 self.failures.pop(exhausted[0], None)
@@ -467,7 +482,8 @@ class Supervisor:
             self.runtime.finish(SkillOutcome.PREEMPTED, "session reconnect")
             self.worker = Worker(self.body, None, state, maintenance=maintenance)
             self.worker.thread.start()
-        elif (self.worker is None and choose and not operator and not self.stopped.is_set()
+        elif (self.worker is None and choose and not failed_over and not operator
+              and not self.stopped.is_set()
               and self.runtime.armed
               and self.runtime.armed.decision.skill not in (None, "IDLE")
               and (self.runtime.armed.decision.skill != "ABORT_WAIT"
