@@ -502,6 +502,26 @@ def test_a_death_at_a_station_is_learned_against_it():
     assert key in (station_key("creature:9", here), station_key("creature:9", there))
     assert (arm.tries, arm.wins) == (DEATH_VISITS, 0)
 
+
+def test_a_death_after_the_hunts_own_fight_is_learned_against_the_station_too():
+    """V274: session 257's pair killed the mage after its hunt's fight had won the first,
+    the hunt cancelled "dead or ghost", and the visit went unscored as a death."""
+    import random
+
+    from jev.learn.choices import DEATH_VISITS, ChoiceMemory, Stations
+
+    memory = ChoiceMemory()
+    here, there = (0.0, 0.0, 80.0), (60.0, 0.0, 80.0)
+    h, _ = _hunt([Fought.KILLED], [(0, 1)])
+    h.stations = Stations(memory, "hunt.station", "creature:9", rng=random.Random(3))
+    h.stations.arrive(here)
+    h.read = lambda: {"vitals.dead": True}
+    h._hunt = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("dead or ghost"))
+    with pytest.raises(RuntimeError):
+        h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=(here, there))
+    (arm,) = memory.arms("hunt.station").values()
+    assert (arm.tries, arm.wins) == (DEATH_VISITS, 0)
+
 def test_a_station_never_reached_is_not_scored():
     """V252: 42 of 49 station visits were scored lost in sessions 205-217, most of them walks
     cut short on the way, which say nothing of what stands at the station."""

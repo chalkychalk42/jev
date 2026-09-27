@@ -207,7 +207,19 @@ class Hunt:
                               spawns=spawns)
         finally:
             if self.stations is not None:
-                self.stations.leave(self._found)     # the station it was at, however it ended
+                if self._dead():
+                    # Killed at it, whether in the hunt's own fight or after it, the hunt
+                    # cancelled: a station to stand at less (V274).
+                    self.stations.died()
+                else:
+                    self.stations.leave(self._found)     # the station it was at, however it ended
+
+    def _dead(self) -> bool:
+        try:
+            values = self.read() or {}
+        except Exception:
+            return False
+        return values.get("vitals.dead") is True or values.get("vitals.ghost") is True
 
     def _hunt(self, centre, radius_yards, name_id, *, timeout_s, spawns) -> Hunted:
         self.kills = self.moves = 0
