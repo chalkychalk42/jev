@@ -3166,3 +3166,75 @@ in the same clear spots. The paladin has not played since 14:27; its level 15.87
    quartermaster); failures remembered across sessions (trainer visits, accepts; 1.3-3.7
    minutes an hour); hunt stations chosen by distance, and only reached ones scored.
 4. The freeze at hour 44 (Sun 19:15), the report by hour 47.
+
+## 27 Sep 2026 11:15 — hour thirty-six: the mage at level 12, V252-V280
+
+The hour-36 checkpoint:
+
+| Go if | Result |
+|---|---|
+| The mage at level 7 or higher (should: 12) | **Met**: level 12 at 08:02 (session 261), three hours before the checkpoint; 12.84 at 11:05 |
+
+**The mage's twelve hours since hour 24** (sessions 223-272, to 10:52): from level 9.05 to 12.74,
+29,712 XP in 11.5 hours played (2,578 an hour), 471 kills and 47 deaths. Its deaths were fights with two
+to six attackers: Prowler pairs, murlocs, and the camps of Westfall. At level 11 on Elwynn's Prowlers
+(sessions 251-260) it made 3,300-4,500 XP an hour. It reached 12 at 08:02 and went on to the 12-20
+guide's Westfall: five deaths in 35 minutes and 1,026 XP an hour over the six sessions of going there and
+back (262-267). Back on the Prowlers at 12 (V276, V280), sessions 268-272 made 4,513 XP an hour with one
+death in 79 kills; session 268 was the run's best (1,273 XP, 17 kills, no deaths).
+
+**Fixes since hour twenty-four** (V245-V251 are in the hour-24 entry):
+- **V252** (everyone): hunt stations scored only when reached; the tour's order a prior. The Prowler
+  stations went from 11% paid off (25 visits, 02:55) to 43% (49 visits); the night's visits 73%.
+- **V253** (everyone): a hearthstone still cooling is not pressed.
+- **V254** (everyone): a trainer not reached is tried again after half an hour, across sessions.
+- **V255** (everyone): far-wandering units carry their reach into rest and get-up spots.
+- **V256** (casters): an attacker lost beside a caster is found by quarter turns.
+- **V257** (everyone): the search for a way round bounded (a V248 cost regression fixed).
+- **V258** (everyone): spawns drawn from a list (every murloc and gnoll point) are in the hostile index.
+- **V259** (everyone): a walk to a merchant or a smith waits for a meal.
+- **V260** (everyone): a bag bought when the purse can spare it (the mage's bags reached 40 slots from
+  loot, so none was bought).
+- **V261** (everyone; schema 19): talent points spent on the class's build: Improved Fireball 1, 2 and 3
+  at levels 10, 11 and 12, each at the first meal after the level.
+- **V262** (everyone): a guide run out below the next one's first level grinds until then.
+- **V263-V268** (everyone): the Lion's Pride Inn, as a general lesson in floors. Positions are x and y
+  alone, and the navmesh stops short of walls and furniture: a unit upstairs is looked for from its own
+  spot (V263); a spot with fewer than two floors reads the floors round it (V264); a route's corners are
+  kept and reached near enough to pass them (V265: the inn's door jamb; walk simulator 45 stuck events to
+  1, real routes 0.5% longer); the tracked height outlives the session (V267); a wedge with no way in known
+  tries the next floor (V268). The mage trained Frost Nova at 10 (session 246) and Fireball 3 at 12 up the
+  inn's stairs with no stuck event.
+- **V266** (everyone): the hostile lookup read the strip (a screen capture) at every sample point of every
+  candidate, which starved V248's search; read once a plan.
+- **V269** (everyone): no looting below half health while another attacker is counted.
+- **V270** (everyone): each place a route passes spawns is gone round on its own: on 31 real routes,
+  spawns passed fell by half for 6-9% more walking; the walk to Sentinel Hill 27 to 8.
+- **V271, V275** (casters with a root): Frost Nova held for a second attacker or a fight going badly, and
+  a step aside, not back, when it roots two.
+- **V272, V276** (everyone): a grind still suited to the level is kept, and the next guide starts a level
+  above its lowest grind's (13 for 12-20): five deaths in the mage's first 35 minutes of Westfall at 12.
+- **V273** (casters): mana spent on a unit that takes nothing stops the fight (two deaths).
+- **V274** (everyone): a death at a hunt's station is learned against it.
+- **V277** (everyone who learns one): damage round the character (Arcane Explosion) is a fight spell,
+  pressed first with two attackers or more at hand; the mage learns it at 14.
+- **V278, V279** (everyone): broken gear goes home by hearthstone only when home is the way to a
+  repairer, and after the Spirit Healer only when home is near the guide's work. With the stone bound at
+  Sentinel Hill and the grind back in Elwynn, the broken-gear rule had hearthed the mage 3,500 yards from
+  a repairer 232 yards off, and it died on the walk back (session 266).
+- **V280** (everyone): the next guide waits two levels past its lowest grind (14 for 12-20): back on the
+  Prowlers at 12 the mage made 5,095 and 4,630 XP an hour with no deaths (sessions 268-269), the run's
+  best, where Westfall at 12 had cost five deaths in 35 minutes.
+
+**Melee's evidence**: the whole suite passes before each deploy. The caster changes are gated on facts a
+paladin's bar does not have (a root, an area spell, a caster profile). The paladin has not played since
+26 Sep 14:27.
+
+**Learner yield**: the station learner's Prowler record, 11% to 43% paid off; tonight's visits 73%.
+
+**Largest loss now**: multi-attacker fights, about one death a session; the plan's fallback at this
+checkpoint is "largest loss only", which is where the night's changes went.
+
+**For the final report**: items are not destroyed (the vendor client has no destroy path, by design): an
+operator decision. The caster's stand-off (18 yards now; ~28 would be safer) waits on nameplates that
+show only within about 20 yards. Longer sessions after the freeze.
