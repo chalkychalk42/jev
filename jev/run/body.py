@@ -47,7 +47,7 @@ from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
-from jev.run.hunt import DEFAULT_HUNT_YARDS, Hunt
+from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import hostiles
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
@@ -759,11 +759,12 @@ class LiveBody:
                     stations=self._stations("hunt.station", objective_key(wanted, node.id)),
                     standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0,
                     conjure=self._conjure)
-        outcome = hunt.run(destination.world, destination.hunt_yards or DEFAULT_HUNT_YARDS,
-                           wanted,
-                           timeout_s=self.hunt_timeout,
-                           spawns=spawn_points(self.hunt_spawns, node.id,
-                                               getattr(destination, "target_id", None)))
+        yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
+        spawns = spawn_points(self.hunt_spawns, node.id, getattr(destination, "target_id", None))
+        outcome = hunt.run(destination.world, yards, wanted, timeout_s=self.hunt_timeout,
+                           spawns=spawns,
+                           others=self._hostiles(destination.world, yards + PACK_YARDS)
+                           if spawns else ())
         return self._result(outcome, hunt.detail)
 
     def _explore(self, target: ObjectiveTarget, complete: Callable[[], bool | None]) -> Result:

@@ -411,6 +411,7 @@ Trials
 | V281 merchants of the zone the character stands in count too | session 276 | repairs and sales near the character across a guide's handover | the merchant chosen at the handover to Westfall at 14 | | |
 | V282 a root stepped clear of only once the client answered its press | session 280 | no run of refused roots each followed by a step back (18 of 169 unanswered in 246-279); fights won with a root lose less health | `ability.unanswered` with role root and no `engage.root` after it; `tools/fight_costs.py` roots answered | | |
 | V283 no corpse searched while something still attacks, at any health | session 281 | no loot begun with two attackers counted (30 in 250-279, 1 looted); deaths after a loot fall | `loot: no_corpse - ... with something still attacking; not now` in the session log | | |
+| V284 a spawn's packmates include every hostile unit round it | session 282 | fewer fights with two or more attackers at 12-20's camps (Westfall from 14) | a hunt's first station away from the camp's core (the `choices` log's order) | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues

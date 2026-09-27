@@ -423,6 +423,22 @@ def test_the_way_between_lone_spawns_goes_round_a_pack_when_it_can():
     assert first[:3] == [lone[0], lone[2], lone[1]]
 
 
+def test_other_hostile_units_count_as_a_spawns_packmates():
+    """V284: at Patrolling Westfall's Riverpaw camp a Mongrel alone among its own kind stood
+    among Herbalists and Brutes, and the level 12 mage died there three times (262-266)."""
+    from jev.run.hunt import spawn_tour
+
+    camp, edge = (0.0, 0.0, 0.0), (70.0, 0.0, 0.0)          # two Mongrels
+    herbalists = ((10.0, 5.0, 0.0, 0.0), (-8.0, 6.0, 0.0, 0.0), (5.0, -12.0, 0.0, 0.0))
+    assert spawn_tour((camp, edge))[0] == camp, "alone among its own kind: the centre first"
+    others = (*herbalists, (0.0, 0.0, 0.0, 0.0))            # the index holds the Mongrels too
+    assert spawn_tour((camp, edge), others) == [edge, camp]
+    h, walked = _hunt([Fought.NO_TARGET], [(1, 10)])
+    assert h.run((0.0, 0.0, 0.0), 90.0, timeout_s=5, spawns=(camp, edge),
+                 others=others) is Hunted.UNREACHABLE
+    assert walked[0] == edge
+
+
 def test_without_spawns_the_rings_remain():
     h, _ = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
     assert h.run((0.0, 0.0, 0.0), 30.0, timeout_s=5, spawns=()) is Hunted.UNREACHABLE

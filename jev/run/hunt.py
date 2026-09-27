@@ -113,6 +113,8 @@ PACK_YARDS = 20.0
 # What each other spawn inside `PACK_YARDS` adds to a point's distance on the tour, so a
 # lone spawn is walked to before a pack up to this much further off per packmate.
 PACK_PENALTY_YARDS = 40.0
+# A hostile spawn this close to one of the target's own is that spawn (`spawn_tour`'s others).
+SAME_SPAWN_YARDS = 1.0
 
 
 def spawn_stations(spawns) -> list[tuple[float, float, float]]:
@@ -120,10 +122,14 @@ def spawn_stations(spawns) -> list[tuple[float, float, float]]:
     return spawn_tour(spawns) * SPAWN_LAPS
 
 
-def spawn_tour(spawns) -> list[tuple[float, float, float]]:
+def spawn_tour(spawns, others=()) -> list[tuple[float, float, float]]:
     """Where the target actually spawns, as a walk: lone spawns before packs, each step to
     the nearest point left once its packmates are counted, from the cluster's centre (the
-    generator lists it first).
+    generator lists it first). A packmate is any unit that attacks on sight (`others`, the
+    hostile spawns round the hunt, V284), not only another of the target: at Patrolling
+    Westfall's Riverpaw camp, 29 hostile spawns within 60 yards of the objective, a Mongrel
+    alone among its own kind stood among Herbalists and Brutes, and the level 12 mage died
+    there three times in 35 minutes (sessions 262-266).
 
     Rings round a centre stand where the mobs may not be. Northshire's Young Wolves spawn
     24 to 170 yards from their cluster's centre, and rings at 0, 13 and 31 yards looked 38
@@ -135,7 +141,10 @@ def spawn_tour(spawns) -> list[tuple[float, float, float]]:
     20260924T045140-ec8686). A pack is still walked, last, for a camp that is all pack.
     """
     left = [tuple(p) for p in spawns]
-    crowd = [sum(1 for q in left if q is not p and math.dist(p[:2], q[:2]) < PACK_YARDS)
+    # The target's own spawns are hostile too, and among `others` already.
+    rest = [tuple(o[:3]) for o in others
+            if all(math.dist(o[:2], p[:2]) > SAME_SPAWN_YARDS for p in left)]
+    crowd = [sum(1 for q in (*left, *rest) if q is not p and math.dist(p[:2], q[:2]) < PACK_YARDS)
              for p in left]
     packed = [i for i, n in enumerate(crowd) if n >= 2]
 
@@ -200,11 +209,11 @@ class Hunt:
     @traced("hunt")
     def run(self, centre: tuple[float, float, float], radius_yards: float,
             name_id: int | None = None, *, timeout_s: float = 900.0,
-            spawns=()) -> Hunted:
+            spawns=(), others=()) -> Hunted:
         self._found = False
         try:
             return self._hunt(centre, radius_yards, name_id, timeout_s=timeout_s,
-                              spawns=spawns)
+                              spawns=spawns, others=others)
         finally:
             if self.stations is not None:
                 if self._dead():
@@ -221,7 +230,7 @@ class Hunt:
             return False
         return values.get("vitals.dead") is True or values.get("vitals.ghost") is True
 
-    def _hunt(self, centre, radius_yards, name_id, *, timeout_s, spawns) -> Hunted:
+    def _hunt(self, centre, radius_yards, name_id, *, timeout_s, spawns, others=()) -> Hunted:
         self.kills = self.moves = 0
         self._outdoors = None
         self.detail = ""
@@ -231,7 +240,8 @@ class Hunt:
         deadline = time.monotonic() + timeout_s
         # Where the target spawns when the guide knows it; rings round the centre when not.
         # Each lap's order is learned, when there is a choice to learn (`stations`).
-        tour, laps = (spawn_tour(spawns), SPAWN_LAPS) if spawns else (stations(centre, radius_yards), 1)
+        tour, laps = ((spawn_tour(spawns, others), SPAWN_LAPS) if spawns
+                      else (stations(centre, radius_yards), 1))
         lone = len({tuple(p) for p in spawns}) == 1
         chooser = self.stations if len({tuple(p) for p in tour}) > 1 else None
         posts = ([p for _ in range(laps) for p in chooser.order(tour)] if chooser is not None
