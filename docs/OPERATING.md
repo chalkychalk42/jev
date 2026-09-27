@@ -1,6 +1,6 @@
 # Operating the bot
 
-How the bot runs unattended as of 26 September 2026: what is running, how to start, pause
+How the bot runs unattended as of 27 September 2026: what is running, how to start, pause
 and stop it, how to see what it is doing, and how a change goes live. The 48-hour plan
 (`docs/plans/forty-eight-hour-session.md`) and its ledger hold the history. Every rule below
 has a row in `DECISIONS.md`.
@@ -70,8 +70,17 @@ Each character's state is in `var/playheads/character-KEY.json`: its guide, curr
 completed quests. Alongside it:
 - `.home.json`: where the hearthstone goes.
 - `.equipped.json`: what it has been given to wear.
-- `.purse.json`: what it could not pay for (V206).
+- `.purse.json`: what it could not pay for (V206), the conjures on its bar (V244), when it last
+  got up after a death (V247), when its hearthstone is ready (V253) and the trainer visit it
+  failed (V254).
 - `.taxi.json`: the flight points it knows.
+- `.trail.json`: the way in from the door when a session ends indoors (V232), and the height it
+  was tracked at (V267).
+
+A character plays its guide's quests in order, with grinds ("ribs") as the failover. When its
+guide is finished below the next guide's start, it grinds the finished guide's last grind until
+two levels past the next guide's lowest grind (V262, V276, V280: the 12-20 guide at 14), then the
+next guide takes over at a session's start.
 
 To play another character between the loop's sessions, hold the loop, then run
 `tools/visit.sh NAME LOG [N]`. It plays N sessions on NAME and returns to the active
@@ -110,7 +119,8 @@ ledger). Rerun the suite before calling a change broken.
 ### A change to what the strip paints
 
 A new schema changes the addon as well as the decoder: schema 18 (V237) paints the class
-trainer's list, which the trainer desk needs to buy by value. The client paints the schema
+trainer's list, which the trainer desk needs to buy by value, and schema 19 (V261), the current
+one, adds the talents and a thirteenth row. The client paints the schema
 that is installed until the addon is installed again. So the two go live in this order, each
 at a session boundary with the loop held:
 1. **The decoder**, merged as above. It reads the installed schema 17 as it did, with the new
@@ -127,8 +137,8 @@ The other order would leave every session in between blind: a decoder that does 
 new schema refuses the strip, as a checksum or schema fault. To go back, put the backup
 (`captures/addon-backup/<time>-StatusStrip`) back as `Interface/AddOns/StatusStrip` and
 restart the client; the new decoder still reads the old strip. The grid kept in
-`var/radio-grid.json` (eleven rows) needs no change: the decoder reads the twelve-row strip
-on its position.
+`var/radio-grid.json` needs no change when rows are added: the decoder reads the longer strip
+on its position (eleven rows, then twelve at schema 18 and thirteen at schema 19).
 
 ## When something is wrong
 

@@ -1,31 +1,34 @@
 # Jev
 
-A guide-directed leveling agent for a private TBC 2.4.3 server, built so that **it gets
-cheaper to run the longer it runs**.
+A guide-directed leveling agent for a private TBC 2.4.3 server. It plays unattended: a session
+loop, generated quest guides, scripted skills that verify their own effects, and choices
+learned from outcomes. It needs no model call to make progress.
 
 ```
-Body       bounded    HID/skills   local      execute and release input
-Tracker    250 ms     predicates   local      guide progress, interrupts, services
-Jev tutor  per action vision       subscription choose, observe, correct
-Student    per action learned     local      evaluated capabilities, abstain on novelty
-Learner    background training    local      filter, evaluate, canary, promote, roll back
+Body       bounded     HID/skills   local         execute input and verify its effect
+Tracker    250 ms      predicates   local         guide progress, interrupts, services
+Policy     per tick    rules        local         the scripted floor: each objective's own routine
+Choices    per visit   outcomes     local         Thompson-learned options, danger map, route memory
+Tutor      on failure  vision       subscription  an objective whose routine failed, rarely
 ```
 
-The guide supplies the objective; Jev can choose bounded actions using screenshots,
-controls and exact-server knowledge. The body executes and verifies effects. Successful
-observed episodes train a local student that gradually takes over evaluated capabilities.
-The existing scripted mode remains available. See the current
-**[teaching-loop contract and test launcher](docs/TEACHING_LOOP.md)**.
+The guide supplies the objective; the body plays it with scripted routines and proves each
+effect by what the addon paints. Where a routine has real alternatives (which hunt station,
+when to heal), the choice is learned from how each option paid off. The tutor takes an
+objective only after its routine has failed. See the current contract at the top of
+**[ARCHITECTURE.md](ARCHITECTURE.md)** and **[docs/OPERATING.md](docs/OPERATING.md)** to run it.
 
 ## Read these in order
 
 | | |
 |---|---|
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | how it is built, and why it differs from the plan |
-| **[docs/TEACHING_LOOP.md](docs/TEACHING_LOOP.md)** | current visual teaching loop, continuous collection and per-capability handover |
-| **[DECISIONS.md](DECISIONS.md)** | every call made, with its reason. Read before proposing an alternative |
-| **[docs/ROADMAP.md](docs/ROADMAP.md)** | current ordered work, evidence gaps and acceptance gates toward sustained improvement |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | how it is built: the current contract first, then the history |
+| **[docs/OPERATING.md](docs/OPERATING.md)** | how it runs unattended, how to watch it, and how a change goes live |
+| **[DECISIONS.md](DECISIONS.md)** | every call made, with its reason and evidence. Read before proposing an alternative |
+| **[STATUS.md](STATUS.md)** | what was measured, when: the latest entry is the current state |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | ordered work and acceptance gates |
 | [docs/PLAN.md](docs/PLAN.md) | the original vision |
+| [docs/TEACHING_LOOP.md](docs/TEACHING_LOOP.md) | the visual teaching loop of 22 September (history: its students went with V225) |
 | [data/README.md](data/README.md) | what is on disk and where it came from |
 
 ## Quickstart
@@ -41,22 +44,17 @@ function are all testable with no client, no capture and no network. A count is 
 of this file on purpose — it goes stale in a day and a stale number in a README is a
 small lie you tell yourself every time you read it. `STATUS.md` carries the current one.
 
-The live body has completed individual quest, combat, travel, loot and service checks.
-The current engagement chain still needs live proof. The visual tutor/student loop is
-built and tested offline; that does not establish learned game competence. See `STATUS.md`
-for measured outcomes and the teaching-loop document for the next acceptance sequence.
+Live, the bot has played for forty-eight hours unattended: a paladin from level 13 to 15.87,
+then a mage the campaign tool made itself, from level 1 onwards (`STATUS.md`).
 
 ```bash
 .venv/bin/python -m jev.run.cli --check  # graph/capability report; never attaches a client
-.venv/bin/python -m jev.run.cli --check --play-mode teach --route-mode supported
 ```
 
-On Windows, `python tools/probe_slice.py` remains the live entry point and delegates to
-`jev.run.cli`. It attaches the client and can send input. It uses the scripted floor by
-default; `--play-mode teach` enables visual tuition (the evaluated students that could
-take capabilities over went with V225). [Operating instructions](docs/OPERATING.md) cover
-the explicit supported route, evidence gates, reconnect, files and remaining live
-acceptance work.
+The live entry point is the session loop (`tools/session_loop.sh`), which runs Windows Python
+`tools/start_teaching.py --run --dispatch hybrid` for each session: it attaches the client and
+sends input. [Operating instructions](docs/OPERATING.md) cover starting, pausing and stopping
+it, the characters, what it learns, and how a change goes live.
 
 ### Platform split
 The brain is pure Python and runs anywhere. Capture and input are Windows-only — they
@@ -70,8 +68,8 @@ jev/world/      state_v1 — the contract everything crosses a process boundary 
 jev/perceive/   JevRadio field table and codec, vision heads, fusion
 jev/coach/      decision schema, verifier, situation_key
 jev/teacher/    the queue, dedup and prompt templates
-jev/play/       visual tutor, bounded controls, observed effects and motor learning
-jev/learn/      episode store, outcome-learned choices, danger map
+jev/play/       the tutor's bounded controls and observed effects (the corpus is recorded)
+jev/learn/      outcome-learned choices, danger map, episode corpus
 jev/guide/      GuideGraph generation, tracker, recorder
 jev/skills/     skill catalog, combat profiles, paths
 jev/clients/    window binding, capture, HID

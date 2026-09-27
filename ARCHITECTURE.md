@@ -1,6 +1,38 @@
 # Jev — architecture
 
-**Current contract, 22 September 2026:** [the visual teaching loop](docs/TEACHING_LOOP.md)
+**Current contract, 27 September 2026** (after the forty-eight-hour run; supersedes the two
+contracts below, kept as history, and the sections after them where they disagree):
+
+- **Play.** Every objective goes to the guide's own scripted routine first, and to the tutor
+  (Claude over the subscription) only after that routine has failed (V223). No trained student
+  acts (V225), nothing is trained inside a live session (V174), and the decision learner is gone
+  (V224). The zero-teacher invariant holds: the loop plays for hours with no tutor call.
+- **Learning is choosing from outcomes** (V158). A choice point with real alternatives (hunt
+  stations, the pack heal line, recovery) keeps each option's record of payoff and cost in
+  `var/choices.json`; options are tried in the order of a Thompson draw, and a death at a
+  station counts against it (V274). Walks keep clear of where the character keeps being
+  attacked at its level (`var/danger.json`, V161), of recent death spots (V157), of blocked
+  spots (`var/route-memory.json`), and, where cheaper, of the world's hostile spawns, place by
+  place (`content/tbc/hostile-spawns.json`; V247, V248, V258, V270).
+- **Perception.** The JevRadio strip (schema 19, 13 rows; it paints and never actuates) gives
+  vitals, position (map x and y only: heights are tracked along the navmesh and kept across
+  sessions, V136, V264, V267), target, bars, spells, trainer rows and talents. Nameplates and
+  corpses are found on the screen and proved by hover before any click.
+- **The guides** are generated graphs (`content/tbc/ally_human_1_12.json`,
+  `ally_human_12_20.json`) played by the tracker and runtime, with grinds ("ribs") as the
+  failover. A finished guide's last grind holds the character until two levels past the next
+  guide's lowest grind (V262, V272, V276, V280).
+- **The body** (`jev.run.body.LiveBody`) owns the skills: travel (the navmesh planner and a
+  follower that keeps a route's corners, V265), fight (melee and caster rotations: a root held
+  for two attackers, a step aside, area damage first against a crowd; V271, V275, V277), loot,
+  rest, the vendor, repair and bag services, the trainer (spells bought by value, V237),
+  talents (V261), the hearthstone and the inn.
+- **Operation.** `tools/session_loop.sh` plays sessions of about fifteen minutes, the keeper
+  restarts servers and the loop, and the campaign makes and switches characters
+  (`docs/OPERATING.md`). A change is deployed from a separate worktree: the full suite, then a
+  hold on the loop, a fast-forward merge at a session boundary, an offline check, and a push.
+
+**Contract of 22 September 2026 (superseded):** [the visual teaching loop](docs/TEACHING_LOOP.md)
 supersedes this document's original rare-teacher/whole-skill-only restriction. In teaching
 mode Jev chooses bounded motor actions from screenshots and observed outcomes, using the
 guide and existing routines as support. Evaluated local capabilities progressively take
@@ -9,7 +41,7 @@ The older scripted mode and its strategic learner remain available. The historic
 sections below describe that earlier mode; zero teacher dependency is a goal earned per
 capability, not an invariant imposed on an untrained motor controller.
 
-**Engagement and tutor contract, 23 September 2026 (DECISIONS V40-V44):** a unit is faced
+**Engagement and tutor contract, 23 September 2026 (DECISIONS V40-V44; superseded where the contract of 27 September differs):** a unit is faced
 by turning until its own hover-proved nameplate is on the screen's centre line (a
 right-click never turns the character); melee auto-attack is pressed only when the radio
 observes it off; kills are proved by zero health or experience, and a corpse the client
