@@ -246,14 +246,24 @@ def _guide_on(args, graph, path: Path):
     return graph
 
 
+# A guide is started a level above its lowest grind's (V276): at that level its mobs are all at
+# or above the character. The level 12 mage died five times in its first 35 minutes of the
+# 12-20 guide's Westfall (sessions 263-264: a Riverpaw camp of 13-15s, Defias Smugglers in
+# threes), where it had made about 3,900 XP an hour at 11 on Elwynn's Prowlers with 0.8 deaths
+# a session; the paladin's Westfall at 12-13 averaged 1.2 deaths a session.
+ENTRY_LEVELS_ABOVE = 1
+
+
 def entry_level(guide: Path) -> int | None:
-    """The level a guide starts at: its lowest grind's. Below it, its every grind is above
-    the character (V262)."""
+    """The level a guide starts at: a level above its lowest grind's. Below its lowest
+    grind's, its every grind is above the character (V262); at it, all its mobs are at or
+    above it (V276)."""
     try:
         ribs = [n for n in Graph.load(guide).nodes if n.kind is StepKind.GRIND]
     except (OSError, ValueError):
         return None
-    return min((r.level[0] for r in ribs), default=None)
+    lowest = min((r.level[0] for r in ribs), default=None)
+    return None if lowest is None else lowest + ENTRY_LEVELS_ABOVE
 
 
 def remembered(args, graph, key: int | None, level: int | None = None):
@@ -294,8 +304,8 @@ def remembered(args, graph, key: int | None, level: int | None = None):
             # apart, where every pull is two or three.
             kept = used.get(memory.step_id) if memory.step_id else None
             if (kept is not None and kept.kind is StepKind.GRIND
-                    and kept.level[0] <= level <= kept.level[1]):
-                rib = kept
+                    and kept.level[0] <= level <= kept.level[1] + ENTRY_LEVELS_ABOVE):
+                rib = kept      # and a level past its window, as the next guide waits (V276)
             if rib is not None:
                 print(f"guide {graph.graph_id} finished at level {level}, below "
                       f"{following.name}'s {entry}: grinding {rib.id} until then")

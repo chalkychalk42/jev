@@ -640,7 +640,8 @@ def test_an_unfinished_guide_stays(tmp_path):
     assert memory.step_id == "alli_human_1_12_47_gold_dust_exchange_do"
 
 
-@pytest.mark.parametrize(("level", "handed_over"), [(10, False), (12, True), (None, True)])
+@pytest.mark.parametrize(("level", "handed_over"), [(10, False), (12, False), (13, True),
+                                                    (None, True)])
 def test_a_guide_run_out_below_the_next_ones_first_level_grinds_until_then(
         tmp_path, capsys, level, handed_over):
     """V262: V245 passed a dead chain by and the level 9 mage's 1-12 route ran out at 9.85;
@@ -661,7 +662,7 @@ def test_a_guide_run_out_below_the_next_ones_first_level_grinds_until_then(
     rib = graph.get(memory.step_id)
     assert rib is not None and rib.kind is StepKind.GRIND and memory.finished, "the mark kept"
     assert rib.level[1] <= level + 1, "a grind for its level"
-    assert memory.entry_level == cli.entry_level(cli.NEXT_GUIDE["alli_human_1_12"]) - 1 == 11
+    assert memory.entry_level == cli.entry_level(cli.NEXT_GUIDE["alli_human_1_12"]) - 1 == 12
     assert "grinding" in capsys.readouterr().out
 
 
@@ -681,3 +682,22 @@ def test_a_grind_still_suited_to_the_level_is_kept(tmp_path):
                   finished=True, entry_level=11)
     _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 11)
     assert memory.step_id != "alli_human_1_12_grind_elwynn_7_9", "outgrown: one for the level"
+
+
+def test_the_next_guide_waits_a_level_past_its_first_grind_and_the_grind_with_it(tmp_path):
+    """V276: the level 12 mage died five times in its first 35 minutes of the 12-20 guide's
+    Westfall, where at 11 it had made 3,900 XP an hour on Elwynn's Prowlers."""
+    from jev.guide import playhead
+
+    assert cli.entry_level(cli.NEXT_GUIDE["alli_human_1_12"]) == 13
+    path = tmp_path / "character.json"
+    playhead.save("alli_human_1_12.supported", "alli_human_1_12_grind_elwynn_9_11", {54}, path,
+                  finished=True, entry_level=12)
+    args = SimpleNamespace(playhead=path, route_mode="supported",
+                           graph=cli.ROOT / "content/tbc/ally_human_1_12.json")
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 12)
+    assert graph.graph_id == "alli_human_1_12.supported"
+    assert memory.step_id == "alli_human_1_12_grind_elwynn_9_11", "the Prowlers, not the gnolls"
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 13)
+    assert graph.graph_id == "alli_human_12_20.supported"
+
