@@ -3238,3 +3238,193 @@ checkpoint is "largest loss only", which is where the night's changes went.
 **For the final report**: items are not destroyed (the vendor client has no destroy path, by design): an
 operator decision. The caster's stand-off (18 yards now; ~28 would be safer) waits on nameplates that
 show only within about 20 yards. Longer sessions after the freeze.
+
+
+## 27 Sep 2026 21:50 — the forty-eight hours, against the plan
+
+T-0 was Friday 25 September 23:14 BST; hour 48 is Sunday 23:15. Two characters played on one
+loop of fifteen-minute sessions: the paladin Testvvi from level 13.0 to 15.87 in its fifteen
+hours, then the mage Itheamar, made by the tool at T-0, from level 5.41 at the switch to
+**15.24** at hour 46 (21:10 on Sunday, when the operator took the desk and the bot stood down, as it
+must). 113 changes went in (V175-V287) and none was reverted. Nothing went in after the freeze at
+hour 44 (19:15).
+
+### The goals, by tier
+
+| Tier | Goal | Result |
+|---|---|---|
+| Must | M1 Testvvi at 15.0 or higher at the switch | **Met**: 15.87 at 14:27 on Saturday (hour 15.2) |
+| Must | M2 The mage made by the tool, the switch made by the loop | **Met**: made and entered at T-0 (23:39-23:43), switched by the campaign at 14:27:30-14:28:50 |
+| Must | M3 The mage at 8 or higher by hour 48 | **Met**: 8 at 20:02 on Saturday (hour 20.8); 15.24 at hour 46 |
+| Must | M4 No stop over 60 minutes; the loop recovers on its own | **Met**: no failure stopped play for more than 53 minutes (after session 157, the paladin wedged at the Sentinel Hill inn). Play stood down twice for the operator at the desk, by design: 14:29-15:42 on Sunday (73 minutes; the keeper relaunched the client when the desk was quiet) and from 21:10 |
+| Must | M5 Discipline | **Met, with a lapse**: every change committed with tests, pushed and in DECISIONS; the suite passed before each deploy; the two-hour scoreboard lapsed from block 10 to 15 and was filled at 12:15 on Sunday; V178-V188's trials were never formally judged |
+| Should | S1 Testvvi at 16.0 at the switch | **Missed**: 15.87 |
+| Should | S2 The mage beats Testvvi's play time to each milestone; 12 by hour 48 | **Half met**: 12 at hour 32.8. Slower to each milestone: 5 at about 3.2 h of play (Testvvi 2.1), 8 at 8.8 (8.2), 10 at 14.9 (12.7), 12 at 20.6 (19.8) |
+| Should | S3 Caster profile: pulls from 25 yards, drinks for mana, trains on time, 1.0 deaths an hour | **Partly**: drinks and conjures its own food and water; trains, but reached the Goldshire trainer late at 10 (the inn's floors, V263-V268); pulls from 18 yards (plates show within about 20); deaths 3.96 an hour |
+| Should | S4 1.0 deaths an hour or fewer | **Missed**: 3.86 an hour over 40.4 hours of play; 1.4-1.5 in the best blocks (15, 16) |
+| Should | S5 Streamlined | **Met**: retired paths removed at hour 17 (V222-V234: 6,923 source and 3,207 test lines); ARCHITECTURE, OPERATING and README current (638bd24); the analysis scripts are tools with tests (deaths_report, fight_costs) |
+| Stretch | X1 Testvvi at 17 at the switch | **Missed** |
+| Stretch | X2 The mage at 14 by hour 48 | **Met**: 14 at 16:40 on Sunday (hour 41.4), and 15 at 20:17 (hour 45.1) |
+| Stretch | X3 An 8-hour block at 4,000 XP/h; 10 tutor calls an hour or fewer | **Half met**: tutor calls at most 3.5 an hour (block 19, once V286 let it play); the best two-hour blocks were 4,234 (Testvvi, block 4), 4,098 and 4,029 (the mage, blocks 15 and 19), and no four in a row averaged 4,000 |
+
+### The characters
+
+| Character | Sessions | Hours played | Level | XP | XP/h | Kills/h | Deaths/h | Stuck/h |
+|---|---|---|---|---|---|---|---|---|
+| Testvvi, human paladin | 134-188 | 11.36 | 13.0-15.87 | 34,517 | 3,039 | 31.3 | 3.6 | 35.2 |
+| Itheamar, human mage | 189-311 | 29.07 | 5.41-15.24 | 74,277 | 2,555 | 38.2 | 4.0 | 47.7 |
+
+The mage reached 8 at 20:02 on Saturday (hour 20.8), 9 at 23:03, 10 at 02:18 on Sunday, 11 at 05:32,
+12 at 08:03, 13 at 11:42, 14 at 16:40 and 15 at 20:17. Its first 3.3 hours (levels 1 to 5.41) were visits during the paladin's fifteen hours:
+the T-0 dry run, four sessions in the paladin's hearthstone cooldowns, and live checks of caster
+fixes (V195-V208).
+
+### The scoreboard
+
+The two-hour blocks are in the ledger (`docs/plans/forty-eight-hour-ledger.md`, Blocks), with each
+block's changes and verdict. In short:
+
+| Block | Hours | Character | Level | XP/h | Deaths/h | Stuck/h |
+|---|---|---|---|---|---|---|
+| 1 | 0-2 | Testvvi | 13.00-13.45 | 2,682 | 4.3 | 52.8 |
+| 2 | 2-4 | Testvvi | 13.45-13.78 | 2,466 | 10.1 | 11.4 |
+| 3 | 4-7 | Testvvi | 13.78-14.23 | 2,768 | 2.7 | 56 |
+| 4 | 7-12 | Testvvi | 14.23-15.25 | 4,234 | 2.6 | 30.3 |
+| 5 | 12-15 | Testvvi | 15.25-15.87 | 2,365 | 2.8 | 22.9 |
+| 6 | 15-17 | Itheamar | 5.41-6.48 | 1,681 | 2.0 | 96.5 |
+| 7 | 17-19 | Itheamar | 6.48-7.28 | 1,576 | 4.0 | 185 |
+| 8 | 19-21 | Itheamar | 7.28-8.34 | 2,256 | 7.6 | 52.5 |
+| 9 | 21-23 | Itheamar | 8.34-8.93 | 1,583 | 3.5 | 104 |
+| 10 | 23.6-25.8 | Itheamar | 8.93-9.65 | 2,170 | 6.6 | 23.9 |
+| 11 | 25.8-28.0 | Itheamar | 9.65-10.34 | 2,306 | 4.8 | 54.5 |
+| 12 | 28.0-30.2 | Itheamar | 10.34-10.97 | 2,142 | 5.8 | 52.0 |
+| 13 | 30.2-32.3 | Itheamar | 10.97-11.80 | 3,556 | 2.0 | 8.9 |
+| 14 | 32.3-34.4 | Itheamar | 11.80-12.16 | 1,624 | 3.5 | 23.7 |
+| 15 | 34.4-36.4 | Itheamar | 12.16-12.99 | 4,098 | 1.5 | 7.0 |
+| 16 | 36.4-38.6 | Itheamar | 13.00-13.49 | 2,903 | 1.4 | 10.5 |
+| 17 | 38.6-42.0 | Itheamar | 13.49-14.03 | 2,516 | 1.8 | 3.7 |
+| 18 | 42.0-44.0 | Itheamar | 14.03-14.50 | 3,454 | 7.0 | 15.0 |
+| 19 | 44.0-46.0 | Itheamar | 14.50-15.24 | 4,029 | 3.5 | 36.5 |
+
+Block 17 holds the operator's 73 minutes at the desk; block 18 is the mage's first Westfall at 14, the
+12-20 guide's quests (Patrolling Westfall, the People's Militia, Goretusk Liver Pie, the Forgotten
+Heirloom, the Killing Fields), with sessions of 5,400-7,000 XP an hour from hand-ins and seven
+deaths an hour among the Riverpaw and Defias camps.
+
+### What changed, and what it did
+
+V175-V287, 113 changes, none reverted; the hour entries above (hours 4, 8, 12, 15, 24 and 36) give
+each with its evidence. By what they were for:
+
+| For | Changes | What they did, measured |
+|---|---|---|
+| Walking, doors and floors | 17: V178, V183, V198, V218, V230-V232, V235-V236, V238-V239, V263-V268 | Stuck events fell about fivefold after V178 (hour 4). The door simulator's stuck events went 108 to 6 (V198) and 45 to 1 (V265, the inn's door jamb). The mage's stuck events an hour: 185 in block 7, 7 in block 15. Frost Nova (10) and Fireball 3 (12) were bought up the Lion's Pride stairs with no stuck event |
+| Hostile units on the way, at meals and get-ups | 10: V197, V213, V233, V247-V248, V255, V257-V258, V270, V284 | The mage's 34 deaths in sessions 195-219 all began within 18 yards of a hostile spawn (V247's evidence). On 31 real routes V270 halved the spawns passed for 6-9% more walking. After V258, session 230 made 1,075 XP with no death, where 222-229 had 14 |
+| Fights | 25: V176, V180, V187-V188, V191, V202, V204, V207-V212, V249, V251, V256, V269, V271, V273, V275, V277, V282-V283, V285, V287 | The caster's worst faults, found on its visits, went first (V204-V208: "not in front" 40 times at full mana). Fights with two or more attackers still cost 0.36 of health against 0.21 for one (sessions 246-279); unanswered roots were 18 of 169 before V282, and 1 corpse in 30 was looted with a second attacker counted before V283 |
+| Merchants, repairs, training, bags and the hearth | 31: V175, V185-V186, V192, V194-V196, V199-V201, V203, V205-V206, V215, V217, V237, V240-V244, V246, V250, V253-V254, V259-V261, V278-V279, V281 | Walks to a merchant or smith the purse could not pay ended (V186, V195-V196, V206); spells bought by value, the ones the bot presses (V237); talents on the class's build (V261: Improved Fireball 1-4). The broken-gear hearth that took the mage 3,500 yards from a repairer 232 yards off (session 266) went (V278) |
+| Guides and the playhead | 15: V177, V179, V181-V182, V193, V214, V219-V221, V234, V245, V262, V272, V276, V280 | Held on Elwynn's Prowlers from 10 to 14 (V262, V276, V280), the mage made 3,500-4,600 XP an hour; the six sessions of Westfall at 12 made 1,026 XP an hour with five deaths in 35 minutes |
+| The strip and the client | 4: V184, V189-V190, V216 | The strip is read on the grid where it was last read whole, after two sessions could not read it at all (V184); a person at the desk is three inputs in three seconds, not ten (V216) |
+| What the bot learns | 3: V252, V274, V286 | The Prowler stations went from 11% of visits paid off to 58% (201 visits). V286 let the tutor play at all: before it, all 15 of its calls since T-0 were cancelled within 131 ms; after it, one rescue went to the tutor (7 decisions, median 7.2 s) and one to the routine |
+| Consolidation | 8: V222-V229 | 6,923 source and 3,207 test lines out at hour 17, the suite green throughout |
+
+### Deaths and stuck events over time
+
+Deaths an hour, by block: the paladin 4.3, 10.1, 2.7, 2.6, 2.8 (Westfall's units two to five levels
+up in block 2); the mage 2.0, 4.0, 7.6, 3.5, 6.6, 4.8, 5.8, 2.0, 3.5, 1.5, 1.4, 1.8, 7.0, 3.5. The mage's deaths were
+fights with two to six attackers almost throughout: kobolds two and three at a time at Fargodeep
+(block 7), Mangy Wolves and bears (8), the murlocs of Crystal Lake (10, ten of sixteen), Prowler pairs
+(11-13), and Westfall's Riverpaw camps at 12 (14, five in 35 minutes). Of 127 deaths since session 150,
+2 came in the gap between sessions, and 1 while the loop was held. A quarter of the mage's deaths since
+session 222 (15 of 59) came within three minutes of getting up, most after eating back to health, in
+the place the first death came from; the next get-up then goes to the Spirit Healer (`DEATH_TRAP_S`).
+
+Stuck events an hour, by block: the paladin 52.8, 11.4, 56, 30.3, 22.9; the mage 96.5, 185, 52.5, 104,
+23.9, 54.5, 52.0, 8.9, 23.7, 7.0, 10.5, 3.7, 15.0, 36.5. The peaks were buildings: the Sentinel Hill inn's loft (block
+3), William Pestle's house in Goldshire and the Westbrook Garrison (7 and 9: V230-V232 back out the way in), and the Lion's
+Pride Inn's stairs to the mage trainer (11-12: V263-V268).
+
+### What the learners gained
+
+- **Hunt stations** (`hunt.station`): 1,422 visits to 219 stations, from 247 at T-0. Once V252 scored
+  a station only when it was reached, the Prowler stations went from 11% of visits paid off (02:55 on
+  Sunday) to 43% by morning and 58% of 201 by noon; the blocks' stations column went from 5 of 15
+  (block 10) to 49 of 76 (block 15). V274 counts a death at a station as four fruitless visits.
+- **The heal line** (`fight.heal_below`, the paladin's): 448 fights, 395 won; with two attackers or
+  more the line is drawn and learned apart (V172).
+- **The danger map**: 2,381 cells from 1,217 at T-0; meals and get-ups keep clear of its hot cells.
+- **The tutor**: in its role since V158, the rescuer of a routine that failed, it made no decision for
+  39 hours: all 15 of its calls were cancelled within 131 ms, because the step failed over in the same
+  look as the failure (found at 14:40 on Sunday, V286). After V286 it played a rescue live, seven
+  decisions at a median 7.2 s (session 307); the recovery choice (`recover.after_failure`) has yet to
+  record an outcome, both rescues having been cut short by combat.
+
+### What failed, and the next backlog
+
+What failed, measured:
+- **Deaths**: 3.86 an hour against a goal of 1.0. Nearly all were fights with two to six
+  attackers: Prowler pairs, murlocs, Westfall's Riverpaw camps. Each change against them helped
+  (V269-V275, V282-V285), and none took a block's rate under 1.4 an hour.
+- **Indoor walks**: the Lion's Pride Inn cost the mage its trainer at level 10 for most of four
+  sessions (49 and 67 stuck events in 238 and 244) until V263-V268 taught the walker floors, and
+  the paladin stood wedged on a crate in the Sentinel Hill inn's loft for about ninety minutes on Saturday morning (sessions 156-159).
+- **Guide handovers**: three faults at the join of two guides, each ending sessions early: the band
+  rule leaving a hand-in behind (V177), the 12-20 guide sending a level 9 mage into Westfall (V262),
+  and a guide outgrown below the next one's entry (V280, amended at 11:43 on Sunday: sessions
+  277-278 lasted 8 and 7 s, and the loop was held five minutes while it was fixed; the mage, at
+  full health at 11:44:12, was dead at 11:49:30, killed standing idle in that hold).
+- **Westfall at 14**: the 12-20 guide's quests made the run's best sessions (5,400-7,000 XP an hour)
+  and its worst block for deaths (block 18: seven an hour), in the Riverpaw and Defias camps.
+- **Polymorph and Arcane Explosion never reached the bar**: at the level 14 trainer the mage bought three
+  new ranks and "nothing to place": its bar was full, so V277's Arcane Explosion and V287's Polymorph, each
+  a new line needing a slot, were not worth buying. V287 has not fired.
+- **The trials**: the plan asked for each change to be judged on its own block. The blocks were
+  judged (the scoreboard's verdicts), and V282-V285 each on its four sessions, but most changes
+  were deployed several to a block and have a prediction and a proof line in the ledger without a
+  verdict of their own; V178-V188 still read "Trial". The blocks lapsed for twelve hours
+  (blocks 10-15, filled at 12:15 on Sunday).
+
+The next backlog, by expected value:
+0. **A slot for Polymorph and Arcane Explosion**: the mage's full bar at 14 kept both off it. The
+   conjured food and water, pressed from the bags as well as the bar, could give up their slots.
+1. **Fights with more than one attacker**, still the deaths: pull from the edge of a camp toward
+   open ground; count a camp's units by yards from the spawn index, not by the pixels between
+   nameplates (`CROWD_PX`); for casters, Arcane Explosion's first measured fights at 14.
+2. **The caster's pull range**: 18 yards, because nameplates show within about 20. Tab and the
+   target frame could select at 30, out of most units' reach.
+3. **Quest objectives in dense camps**: defer an objective whose camp stands above the character
+   (as V193 does for grind ribs), rather than learning it by dying (V274).
+4. **Session boundaries**: a session that ends low or in a fight leaves the character standing in
+   the gap (2 of 127 deaths since session 150); rest before the end, or keep the gap short.
+5. **Refused presses**: 7% of attack presses go unanswered (not facing 3%, not ready 3%);
+   the not-ready ones while the bar paints the slot ready are not understood.
+6. **Choice points** from the plan's list: `rib.choice` (which grind at a level, by XP a minute
+   net of deaths) has the variance to learn from.
+7. **The hive**: the operator's next project, planned from 21:40 on Sunday in its own directory. The
+   server's playerbots module, off since 19 September, gives hundreds of bodies on a separate realm;
+   Jev's own brain drives them through the module's command server, and what they learn - danger,
+   stations, guide faults, fight rules tried at scale - reaches the live bot only once checked
+   against its own play.
+
+### Decisions for the operator
+
+- Items are never destroyed: the vendor client has no destroy path, by design. Bags are bought instead
+  (V260). Say if a full bag of grey items may be destroyed.
+- The caster's stand-off: 18 yards now. About 28 would be safer, but nameplates show only within
+  about 20 yards, so pulling from further needs another way to see the target.
+- Session length after the freeze: fifteen minutes now; longer sessions would save the half-minute
+  start of each, but a session that ends mid-fight or low is the character's exposure (session 276's
+  death came in the gap).
+
+### How to run it
+
+Start the loop once, `setsid nohup tools/session_loop.sh > /dev/null 2>&1 < /dev/null &`
+(check `pgrep -af session_loop` first); it plays fifteen-minute sessions of the character the
+campaign names (`var/campaign.json`) and the keeper (`tools/keep.sh`, on a systemd timer) brings
+back the servers, the client and the loop when they stop. `tools/keep.sh status` says green or
+red and why. `touch var/loop/hold` pauses between sessions and `rm` resumes; `touch
+var/loop/stop` ends the loop after the session, and `captures/teaching/STOP` ends the session
+now. A change is made in the `../ForeverV2-dev` worktree with a test, the full suite run to a
+log, and `tools/deploy.sh w48 LOG` merges it at the next session boundary, checks it offline,
+pushes, and lets play go on. `tools/session_report.py --since N --blocks 2` is the scoreboard;
+`tools/deaths_report.py` and `tools/fight_costs.py` say why characters die and what fights cost.
+`docs/OPERATING.md` has the rest.

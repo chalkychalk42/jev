@@ -295,6 +295,8 @@ Now
 
 - **Hours 36-44, 27 Sep:** with the consolidation in at hour 17, the window went to the mage's largest measured losses, one change at a time with its evidence (V281-V285), and to the docs. The freeze at hour 44 (19:15) stands. The blocks for hours 23-36 (10-15) were added at 12:15; they had lapsed after block 9.
 
+- **Closed, 27 Sep 21:50:** the forty-eight hours ended with the mage at 15.24 (21:10, the operator at the desk). The final report is the STATUS entry "the forty-eight hours, against the plan"; V286-V287 went in before the freeze and nothing after it. The next project, the hive, is planned in its own directory.
+
 Blocks
 ------
 
@@ -315,6 +317,10 @@ Blocks
 | 13 (sessions 251-258, 2.01 h played) | 30.2-32.3 | Itheamar | 10.97-11.80 | 3,556 | 2.0 | 8.9 | 0 guide steps/h | 0 | V272-V275 | The mage's first block over 3,500 XP/h: Prowlers at 11, and the stations paid off on 39 of 56 visits (V252's learner) |
 | 14 (sessions 259-267, 2.03 h played) | 32.3-34.4 | Itheamar | 11.80-12.16 | 1,624 | 3.5 | 23.7 | 1.0 guide steps/h | 0 | V276-V278 | Level 12 at 08:02, and the 12-20 guide's Westfall: five deaths in 35 minutes to Riverpaw camps of 13-15s and Defias Smugglers, 39-347 XP a session in 262-266. V276 took the mage back to the Prowlers |
 | 15 (sessions 268-275, 2.01 h played) | 34.4-36.4 | Itheamar | 12.16-12.99 | 4,098 | 1.5 | 7.0 | 0 guide steps/h | 0 | V279-V280 | The run's best mage block: the Prowlers at 12, 5,095 and 4,630 XP/h in 268-269, three deaths; the stations paid off on 49 of 76 visits |
+| 16 (sessions 276-286, 2.09 h played) | 36.4-38.6 | Itheamar | 13.00-13.49 | 2,903 | 1.4 | 10.5 | 0 guide steps/h | 0 | V281-V285 | The Prowlers at 13; the outgrown fault (277-278, 8 and 7 s) and the five-minute hold, in which the mage was killed standing idle; V282-V285 judged kept (V284 in Westfall) |
+| 17 (sessions 287-295, 2.19 h played) | 38.6-42.0 | Itheamar | 13.49-14.03 | 2,516 | 1.8 | 3.7 | 0.5 guide steps/h | 0 | V286-V287 | The operator at the desk 14:29-15:42, the bot stood down; level 14 at 16:40 (session 293), Improved Fireball 5, three ranks bought at Zaldimar and nothing placed: the bar full, no Polymorph, no Arcane Explosion |
+| 18 (sessions 296-303, 2.01 h played) | 42.0-44.0 | Itheamar | 14.03-14.50 | 3,454 | 7.0 | 15.0 | 2.0 guide steps/h | 0 | - | Westfall's 12-20 quests at 14: the best hand-in sessions (7,027 XP/h in 301) and seven deaths an hour in the Riverpaw and Defias camps |
+| 19 (sessions 304-311, 2.00 h played) | 44.0-46.0 | Itheamar | 14.50-15.24 | 4,029 | 3.5 | 36.5 | 3.0 guide steps/h | 3.5 | - (frozen) | Level 15 at 20:17 (Ignite 1); the tutor's first rescue, seven decisions (session 307, V286); the operator at the desk from 21:10 |
 
 Trials
 ------
