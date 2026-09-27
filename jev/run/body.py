@@ -1458,7 +1458,8 @@ class LiveBody:
         durability = state.bags.durability_min
         distance = self._repairer_yards()
         if (durability is not None and durability <= BROKEN_DURABILITY
-                and distance is not None and distance > HEARTH_TO_REPAIR_YARDS):
+                and distance is not None and distance > HEARTH_TO_REPAIR_YARDS
+                and self._home_repairs(distance)):
             home = self._go_home()
             self.say(f"  broken gear and the nearest repairer {distance:.0f} yards off: "
                      f"hearthstone {home.value} {self.hearth.detail}".rstrip())
@@ -1467,15 +1468,32 @@ class LiveBody:
             self.policy_context.repaired()
         return self._result(repaired, self.repair.detail)
 
-    def _repairer_yards(self) -> float | None:
+    def _home_repairs(self, distance: float) -> bool:
+        """Home by hearthstone is the way to a repairer (V278): one stands by home, and the walk
+        back from home is shorter than the walk to the nearest repairer and back. A stone bound
+        where the guide worked before is not: the level 12 mage, back on Elwynn's Prowlers with
+        its stone bound at Sentinel Hill, hearthed 3,500 yards from a repairer 232 yards off, and
+        walked it all back (session 266). A home not known is taken to stand by an armourer, as
+        a new character's does."""
+        home = load_home(self.home_memory)
         here = self._position()
-        if here is None:
-            return None
+        if home is None or here is None:
+            return True
+        by_home = self._repairer_yards(at=home[:2])
         world = map_to_world(*here, self.client.bounds)
+        return (by_home is not None and by_home <= HEARTH_TO_REPAIR_YARDS
+                and math.dist(home[:2], world[:2]) < 2 * distance)
+
+    def _repairer_yards(self, at: tuple[float, float] | None = None) -> float | None:
+        if at is None:
+            here = self._position()
+            if here is None:
+                return None
+            at = map_to_world(*here, self.client.bounds)
         placed = [m.world for m in self._repairers()] or [
             n.world for n in self.graph.nodes if n.kind is StepKind.REPAIR
             and n.world is not None and n.map_id == self.client.bounds.map_id]
-        return min((math.dist(w[:2], world) for w in placed), default=None)
+        return min((math.dist(w[:2], at[:2]) for w in placed), default=None)
 
     def _vendor(self, state) -> Result:
         values, here = self._read(), self._position()

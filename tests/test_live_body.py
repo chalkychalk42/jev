@@ -1067,6 +1067,41 @@ def test_broken_gear_far_from_a_repairer_goes_home_by_hearthstone_first(
     assert calls == (["hearth", "repair"] if hearths else ["repair"])
 
 
+
+@pytest.mark.parametrize(("home_x", "by_home_x", "repairer_x", "hearths"), [
+    (3500.0, None, 232.0, False),     # home far off where the guide was: walk to the repairer
+    (300.0, 310.0, 600.0, True),      # home near, an armourer by it: home first
+    (300.0, None, 600.0, False)])     # home near, no armourer by it: walk
+def test_broken_gear_goes_home_only_when_home_is_the_way_to_a_repairer(
+        tmp_path, home_x, by_home_x, repairer_x, hearths):
+    """V278: back on Elwynn's Prowlers with its stone bound at Sentinel Hill, the level 12
+    mage hearthed 3,500 yards from a repairer 232 yards off (session 266)."""
+    from jev.clients.hearth import Hearthed
+    from jev.guide.coords import map_to_world
+    from jev.world.home import save_home
+    from jev.world.state_v1 import Bags
+
+    b = body()
+    b.client.bounds = ZoneBounds(1, 0, 1000, 0, 1000, 0)     # no catalog repairer inside
+    b.client.position = lambda: (0.5, 0.5)
+    here = map_to_world(0.5, 0.5, b.client.bounds)
+    b.home_memory = tmp_path / "home.json"
+    save_home(b.home_memory, (here[0] + home_x, here[1], 0.0), name="an inn")
+    base = b.graph.nodes[0]
+    nodes = [base, base.model_copy(update={"id": "armourer", "kind": StepKind.REPAIR,
+                                           "world": (here[0] + repairer_x, here[1], 0),
+                                           "target_name": "Godric Rothgar"})]
+    if by_home_x is not None:
+        nodes.append(base.model_copy(update={"id": "home armourer", "kind": StepKind.REPAIR,
+                                             "world": (here[0] + by_home_x, here[1], 0),
+                                             "target_name": "Kirk Maxwell"}))
+    b.graph = Graph(graph_id="g", faction="alliance", entry="quest", nodes=tuple(nodes))
+    calls = []
+    b.hearth = SimpleNamespace(run=lambda: calls.append("hearth") or Hearthed.HOME, detail="")
+    b.repair = SimpleNamespace(run=lambda: calls.append("repair") or Repaired.DONE, detail="")
+    b._repair(seen(bags=Bags(durability_min=0.0, free=5)))
+    assert calls == (["hearth", "repair"] if hearths else ["repair"])
+
 def test_a_meal_is_taken_out_of_reach_of_the_camps_spawns():
     """Eating in the middle of the wolf camp was bitten at 26% health (run
     20260924T053651-ac99b2)."""
