@@ -11,6 +11,12 @@ Now
   - Hours count from then: hour 15 is Saturday 14:15, hour 36 Sunday 11:15, hour 44
     Sunday 19:15, and hour 48 Sunday 23:15.
   - The campaign's switch deadline was moved to Saturday 14:15.
+- **Current state, 27 Sep 13:40:** the mage Itheamar (key 73ce06a8) plays alone, the campaign
+  having no character after it: level 13.5 on Elwynn's Prowlers (the 1-12 guide's 9-11 grind,
+  held to 14 by V262 and V280), then the 12-20 guide in Westfall. A change goes live by
+  `tools/deploy.sh w48 LOG` from the live checkout once the dev worktree's suite has written
+  LOG. The latest changes are V281-V285; the freeze is at 19:15 (hour 44) and the final report
+  due by 22:15 (hour 47). The blocks table below is current to block 15.
 - **T-0, step by step:**
   - 23:14: the desk had been idle 4.5 h and the servers were up.
   - 23:15: the client was launched; the login put Testvvi in Goldshire at level 13; the
@@ -287,7 +293,7 @@ Now
 
 - **Deviation from §11, 26 Sep 16:05:** the consolidation was prepared on a side branch from 13:00 (steps 1-6: 6,923 source lines and 3,207 test lines out), replayed onto w48 with its DECISIONS rows renumbered V222-V229, and deployed at hour 17 rather than hours 36-44: a day of play on it before the freeze, where the plan left eight hours. The addon's field table is unchanged (the generated `Fields.lua` is identical), and the loop's launch flags pass the real offline check (a new test).
 
-- **Hours 36-44, 27 Sep:** with the consolidation in at hour 17, the window went to the mage's largest measured losses, one change at a time with its evidence (V281-V283), and to the docs. The freeze at hour 44 (19:15) stands. The blocks for hours 23-36 (10-15) were added at 12:15; they had lapsed after block 9.
+- **Hours 36-44, 27 Sep:** with the consolidation in at hour 17, the window went to the mage's largest measured losses, one change at a time with its evidence (V281-V285), and to the docs. The freeze at hour 44 (19:15) stands. The blocks for hours 23-36 (10-15) were added at 12:15; they had lapsed after block 9.
 
 Blocks
 ------
