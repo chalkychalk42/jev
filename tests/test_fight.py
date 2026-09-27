@@ -23,6 +23,7 @@ from jev.clients.fight import (
     Fight,
     Fought,
 )
+from jev.clients.fight import GCD_GUARD_S as REAL_GCD_GUARD_S
 from jev.clients.hid import Humaniser
 from jev.clients.targeting import (
     ClickCode,
@@ -893,6 +894,21 @@ def test_selection_cancellation_propagates():
     with pytest.raises(Cancelled, match="stop requested"):
         f.select(1161)
 
+
+
+@pytest.fixture(autouse=True)
+def _no_global_cooldown_guard(monkeypatch):
+    """The wait after a press the client acted on (V285) is its own tests'; the others press as
+    fast as their looks come, as they did before it."""
+    monkeypatch.setattr("jev.clients.fight.GCD_GUARD_S", 0.0)
+
+
+@pytest.fixture
+def gcd_guard(monkeypatch):
+    """The real wait after a press the client acted on (V285)."""
+    from jev.clients import fight
+
+    monkeypatch.setattr(fight, "GCD_GUARD_S", REAL_GCD_GUARD_S)
 
 @pytest.fixture
 def combat_clock(monkeypatch):
@@ -2698,6 +2714,33 @@ def test_a_root_the_client_does_not_answer_is_not_stepped_clear_of(combat_clock)
     f.read = lambda: {**contact, "bars.ready": 0b000111}
     assert f._root(mage, contact) is True
     assert hid.taps == ["6", "6"] and hid.holds == [("s", 2.0)], "answered: stepped clear"
+
+
+def test_no_press_inside_the_global_cooldown_of_the_last_one_answered(combat_clock, gcd_guard):
+    """V285: the global cooldown ends later than the bar paints it. Of the mage's 78 presses
+    refused as not ready, 75 came within 2 s of the press before; at 1.7 s 106 presses were
+    answered and 30 refused, and from 1.9 s none (sessions 246-283)."""
+    from dataclasses import replace
+
+    blast = Ability(slot=6, role=Role.ATTACK, name="Fire Blast", mana=40, spell_id=2136)
+    nova = Ability(slot=5, role=Role.ROOT, name="Frost Nova", mana=55, spell_id=122)
+    mage = replace(MAGE, abilities=(*MAGE.abilities, blast, nova))
+    contact = {**AT_RANGE, "target.in_melee": True, "vitals.hp": 0.4,
+               "bars.usable": 0b110111, "bars.ready": 0b110111}
+    hid = _Hid()
+    f = _fight([contact], hid=hid)
+    f.profile = mage
+    f._rotate(contact)
+    first = list(hid.taps)
+    assert first, "nothing pressed at contact"
+    f._rotate({**contact, "bars.gcd": 0.5})             # answered: its global cooldown
+    combat_clock[0] += REAL_GCD_GUARD_S - 0.2
+    f._rotate(contact)                                   # the bar paints it over
+    assert hid.taps == first, "pressed inside the global cooldown"
+    assert f._root(mage, contact) is False and hid.taps == first, "the root waits too"
+    combat_clock[0] += 0.2
+    f._rotate(contact)
+    assert len(hid.taps) == len(first) + 1
 
 
 def test_the_root_is_held_for_a_second_attacker_or_a_fight_going_badly(combat_clock):

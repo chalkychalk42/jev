@@ -142,6 +142,12 @@ PRESS_GIVE_UP = 3
 # in 19 s against a murloc at 23% (session 201) and 12 in 13 s against two wolves (214),
 # "Spell is not ready yet" each time, and died both times.
 NOT_READY_HOLD_S = 4.0
+# After a press the client acted on, no other is made before this (V285): its global cooldown
+# ends later than the bar paints it. Of the mage's 78 presses refused as not ready (sessions
+# 246-283), 75 came within 2 s of the press before; at 1.7 s after one, 106 presses were
+# answered and 30 refused, at 1.8 s 222 and 6, and from 1.9 s none was refused. Each refusal
+# cost a look and left its row out for `NOT_READY_HOLD_S`: Fireball, then Arcane Missiles.
+GCD_GUARD_S = 1.9
 
 # After a target vanishes, how long to watch for the experience that proves a kill.
 SETTLE_LOOKS = 3
@@ -481,6 +487,8 @@ class Fight:
     _dropped: tuple[int, int] = field(default=(0, 0), init=False)
     # Slots the client refused as not ready, and until when they are left (V251).
     _held: dict[int, float] = field(default_factory=dict, init=False)
+    # When the last press the client acted on was made, a toggle's aside (`GCD_GUARD_S`).
+    _gcd_from: float | None = field(default=None, init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
     _race: list[tuple] = field(default_factory=list, init=False)
     # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
@@ -1583,6 +1591,8 @@ class Fight:
             return False
         usable, ready = values.get("bars.usable"), values.get("bars.ready")
         now = time.monotonic()
+        if self._in_gcd(now):
+            return False
         for row in profile.by_role(Role.ROOT):
             bit = 1 << (row.slot - 1)
             if ((usable is not None and not usable & bit) or (ready is not None and not ready & bit)
@@ -1873,7 +1883,8 @@ class Fight:
         def pressable(a: Ability) -> bool:
             bit = 1 << (a.slot - 1)
             return (bool(ready & bit) and bool(usable & bit)
-                    and self._held.get(a.slot, 0.0) <= looked)
+                    and self._held.get(a.slot, 0.0) <= looked
+                    and (a.toggle or not self._in_gcd(looked)))
 
         hp = values.get("vitals.hp")
         in_combat = values.get("vitals.combat") is True
@@ -2135,6 +2146,8 @@ class Fight:
         ability, when, last_use, lasting, saved_at, _ = self._pending_press
         if self._answer_in(values):
             self._pending_press = None
+            if not ability.toggle:
+                self._gcd_from = when
             self._dropped = (0, 0)
             return True
         age = time.monotonic() - when
@@ -2163,6 +2176,10 @@ class Fight:
         if ability.role is Role.HEAL:
             self._pending_heal = None
         return True
+
+    def _in_gcd(self, now: float) -> bool:
+        """Inside the global cooldown of the last press the client acted on (V285)."""
+        return self._gcd_from is not None and now - self._gcd_from < GCD_GUARD_S
 
     def _answer_in(self, values: dict) -> bool:
         """The client acted on the pending press: a cast, the global cooldown, the slot's own
