@@ -390,6 +390,7 @@ Trials
 | V267 the tracked height kept across sessions; V268 a trail-less indoor wedge tries the next floor | session 245 | sessions that begin indoors walk out | `the next plan starts on the floor at N` followed by a complete walk outdoors | **V267 fired**, session 246: taken up at 63.9 (the inn's upper floor, where 245 ended) and an 11.9-yard plan to Zaldimar; `TRAIN_CLASS: done, 3 bought for 1140 copper [Frost Nova 1, Conjure Water 2, Frost Armor 2]`, Frost Nova on slot 10. V268 not yet seen | |
 | V269 below half health a corpse waits while anything else attacks | session 246 | fewer deaths in two-attacker fights | `corpse looted: no_corpse - at N% health with something still attacking; not now` after a kill with the selection cleared | | |
 | V270 each place a route passes spawns gone round on its own | session 248 | fewer attacks on long walks; the walk into Westfall at 12 | `round N units` on long walks; walk deaths per hour | | |
+| V271 a caster with more than one attacker steps aside after its root | session 249 | fewer deaths to Prowler pairs | `engage.root` events with `step` q or e; deaths with two attackers per hour | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues

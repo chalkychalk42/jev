@@ -302,6 +302,11 @@ MAX_RANGED_STEPS = 8
 # After a root at contact (Frost Nova) a caster backs off this long, still facing: about
 # nine yards at the walk backwards, out of the held unit's reach (V169).
 STEP_CLEAR_S = 2.0
+# With more than one unit counted attacking it steps aside instead, this long at a run (V271):
+# about ten yards square to the one it faces, clear of one in front and one behind. Backing
+# straight off the one faced took the level 10 mage into the Prowler behind it, held and still
+# in reach, and it died with the one it faced at 28% (session 247).
+STEP_ASIDE_S = 1.5
 # A press whose ability's mana has at least this share gone since it was pressed was
 # answered, whatever the bar painted (V176).
 ANSWER_SPENT = 0.7
@@ -394,6 +399,7 @@ class Fight:
     _toggled: bool = field(default=False, init=False)
     _pending_heal: tuple[float, float] | None = field(default=None, init=False)
     _damage_mark: float | None = field(default=None, init=False)
+    _asides: int = field(default=0, init=False)          # steps aside after a root, for the side (V271)
     _damage_at: float = field(default=0.0, init=False)
     _last_aim_at: float = field(default=0.0, init=False)
     last_hp: float | None = field(default=None, init=False)
@@ -1502,7 +1508,8 @@ class Fight:
 
     def _root(self, profile: CombatProfile, values: dict) -> bool:
         """At contact, hold what is round the caster (Frost Nova) and back off, still facing,
-        to cast again out of its reach (V169). `True` if a root was pressed."""
+        to cast again out of its reach (V169); with more than one attacker counted, step aside,
+        left and right in turn (V271). `True` if a root was pressed."""
         usable, ready = values.get("bars.usable"), values.get("bars.ready")
         for row in profile.by_role(Role.ROOT):
             bit = 1 << (row.slot - 1)
@@ -1510,9 +1517,13 @@ class Fight:
                 continue
             if self._mana_left_after(row, values) < 0 or not self._press(row):
                 continue
-            event("engage.root", data={"slot": row.slot, "step_clear_s": STEP_CLEAR_S})
+            many = (values.get("combat.attackers") or 0) >= 2
+            self._asides += many
+            key, seconds = (("q" if self._asides % 2 else "e", STEP_ASIDE_S) if many
+                            else ("s", STEP_CLEAR_S))
+            event("engage.root", data={"slot": row.slot, "step": key, "step_s": seconds})
             time.sleep(pace(self.hid, 0.3))    # the root lands with the press: no cast time
-            if not self.hid.hold("s", STEP_CLEAR_S):
+            if not self.hid.hold(key, seconds):
                 self._input_refused = True
                 self.detail = "step-clear input refused"
             return True

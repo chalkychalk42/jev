@@ -2406,6 +2406,24 @@ def test_at_contact_a_caster_roots_and_backs_off(combat_clock):
     assert f._root(mage, cooling) is False, "on its cooldown: the rotation goes on"
 
 
+def test_with_more_than_one_attacker_a_caster_steps_aside_after_its_root(combat_clock):
+    """V271: backing straight off the one faced took the level 10 mage into the Prowler
+    behind it, held and still in reach (session 247). Aside, left and right in turn."""
+    from dataclasses import replace
+
+    nova = Ability(slot=6, role=Role.ROOT, name="Frost Nova", mana=55, spell_id=122)
+    mage = replace(MAGE, abilities=(*MAGE.abilities, nova))
+    pair = {**AT_RANGE, "target.in_melee": True, "bars.usable": 0b100111,
+            "bars.ready": 0b100111, "combat.attackers": 2}
+    hid = _Hid()
+    f = _fight([pair], hid=hid)
+    f.profile = mage
+    assert f._root(mage, pair) is True and f._root(mage, pair) is True
+    assert hid.holds == [("q", 1.5), ("e", 1.5)]
+    assert f._root(mage, {**pair, "combat.attackers": 1}) is True
+    assert hid.holds[-1] == ("s", 2.0), "one attacker: backed off, still facing it"
+
+
 def test_a_casters_mana_line_is_what_its_kills_cost_it(combat_clock):
     """V170: 1.15 times the median of the last ten kills' mana, within 0.35-0.85."""
     f = _mage([AT_RANGE])
