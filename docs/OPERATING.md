@@ -113,6 +113,13 @@ Never edit the live checkout while a session runs: the running process imports f
      must exit 0;
    - release the hold and push.
 
+   `tools/deploy.sh w48 LOG` does step 4 on its own, as a background task from the live
+   checkout: it holds the loop, waits for the suite's log to end in `exit=0` (write it with
+   `pytest -q > LOG 2>&1; echo "exit=$?" >> LOG`), waits for the session to end, merges,
+   runs the offline check (and takes the merge back if it fails), pushes, and releases the
+   hold whatever happened. Commit nothing to `w48` while it waits: the merge takes the
+   branch as it is when the session ends, tested or not.
+
 Three tests are known to fail now and then under the full suite's load (listed in the
 ledger). Rerun the suite before calling a change broken.
 
