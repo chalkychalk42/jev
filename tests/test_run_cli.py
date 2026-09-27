@@ -638,3 +638,28 @@ def test_an_unfinished_guide_stays(tmp_path):
     _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None)
     assert graph.graph_id == "alli_human_1_12.supported"
     assert memory.step_id == "alli_human_1_12_47_gold_dust_exchange_do"
+
+
+@pytest.mark.parametrize(("level", "handed_over"), [(10, False), (12, True), (None, True)])
+def test_a_guide_run_out_below_the_next_ones_first_level_grinds_until_then(
+        tmp_path, capsys, level, handed_over):
+    """V262: V245 passed a dead chain by and the level 9 mage's 1-12 route ran out at 9.85;
+    in the 12-20 guide's Westfall its walk in met a level 14-15 Harvest Watcher and an 18-19
+    Dust Devil, dead both times (session 235)."""
+    from jev.guide import playhead
+
+    path = tmp_path / "character.json"
+    playhead.save("alli_human_1_12.supported",
+                  "alli_human_1_12_59_cloth_and_leather_armor_turnin", {54}, path, finished=True)
+    args = SimpleNamespace(playhead=path, route_mode="supported",
+                           graph=cli.ROOT / "content/tbc/ally_human_1_12.json")
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, level)
+    if handed_over:
+        assert graph.graph_id == "alli_human_12_20.supported"
+        return
+    assert graph.graph_id == "alli_human_1_12.supported", "not on to Westfall at 10"
+    rib = graph.get(memory.step_id)
+    assert rib is not None and rib.kind is StepKind.GRIND and not memory.finished
+    assert rib.level[1] <= level + 1, "a grind for its level"
+    assert memory.entry_level == cli.entry_level(cli.NEXT_GUIDE["alli_human_1_12"]) - 1 == 11
+    assert "grinding" in capsys.readouterr().out

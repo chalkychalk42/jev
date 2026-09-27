@@ -10,7 +10,7 @@ import re
 import signal
 import time
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from jev.clients import operator, win32
@@ -246,9 +246,21 @@ def _guide_on(args, graph, path: Path):
     return graph
 
 
-def remembered(args, graph, key: int | None):
+def entry_level(guide: Path) -> int | None:
+    """The level a guide starts at: its lowest grind's. Below it, its every grind is above
+    the character (V262)."""
+    try:
+        ribs = [n for n in Graph.load(guide).nodes if n.kind is StepKind.GRIND]
+    except (OSError, ValueError):
+        return None
+    return min((r.level[0] for r in ribs), default=None)
+
+
+def remembered(args, graph, key: int | None, level: int | None = None):
     """This character's playhead and route: its own file, found by the key the strip
-    paints, so each character keeps its own place in the guide (`playhead`)."""
+    paints, so each character keeps its own place in the guide (`playhead`). A guide run
+    out below the next one's first level plays its own grind for the character until that
+    level (V262)."""
     if args.playhead is not None:
         path = args.playhead
     elif key is None:
@@ -269,6 +281,19 @@ def remembered(args, graph, key: int | None):
         following = NEXT_GUIDE.get(graph.graph_id)
         if not memory.finished or following is None or not following.exists():
             return path, memory, route, used
+        entry = entry_level(following)
+        if level is not None and entry is not None and level < entry:
+            # Run out early: V245 passed a dead chain by, and the level 9 mage's 1-12 route
+            # ended at 9.85. In the 12-20 guide's Westfall its walk in met a level 14-15
+            # Harvest Watcher and an 18-19 Dust Devil, dead both times (session 235). Its
+            # own grind for its level until the next guide's first, the level kept so a
+            # grind runs on across sessions (V214).
+            rib = used.rib_for(level)
+            if rib is not None:
+                print(f"guide {graph.graph_id} finished at level {level}, below "
+                      f"{following.name}'s {entry}: grinding {rib.id} until then")
+                return path, replace(memory, step_id=rib.id, finished=False, rejoin_to=None,
+                                     rib_until=None, entry_level=entry - 1), route, used
         # This character finished the guide: the next one takes over, its quests carried.
         print(f"guide {graph.graph_id} finished; continuing with {following.name}")
         args.graph = following
@@ -338,7 +363,9 @@ def _live(args, graph) -> int:
         stamp("quest log read")
         # Which character is logged in decides whose playhead this run keeps.
         character = values.get("char.key")
-        path, memory, route, graph = remembered(args, graph, character)
+        level = values.get("char.level")
+        path, memory, route, graph = remembered(args, graph, character,
+                                                level if isinstance(level, int) else None)
         print(f"character {character:08x}: playhead {path}" if character is not None
               else f"playhead {path}")
         zones = bounds_by_radio_id(str(ROOT / "data/zones-tbc-243.json"))
