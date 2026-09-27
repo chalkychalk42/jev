@@ -49,7 +49,13 @@ To be sure, touch the hold, then the STOP file.
 - `tools/session_check.py N`: session N's checks. These are the proof lines each change prints
   at the start, plus kills, level gain, deaths and choices.
 - `tools/session_report.py --since N`: a row per session with minutes, XP, XP an hour, kills,
-  quest steps, deaths, loot, stuck events and money.
+  quest steps, deaths, loot, stuck events and money; `--blocks 2` is the plan's scoreboard.
+- `tools/deaths_report.py N M ...`: each death in sessions N, M: the step, the skill armed,
+  health and mana as the fight began, the most attackers counted, the units selected.
+- `tools/fight_costs.py FIRST LAST`: the fights won and lost by the most attackers counted,
+  with the health, seconds and mana each cost, and the roots the client answered.
+- `tools/choices_report.py`: what the learned choice points have tried and how each paid off
+  (hunt stations, the heal line).
 - The logs:
   - `captures/session-loop.log`: a line per session start and exit, and the campaign's
     decision.
