@@ -312,6 +312,12 @@ STEP_ASIDE_S = 1.5
 # ends unreachable, and the unit is not taken again for `UNHURT_S`. Twice the level 10 mage
 # spent its mana from full to nothing so, and died to the unit when it came (a Mangy Wolf behind
 # a tree at Crystal Lake, session 242; a Murloc Lurker, session 250).
+# The root at contact is held for more than one attacker counted, or for a fight going badly:
+# below this share of health (V275). Pressed at every first contact, it saved single fights 2% of
+# health (median 22% lost before it, 20% after) and cost them 4 s (12 s to 16 s), and was cooling
+# when a second attacker came: fights with two or more went from 33% of health lost to 47%, and
+# the level 10 mage's deaths were such fights (sessions 239-253).
+ROOT_HP = 0.5
 UNHURT_MANA = 0.35
 UNHURT_S = 60.0
 # A press whose ability's mana has at least this share gone since it was pressed was
@@ -796,7 +802,8 @@ class Fight:
                     self._sidestep("los")
                     if self._input_refused:
                         return Fought.REFUSED
-                elif v.get("target.in_melee") is True and not casting and self._root(profile, v):
+                elif (v.get("target.in_melee") is True and not casting and self._root_wanted(v)
+                      and self._root(profile, v)):
                     if self._input_refused:
                         return Fought.REFUSED
                     time.sleep(pace(self.hid, 0.2))
@@ -1539,6 +1546,13 @@ class Fight:
             return (0, attack.slot)
 
         return tuple(sorted(attacks, key=rank))
+
+    @staticmethod
+    def _root_wanted(values: dict) -> bool:
+        """A root at contact for more than one attacker, or below half health (V275)."""
+        hp = values.get("vitals.hp")
+        return ((values.get("combat.attackers") or 0) >= 2
+                or (isinstance(hp, (int, float)) and hp < ROOT_HP))
 
     def _root(self, profile: CombatProfile, values: dict) -> bool:
         """At contact, hold what is round the caster (Frost Nova) and back off, still facing,
