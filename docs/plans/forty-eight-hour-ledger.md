@@ -287,6 +287,8 @@ Now
 
 - **Deviation from §11, 26 Sep 16:05:** the consolidation was prepared on a side branch from 13:00 (steps 1-6: 6,923 source lines and 3,207 test lines out), replayed onto w48 with its DECISIONS rows renumbered V222-V229, and deployed at hour 17 rather than hours 36-44: a day of play on it before the freeze, where the plan left eight hours. The addon's field table is unchanged (the generated `Fields.lua` is identical), and the loop's launch flags pass the real offline check (a new test).
 
+- **Hours 36-44, 27 Sep:** with the consolidation in at hour 17, the window went to the mage's largest measured losses, one change at a time with its evidence (V281-V283), and to the docs. The freeze at hour 44 (19:15) stands. The blocks for hours 23-36 (10-15) were added at 12:15; they had lapsed after block 9.
+
 Blocks
 ------
 
@@ -301,6 +303,12 @@ Blocks
 | 7 (sessions 197-204, 2.01 h played) | 17-19 | Itheamar | 6.48-7.28 | 1,576 | 4.0 | 185 | 3.0 guide steps/h | 0 | V222-V234 (the consolidation at hour 17) | Fargodeep's kobolds: deaths to two and three at once, gear broken, too poor to repair; the stuck count from walks wedged in William Pestle's house and the like (V230-V232) |
 | 8 (sessions 205-213, 2.25 h played) | 19-21 | Itheamar | 7.28-8.34 | 2,256 | 7.6 | 52.5 | 3.6 guide steps/h | 0 | V235-V240 (and V237's schema 18) | Its best XP/h to then and its worst deaths: Mangy Wolves, bears and boars two and three at a time; Frostbolt bought by value (V237) |
 | 9 (sessions 214-221, 2.00 h played) | 21-23 | Itheamar | 8.34-8.93 | 1,583 | 3.5 | 104 | 0 guide steps/h | 0 | V241-V246 | 45 minutes wedged in the Westbrook Garrison (214-217), four deaths in 219 on the Goldshire road; then 2,369, 2,723 and 3,907 XP/h in 219-221 once V245 left the dead chain and V246 looted with the bags full (15 of 16 corpses in 221) |
+| 10 (sessions 222-230, 2.13 h played) | 23.6-25.8 | Itheamar | 8.93-9.65 | 2,170 | 6.6 | 23.9 | 0.9 guide steps/h | 0 | V247-V258 | Sixteen deaths, ten of them murlocs at Crystal Lake on Bounty on Murlocs and Protect the Frontier: spawns drawn from a list were missing from the hostile index until V258, and session 230 then made 1,075 XP with no death |
+| 11 (sessions 231-241, 2.09 h played) | 25.8-28.0 | Itheamar | 9.65-10.34 | 2,306 | 4.8 | 54.5 | 0 guide steps/h | 0 | V259-V264 (V261's schema 19: talents) | Ten deaths: Prowlers and Mangy Wolves, and three on the 12-20 guide's walk into Westfall at level 9 (a Dust Devil 18-19 among them), which V262 ended by grinding 1-12's last rib until 12. The stuck events were the Lion's Pride Inn's floors on the way to the trainer at 10 (49 in session 238) |
+| 12 (sessions 242-250, 2.25 h played) | 28.0-30.2 | Itheamar | 10.34-10.97 | 2,142 | 5.8 | 52.0 | 0 guide steps/h | 0 | V265-V271 | Thirteen deaths on Elwynn's 9-11 grind: Prowler pairs (five), murlocs and wolves two at a time. Frost Nova trained up the inn's stairs in session 246, after V263-V268 |
+| 13 (sessions 251-258, 2.01 h played) | 30.2-32.3 | Itheamar | 10.97-11.80 | 3,556 | 2.0 | 8.9 | 0 guide steps/h | 0 | V272-V275 | The mage's first block over 3,500 XP/h: Prowlers at 11, and the stations paid off on 39 of 56 visits (V252's learner) |
+| 14 (sessions 259-267, 2.03 h played) | 32.3-34.4 | Itheamar | 11.80-12.16 | 1,624 | 3.5 | 23.7 | 1.0 guide steps/h | 0 | V276-V278 | Level 12 at 08:02, and the 12-20 guide's Westfall: five deaths in 35 minutes to Riverpaw camps of 13-15s and Defias Smugglers, 39-347 XP a session in 262-266. V276 took the mage back to the Prowlers |
+| 15 (sessions 268-275, 2.01 h played) | 34.4-36.4 | Itheamar | 12.16-12.99 | 4,098 | 1.5 | 7.0 | 0 guide steps/h | 0 | V279-V280 | The run's best mage block: the Prowlers at 12, 5,095 and 4,630 XP/h in 268-269, three deaths; the stations paid off on 49 of 76 visits |
 
 Trials
 ------
@@ -401,6 +409,8 @@ Trials
 | V279 up at the Spirit Healer, home by hearthstone only when home is near the work | session 269 | no hearth to Sentinel Hill from the Prowlers | `up at the Spirit Healer; home is far from the guide's work: walking on` | | |
 | V280 the next guide waits two levels past its lowest grind (14 for 12-20) | session 271 | the mage on the Prowlers to 14, then Westfall with Arcane Explosion | `below ally_human_12_20.json's 14: grinding alli_human_1_12_grind_elwynn_9_11 until then` | **Fired**, session 271 (deployed 10:22): `finished at level 12, below ally_human_12_20.json's 14: grinding alli_human_1_12_grind_elwynn_9_11 until then`, the playhead's grind to 14 | |
 | V281 merchants of the zone the character stands in count too | session 276 | repairs and sales near the character across a guide's handover | the merchant chosen at the handover to Westfall at 14 | | |
+| V282 a root stepped clear of only once the client answered its press | session 280 | no run of refused roots each followed by a step back (18 of 169 unanswered in 246-279); fights won with a root lose less health | `ability.unanswered` with role root and no `engage.root` after it; `tools/fight_costs.py` roots answered | | |
+| V283 no corpse searched while something still attacks, at any health | session 281 | no loot begun with two attackers counted (30 in 250-279, 1 looted); deaths after a loot fall | `loot: no_corpse - ... with something still attacking; not now` in the session log | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
