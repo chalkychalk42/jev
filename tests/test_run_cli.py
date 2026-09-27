@@ -703,3 +703,10 @@ def test_the_next_guide_waits_a_level_past_its_first_grind_and_the_grind_with_it
     _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 14)
     assert graph.graph_id == "alli_human_12_20.supported"
 
+
+def test_a_guide_is_not_outgrown_before_the_next_one_takes_over():
+    """V280, amended: at 13 the 1-12 guide was outgrown while the 12-20 guide waited for 14,
+    and sessions 277-279 each ended within seconds of starting."""
+    assert cli.outgrown_at("alli_human_1_12") == cli.entry_level(cli.NEXT_GUIDE["alli_human_1_12"]) == 14
+    assert cli.outgrown_at("alli_human_12_20") is None, "no next guide: never outgrown"
+

@@ -193,6 +193,19 @@ OUTGROWN_AT: dict[str, int] = {
 }
 
 
+def outgrown_at(graph_id: str) -> int | None:
+    """The level a guide with a next is outgrown at: its own (V162), and never before the next
+    guide takes over (V280, amended): at 13 the 1-12 guide was outgrown while the 12-20 guide
+    waited for 14, and sessions 277-279 each ended within seconds of starting."""
+    following = NEXT_GUIDE.get(graph_id)
+    if following is None:
+        return None
+    own, entry = OUTGROWN_AT.get(graph_id), entry_level(following)
+    if own is None or entry is None:
+        return own if own is not None else entry
+    return max(own, entry)
+
+
 def worthless_quests(world_db: Path | None, graph: Graph) -> frozenset[int]:
     """The guide's quests that pay no experience and offer no reward to choose, from the
     world snapshot (`compile_route`'s `worthless`, V163). Nothing when it cannot be read."""
@@ -479,8 +492,7 @@ def _live(args, graph) -> int:
                 graph.graph_id, step, done, path, rejoin_to=rejoin, deaths=deaths,
                 retried=retried, rib_until=until, finished=finished, entry_level=entry_level),
             character_key=character,
-            outgrown_at=(OUTGROWN_AT.get(route.source_graph_id)
-                         if route.source_graph_id in NEXT_GUIDE else None),
+            outgrown_at=outgrown_at(route.source_graph_id),
             available_skills=body.available,
             validate_action=body.validate,
         )
