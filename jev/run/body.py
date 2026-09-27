@@ -1633,10 +1633,27 @@ class LiveBody:
         return (Supply(item_id=best, name=f"bag {best}", role="bag", desired=1),)
 
     def _in_zone(self, candidates) -> list:
-        """The merchants standing inside the measured zone's map box."""
-        return [m for m in candidates
-                if (point := world_to_map(*m.world[:2], self.client.bounds)) is not None
-                and all(0 <= value <= 1 for value in point)]
+        """The merchants standing inside the measured zone's map box, or inside the box of the
+        zone the character stands in, another on the same map (V281): at Sentinel Hill on the
+        Elwynn guide the mage's repair went for Frederick Stover in Stormwind, 1,900 yards and
+        no complete plan (session 266), and at 14 it will stand in Elwynn on the Westfall
+        guide, Goldshire's smiths out of its box."""
+        boxes = [self.client.bounds]
+        here = self._zone_here()
+        if (here is not None and here != self.client.bounds
+                and here.map_id == self.client.bounds.map_id):
+            boxes.append(here)
+        return [m for m in candidates if any(
+            (point := world_to_map(*m.world[:2], box)) is not None
+            and all(0 <= value <= 1 for value in point) for box in boxes)]
+
+    def _zone_here(self):
+        """The map box of the zone the strip says the character stands in, or `None`."""
+        zones = getattr(self.client, "coordinate_zones", None)
+        if not zones:
+            return None
+        values = self._read() or {}
+        return zones.get(values.get("pos.zone_id"))
 
     def _ranked(self, candidates, world) -> list:
         """The first `MERCHANT_TRIES` merchants to try from `world`: the shortest walk,

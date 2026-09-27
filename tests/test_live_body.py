@@ -1616,3 +1616,23 @@ def test_talent_points_are_spent_at_a_meal_on_a_schema_19_strip_once_a_level(mon
     reading["char.level"] = 11
     b._spend_talents()
     assert len(runs) == 2
+
+
+def test_a_merchant_in_the_zone_the_character_stands_in_counts_too():
+    """V281: at Sentinel Hill on the Elwynn guide the mage's repair went for Frederick Stover in
+    Stormwind, 1,900 yards and no complete plan (session 266)."""
+    from jev.world.vendor import Merchant
+
+    b = body()
+    elwynn = ZoneBounds(12, 0, 1535.4166, -1935.4166, -7939.583, -10254.166)
+    westfall = ZoneBounds(40, 0, 2033.3333, -1500.0, -9616.6666, -11972.9166)
+    b.client.bounds = elwynn
+    b.client.coordinate_zones = {12080: elwynn, 40: westfall}
+    stover = Merchant(entry=1298, name="Frederick Stover", map_id=0,
+                      world=(-8795.5, 709.1, 102.4), items=frozenset(), repairs=True)
+    macgregor = Merchant(entry=843, name="William MacGregor", map_id=0,
+                         world=(-10653.0, 994.0, 32.0), items=frozenset(), repairs=True)
+    b.client.read = lambda: {"pos.zone_id": 12080}
+    assert b._in_zone([stover, macgregor]) == [stover], "in Elwynn: Elwynn's box"
+    b.client.read = lambda: {"pos.zone_id": 40}
+    assert b._in_zone([stover, macgregor]) == [stover, macgregor], "in Westfall: its box too"
