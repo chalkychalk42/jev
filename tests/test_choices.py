@@ -114,6 +114,24 @@ def test_a_visit_is_timed_and_recorded_as_it_went(tmp_path):
     assert rows[1]["won"] is True and rows[1]["seconds"] == 30.0
 
 
+
+def test_a_visit_that_ended_in_a_death_counts_as_several_that_paid_nothing(tmp_path):
+    """V274: the level 10 mage's deaths were Prowler pairs about once a session (sessions
+    244-253); a station where pairs keep killing it is one to stand at less."""
+    from jev.learn.choices import DEATH_VISITS
+
+    memory = ChoiceMemory(clock=Clock())
+    log = ChoiceLog(tmp_path / "choices.jsonl", clock=Clock())
+    stations = Stations(memory, "hunt.station", "creature:9", log=log, clock=Clock(),
+                        rng=random.Random(1))
+    stations.arrive((0.0, 0.0))
+    stations.died()
+    stations.died()                               # nothing open any more: nothing more
+    arm = memory.arms("hunt.station")["creature:9@0,0"]
+    assert (arm.tries, arm.wins) == (DEATH_VISITS, 0)
+    rows = [json.loads(line) for line in (tmp_path / "choices.jsonl").read_text().splitlines()]
+    assert rows[-1]["event"] == "death" and rows[-1]["visits"] == DEATH_VISITS
+
 def test_a_hunt_is_learned_under_its_creature_else_its_step():
     assert objective_key(2864, "step_a") == "creature:2864"
     assert objective_key(None, "grind_elwynn_9_11") == "step:grind_elwynn_9_11"

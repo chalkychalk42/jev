@@ -310,6 +310,8 @@ class Hunt:
                      + (f" - {self.fight.detail}" if self.fight.detail else ""))
 
             if outcome is Fought.DIED:
+                if chooser is not None:
+                    chooser.died()               # a station to stand at less (V274)
                 self.detail = "died on the objective"
                 return Hunted.DIED
             stopped = {Fought.BLIND: Hunted.BLIND, Fought.REFUSED: Hunted.REFUSED,

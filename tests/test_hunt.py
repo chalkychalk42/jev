@@ -485,6 +485,23 @@ def test_the_hunt_stands_first_where_its_target_has_been_found_and_records_the_v
     assert (arm.tries, arm.wins) == (7, 7), "the visit and its kill were learned"
 
 
+
+def test_a_death_at_a_station_is_learned_against_it():
+    """V274: a visit that ended in the character's death counts as several that paid nothing."""
+    import random
+
+    from jev.learn.choices import DEATH_VISITS, ChoiceMemory, Stations, station_key
+
+    memory = ChoiceMemory()
+    here, there = (0.0, 0.0, 80.0), (60.0, 0.0, 80.0)
+    h, _ = _hunt([Fought.DIED], [(0, 1)])
+    h.stations = Stations(memory, "hunt.station", "creature:9", rng=random.Random(3))
+    assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=(here, there)) is Hunted.DIED
+    arms = memory.arms("hunt.station")
+    (key, arm), = arms.items()
+    assert key in (station_key("creature:9", here), station_key("creature:9", there))
+    assert (arm.tries, arm.wins) == (DEATH_VISITS, 0)
+
 def test_a_station_never_reached_is_not_scored():
     """V252: 42 of 49 station visits were scored lost in sessions 205-217, most of them walks
     cut short on the way, which say nothing of what stands at the station."""

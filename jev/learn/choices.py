@@ -42,6 +42,10 @@ PRIOR_VISITS = 2.0
 # yards further than the nearest (sessions 205-217), on records that were mostly walks cut
 # short, not visits.
 TOUR_DECAY = 0.85
+# A visit that ended in the character's death counts as this many visits that paid nothing
+# (V274): a station where a pair keeps killing the character is one to stand at less. The
+# level 10 mage's deaths were Prowler pairs about once a session (sessions 244-253).
+DEATH_VISITS = 4
 
 
 @dataclass
@@ -172,6 +176,18 @@ class Stations:
         """A station chosen: its visit is timed from here."""
         self.leave(False)
         self._open = (tuple(station), self.clock())
+
+    def died(self) -> None:
+        """The open station's visit ended in the character's death (V274)."""
+        if self._open is None:
+            return
+        key = station_key(self.objective, self._open[0])
+        self.leave(False)
+        for _ in range(DEATH_VISITS - 1):
+            self.memory.record(self.point, key, False, 0.0)
+        if self.log is not None:
+            self.log.write({"event": "death", "point": self.point, "key": key,
+                            "visits": DEATH_VISITS})
 
     def leave(self, won: bool) -> None:
         """The open station's visit ended; `won` says whether it paid off."""

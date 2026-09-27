@@ -393,6 +393,7 @@ Trials
 | V271 a caster with more than one attacker steps aside after its root | session 249 | fewer deaths to Prowler pairs | `engage.root` events with `step` q or e; deaths with two attackers per hour | | |
 | V272 a grind still suited to the level kept at a session's start | the first session at level 11 | the mage stays on the Prowlers (9-11) until 12, not the gnoll camp (11-12) | `grinding alli_human_1_12_grind_elwynn_9_11 until then` at level 11 | **Fired**, session 252, the first at level 11: `finished at level 11, below ally_human_12_20.json's 12: grinding alli_human_1_12_grind_elwynn_9_11 until then`; the level 11 talent point went to Improved Fireball 2 at the first meal (V261) | |
 | V273 a caster's mana spent on a unit that takes nothing ends the fight | session 252 | no death after a fight that drained the mana into an unhurt unit | `fight.unhurt` events; `not hurt` fight details | | |
+| V274 a death at a hunt's station learned against it | session 254 | fewer deaths at the same stations | `death` rows in `choices.jsonl`; deaths per session | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues
