@@ -210,6 +210,10 @@ class Client:
     # session if its first read is where the last one ended.
     trail_memory: Path | None = field(default=None, init=False)
     _trail_pending: list | None = field(default=None, init=False)
+    # And the height tracked where it ended (V267), taken up the same way.
+    _ground_pending: tuple | None = field(default=None, init=False)
+    # Where a wedge with no way in known last moved the height, and the floors tried (V268).
+    _floors_tried: tuple = field(default=(None, ()), init=False)
     # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
     # context and bitmap once and reuses them, so two threads grabbing at the same time
     # tear each other's frame in half. The heartbeat samples on its own thread, so every
@@ -308,9 +312,49 @@ class Client:
         v = self.read()
         if v is None or v.get("pos.mx") is None or v.get("pos.my") is None:
             return None
+        self._take_ground(v)
         self._track_height(v)
         self._note_trail(v)
         return (v["pos.mx"], v["pos.my"])
+
+    def _next_floor(self) -> None:
+        """Wedged indoors with no way in known, the floor the character is thought to be on
+        may not be the one it is on (V268): the next plan starts on the lowest floor under
+        the spot not yet tried there, round again once all have been. Session 244 began in
+        the Lion's Pride Inn's cellar; its plans out started on the hall and the roof over
+        it, and it stayed in the cellar, where a plan from the cellar's floor walks out."""
+        if self.query is None or self.bounds is None:
+            return
+        here = self.position()
+        if here is None:
+            return
+        x, y = map_to_world(*here, self.bounds)[:2]
+        floors = surfaces_under(self.query, self.bounds.map_id, x, y)
+        if len(floors) < 2:
+            return
+        spot, tried = self._floors_tried
+        if spot is None or math.dist(spot, (x, y)) > GROUND_MEMORY_YARDS:
+            tried = []
+        if self._ground is not None:
+            tried = [*tried, self._ground[2]]
+        left = [f for f in floors if all(abs(f - t) > FLOOR_GAP for t in tried)]
+        if not left:
+            left, tried = floors, []
+        self._floors_tried = ((x, y), [*tried, left[0]])
+        self._ground = (x, y, left[0])
+        self._say(f"  the next plan starts on the floor at {left[0]:.1f}")
+
+    def _take_ground(self, values: dict) -> None:
+        """The height the last session tracked, at the first read if the character stands
+        where it ended (V267). Unknown, a first plan starts at the destination's height: in
+        the Lion's Pride Inn's cellar, where session 243 ended, session 244's plans out
+        started on the hall and the roof over it, and the character stayed in the cellar."""
+        pending, self._ground_pending = self._ground_pending, None
+        if pending is None or self._ground is not None or self.bounds is None:
+            return
+        x, y = map_to_world(values["pos.mx"], values["pos.my"], self.bounds)[:2]
+        if math.dist(pending[:2], (x, y)) <= GROUND_MEMORY_YARDS:
+            self._ground = (x, y, pending[2])
 
     def _note_trail(self, values: dict) -> None:
         """Keep the way in while the character is indoors (`back_out`, V230)."""
@@ -376,6 +420,7 @@ class Client:
         if self.travel is None or not self._trail_anchored or len(self._trail) < 2:
             self._say("  wedged indoors, and no way in known to walk back"
                       + ("" if self._trail_anchored else " (it began indoors)"))
+            self._next_floor()
             return False
         self._say(f"  wedged indoors: backing out the way it came in, {len(self._trail)} points")
         z = self._ground[2] if self._ground is not None else 0.0
@@ -677,6 +722,10 @@ class Client:
         if isinstance(trail, list) and len(trail) >= 2 and all(
                 isinstance(p, list) and len(p) == 3 for p in trail):
             self._trail_pending = [tuple(p) for p in trail]
+        ground = raw.get("ground") if isinstance(raw, dict) else None
+        if (isinstance(ground, list) and len(ground) == 3
+                and all(isinstance(c, (int, float)) for c in ground)):
+            self._ground_pending = tuple(float(c) for c in ground)
 
     def save_trail(self) -> None:
         """Keep the way in for the next session: a session that ended in the Lion's Pride
@@ -686,7 +735,8 @@ class Client:
         with contextlib.suppress(OSError):
             atomic_json(Path(self.trail_memory),
                         {"format": 1, "anchored": self._trail_anchored,
-                         "trail": [list(p) for p in self._trail]})
+                         "trail": [list(p) for p in self._trail],
+                         "ground": list(self._ground) if self._ground is not None else None})
 
     def close(self) -> None:
         try:

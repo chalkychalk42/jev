@@ -573,6 +573,46 @@ def test_the_way_in_outlives_the_session(tmp_path):
     assert not elsewhere._trail_anchored, "not where the last session ended"
 
 
+def test_the_height_outlives_the_session(tmp_path):
+    """V267: session 243 ended in the Lion's Pride Inn's cellar with its height tracked there;
+    session 244's plans out started on the hall and the roof over it."""
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    client.trail_memory = tmp_path / "character-1.trail.json"
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    client._ground = (here[0], here[1], 50.0)
+    client.save_trail()
+
+    later, _ = client_in("Elwynn", (0.49, 0.42))
+    later.trail_memory = client.trail_memory
+    later.restore_trail()
+    later.position()
+    assert later._ground[2] == 50.0, "taken up where it ended"
+
+    elsewhere, _ = client_in("Elwynn", world_to_map(here[0] + 60, here[1], ELWYNN))
+    elsewhere.trail_memory = client.trail_memory
+    elsewhere.restore_trail()
+    elsewhere.position()
+    assert elsewhere._ground is None, "not where the last session ended"
+
+
+def test_wedged_with_no_way_in_known_the_next_plan_starts_on_another_floor(monkeypatch):
+    """V268: session 244 began in the inn's cellar (50) with its plans starting on the hall
+    (57); wedged, and no way in known, the next plan starts on the lowest floor not tried."""
+    import jev.run.client as client_module
+
+    client, values = client_in("Elwynn", (0.49, 0.42))
+    values["pos.indoors"] = True
+    client.travel = SimpleNamespace()
+    here = map_to_world(0.49, 0.42, ELWYNN)
+    client._ground = (here[0], here[1], 57.0)
+    monkeypatch.setattr(client_module, "surfaces_under", lambda q, m, x, y: [50.0, 57.0, 71.5])
+    assert client.back_out() is False
+    assert client._ground[2] == 50.0, "the cellar first"
+    client.back_out()
+    assert client._ground[2] == 71.5, "then the one not yet tried"
+    client.back_out()
+    assert client._ground[2] == 50.0, "and round again"
+
 def test_the_way_back_ends_clear_of_the_door_or_at_it():
     """V236: the walk back ended at the doorway's threshold, still read indoors, and no plan
     was tried from there (sessions 202-204: "backing out ended indoors")."""
