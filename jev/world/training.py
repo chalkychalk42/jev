@@ -53,22 +53,26 @@ TRAINER_REACH_SPELLS = 2
 # Roles worth a new bar slot, in the order free slots are handed out.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
 NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort", "conjure",
-                  "root", "area")
+                  "root", "cc", "area")
 BAR_SLOTS = 12
 
 # The roles the fight code presses (`jev.world.combat.TRAINED_ROLES`), in the order a spell
 # is worth buying (V237). First what a fight is won with: damage (a strike, a seal), then
 # control of what is fought (a root, a stun), then what keeps the character standing in one
 # (a save, a last resort, a heal, an aura). Then what is kept up or made between fights: a
-# conjure, then a long buff. A spell of any other role - Polymorph, a dispel, a passive -
-# is pressed by nothing. The mage with a spell's money a visit bought Conjure Water before
-# Frostbolt at level 5 and Conjure Food before Fire Blast at 6, in the stock window's order.
-FIGHT_ROLES = ("strike", "short_buff", "root", "stun", "area", "save", "last_resort", "heal",
-               "aura", "attack")
+# conjure, then a long buff. A spell of any other role - a dispel, a passive - is pressed by
+# nothing. Polymorph is pressed since V287 (`cc`): it holds one of two attackers out of the
+# fight. The mage with a spell's money a visit bought Conjure Water before Frostbolt at
+# level 5 and Conjure Food before Fire Blast at 6, in the stock window's order.
+FIGHT_ROLES = ("strike", "short_buff", "root", "stun", "cc", "area", "save", "last_resort",
+               "heal", "aura", "attack")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
-# What holds more than one attacker, bought before the oldest gap (V242).
+# What holds more than one attacker, bought before the oldest gap (V242). Polymorph holds
+# one and is bought by its level, as the strikes are (V287).
 CONTROL_ROLES = ("root", "stun")
+# A line a full bar gives up to a new fight line ranked above it (`placements`, V287).
+DISPLACED_ROLES = ("cc",)
 
 
 @dataclass(frozen=True)
@@ -442,7 +446,30 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
     free = [(slot, 0) for slot in range(1, BAR_SLOTS + 1) if bar.get(slot) == 0] + spare
     out.extend(Placement(f.spell_id, slot, old)
                for f, (slot, old) in zip(wanted, free, strict=False))
+    # A full bar gives Polymorph's place to a new fight line ranked above it (V287): at 10 a
+    # new mage's Frost Nova goes over the Polymorph its bar took at 8, where the full bar had
+    # kept Frost Nova out and the mage bought Conjure Water 2 instead. Nothing else is moved:
+    # a long buff that ranks above a root for a free slot does not push one off (V237).
+    waiting = [f for f in wanted[len(free):] if f.role in FIGHT_ROLES]
+    rank = {role: i for i, role in enumerate(NEW_LINE_ROLES)}
+    held = [(slot, f) for slot, f in _on_bar_slots(bar, facts)
+            if f.role in DISPLACED_ROLES and not any(p.slot == slot for p in out)]
+    for f in waiting:
+        if not held or rank[held[0][1].role] <= rank[f.role]:
+            break
+        slot, old = held.pop(0)
+        out.append(Placement(f.spell_id, slot, old.spell_id))
     return out
+
+
+def _on_bar_slots(bar: Mapping[int, int | None], facts: dict | None):
+    """Each slot's spell on the main bar, its first copy only."""
+    seen: set[str] = set()
+    for slot in range(1, BAR_SLOTS + 1):
+        here = spell(bar.get(slot), facts)
+        if here is not None and here.name not in seen:
+            seen.add(here.name)
+            yield slot, here
 
 
 def _first_levels(facts: dict | None) -> dict[str, int]:

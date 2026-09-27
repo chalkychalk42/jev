@@ -341,6 +341,8 @@ class Hunt:
             if stopped is not None:
                 self.detail = self.fight.detail
                 return stopped
+            if outcome is Fought.HELD:
+                continue                    # the unit attacking next, the held one after (V287)
             if outcome is Fought.KILLED:
                 self.kills += 1
                 self._found = True

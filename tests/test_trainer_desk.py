@@ -337,13 +337,24 @@ def test_the_old_desk_would_have_bought_the_window_s_first_row():
 
 
 def test_nothing_worth_buying_is_nothing_bought():
-    """Everything else known: only Polymorph is learnable now, and nothing presses it."""
-    known = MAGE_KNOWN | {143, 116, 205, 5143}
+    """Everything known, Polymorph too: nothing is bought."""
+    known = MAGE_KNOWN | {143, 116, 205, 5143, 118}
     window = TrainerWindow(money=5000, known=known)
     trained = TrainerDesk(window, window.read, window.visit, clock=lambda: window.now,
                           sleep=window.sleep, trainer=ZALDIMAR, known=known, bar=MAGE_BAR)
     assert trained.run() is Trained.NOTHING, trained.detail
     assert window.bought == [] and window.clicks == []
+
+
+def test_polymorph_alone_learnable_is_bought():
+    """V287: the fight presses Polymorph, holding one of two attackers; with everything else
+    known it is what the desk buys."""
+    known = MAGE_KNOWN | {143, 116, 205, 5143}
+    window = TrainerWindow(money=5000, known=known)
+    trained = TrainerDesk(window, window.read, window.visit, clock=lambda: window.now,
+                          sleep=window.sleep, trainer=ZALDIMAR, known=known, bar=MAGE_BAR)
+    assert trained.run() is Trained.DONE, trained.detail
+    assert window.bought == [118]
 
 
 def test_a_folded_header_is_opened_before_the_choice():

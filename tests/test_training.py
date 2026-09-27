@@ -203,14 +203,14 @@ def _names(spell_ids):
 
 
 def test_a_spell_nothing_presses_or_the_bar_will_not_hold_is_not_worth_buying():
-    """Polymorph (cc), Parry (passive), Slow Fall (a new short buff), Flash of Light (a new
-    heal) and Blessing of Protection beside Divine Protection (a second save) are never
-    pressed: not worth a copper. A new rank of a spell on the bar, a strike, a root, damage
-    round the caster (Arcane Explosion, V277) or a conjure is."""
+    """Parry (passive), Slow Fall (a new short buff), Flash of Light (a new heal) and
+    Blessing of Protection beside Divine Protection (a second save) are never pressed: not
+    worth a copper. A new rank of a spell on the bar, a strike, a root, Polymorph (V287),
+    damage round the caster (Arcane Explosion, V277) or a conjure is."""
     mage_bar = starting_bar(8, 1)
-    for spell_id in (118, 130):
+    for spell_id in (130,):
         assert not worth_buying(spell_id, MAGE_START, mage_bar), spell(spell_id).name
-    for spell_id in (116, 143, 122, 1449, 5504, 7300, 5143):
+    for spell_id in (116, 143, 122, 118, 1449, 5504, 7300, 5143):
         assert worth_buying(spell_id, MAGE_START, mage_bar), spell(spell_id).name
     assert worth_buying(5505, MAGE_START | {5504}, mage_bar), "Conjure Water rank 2"
     paladin_bar = starting_bar(2, 1)
@@ -235,17 +235,17 @@ def test_a_rank_of_a_spell_off_the_bar_or_a_spell_with_no_slot_left_is_not_worth
     assert worth_buying(145, known, full), "Fireball 3 over Fireball 2"
 
 
-def test_polymorph_neither_sends_the_mage_to_a_trainer_nor_keeps_copper_back():
-    """V215's reserve and the visit itself count only what would be bought: a level 8 mage
-    with everything else learned is not walked to Zaldimar, nor keeps 200 copper, for
-    Polymorph."""
+def test_polymorph_sends_the_mage_to_a_trainer_and_keeps_its_copper_back():
+    """V215's reserve and the visit itself count only what would be bought. Since V287 the
+    fight presses Polymorph, holding one of two attackers: a level 8 mage with everything
+    else learned is walked to Zaldimar for it, and keeps its 200 copper."""
     goldshire = (-9460.0, 60.0)
     known = MAGE_START | {1459, 116, 205, 5504, 587, 2136, 143, 5143}
-    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known, race_id=1)] == []
-    assert trainer_due(8, 1, 8, known, 10_000, 0, goldshire) is None
-    assert training_cost(8, 1, 8, known, 0, goldshire) == 0
-    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known - {5143},
-                                                   race_id=1)] == [5143]
+    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known, race_id=1)] == [118]
+    assert trainer_due(8, 1, 8, known, 10_000, 0, goldshire) is not None
+    assert training_cost(8, 1, 8, known, 0, goldshire) == 200
+    assert [o.spell_id for o in training.learnable(ZALDIMAR, 8, known | {118},
+                                                   race_id=1)] == []
 
 
 def test_a_talent_s_later_rank_is_not_counted_as_for_sale():
@@ -272,7 +272,9 @@ def test_what_acts_in_a_fight_is_bought_before_what_is_kept_up_between_fights():
     steady = MAGE_START | {1459, 116, 5504, 143, 587, 2136, 205, 5143}
     assert ordered(10, steady) == ["Frost Nova 1", "Conjure Water 2", "Frost Armor 2"]
     assert ordered(12, steady | {122, 5505, 7300})[:2] == ["Fireball 3", "Conjure Food 2"]
-    assert ordered(8, MAGE_START | {116, 1459}) == ["Frostbolt 2", "Arcane Missiles 1"]
+    # Polymorph holds one of two attackers (V287), bought by its level as a strike is.
+    assert ordered(8, MAGE_START | {116, 1459}) == ["Frostbolt 2", "Arcane Missiles 1",
+                                                    "Polymorph 1"]
     frostbolt, fireball = (next(o for o in ZALDIMAR.offers if o.spell_id == s)
                            for s in (116, 143))
     assert buy_order(frostbolt, MAGE_LIVE) < buy_order(fireball, MAGE_LIVE)
@@ -289,7 +291,8 @@ def test_every_role_the_fight_code_presses_is_ranked_for_buying():
     from jev.world.combat import TRAINED_ROLES
 
     assert set(training.BUY_ORDER) == set(TRAINED_ROLES)
-    assert {"cc", "utility", "passive"}.isdisjoint(training.BUY_ORDER)
+    assert {"utility", "passive"}.isdisjoint(training.BUY_ORDER)
+    assert "cc" in training.BUY_ORDER, "Polymorph holds one of two attackers (V287)"
 
 
 def _visit(level, known, bar, money):
@@ -324,10 +327,11 @@ def _placed(bar, known):
 
 def test_a_mage_with_one_spell_s_money_buys_what_it_fights_with():
     """A mage that kept up, with one spell's money at 8, 10, 12 and 14: Frostbolt 2, Frost
-    Nova, Fireball 3, Frostbolt 3. In the window's order (skill line, then name) the Arcane
-    rows come first: Arcane Missiles and Polymorph at 8, Conjure Water 2 at 10, Conjure Food
-    2, Dampen Magic and Slow Fall at 12, Arcane Explosion at 14. The mage as it stood on 26
-    September buys Frostbolt and Fireball rank 2 at 8 with 200 copper, the two it lacked."""
+    Nova (over Polymorph's slot when the bar is full, V287), Fireball 3, Frostbolt 3. In the
+    window's order (skill line, then name) the Arcane rows come first: Arcane Missiles and
+    Polymorph at 8, Conjure Water 2 at 10, Conjure Food 2, Dampen Magic and Slow Fall at 12,
+    Arcane Explosion at 14. The mage as it stood on 26 September buys Frostbolt and Fireball
+    rank 2 at 8 with 200 copper, the two it lacked."""
     known, bar, first = set(MAGE_START), starting_bar(8, 1), {}
     for level in range(2, 16, 2):
         price = max((o.cost for o in ZALDIMAR.offers if o.level == level), default=0)
@@ -339,6 +343,21 @@ def test_a_mage_with_one_spell_s_money_buys_what_it_fights_with():
                      14: ["Frostbolt 3"]}
     bought, _, left = _visit(8, MAGE_LIVE, MAGE_LIVE_BAR, 200)
     assert (_names(bought), left) == (["Frostbolt 1", "Fireball 2"], 0)
+
+
+def test_a_full_bar_gives_polymorphs_place_to_a_new_fight_line_and_nothing_else_moves():
+    """V287: a new mage's bar took Polymorph at 8 into its last free slot; at 10 Frost Nova
+    goes over it. A long buff ranked above a root for a free slot does not push one off
+    (V237), nor does anything push off a line that is not Polymorph's."""
+    full = {1: 6603, 2: 143, 3: 168, 4: 1459, 5: 116, 6: 5504, 7: 2136, 8: 587, 9: 5143,
+            10: 118, 11: None, 12: None}
+    known = {i for i in full.values() if i}
+    placed = training.placements(full, known | {122})
+    assert [(p.spell_id, p.slot, p.replaces) for p in placed] == [(122, 10, 118)]
+    assert worth_buying(122, known, full), "Frost Nova, over Polymorph"
+    with_nova = {**full, 10: 122}
+    assert training.placements(with_nova, (known - {118}) | {122, 604}) == [], \
+        "Dampen Magic does not push Frost Nova off"
 
 
 def test_every_trainer_s_offers_are_told_apart_by_name_and_rank():

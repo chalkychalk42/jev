@@ -2743,6 +2743,75 @@ def test_no_press_inside_the_global_cooldown_of_the_last_one_answered(combat_clo
     assert len(hid.taps) == len(first) + 1
 
 
+def _mage_with_polymorph():
+    from dataclasses import replace
+
+    sheep = Ability(slot=11, role=Role.CC, name="Polymorph", mana=60, spell_id=118)
+    explosion = Ability(slot=12, role=Role.ATTACK, name="Arcane Explosion", mana=75,
+                        spell_id=1449)
+    return replace(MAGE, abilities=(*MAGE.abilities, sheep, explosion))
+
+
+PAIR = {**AT_RANGE, "target.in_melee": True, "target.attacking_me": True, "target.hp": 0.9,
+        "target.guid": "prowler-1", "combat.attackers": 2, "vitals.power": 1.0,
+        "vitals.power_max": 600, "bars.ready": 0b111111111111, "bars.usable": 0b111111111111}
+
+
+def test_with_a_second_attacker_the_selected_unit_is_held_and_the_other_fought(combat_clock):
+    """V287: fights with two attackers or more cost the level 12-13 mage 0.35 of its health
+    against 0.21 for one, and were most of its deaths (sessions 246-285); Polymorph was never
+    bought. Held once its mana is gone - a cast's mana goes as it lands - the fight ends, and
+    the held unit is left while it is held and not attacking."""
+    mage = _mage_with_polymorph()
+    casting = {**PAIR, "bars.casting": True}
+    landed = {**PAIR, "vitals.power": 0.9}
+    hid = _Hid()
+    f = _fight([casting, casting, landed], hid=hid)
+    f.profile = mage
+    assert f._hold_wanted(mage, PAIR)
+    assert f._hold(mage, PAIR) is Fought.HELD
+    assert hid.taps == ["minus"] and f._holding_now(combat_clock[0])
+    left = {**PAIR, "target.attacking_me": False}
+    assert f._acceptable(None, defend=True, values=left) is False, "left while held"
+    assert f._acceptable(None, defend=True, values=PAIR) is True, "fought if it attacks"
+    assert not f._hold_wanted(mage, PAIR), "one held at a time"
+
+
+def test_no_hold_against_one_attacker_or_a_hurt_one(combat_clock):
+    mage = _mage_with_polymorph()
+    f = _fight([PAIR])
+    f.profile = mage
+    assert not f._hold_wanted(mage, {**PAIR, "combat.attackers": 1})
+    assert not f._hold_wanted(mage, {**PAIR, "target.hp": 0.4}), "quicker to finish it"
+    assert not f._hold_wanted(mage, {**PAIR, "target.attacking_me": False})
+    assert not f._hold_wanted(MAGE, PAIR), "no Polymorph on the bar"
+
+
+def test_a_hold_that_never_began_holds_nothing_and_is_not_pressed_again(combat_clock):
+    mage = _mage_with_polymorph()
+    hid = _Hid()
+    f = _fight([PAIR], hid=hid)
+    f.profile = mage
+    assert f._hold(mage, PAIR) is None
+    assert f._holding == {} and not f._hold_wanted(mage, PAIR), "one try a fight"
+
+
+def test_nothing_round_the_caster_is_pressed_while_a_unit_is_held(combat_clock):
+    """V287: Arcane Explosion first with two at hand (V277) would wake the held unit."""
+    mage = _mage_with_polymorph()
+    hid = _Hid()
+    f = _fight([PAIR], hid=hid)
+    f.profile = mage
+    f._rotate(PAIR)
+    assert hid.taps[:1] == ["equals"], "two at hand: damage round the caster first"
+    g_hid = _Hid()
+    g = _fight([PAIR], hid=g_hid)
+    g.profile = mage
+    g._holding["prowler-2"] = combat_clock[0] + 20.0
+    g._rotate(PAIR)
+    assert g_hid.taps and g_hid.taps[0] != "equals", "not while a unit is held"
+
+
 def test_the_root_is_held_for_a_second_attacker_or_a_fight_going_badly(combat_clock):
     """V275: at every first contact it saved single fights 2% of health and cost them 4 s,
     and was cooling when a second attacker came (sessions 239-253)."""

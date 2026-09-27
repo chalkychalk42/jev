@@ -331,6 +331,16 @@ ROOT_HP = 0.5
 # each: the Prowler followed and bit, 48% to 29% of the mage's health (session 275). One in
 # nine of the mage's roots went so (18 of 167, sessions 246-279), in runs within a fight.
 ROOT_LOOK_S = 0.15
+# With a second attacker counted and the selected one still this healthy, the selected one is
+# held out of the fight (Polymorph, V287), and the other fought alone, then it. Fights with
+# two attackers or more cost the level 12-13 mage 0.35 of its health against 0.21 for one,
+# and were most of its deaths: Prowler pairs and packs (sessions 246-285). Polymorph, 200
+# copper at 8, was never bought: nothing pressed it.
+HOLD_TARGET_HP = 0.5
+# How long a unit held stays out of the fight as far as the fight is concerned (Polymorph's
+# first rank), and the longest its cast is followed, pushback included.
+HELD_S = 20.0
+HOLD_CAST_S = 4.0
 UNHURT_MANA = 0.35
 UNHURT_S = 60.0
 # A press whose ability's mana has at least this share gone since it was pressed was
@@ -382,6 +392,7 @@ class Fought(StrEnum):
     BLIND = "blind"
     REFUSED = "refused"
     INTERRUPTED = "interrupted"
+    HELD = "held"                    # the selected unit held out of it (Polymorph): the other next
 
     @property
     def ok(self) -> bool:
@@ -489,6 +500,10 @@ class Fight:
     _held: dict[int, float] = field(default_factory=dict, init=False)
     # When the last press the client acted on was made, a toggle's aside (`GCD_GUARD_S`).
     _gcd_from: float | None = field(default=None, init=False)
+    # Units held out of the fight (Polymorph), by guid, and until when (V287); whether this
+    # fight has pressed its hold.
+    _holding: dict[str, float] = field(default_factory=dict, init=False)
+    _held_this_fight: bool = field(default=False, init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
     _race: list[tuple] = field(default_factory=list, init=False)
     # The last look the evidence clocks were advanced to (`_hold_clocks_while_casting`).
@@ -567,6 +582,7 @@ class Fight:
         self._pending_press = None
         self._dropped = (0, 0)
         self._held = {}
+        self._held_this_fight = False
         self._race = []
         self._look_at = None
         self._damage_mark = None
@@ -823,8 +839,11 @@ class Fight:
                     self._sidestep("los")
                     if self._input_refused:
                         return Fought.REFUSED
+                elif (not casting and self._hold_wanted(profile, v)
+                      and (held := self._hold(profile, v)) is not None):
+                    return held
                 elif (v.get("target.in_melee") is True and not casting and self._root_wanted(v)
-                      and self._root(profile, v)):
+                      and not self._holding_now(time.monotonic()) and self._root(profile, v)):
                     if self._input_refused:
                         return Fought.REFUSED
                     time.sleep(pace(self.hid, 0.2))
@@ -1096,6 +1115,9 @@ class Fight:
         guid = v.get("target.guid")
         if guid is not None and time.monotonic() - self._unhurt.get(guid, -math.inf) < UNHURT_S:
             return False                       # found unhurt a moment ago (V273)
+        if (guid is not None and self._holding.get(guid, -math.inf) > time.monotonic()
+                and v.get("target.attacking_me") is not True):
+            return False                       # held out of the fight a moment ago (V287)
         if attackers_only and v.get("target.attacking_me") is not True:
             return False
         if (defend and v.get("target.attacking_me") is not True
@@ -1636,6 +1658,80 @@ class Fight:
         event("engage.root_unanswered", data={"slot": row.slot})
         return False
 
+    def _holding_now(self, now: float) -> bool:
+        """A unit held out of the fight (Polymorph) is still held: nothing round the caster is
+        pressed, a root or damage to all, which would wake it (V287)."""
+        return any(until > now for until in self._holding.values())
+
+    def _hold_wanted(self, profile: CombatProfile, values: dict) -> bool:
+        """Hold the selected unit out of the fight (V287): a second attacker counted, the
+        selected one attacking and still healthy, none held already, one hold a fight."""
+        hp = values.get("target.hp")
+        return (bool(profile.by_role(Role.CC)) and not self._held_this_fight
+                and (values.get("combat.attackers") or 0) >= 2
+                and values.get("target.attacking_me") is True
+                and values.get("target.guid") is not None
+                and isinstance(hp, (int, float)) and hp >= HOLD_TARGET_HP
+                and not self._holding_now(time.monotonic()))
+
+    def _hold(self, profile: CombatProfile, values: dict) -> Fought | None:
+        """Polymorph the selected unit, and end the fight once the cast has landed: the next
+        takes the unit attacking, the held one left (`_acceptable`) until it wakes (V287).
+        `None` if nothing was held."""
+        if not self._press_answered(values):
+            return None
+        now = time.monotonic()
+        usable, ready = values.get("bars.usable"), values.get("bars.ready")
+        guid = values.get("target.guid")
+        for row in profile.by_role(Role.CC):
+            bit = 1 << (row.slot - 1)
+            if ((usable is not None and not usable & bit) or (ready is not None and not ready & bit)
+                    or self._held.get(row.slot, 0.0) > now or self._in_gcd(now)):
+                continue
+            if self._mana_left_after(row, values) < 0 or not self._press(row):
+                continue
+            self._held_this_fight = True
+            if not self._cast_through(row, values.get("vitals.power")):
+                return None
+            self._holding[guid] = time.monotonic() + HELD_S
+            event("fight.hold", data={"slot": row.slot, "name_id": values.get("target.name_id"),
+                                      "guid": guid, "target_hp": values.get("target.hp"),
+                                      "attackers": values.get("combat.attackers")})
+            self.detail = "held the selected unit (Polymorph) with another attacking; that one next"
+            return Fought.HELD
+        return None
+
+    def _cast_through(self, row: Ability, before: float | None) -> bool:
+        """A cast pressed, followed to its end (V287): `True` once it has completed, its mana
+        gone from `before` - a cast's mana goes as it lands - within `HOLD_CAST_S`, pushback
+        included. One that never began is settled as dropped, as `_press_answered` settles."""
+        pressed = time.monotonic()
+        began = False
+        v = None
+        while time.monotonic() - pressed < HOLD_CAST_S:
+            time.sleep(pace(self.hid, ROOT_LOOK_S))
+            v = self.read()
+            self._observe(v)
+            if v is None:
+                continue
+            if v.get("vitals.dead") is True:
+                return False
+            if v.get("bars.casting") is True:
+                if not began:
+                    began = True
+                    self._press_answered(v)          # its global cooldown from the press
+                continue
+            if not began and time.monotonic() - pressed >= PRESS_ANSWER_S:
+                self._press_answered(v)              # never began: dropped
+                return False
+            if began:
+                power, pool = v.get("vitals.power"), v.get("vitals.power_max")
+                return (isinstance(before, (int, float)) and isinstance(power, (int, float))
+                        and bool(pool) and (before - power) * pool >= ANSWER_SPENT * row.mana)
+        if v is not None and self._pending_press is not None:
+            self._press_answered(v)
+        return False
+
     @staticmethod
     def _beyond_reach(profile: CombatProfile, values: dict) -> bool:
         """The strip says none of the caster's ranged attacks reaches the unit (schema 17's
@@ -1970,7 +2066,8 @@ class Fight:
         # Damage round the character reaches only what is at hand, and is worth its cost
         # against more than one: first then, and not pressed otherwise (V277).
         crowd = (values.get("target.in_melee") is True
-                 and (values.get("combat.attackers") or 0) >= 2)
+                 and (values.get("combat.attackers") or 0) >= 2
+                 and not self._holding_now(time.monotonic()))       # it would wake it (V287)
         areas = tuple(a for a in profile.by_role(Role.ATTACK) if _area(a))
         attacks = tuple(a for a in profile.by_role(Role.ATTACK) if not _area(a))
         if casting_instead:

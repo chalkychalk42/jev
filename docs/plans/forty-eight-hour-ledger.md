@@ -420,6 +420,7 @@ Trials
 | V284 a spawn's packmates include every hostile unit round it | session 282 | fewer fights with two or more attackers at 12-20's camps (Westfall from 14) | a hunt's first station away from the camp's core (the `choices` log's order) | | |
 | V285 no press within 1.9 s of the last one the client acted on | session 285 | presses refused as not ready fall from 78 in sessions 246-283 (2 a session) to near none | `ability.unanswered` with error not_ready within 2 s of a press (`executions.jsonl`) | | |
 | V286 a routine failing its step's last attempt is rescued once (tutor or routine, learned) before the step fails over; nothing started on the step left | the next session | `recover.after_failure` records outcomes (none in 48 h before); no tutor call cancelled "playhead changed"; the tutor plays some rescues to an end | `one more attempt, the tutor's` / `the routine's` in the session log; `play-teacher.jsonl` status ok | | |
+| V287 with a second attacker, the selected unit held (Polymorph) and the other fought alone | the next session (Polymorph bought at the next trainer visit) | fights with two attackers or more lose less health and end in fewer deaths (0.35 of health and most deaths in 246-285) | `fight.hold` events; `held (...) - held the selected unit (Polymorph)` in the session log | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues

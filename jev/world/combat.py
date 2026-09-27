@@ -43,6 +43,7 @@ class Role(StrEnum):
     LAST_RESORT = "last_resort"    # a full heal on a long cooldown, at the very end
     CONJURE = "conjure"            # makes an item: pressed out of combat, never in a fight
     ROOT = "root"                  # holds what is round the caster: then a step clear
+    CC = "cc"                      # holds the selected unit out of the fight: Polymorph (V287)
 
 
 # -- policy -------------------------------------------------------------------------
@@ -255,7 +256,7 @@ PROFILES: dict[str, CombatProfile] = _load()
 TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL,
                  "short_buff": Role.BUFF, "long_buff": Role.BUFF, "aura": Role.AURA,
                  "save": Role.SAVE, "stun": Role.STUN, "last_resort": Role.LAST_RESORT,
-                 "conjure": Role.CONJURE, "root": Role.ROOT,
+                 "conjure": Role.CONJURE, "root": Role.ROOT, "cc": Role.CC,
                  # Damage to every enemy round the character: an attack the fight presses with
                  # more than one at hand (V277).
                  "area": Role.ATTACK}
