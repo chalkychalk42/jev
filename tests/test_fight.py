@@ -2667,6 +2667,10 @@ def test_a_casters_mana_spent_on_a_unit_that_takes_nothing_ends_the_fight(combat
     hurt._damage_seen = True
     assert hurt._unhurt_by({**evading, "vitals.power": 0.2}) is False, "being hurt: fight on"
 
+    f._power_start = None                       # the next fight, begun on the kept selection
+    assert f._unhurt_by({**evading, "vitals.power": 0.6}) is True, "no more mana on it (270)"
+    assert "a moment ago" in f.detail
+
 
 def test_the_root_is_held_for_a_second_attacker_or_a_fight_going_badly(combat_clock):
     """V275: at every first contact it saved single fights 2% of health and cost them 4 s,

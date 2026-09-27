@@ -1225,6 +1225,13 @@ class Fight:
     def _unhurt_by(self, values: dict) -> bool:
         """A caster's mana spent on a unit whose health has not moved (V273): the unit is
         marked not to be taken again for a while, and the fight says why it ends."""
+        guid = values.get("target.guid")
+        if (not self._damage_seen and guid is not None
+                and time.monotonic() - self._unhurt.get(guid, -math.inf) < UNHURT_S):
+            # Still selected from the fight it was found unhurt in: a fight begun on the kept
+            # selection spent another 40% on the same Prowler (session 270).
+            self.detail = "the unit took nothing a moment ago; not hurt"
+            return True
         power = values.get("vitals.power")
         if not isinstance(power, (int, float)):
             return False
@@ -1234,7 +1241,6 @@ class Fight:
         spent = self._power_start - power
         if self._damage_seen or spent < UNHURT_MANA:
             return False
-        guid = values.get("target.guid")
         if guid is not None:
             self._unhurt[guid] = time.monotonic()
         self.detail = f"{spent:.0%} of its mana spent and the unit's health never moved; not hurt"
