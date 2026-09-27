@@ -399,6 +399,7 @@ Trials
 | V277 damage round the character bought and pressed first with more than one at hand | deployed 09:06; the mage's training at 14 | Arcane Explosion bought at 14 and pressed in fights with two or more | `bought ... [Arcane Explosion 1 ...]` at Zaldimar; presses of its slot with `combat.attackers` 2+ | | |
 | V278 broken gear home by hearthstone only when home is the way to a repairer | session 267 | no hearth away from a near repairer | `broken gear and the nearest repairer N yards off` only with home near; repairs walked to otherwise | **Fired**, session 267: broken gear, a 263-yard walk to the smith and `VENDOR_REPAIR: done`, no hearthstone; a wedge in the smithy backed out (`backed out: outdoors, walking on`) | |
 | V279 up at the Spirit Healer, home by hearthstone only when home is near the work | session 269 | no hearth to Sentinel Hill from the Prowlers | `up at the Spirit Healer; home is far from the guide's work: walking on` | | |
+| V280 the next guide waits two levels past its lowest grind (14 for 12-20) | session 271 | the mage on the Prowlers to 14, then Westfall with Arcane Explosion | `below ally_human_12_20.json's 14: grinding alli_human_1_12_grind_elwynn_9_11 until then` | | |
 | V215 in the mage's hands | session 189 | the mage trains when it can pay | session 189: `Khelden Bremen: done, 1 bought for 95 copper`, Conjure Water on slot 5; the purse had reached 153 | | |
 
 Issues

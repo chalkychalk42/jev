@@ -246,18 +246,20 @@ def _guide_on(args, graph, path: Path):
     return graph
 
 
-# A guide is started a level above its lowest grind's (V276): at that level its mobs are all at
-# or above the character. The level 12 mage died five times in its first 35 minutes of the
+# A guide is started two levels above its lowest grind's (V276, V280): at that level its mobs are
+# all at or above the character. The level 12 mage died five times in its first 35 minutes of the
 # 12-20 guide's Westfall (sessions 263-264: a Riverpaw camp of 13-15s, Defias Smugglers in
 # threes), where it had made about 3,900 XP an hour at 11 on Elwynn's Prowlers with 0.8 deaths
-# a session; the paladin's Westfall at 12-13 averaged 1.2 deaths a session.
-ENTRY_LEVELS_ABOVE = 1
+# a session; the paladin's Westfall at 12-13 averaged 1.2 deaths a session and about 2,800 XP an
+# hour. Back on the Prowlers at 12 the mage made 5,095 and 4,630 XP an hour with no deaths
+# (sessions 268-269), and at 14 it learns Arcane Explosion, its first answer to a camp.
+ENTRY_LEVELS_ABOVE = 2
 
 
 def entry_level(guide: Path) -> int | None:
-    """The level a guide starts at: a level above its lowest grind's. Below its lowest
+    """The level a guide starts at: two levels above its lowest grind's. Below its lowest
     grind's, its every grind is above the character (V262); at it, all its mobs are at or
-    above it (V276)."""
+    above it (V276, V280)."""
     try:
         ribs = [n for n in Graph.load(guide).nodes if n.kind is StepKind.GRIND]
     except (OSError, ValueError):
@@ -303,9 +305,13 @@ def remembered(args, graph, key: int | None, level: int | None = None):
             # 9-11 Prowlers' rib gave way to the 11-12 one, eight Riverpaw Gnolls 5 to 9 yards
             # apart, where every pull is two or three.
             kept = used.get(memory.step_id) if memory.step_id else None
-            if (kept is not None and kept.kind is StepKind.GRIND
-                    and kept.level[0] <= level <= kept.level[1] + ENTRY_LEVELS_ABOVE):
-                rib = kept      # and a level past its window, as the next guide waits (V276)
+            first = entry - ENTRY_LEVELS_ABOVE          # the next guide's lowest grind's level
+            if (kept is not None and kept.kind is StepKind.GRIND and kept.level[0] <= level
+                    and (level <= kept.level[1]
+                         # the guide's last grinds wait with the next guide (V276, V280)
+                         or (kept.level[1] >= first - 1
+                             and level <= kept.level[1] + ENTRY_LEVELS_ABOVE))):
+                rib = kept
             if rib is not None:
                 print(f"guide {graph.graph_id} finished at level {level}, below "
                       f"{following.name}'s {entry}: grinding {rib.id} until then")
