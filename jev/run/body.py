@@ -1468,6 +1468,21 @@ class LiveBody:
             self.policy_context.repaired()
         return self._result(repaired, self.repair.detail)
 
+    def _home_near_work(self, state) -> bool:
+        """Home is near the guide's work: within `HOME_FAR_YARDS` of the step's node (V279).
+        Up at the Spirit Healer, home by hearthstone is the way back to it only then: with its
+        stone bound at Sentinel Hill and its grind on Elwynn's Prowlers (V276), the level 12
+        mage would have hearthed 3,500 yards from its work after a death at a camp. A home or
+        a step not known is taken to be near, as a new character's is."""
+        home = load_home(self.home_memory)
+        if home is None:
+            return True
+        step = getattr(getattr(state, "guide", None), "step_id", None)
+        node = self.graph.get(step) if step else self._node()
+        if node is None or node.world is None:
+            return True
+        return math.dist(home[:2], node.world[:2]) <= HOME_FAR_YARDS
+
     def _home_repairs(self, distance: float) -> bool:
         """Home by hearthstone is the way to a repairer (V278): one stands by home, and the walk
         back from home is shorter than the walk to the nearest repairer and back. A stone bound
@@ -1833,10 +1848,17 @@ class LiveBody:
             up = self.recover.run_spirit_healer()
             if up is Recovered.ALIVE:
                 self._revived(None)
-                home = self._go_home()
-                self.say(f"  up at the Spirit Healer; hearthstone: {home.value} {self.hearth.detail}")
+                if self._home_near_work(state):
+                    home = self._go_home()
+                    self.say(f"  up at the Spirit Healer; hearthstone: {home.value} "
+                             f"{self.hearth.detail}")
+                    detail = f"up at the Spirit Healer; hearthstone {home.value}"
+                else:
+                    self.say("  up at the Spirit Healer; home is far from the guide's work: "
+                             "walking on")
+                    detail = "up at the Spirit Healer; walking on"
                 self._wait_out_sickness()
-                return self._result(up, f"up at the Spirit Healer; hearthstone {home.value}")
+                return self._result(up, detail)
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body, "
                      f"to get up {TRAP_RECLAIM_YARDS:.0f} yards short of it")
         else:

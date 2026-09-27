@@ -585,6 +585,29 @@ def test_a_body_that_killed_the_character_again_is_left_for_the_spirit_healer(
     assert DEATH_TRAP_S > 60.0
 
 
+
+@pytest.mark.parametrize(("home_yards", "hearths"), [(300.0, True), (3500.0, False)])
+def test_up_at_the_spirit_healer_home_only_when_home_is_near_the_work(
+        tmp_path, monkeypatch, home_yards, hearths):
+    """V279: with its stone bound at Sentinel Hill and its grind on Elwynn's Prowlers (V276),
+    a death trap would have hearthed the level 12 mage 3,500 yards from its work."""
+    from jev.clients.hearth import Hearthed
+    from jev.world.home import save_home
+
+    b = body()
+    now = 10_000.0
+    monkeypatch.setattr("jev.run.body.time.time", lambda: now)
+    b._revived_at = now - 60.0                              # a body that killed it again
+    node = b.graph.get(seen().guide.step_id) or b.graph.nodes[0]
+    b.home_memory = tmp_path / "home.json"
+    save_home(b.home_memory, (node.world[0] + home_yards, node.world[1], 0.0), name="an inn")
+    calls = []
+    b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+    b.hearth.run = lambda: calls.append("hearth") or Hearthed.HOME
+    result = b._recover(seen())
+    assert calls == (["healer", "hearth"] if hearths else ["healer"])
+    assert ("walking on" in result.detail) is not hearths
+
 def test_a_revival_is_remembered_by_the_next_session(tmp_path, monkeypatch):
     """V247: session 219 began with the get-up at the end of 218 forgotten, got up at the
     body again and died."""
