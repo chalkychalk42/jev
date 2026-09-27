@@ -203,14 +203,14 @@ def _names(spell_ids):
 
 
 def test_a_spell_nothing_presses_or_the_bar_will_not_hold_is_not_worth_buying():
-    """Polymorph (cc), Arcane Explosion (utility), Parry (passive), Slow Fall (a new short
-    buff), Flash of Light (a new heal) and Blessing of Protection beside Divine Protection
-    (a second save) are never pressed: not worth a copper. A new rank of a spell on the
-    bar, a strike, a root or a conjure is."""
+    """Polymorph (cc), Parry (passive), Slow Fall (a new short buff), Flash of Light (a new
+    heal) and Blessing of Protection beside Divine Protection (a second save) are never
+    pressed: not worth a copper. A new rank of a spell on the bar, a strike, a root, damage
+    round the caster (Arcane Explosion, V277) or a conjure is."""
     mage_bar = starting_bar(8, 1)
-    for spell_id in (118, 1449, 130):
+    for spell_id in (118, 130):
         assert not worth_buying(spell_id, MAGE_START, mage_bar), spell(spell_id).name
-    for spell_id in (116, 143, 122, 5504, 7300, 5143):
+    for spell_id in (116, 143, 122, 1449, 5504, 7300, 5143):
         assert worth_buying(spell_id, MAGE_START, mage_bar), spell(spell_id).name
     assert worth_buying(5505, MAGE_START | {5504}, mage_bar), "Conjure Water rank 2"
     paladin_bar = starting_bar(2, 1)
@@ -251,12 +251,13 @@ def test_polymorph_neither_sends_the_mage_to_a_trainer_nor_keeps_copper_back():
 def test_a_talent_s_later_rank_is_not_counted_as_for_sale():
     """Pyroblast rank 2 is on Zaldimar's list at 24, its rank 1 a talent the bot never
     takes: the stock window never teaches it. Counted, it took the last free slot in the
-    shopping of a mage new at 24, and Conjure Water, every rank of it, dropped out of what
-    the visit was for. Fireball rank 2's rank 1 is a starting spell, and counts."""
+    shopping of a mage new at 24. Fireball rank 2's rank 1 is a starting spell, and counts.
+    The bar's free slots go to what a fight is won with first (V237): with Arcane Explosion
+    one of those (V277), a mage new at 24 has none left for Conjure Water."""
     sale = {o.spell_id for o in training.learnable(ZALDIMAR, 24, MAGE_START, race_id=1)}
     assert 12505 not in sale, "Pyroblast 2"
-    assert {5504, 5505, 5506} <= sale, "Conjure Water 1-3"
     assert 143 in sale, "Fireball 2"
+    assert 1449 in sale, "Arcane Explosion 1"
 
 
 def test_what_acts_in_a_fight_is_bought_before_what_is_kept_up_between_fights():

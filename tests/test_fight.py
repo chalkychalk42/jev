@@ -2676,3 +2676,24 @@ def test_the_root_is_held_for_a_second_attacker_or_a_fight_going_badly(combat_cl
     assert Fight._root_wanted({**alone, "combat.attackers": 2}) is True
     assert Fight._root_wanted({**alone, "vitals.hp": 0.45}) is True
 
+
+
+def test_damage_round_the_caster_comes_first_with_more_than_one_at_hand(combat_clock):
+    """V277: Arcane Explosion reaches what stands round the caster, at once and with no cast
+    to push back: first with two attackers or more at hand, not pressed with one or at range."""
+    from jev.world.combat import Ability, CombatProfile
+
+    fireball = Ability(slot=2, role=Role.ATTACK, name="Fireball", mana=30, spell_id=133)
+    explosion = Ability(slot=7, role=Role.ATTACK, name="Arcane Explosion", mana=75,
+                        spell_id=1449)
+    mage = CombatProfile(name="mage", abilities=(fireball, explosion), caster=True)
+    crowd = {**AT_RANGE, "target.in_melee": True, "combat.attackers": 2,
+             "bars.ready": 0b1000010, "bars.usable": 0b1000010}
+    for values, first in ((crowd, "7"), ({**crowd, "combat.attackers": 1}, "2"),
+                          ({**crowd, "target.in_melee": False}, "2")):
+        hid = _Hid()
+        f = _fight([values], hid=hid)
+        f.profile = mage
+        f._rotate(values)
+        assert hid.taps[:1] == [first], (values["combat.attackers"], values["target.in_melee"],
+                                         hid.taps)

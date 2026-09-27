@@ -76,6 +76,10 @@ AURA_THREAT = 10
 AURAS_IMMUNE = (39, 40)
 TARGET_SELF = 1
 TARGET_ENEMY = 6
+# Round the caster (A), every enemy in the area (B): Arcane Explosion, Thunder Clap, Frost Nova.
+TARGET_CASTER_AREA = 22
+TARGET_ENEMIES_IN_AREA = 15
+CAST_INSTANT = 1
 TARGETS_FRIEND = (21, 57)
 DURATION_INFINITE = 21
 ATTR_PASSIVE = 0x40
@@ -96,13 +100,14 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         "select SpellName, Rank1, Attributes, Effect1, EffectApplyAuraName1, "
         "EffectImplicitTargetA1, DurationIndex, RecoveryTime, CategoryRecoveryTime, "
         "ManaCost, ManaCostPercentage, CasterAuraState, TargetCreatureType, "
-        "EffectApplyAuraName2, EffectApplyAuraName3, Effect2, Effect3, EffectItemType1 "
+        "EffectApplyAuraName2, EffectApplyAuraName3, Effect2, Effect3, EffectItemType1, "
+        "EffectImplicitTargetB1, CastingTimeIndex "
         "from world_spell_template where Id=?", (spell_id,)).fetchone()
     if row is None:
         return None
     (name, rank, attributes, effect, aura, target, duration_index, recovery, category,
      mana, mana_pct, caster_state, creature_type, aura2, aura3, effect2, effect3,
-     item) = row
+     item, target_b, cast_index) = row
     # Divine Protection pacifies first and makes immune second: any effect's aura counts.
     auras = {aura, aura2, aura3} - {0, None}
     duration_ms = None
@@ -157,6 +162,10 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         facts["role"] = "strike"
     elif AURA_ROOT in auras and target != TARGET_ENEMY:
         facts["role"] = "root"
+    elif (effect == EFFECT_SCHOOL_DAMAGE and target == TARGET_CASTER_AREA
+          and target_b == TARGET_ENEMIES_IN_AREA and cast_index == CAST_INSTANT):
+        # Damage to every enemy round the caster, at once (V277): Arcane Explosion.
+        facts["role"] = "area"
     elif AURA_TRANSFORM in auras and target == TARGET_ENEMY:
         facts["role"] = "cc"
     elif effect == EFFECT_CREATE_ITEM and target == TARGET_SELF:

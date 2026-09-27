@@ -53,7 +53,7 @@ TRAINER_REACH_SPELLS = 2
 # Roles worth a new bar slot, in the order free slots are handed out.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
 NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort", "conjure",
-                  "root")
+                  "root", "area")
 BAR_SLOTS = 12
 
 # The roles the fight code presses (`jev.world.combat.TRAINED_ROLES`), in the order a spell
@@ -63,8 +63,8 @@ BAR_SLOTS = 12
 # conjure, then a long buff. A spell of any other role - Polymorph, a dispel, a passive -
 # is pressed by nothing. The mage with a spell's money a visit bought Conjure Water before
 # Frostbolt at level 5 and Conjure Food before Fire Blast at 6, in the stock window's order.
-FIGHT_ROLES = ("strike", "short_buff", "root", "stun", "save", "last_resort", "heal", "aura",
-               "attack")
+FIGHT_ROLES = ("strike", "short_buff", "root", "stun", "area", "save", "last_resort", "heal",
+               "aura", "attack")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
 # What holds more than one attacker, bought before the oldest gap (V242).

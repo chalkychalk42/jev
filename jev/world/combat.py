@@ -255,7 +255,10 @@ PROFILES: dict[str, CombatProfile] = _load()
 TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL,
                  "short_buff": Role.BUFF, "long_buff": Role.BUFF, "aura": Role.AURA,
                  "save": Role.SAVE, "stun": Role.STUN, "last_resort": Role.LAST_RESORT,
-                 "conjure": Role.CONJURE, "root": Role.ROOT}
+                 "conjure": Role.CONJURE, "root": Role.ROOT,
+                 # Damage to every enemy round the character: an attack the fight presses with
+                 # more than one at hand (V277).
+                 "area": Role.ATTACK}
 
 
 def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatProfile:

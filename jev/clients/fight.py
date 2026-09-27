@@ -350,6 +350,12 @@ SLOT_KEYS: dict[int, str] = {
 }
 
 
+def _area(ability: Ability) -> bool:
+    """Damage to every enemy round the character (V277): Arcane Explosion, Thunder Clap."""
+    known = spell_facts(ability.spell_id)
+    return known is not None and known.role == "area"
+
+
 class Fought(StrEnum):
     KILLED = "killed"
     NO_TARGET = "no_target"          # Tab found nothing attackable
@@ -1907,9 +1913,16 @@ class Fight:
         #    because pressing melee auto-attack while already swinging **stops** it. A
         #    caster with the mana casts instead: its staff is for when the mana is gone.
         casting_instead = self._ranged_ready(profile, values)
-        attacks = profile.by_role(Role.ATTACK)
+        # Damage round the character reaches only what is at hand, and is worth its cost
+        # against more than one: first then, and not pressed otherwise (V277).
+        crowd = (values.get("target.in_melee") is True
+                 and (values.get("combat.attackers") or 0) >= 2)
+        areas = tuple(a for a in profile.by_role(Role.ATTACK) if _area(a))
+        attacks = tuple(a for a in profile.by_role(Role.ATTACK) if not _area(a))
         if casting_instead:
             attacks = self._caster_order(attacks, values)
+        if crowd:
+            attacks = (*areas, *attacks)
         for attack in attacks:
             if not pressable(attack) or not affordable(attack):
                 continue
