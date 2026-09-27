@@ -84,7 +84,8 @@ def roots(run: Path) -> tuple[int, int]:
             continue
         pressed += 1
         bit = 1 << (data["slot"] - 1)
-        before = [(l.get("data") or {}).get("vitals.power") for l in looks if r["t"] - 1.0 <= l["t"] <= r["t"]]
+        before = [(look.get("data") or {}).get("vitals.power") for look in looks
+                  if r["t"] - 1.0 <= look["t"] <= r["t"]]
         power = before[-1] if before else None
         until = min([t for t in presses if t > r["t"]] + [r["t"] + ANSWER_S])
         for look in looks:

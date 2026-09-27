@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 
-from fight_costs import fights, roots  # noqa: E402
+from fight_costs import fights, roots
 
 
 def _write(path: Path, rows) -> None:

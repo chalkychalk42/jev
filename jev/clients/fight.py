@@ -2132,7 +2132,7 @@ class Fight:
         """
         if self._pending_press is None:
             return True
-        ability, when, last_use, lasting, saved_at, power_before = self._pending_press
+        ability, when, last_use, lasting, saved_at, _ = self._pending_press
         if self._answer_in(values):
             self._pending_press = None
             self._dropped = (0, 0)
