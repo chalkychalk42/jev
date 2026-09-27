@@ -112,3 +112,42 @@ def test_the_ways_round_are_planned_below_the_layers_that_search_their_own():
     assert len(route.points) > 2
     assert inner.asked == 1 and legs.asked > 2, "the direct route above, the legs below"
     assert query.estimate() is inner, "a walk's cost is asked without the search"
+
+
+class _Valley(_OpenGround):
+    """Open ground in a valley 200 yards wide along the x axis, and nothing beyond it."""
+
+    def path(self, map_id, start, end):
+        self.asked += 1
+        if abs(start[1]) > 100.0 or abs(end[1]) > 100.0:
+            return Path(PathStatus.NOPATH, ())
+        return Path(PathStatus.COMPLETE, (tuple(start), tuple(end)))
+
+
+def test_each_place_a_long_walk_passes_is_gone_round_on_its_own():
+    """V270: one way round the middle of every spawn a long route passed was no way round;
+    the level 12 walk from Elwynn's Prowlers to Sentinel Hill passed 27 spawns with it or
+    without it, and 8 gone round place by place."""
+    camps = [(495.0, 0.0), (500.0, 5.0), (505.0, -5.0),
+             (2495.0, 0.0), (2500.0, 5.0), (2505.0, -5.0)]
+    query = ExposureQuery(_Valley(), _spawns(camps))
+    start, end = (0.0, 0.0, 60.0), (3000.0, 0.0, 60.0)
+    route = query.path(0, start, end)
+    assert not query.exposed(0, route.points, start, end), "both camps gone round"
+    assert route.length_yards() < 3000.0 + 150.0, "each round its own place, not one wide way"
+    assert "attack on sight" in route.detail
+    assert route.points[0] == start and route.points[-1] == end
+
+
+def test_going_round_places_stops_at_its_budget():
+    from jev.guide.exposure import PLACES_BUDGET_S
+
+    camps = [(495.0, 0.0), (500.0, 5.0), (505.0, -5.0),
+             (2495.0, 0.0), (2500.0, 5.0), (2505.0, -5.0)]
+    ticks = iter(range(10000))
+    inner = _Valley()
+    query = ExposureQuery(inner, _spawns(camps),
+                          clock=lambda: next(ticks) * (PLACES_BUDGET_S / 3))
+    route = query.path(0, (0.0, 0.0, 60.0), (3000.0, 0.0, 60.0))
+    assert route.usable
+    assert inner.asked <= 1 + 2 * 3 + 2 * 3, "a few legs each search, then the best found"

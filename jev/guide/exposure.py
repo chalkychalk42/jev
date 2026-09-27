@@ -42,6 +42,16 @@ EXPOSURE_BUDGET_S = 1.0
 # as far again as a far-wandering unit carries its reach (V255).
 SAMPLE_YARDS = 30.0
 WANDER_LOOK = 20.0
+# Then each place the chosen route still passes spawns is gone round on its own (V270): spawns
+# further apart than this along the route are separate places, each rounded between points this
+# far before and after it, by a way at most `EXPOSURE_DETOUR` times the stretch it replaces and
+# this much more. One way round the middle of every spawn a long route passed was no way round:
+# the level 12 walk from Elwynn's Prowlers to Sentinel Hill, 3,261 yards, passed 27 spawns with
+# or without it; round each place, 8, in 409 yards more.
+PLACE_GAP_YARDS = 80.0
+PLACE_SIDE_YARDS = 40.0
+PLACE_SLACK_YARDS = 60.0
+PLACES_BUDGET_S = 1.0
 
 
 def _samples(points, step: float):
@@ -93,9 +103,13 @@ class ExposureQuery:
     def path(self, map_id: int, start, end) -> Path:
         direct = self.inner.path(map_id, start, end)
         try:
-            return self._fewer(map_id, start, end, direct)
+            chosen = self._fewer(map_id, start, end, direct)
         except Exception:
             return direct
+        try:
+            return self._round_places(map_id, start, end, chosen)
+        except Exception:
+            return chosen
 
     def close(self) -> None:
         self.inner.close()
@@ -152,3 +166,134 @@ class ExposureQuery:
                     best = Path(direct.status, points, direct.source,
                                 f"round {len(passed)} units that attack on sight")
         return best
+
+    def _round_places(self, map_id: int, start, end, route: Path) -> Path:
+        """Go round each place `route` still passes spawns, on its own (V270)."""
+        if (not route.usable or route.status is not PathStatus.COMPLETE
+                or len(route.points) < 2 or start[:2] == end[:2]):
+            return route
+        points = [tuple(p) for p in route.points]
+        cum = _arcs(points)
+        passed = self.exposed(map_id, points, start, end)
+        if not passed:
+            return route
+        deadline = self.clock() + PLACES_BUDGET_S
+        out: list = []
+        done, bent = 0.0, 0
+        for place in _places(points, cum, passed):
+            if self.clock() >= deadline:
+                break
+            lo = max(done, place[0][0] - PLACE_SIDE_YARDS)
+            hi = min(cum[-1], place[-1][0] + PLACE_SIDE_YARDS)
+            if hi - lo < 1.0:
+                continue
+            stretch = _between(points, cum, lo, hi)
+            way = self._round_place(map_id, start, end, stretch, [s for _, s in place], deadline)
+            if way is stretch:
+                continue
+            _extend(out, _between(points, cum, done, lo))
+            _extend(out, way)
+            done, bent = hi, bent + 1
+        if not bent:
+            return route
+        _extend(out, _between(points, cum, done, cum[-1]))
+        return Path(route.status, tuple(out), route.source,
+                    f"round {len(passed)} units that attack on sight")
+
+    def _round_place(self, map_id: int, start, end, stretch: list, spawns: list,
+                     deadline: float) -> list:
+        """The cheapest way from the stretch's first point to its last round these spawns, or
+        the stretch itself."""
+        a, b = stretch[0], stretch[-1]
+        length = _length(stretch)
+        best_cost = self.cost(length, len(self.exposed(map_id, stretch, start, end)))
+        best = stretch
+        cx = sum(x for x, _ in spawns) / len(spawns)
+        cy = sum(y for _, y in spawns) / len(spawns)
+        spread = max(math.dist((cx, cy), s) for s in spawns)
+        z = (a[2] + b[2]) / 2
+        for margin in EXPOSURE_MARGINS:
+            radius = spread + EXPOSED_YARDS + margin
+            for k in range(EXPOSURE_BEARINGS):
+                if self.clock() >= deadline:
+                    return best
+                angle = 2 * math.pi * k / EXPOSURE_BEARINGS
+                via = (cx + radius * math.cos(angle), cy + radius * math.sin(angle), z)
+                first = self.legs.path(map_id, a, via)
+                if first.status is not PathStatus.COMPLETE or len(first.points) < 2:
+                    continue
+                second = self.legs.path(map_id, first.points[-1], b)
+                if second.status is not PathStatus.COMPLETE or len(second.points) < 2:
+                    continue
+                way = [tuple(p) for p in first.points] + [tuple(p) for p in second.points[1:]]
+                total = _length(way)
+                if total > length * EXPOSURE_DETOUR + PLACE_SLACK_YARDS:
+                    continue
+                cost = self.cost(total, len(self.exposed(map_id, way, start, end)))
+                if cost < best_cost:
+                    best_cost, best = cost, way
+        return best
+
+
+def _arcs(points) -> list[float]:
+    """How far along the polyline each of its points lies."""
+    out = [0.0]
+    for a, b in zip(points, points[1:], strict=False):
+        out.append(out[-1] + math.dist(a[:2], b[:2]))
+    return out
+
+
+def _length(points) -> float:
+    return sum(math.dist(a[:2], b[:2]) for a, b in zip(points, points[1:], strict=False))
+
+
+def _along(points, cum: list[float], p: tuple[float, float]) -> float:
+    """How far along the polyline its point nearest `p` lies."""
+    best, at = math.inf, 0.0
+    for i in range(1, len(points)):
+        a, b = points[i - 1], points[i]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length2 = dx * dx + dy * dy
+        t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy)
+                                                  / length2))
+        d = math.dist((a[0] + t * dx, a[1] + t * dy), p)
+        if d < best:
+            best, at = d, cum[i - 1] + t * math.sqrt(length2)
+    return at
+
+
+def _places(points, cum: list[float], passed) -> list:
+    """The passed spawns by where along the route they are passed, in places: runs of spawns
+    no further apart along it than `PLACE_GAP_YARDS`."""
+    along = sorted((_along(points, cum, s), s) for s in passed)
+    places = [[along[0]]]
+    for item in along[1:]:
+        if item[0] - places[-1][-1][0] > PLACE_GAP_YARDS:
+            places.append([item])
+        else:
+            places[-1].append(item)
+    return places
+
+
+def _point_at(points, cum: list[float], s: float):
+    """The point `s` along the polyline, height and all, and the index of the next vertex."""
+    for i in range(1, len(points)):
+        if cum[i] >= s:
+            a, b = points[i - 1], points[i]
+            f = 0.0 if cum[i] == cum[i - 1] else (s - cum[i - 1]) / (cum[i] - cum[i - 1])
+            return tuple(a[k] + (b[k] - a[k]) * f for k in range(len(a))), i
+    return tuple(points[-1]), len(points)
+
+
+def _between(points, cum: list[float], lo: float, hi: float) -> list:
+    """The polyline from `lo` along it to `hi`."""
+    first, i = _point_at(points, cum, lo)
+    last, j = _point_at(points, cum, hi)
+    return [first, *points[i:j], last]
+
+
+def _extend(out: list, more) -> None:
+    """Add a piece of polyline, without repeating the point it starts at."""
+    for p in more:
+        if not out or math.dist(out[-1], p) > 0.01:
+            out.append(p)
