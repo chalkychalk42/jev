@@ -289,6 +289,13 @@ def remembered(args, graph, key: int | None, level: int | None = None):
             # own grind for its level until the next guide's first, the level kept so a
             # grind runs on across sessions (V214).
             rib = used.rib_for(level)
+            # A grind still suited to the level is kept, not traded (V272): at 11 the level
+            # 9-11 Prowlers' rib gave way to the 11-12 one, eight Riverpaw Gnolls 5 to 9 yards
+            # apart, where every pull is two or three.
+            kept = used.get(memory.step_id) if memory.step_id else None
+            if (kept is not None and kept.kind is StepKind.GRIND
+                    and kept.level[0] <= level <= kept.level[1]):
+                rib = kept
             if rib is not None:
                 print(f"guide {graph.graph_id} finished at level {level}, below "
                       f"{following.name}'s {entry}: grinding {rib.id} until then")

@@ -663,3 +663,21 @@ def test_a_guide_run_out_below_the_next_ones_first_level_grinds_until_then(
     assert rib.level[1] <= level + 1, "a grind for its level"
     assert memory.entry_level == cli.entry_level(cli.NEXT_GUIDE["alli_human_1_12"]) - 1 == 11
     assert "grinding" in capsys.readouterr().out
+
+
+def test_a_grind_still_suited_to_the_level_is_kept(tmp_path):
+    """V272: at 11 the level 9-11 Prowlers' rib would have given way to the 11-12 one, eight
+    Riverpaw Gnolls 5 to 9 yards apart, where every pull is two or three."""
+    from jev.guide import playhead
+
+    path = tmp_path / "character.json"
+    playhead.save("alli_human_1_12.supported", "alli_human_1_12_grind_elwynn_9_11", {54}, path,
+                  finished=True, entry_level=11)
+    args = SimpleNamespace(playhead=path, route_mode="supported",
+                           graph=cli.ROOT / "content/tbc/ally_human_1_12.json")
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 11)
+    assert memory.step_id == "alli_human_1_12_grind_elwynn_9_11" and memory.finished
+    playhead.save("alli_human_1_12.supported", "alli_human_1_12_grind_elwynn_7_9", {54}, path,
+                  finished=True, entry_level=11)
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 11)
+    assert memory.step_id != "alli_human_1_12_grind_elwynn_7_9", "outgrown: one for the level"
