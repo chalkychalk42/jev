@@ -2646,3 +2646,23 @@ def test_a_caster_buffs_up_between_fights_while_it_has_the_mana(combat_clock):
     paladin.profile = for_class(2, 1)
     assert paladin.buff_up() == 0, "not a caster: its buffs are the rotation's"
     assert _fight([rested]).buff_up() == 0, "no census yet: nothing read, nothing pressed"
+
+
+def test_a_casters_mana_spent_on_a_unit_that_takes_nothing_ends_the_fight(combat_clock):
+    """V273: twice the level 10 mage spent its mana from full to nothing on a unit whose
+    health never moved (a Mangy Wolf behind a tree, session 242; a Murloc Lurker, session
+    250), and died to it when it came."""
+    evading = {**AT_RANGE, "target.has": True, "target.hp": 1.0, "target.guid": 77,
+               "target.attacking_me": True}
+    f = _mage([evading])
+    assert f._unhurt_by(evading) is False, "the fight's first mana, noted"
+    assert f._unhurt_by({**evading, "vitals.power": 0.7}) is False, "30%: not yet"
+    assert f._unhurt_by({**evading, "vitals.power": 0.6}) is True
+    assert "not hurt" in f.detail
+    assert f._acceptable(None, defend=True, values=evading) is False, "not taken again"
+    assert f._acceptable(None, defend=True, values={**evading, "target.guid": 78}) is True
+
+    hurt = _mage([evading])
+    hurt._unhurt_by(evading)
+    hurt._damage_seen = True
+    assert hurt._unhurt_by({**evading, "vitals.power": 0.2}) is False, "being hurt: fight on"

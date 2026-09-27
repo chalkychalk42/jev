@@ -307,6 +307,13 @@ STEP_CLEAR_S = 2.0
 # straight off the one faced took the level 10 mage into the Prowler behind it, held and still
 # in reach, and it died with the one it faced at 28% (session 247).
 STEP_ASIDE_S = 1.5
+# A caster that has spent this share of its mana on a unit whose health never moved is not
+# hurting it (V273): a unit that cannot reach the caster evades, and takes nothing. The fight
+# ends unreachable, and the unit is not taken again for `UNHURT_S`. Twice the level 10 mage
+# spent its mana from full to nothing so, and died to the unit when it came (a Mangy Wolf behind
+# a tree at Crystal Lake, session 242; a Murloc Lurker, session 250).
+UNHURT_MANA = 0.35
+UNHURT_S = 60.0
 # A press whose ability's mana has at least this share gone since it was pressed was
 # answered, whatever the bar painted (V176).
 ANSWER_SPENT = 0.7
@@ -400,6 +407,8 @@ class Fight:
     _pending_heal: tuple[float, float] | None = field(default=None, init=False)
     _damage_mark: float | None = field(default=None, init=False)
     _asides: int = field(default=0, init=False)          # steps aside after a root, for the side (V271)
+    _power_start: float | None = field(default=None, init=False)   # the fight's first mana (V273)
+    _unhurt: dict = field(default_factory=dict, init=False)        # guid -> when found unhurt
     _damage_at: float = field(default=0.0, init=False)
     _last_aim_at: float = field(default=0.0, init=False)
     last_hp: float | None = field(default=None, init=False)
@@ -535,6 +544,7 @@ class Fight:
         self._look_at = None
         self._damage_mark = None
         self._damage_seen = self._input_refused = False
+        self._power_start = None
         self._selected_name_id = None
         self._selected_guid = None
         self._aim_code = None
@@ -733,6 +743,8 @@ class Fight:
 
             self._last_near = v.get("target.in_melee") is True
             profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
+            if profile.caster and self._unhurt_by(v):
+                return Fought.UNREACHABLE
             if self._ranged_ready(profile, v):
                 # A caster with the mana casts from where it stands (V164). The client says
                 # what is wrong with a cast - too far, not facing, out of sight - and each
@@ -1053,6 +1065,9 @@ class Fight:
         hp = v.get("target.hp")
         if hp is not None and hp <= DEAD_HP:
             return False                       # a corpse is selectable and not a fight
+        guid = v.get("target.guid")
+        if guid is not None and time.monotonic() - self._unhurt.get(guid, -math.inf) < UNHURT_S:
+            return False                       # found unhurt a moment ago (V273)
         if attackers_only and v.get("target.attacking_me") is not True:
             return False
         if (defend and v.get("target.attacking_me") is not True
@@ -1193,6 +1208,25 @@ class Fight:
             if self._reach_at is not None:
                 self._reach_at += held
         self._look_at = now
+
+    def _unhurt_by(self, values: dict) -> bool:
+        """A caster's mana spent on a unit whose health has not moved (V273): the unit is
+        marked not to be taken again for a while, and the fight says why it ends."""
+        power = values.get("vitals.power")
+        if not isinstance(power, (int, float)):
+            return False
+        if self._power_start is None:
+            self._power_start = power
+            return False
+        spent = self._power_start - power
+        if self._damage_seen or spent < UNHURT_MANA:
+            return False
+        guid = values.get("target.guid")
+        if guid is not None:
+            self._unhurt[guid] = time.monotonic()
+        self.detail = f"{spent:.0%} of its mana spent and the unit's health never moved; not hurt"
+        event("fight.unhurt", data={"spent": round(spent, 3), "guid": guid})
+        return True
 
     def _note_damage(self, values: dict) -> bool:
         """The target lost health since the last look: a swing reached it."""
