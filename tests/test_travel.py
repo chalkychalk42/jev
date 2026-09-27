@@ -381,3 +381,22 @@ def test_a_long_leg_that_keeps_closing_is_not_stuck():
                no_progress_s=0.6)
     result = t.to((0.5, 0.48), timeout_s=20.0, allow_detour=False)
     assert result.outcome is Outcome.ARRIVED
+
+
+def test_a_doors_inner_jamb_is_kept_however_close_and_reached_near():
+    """V265: the Lion's Pride Inn's door as the planner gives it, the outer jamb, the inner
+    2.4 yards on, and the hall beyond, turned 70 degrees; a point on a straight way is
+    still thinned."""
+    from jev.clients.travel import _corner_arrival, _thin
+    from jev.guide.coords import world_to_map
+
+    bounds = ZoneBounds(12, 0, 1535.4166, -1935.4166, -7939.583, -10254.166)
+    door = [world_to_map(x, y, bounds) for x, y in
+            [(-9450.7, 40.5), (-9455.2, 44.5), (-9457.6, 44.8), (-9461.3, 37.6)]]
+    assert _thin(door, bounds, 3.0) == door
+    assert 1.0 <= _corner_arrival(door, 2, bounds, 3.0) < 1.2, "the inner jamb"
+    assert 1.5 < _corner_arrival(door, 1, bounds, 3.0) < 2.0, "the outer, turned 35 degrees"
+    straight = [world_to_map(x, y, bounds) for x, y in
+                [(-9450.0, 40.0), (-9455.0, 40.0), (-9456.5, 40.2), (-9462.0, 40.0)]]
+    assert _thin(straight, bounds, 3.0) == [straight[0], straight[1], straight[3]]
+    assert _corner_arrival(straight, 1, bounds, 3.0) == 3.0

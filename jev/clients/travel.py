@@ -90,6 +90,14 @@ DETOUR_BLOCKED_YARDS = 3.0
 LINE_YARDS = 1.0
 LOOKAHEAD_YARDS = 4.0
 
+# A planned route's corner - where it bends round a wall's end, a door's jamb - is kept however
+# close to the waypoint before it, and reached near enough that the leg on from there passes
+# within this of it (V265). Thinned away, or reached from three yards off, the inner jamb of
+# the Lion's Pride Inn's door left the leg on into the hall running through the wall beside
+# the door, and the mage's walk to its trainer stood outside against it for three minutes
+# (session 241).
+CORNER_YARDS = 1.0
+
 
 class Outcome(StrEnum):
     ARRIVED = "arrived"
@@ -482,7 +490,8 @@ class Travel:
 
         for i, leg in enumerate(legs[1:], start=1):     # legs[0] is where we already are
             final = i == len(legs) - 1
-            self.arrival_yards = exact if final else self.waypoint_arrival_yards
+            self.arrival_yards = exact if final else _corner_arrival(
+                legs, i, self.bounds, self.waypoint_arrival_yards)
             self.closest_yards = None       # per leg, or the number means nothing
             remaining = timeout_s - (time.perf_counter() - t0)
             if remaining <= 0:
@@ -859,15 +868,62 @@ def _thin(legs: list[tuple[float, float]], bounds: ZoneBounds,
     keeping both means the second is satisfied the moment the first is and the follower
     spends its time declaring victory instead of walking. The last point always survives:
     it is the destination, and thinning it away would be arriving somewhere else.
+
+    A corner survives too (V265): a point the straight leg past it would miss by more than
+    `CORNER_YARDS` is where the route bends round something, and is reached at a radius of
+    its own (`_corner_arrival`).
     """
     if len(legs) <= 2:
         return legs
-    kept = [legs[0]]
-    for leg in legs[1:-1]:
-        if distance_yards(kept[-1], leg, bounds) >= min_gap_yards:
-            kept.append(leg)
-    kept.append(legs[-1])
-    return kept
+    kept = [0]
+    for i in range(1, len(legs) - 1):
+        if distance_yards(legs[kept[-1]], legs[i], bounds) >= min_gap_yards:
+            kept.append(i)
+    kept.append(len(legs) - 1)
+    out = [kept[0]]
+    for a, b in zip(kept, kept[1:]):
+        out.extend(_corners(legs, a, b, bounds))
+        out.append(b)
+    return [legs[i] for i in out]
+
+
+def _corners(legs, a: int, b: int, bounds: ZoneBounds) -> list[int]:
+    """The points between `legs[a]` and `legs[b]`, in order, that the straight leg between
+    them would pass more than `CORNER_YARDS` from, and the corners of what is left."""
+    far, worst = None, CORNER_YARDS
+    for i in range(a + 1, b):
+        off = _off_leg_yards(legs[i], legs[a], legs[b], bounds)
+        if off > worst:
+            far, worst = i, off
+    if far is None:
+        return []
+    return [*_corners(legs, a, far, bounds), far, *_corners(legs, far, b, bounds)]
+
+
+def _off_leg_yards(p, a, b, bounds: ZoneBounds) -> float:
+    """How far `p` lies from the straight leg from `a` to `b`, in yards."""
+    dx, dy = to_yards(b[0] - a[0], b[1] - a[1], bounds)
+    px, py = to_yards(p[0] - a[0], p[1] - a[1], bounds)
+    length2 = dx * dx + dy * dy
+    t = 0.0 if length2 == 0 else max(0.0, min(1.0, (px * dx + py * dy) / length2))
+    return math.hypot(px - t * dx, py - t * dy)
+
+
+def _corner_arrival(legs, i: int, bounds: ZoneBounds, loose: float) -> float:
+    """The arrival radius at waypoint `i`, where the route turns: `loose` on a straight way,
+    less round a corner, so that the leg on from where it counts as reached passes within
+    `CORNER_YARDS` of it (V265). Cut from `r` yards short, a turn of `t` passes the corner
+    about `r sin t` off; a turn past square, about `r`."""
+    if not 0 < i < len(legs) - 1:
+        return loose
+    ux, uy = to_yards(legs[i][0] - legs[i - 1][0], legs[i][1] - legs[i - 1][1], bounds)
+    vx, vy = to_yards(legs[i + 1][0] - legs[i][0], legs[i + 1][1] - legs[i][1], bounds)
+    lu, lv = math.hypot(ux, uy), math.hypot(vx, vy)
+    if lu == 0 or lv == 0:
+        return loose
+    cos = (ux * vx + uy * vy) / (lu * lv)
+    sin = 1.0 if cos <= 0 else math.sqrt(max(0.0, 1.0 - cos * cos))
+    return loose if sin * loose <= CORNER_YARDS else max(CORNER_YARDS, CORNER_YARDS / sin)
 
 
 def _wrap(a: float) -> float:

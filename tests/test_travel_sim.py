@@ -140,6 +140,23 @@ def test_a_planned_leg_through_a_door_goes_through_it(off, monkeypatch):
     assert result.outcome is Outcome.ARRIVED and result.stuck_events == 0
 
 
+# A wall 1.6 yards thick with a door 2.5 wide through it, y 0 to 2.5, and the planner's way
+# in: round the outer jamb, through, round the inner one, on into the room beside the wall.
+THICK_DOOR = [Segment(0, -15, 0, 0), Segment(0, 2.5, 0, 15), Segment(-1.6, -15, -1.6, 0),
+              Segment(-1.6, 2.5, -1.6, 15), Segment(0, 0, -1.6, 0), Segment(0, 2.5, -1.6, 2.5)]
+JAMBS = [(0.6, 1.9), (-2.2, 1.9), (-6.0, 9.0)]
+
+
+@pytest.mark.parametrize(("start", "off"), [((6, -4), -20), ((6, 0), -20), ((6, 4), -20),
+                                            ((10, -4), 20), ((10, 0), 20)])
+def test_a_route_round_a_doors_jambs_goes_round_them(start, off, monkeypatch):
+    """V265: the inner jamb of the Lion's Pride Inn's door, 2.4 yards past the outer, was
+    thinned away, and the leg on into the hall ran through the wall beside the door; the
+    mage's walk to its trainer stood against it for three minutes (session 241)."""
+    heading = math.atan2(JAMBS[0][1] - start[1], JAMBS[0][0] - start[0]) + math.radians(off)
+    result, _ = walk([start, *JAMBS], THICK_DOOR, heading, monkeypatch=monkeypatch)
+    assert result.outcome is Outcome.ARRIVED and result.stuck_events == 0, result.detail
+
 def test_open_ground_is_walked_without_any_recovery(monkeypatch):
     result, _ = walk([(0, 0), (40, 0), (40, 20)], [], 0.0, memory=RouteMemory(),
                      monkeypatch=monkeypatch)
