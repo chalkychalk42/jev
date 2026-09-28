@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from jev.coach.policy import Context, reflex, service
+from jev.coach.policy import Context, own_rule, reflex, service
 from jev.learn.episode import Recorder, SkillOutcome
 from jev.orch.runtime import Armed, ClientRuntime
 from jev.run.evidence import bind, operation
@@ -299,13 +299,21 @@ class Supervisor:
                         state.bags.free if state is not None else None)
                 if (worker.arm.decision.skill == "BIND_HEARTH"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
-                    # An inn out of reach is not walked to again on this step.
-                    self.runtime.policy_context.bind_failed(
-                        state.guide.step_id if state is not None else None)
+                    # An inn out of reach is not walked to again on this step: the step it was
+                    # armed on, which is the one the policy reads (V315). The state read here
+                    # is the source's, which names no step - only the runtime's tick puts the
+                    # playhead on it - so the bar was set on `None` and never held: 815 binds
+                    # in one run of hive-477 on 28 Sep, each aborted in 0.25 s.
+                    self.runtime.policy_context.bind_failed(worker.arm.step_id)
                 if (worker.arm.decision.skill == "DISCOVER_FLIGHT"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
-                    self.runtime.policy_context.discover_failed(
-                        state.guide.step_id if state is not None else None)
+                    self.runtime.policy_context.discover_failed(worker.arm.step_id)
+                if (result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
+                        and own_rule(worker.arm.rule).startswith("service.")):
+                    # Whatever its own bar says, a failed service waits `SERVICE_RETRY_MIN_S`
+                    # before a service rule arms it again (V315).
+                    self.runtime.policy_context.service_failed(
+                        worker.arm.decision.skill, state.t if state is not None else time.time())
                 if (worker.arm.decision.skill == "TRAIN_CLASS"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
                     # A trainer out of reach is not walked to again for half an hour at this

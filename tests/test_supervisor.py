@@ -1077,3 +1077,84 @@ def test_the_sessions_end_closes_what_is_learned_only_when_the_next_thing_starts
     failing = Failing()
     Supervisor(runtime(tmp_path, [seen()]), failing, say=lambda line: None).close()
     assert failing.releases == 1
+
+
+@pytest.mark.parametrize("skill,blocked", [("BIND_HEARTH", "bindable"),
+                                           ("DISCOVER_FLIGHT", "discoverable")])
+def test_a_bind_or_visit_that_fails_at_once_is_not_armed_again_on_the_step(tmp_path, skill,
+                                                                          blocked):
+    """The hive, 28 Sep 20:00-23:20: BIND_HEARTH armed 40,963 times, a bot's inn behind a
+    death camp refused at once (V307), "the planner could not stand us on the node" in 0.25 s
+    and armed again 0.5 s later. The bar was set on the step the source's state names, which is
+    none: the source reads the game, and only the runtime puts the playhead on a state."""
+    class ServiceBody(Body):
+        available = Body.available | {skill}
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.armed = []
+
+        def execute(self, arm, state, checkpoint):
+            self.armed.append(arm.decision.skill)
+            return super().execute(arm, state, checkpoint)
+
+    rt = runtime(tmp_path, [seen(t / 2) for t in range(8)])
+    setattr(rt.policy_context, blocked, lambda state: True)
+    body = ServiceBody(result=Result(SkillOutcome.ABORTED,
+                                     "the planner could not stand us on the node",
+                                     "approach_failed"))
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == skill
+        assert supervisor.worker.done.wait(1)
+        for t in range(1, 6):
+            supervisor.step(t / 2)
+            if supervisor.worker is not None:
+                supervisor.worker.done.wait(1)
+        assert body.armed.count(skill) == 1, f"{skill} armed {body.armed} on one step"
+        assert rt.armed.decision.skill != skill
+        assert getattr(rt.policy_context, f"{blocked.removesuffix('able')}_blocked") == (
+            rt.tracker.step_id,), "the bar is on the step the policy reads"
+    finally:
+        supervisor.close()
+
+
+def test_a_service_that_failed_is_not_armed_again_within_the_minimum_whatever_the_step(
+        tmp_path):
+    """A general guard against the spin above: a service that failed is not armed again by
+    a service rule within `SERVICE_RETRY_MIN_S`, even where its own bar names another step."""
+    from jev.coach.policy import SERVICE_RETRY_MIN_S
+
+    class ServiceBody(Body):
+        available = Body.available | {"BIND_HEARTH"}
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.armed = []
+
+        def execute(self, arm, state, checkpoint):
+            self.armed.append(arm.decision.skill)
+            return super().execute(arm, state, checkpoint)
+
+    rt = runtime(tmp_path, [seen(t) for t in (0, 1, 2, SERVICE_RETRY_MIN_S + 2)])
+    rt.policy_context.bindable = lambda state: True
+    # A bar that never matches: as if the step's name had changed under it.
+    rt.policy_context.bind_failed = lambda step_id: None
+    body = ServiceBody(result=Result(SkillOutcome.ABORTED, "no inn", "approach_failed"))
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.done.wait(1)
+        for t in (1, 2):
+            supervisor.step(t)
+            if supervisor.worker is not None:
+                supervisor.worker.done.wait(1)
+        assert body.armed.count("BIND_HEARTH") == 1
+        assert rt.armed.decision.skill != "BIND_HEARTH"
+        supervisor.step(SERVICE_RETRY_MIN_S + 2)
+        assert rt.armed.decision.skill == "BIND_HEARTH", "the minimum passed: asked again"
+    finally:
+        supervisor.close()

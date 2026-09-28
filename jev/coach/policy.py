@@ -28,7 +28,7 @@ always usable on its own.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from jev.coach.schema import Decision, Intent
 from jev.guide.graph import Node
@@ -84,6 +84,14 @@ UNREACHABLE_RETRY_S = 1800.0
 # The services barred so, by skill, and the name of each one's bar in `Context`.
 UNREACHABLE_KINDS = {"VENDOR_REPAIR": "repair", "BUY_AMMO_REAGENT_FOOD": "supplies",
                      "BAG_MAKE_SPACE": "bags"}
+# A service that failed - aborted or timed out, not cut short - is armed again by no service
+# rule within this many seconds (wall time), on any step: a floor under every bar above,
+# which each keys by a step and so holds only while the step it names is the one the policy
+# reads (V315). BIND_HEARTH was armed 40,963 times in the hive from 20:00 to 23:20 on 28 Sep,
+# 815 times in one run of hive-477: its inn behind a death camp, the walk was refused at once
+# (V307), the skill aborted in 0.25 s, and its bar, set on a step no rule reads, let it be
+# armed again 0.5 s later. Not keyed by the step, which is what failed to agree.
+SERVICE_RETRY_MIN_S = 60.0
 
 
 @dataclass(frozen=True)
@@ -108,6 +116,18 @@ class Context:
     def repair_failed(self, money: int | None) -> None:
         self.repair_blocked, self.repair_money = True, money
         self._save()
+
+    # When each service last failed, by skill (`SERVICE_RETRY_MIN_S`, V315).
+    service_failed_at: dict[str, float] = field(default_factory=dict)
+
+    def service_failed(self, skill: str, now: float) -> None:
+        self.service_failed_at[skill] = now
+
+    def failed_lately(self, skill: str | None, now: float) -> bool:
+        """Did `skill` fail within `SERVICE_RETRY_MIN_S` of `now`? Either way round: a wall
+        clock set back (the WSL clock, 28 Sep) does not hold a service off for good."""
+        at = self.service_failed_at.get(skill or "")
+        return at is not None and abs(now - at) < SERVICE_RETRY_MIN_S
 
     fight_unengaged: int = 0
     fight_paused_until: float = 0.0
@@ -479,6 +499,9 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     plans: list[Plan] = []
 
     def due(plan: Plan) -> None:
+        # Nor one that failed within `SERVICE_RETRY_MIN_S`, whoever would pick it (V315).
+        if context is not None and context.failed_lately(plan.decision.skill, state.t):
+            return
         if all(p.rule != plan.rule for p in plans):
             plans.append(plan)
 
