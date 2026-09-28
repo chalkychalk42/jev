@@ -295,6 +295,7 @@ class Hunt:
                 if chooser is not None:
                     chooser.leave(self._found)       # the last station's visit, as it went
                     self._found = False
+                    chooser.walking()                # a visit's walk is its cost too (V310)
                 with operation("hunt.approach", data={"destination": target}) as span:
                     standoff = 0.0 if close else self.standoff_yards
                     arrived = (self.approach(target, stop_short=standoff)

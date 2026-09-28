@@ -502,6 +502,29 @@ def test_the_hunt_stands_first_where_its_target_has_been_found_and_records_the_v
 
 
 
+def test_a_stations_visit_is_timed_from_the_walk_to_it():
+    """V310: a far station's walk is its cost over a near one, so the visit counts from the
+    walk's start, not from arriving."""
+    import random
+
+    from jev.learn.choices import ChoiceMemory, Stations
+
+    now = [0.0]
+
+    def walk(p):
+        now[0] += 30.0                           # the walk takes thirty seconds
+        return True
+
+    memory = ChoiceMemory()
+    here, there = (0.0, 0.0, 80.0), (60.0, 0.0, 80.0)
+    h, _ = _hunt([Fought.KILLED], [(0, 1), (0, 1), (1, 1)], approach=walk)
+    h.stations = Stations(memory, "hunt.station", "creature:9", rng=random.Random(3),
+                          clock=lambda: now[0])
+    assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=(here, there)) is Hunted.DONE
+    (arm,) = memory.arms("hunt.station").values()
+    assert (arm.tries, arm.wins, arm.seconds) == (1, 1, 30.0)
+
+
 def test_a_death_at_a_station_is_learned_against_it():
     """V274: a visit that ended in the character's death counts as several that paid nothing."""
     import random

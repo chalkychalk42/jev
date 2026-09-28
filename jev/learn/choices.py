@@ -16,6 +16,12 @@ done, shrunk toward its choice's pooled rate, and options are tried in the order
 unproven option draws from the pooled rate and so gets its turn; one that has paid off
 comes first; one that never has sinks, without ever being ruled out.
 
+What is drawn is an option's payoffs per second, not per try (V310): its chance divided by a
+draw of its seconds a try, shrunk the same way toward the choice's pooled seconds. A station
+that yields 60% of visits 90 yards away no longer beats one that yields 50% next door, and a
+heal line is learned by the seconds a kill costs (`jev.clients.fight`), not by how often a
+fight went well.
+
 Each run keeps what was seen, chosen and learned in `choices.jsonl`; the durable record is
 one JSON file (`ChoiceMemory`).
 """
@@ -46,6 +52,16 @@ TOUR_DECAY = 0.85
 # (V274): a station where a pair keeps killing the character is one to stand at less. The
 # level 10 mage's deaths were Prowler pairs about once a session (sessions 244-253).
 DEATH_VISITS = 4
+# What a death costs beyond the time it took, in seconds (V310): the hive's reward charges each
+# death this much more played time (JevHive `docs/plans/reward.md`, `DEATH_S`), for what the
+# played hours do not show - the live client's durability, the goal's cap on deaths. A visit
+# that ended in one spreads it over its `DEATH_VISITS - 1` extra visits; a heal line's cycle
+# carries it whole.
+DEATH_S = 120.0
+# A try is counted at least this many seconds when an option's pace is drawn (V310): a death's
+# extra visits were recorded at 0 s before it, and an option of those alone would otherwise
+# draw a pace of nothing.
+SECONDS_FLOOR = 1.0
 # Another's record of the same choices, read beside the character's own and never written
 # (V290): the hive's, whose bots play this code on a server of their own. Each of its visits
 # counts as `PRIOR_WEIGHT` of the character's own, and an option takes at most `PRIOR_CAP`
@@ -165,12 +181,39 @@ def pooled(arms: Iterable[Arm]) -> float:
     return (sum(a.wins for a in arms) + 1) / (sum(a.tries for a in arms) + 2)
 
 
-def draw(arm: Arm | None, rate: float, rng: random.Random) -> float:
-    """A draw of an option's chance of paying off: its record, shrunk toward `rate`."""
+def pace(arms: Iterable[Arm]) -> float | None:
+    """The pooled seconds a try across a choice's options (V310); `None` while none has its
+    time recorded, and a draw is then of the chance alone, as before."""
+    arms = list(arms)
+    tries = sum(a.tries for a in arms)
+    seconds = sum(max(0.0, a.seconds) for a in arms)
+    if tries <= 0 or seconds <= 0:
+        return None
+    return max(SECONDS_FLOOR, seconds / tries)
+
+
+def draw(arm: Arm | None, rate: float, rng: random.Random, pooled_s: float | None = None) -> float:
+    """A draw of an option's chance of paying off: its record, shrunk toward `rate`. With
+    `pooled_s` (the choice's `pace`), a draw of its payoffs per second (V310): the chance times
+    a draw of its tries per second, shrunk toward the pooled pace by `PRIOR_VISITS` tries.
+
+    Tries per second is drawn as an exponential's rate is (a gamma of the tries, over the
+    seconds they took), so an option seldom tried is uncertain in its pace as in its chance,
+    and one never tried draws around the pooled rate over the pooled pace: it gets its turn."""
     tries, wins = (arm.tries, arm.wins) if arm is not None else (0, 0)
     alpha = PRIOR_VISITS * rate + wins
     beta = PRIOR_VISITS * (1.0 - rate) + (tries - wins)
-    return rng.betavariate(max(alpha, 1e-6), max(beta, 1e-6))
+    chance = rng.betavariate(max(alpha, 1e-6), max(beta, 1e-6))
+    if pooled_s is None:
+        return chance
+    seconds = max(arm.seconds, tries * SECONDS_FLOOR) if arm is not None else 0.0
+    spent = PRIOR_VISITS * max(SECONDS_FLOOR, pooled_s) + seconds
+    return chance * rng.gammavariate(PRIOR_VISITS + tries, 1.0 / spent)
+
+
+def _logged(value: float) -> float:
+    """A draw as the log keeps it: four figures, since payoffs a second are small."""
+    return float(f"{value:.4g}")
 
 
 def record_text(arm: Arm | None, unit: str = "each") -> str:
@@ -178,8 +221,10 @@ def record_text(arm: Arm | None, unit: str = "each") -> str:
     if arm is None or arm.tries <= 0:
         return "never tried"
     tries = round(arm.tries, 1)
+    # The seconds a payoff costs are what is learned (V310), so Jev reads them too.
+    per_win = f", {arm.seconds / arm.wins:.0f} s a payoff" if arm.wins > 0 else ""
     return (f"tried {tries:g}, paid off {round(arm.wins, 1):g} ({arm.wins / arm.tries:.0%}), "
-            f"{arm.seconds / arm.tries:.0f} s {unit}")
+            f"{arm.seconds / arm.tries:.0f} s {unit}{per_win}")
 
 
 def station_key(objective: str, station: Sequence[float]) -> str:
@@ -204,14 +249,16 @@ class Stations:
         self.judge = judge
         self._judged_at: float | None = None
         self._open: tuple[tuple, float] | None = None
+        self._walk: float | None = None
 
     def order(self, stations: Sequence[Sequence[float]]) -> list[tuple]:
-        """One lap of `stations`, the most likely to pay off first, each a little less likely
-        the further along the tour's own order it stands (`TOUR_DECAY`)."""
+        """One lap of `stations`, the most payoffs a second first (V310), each a little less
+        likely the further along the tour's own order it stands (`TOUR_DECAY`)."""
         stations = [tuple(s) for s in stations]
         arms = self.memory.arms(self.point, f"{self.objective}@")
-        rate = pooled(arms.values())
-        draws = [draw(arms.get(station_key(self.objective, s)), rate, self.rng) for s in stations]
+        rate, pooled_s = pooled(arms.values()), pace(arms.values())
+        draws = [draw(arms.get(station_key(self.objective, s)), rate, self.rng, pooled_s)
+                 for s in stations]
         order = sorted(range(len(stations)), key=lambda i: -draws[i] * TOUR_DECAY ** i)
         by = "local"
         now = self.clock()
@@ -225,8 +272,9 @@ class Stations:
         if self.log is not None:
             self.log.write({"event": "choice", "point": self.point, "objective": self.objective,
                             "rate": round(rate, 4), "by": by,
+                            "pace": None if pooled_s is None else round(pooled_s, 2),
                             "options": [station_key(self.objective, s) for s in stations],
-                            "draws": [round(d, 4) for d in draws],
+                            "draws": [_logged(d) for d in draws],
                             "order": [station_key(self.objective, stations[i]) for i in order]})
         return [stations[i] for i in order]
 
@@ -267,22 +315,30 @@ class Stations:
                                                   self.clock())
         return chosen
 
+    def walking(self) -> None:
+        """The walk to the next station begins: a visit that arrives is timed from here, its
+        walk included (V310). A far station's walk is what it costs over a near one; a walk
+        cut short on the way is charged to none (V252)."""
+        self._walk = self.clock()
+
     def arrive(self, station: Sequence[float]) -> None:
-        """A station chosen: its visit is timed from here."""
+        """A station chosen: its visit is timed from here, or from its walk's start."""
         self.leave(False)
-        self._open = (tuple(station), self.clock())
+        since, self._walk = (self._walk if self._walk is not None else self.clock()), None
+        self._open = (tuple(station), since)
 
     def died(self) -> None:
-        """The open station's visit ended in the character's death (V274)."""
+        """The open station's visit ended in the character's death (V274), charged `DEATH_S`
+        over its extra visits (V310)."""
         if self._open is None:
             return
         key = station_key(self.objective, self._open[0])
         self.leave(False)
         for _ in range(DEATH_VISITS - 1):
-            self.memory.record(self.point, key, False, 0.0)
+            self.memory.record(self.point, key, False, DEATH_S / (DEATH_VISITS - 1))
         if self.log is not None:
             self.log.write({"event": "death", "point": self.point, "key": key,
-                            "visits": DEATH_VISITS})
+                            "visits": DEATH_VISITS, "seconds": DEATH_S})
 
     def leave(self, won: bool) -> None:
         """The open station's visit ended; `won` says whether it paid off."""
@@ -363,8 +419,9 @@ class Choice:
 
     def __init__(self, memory: ChoiceMemory, point: str, *, log: ChoiceLog | None = None,
                  rng: random.Random | None = None, judge=None,
-                 judged: frozenset[str] | None = None):
+                 judged: frozenset[str] | None = None, unit: str = "each"):
         self.memory, self.point, self.log = memory, point, log
+        self.unit = unit                     # what a try's seconds are, as Jev reads them
         self.rng = rng or random.Random()
         # Jev, when it coaches the character (`jev.coach.judge.Judge`), picks with each
         # option's record in front of it; `judged` limits it to those objectives (a choice
@@ -372,16 +429,18 @@ class Choice:
         self.judge, self.judged = judge, judged
 
     def pick(self, objective: str, options: Sequence[str]) -> str:
+        """The option with the most payoffs a second drawn (V310)."""
         arms = self.memory.arms(self.point, f"{objective}@")
-        rate = pooled(arms.values())
-        draws = [draw(arms.get(f"{objective}@{option}"), rate, self.rng) for option in options]
+        rate, pooled_s = pooled(arms.values()), pace(arms.values())
+        draws = [draw(arms.get(f"{objective}@{option}"), rate, self.rng, pooled_s)
+                 for option in options]
         chosen = options[max(range(len(options)), key=lambda i: draws[i])]
         by = "local"
         if (self.judge is not None and len(options) > 1
                 and (self.judged is None or objective in self.judged)):
             try:
                 picked = self.judge.pick(self.point, objective, {
-                    option: record_text(arms.get(f"{objective}@{option}"))
+                    option: record_text(arms.get(f"{objective}@{option}"), self.unit)
                     for option in options})
             except Exception:
                 picked = None
@@ -390,7 +449,8 @@ class Choice:
         if self.log is not None:
             self.log.write({"event": "choice", "point": self.point, "objective": objective,
                             "rate": round(rate, 4), "options": list(options), "by": by,
-                            "draws": [round(d, 4) for d in draws], "chosen": chosen})
+                            "pace": None if pooled_s is None else round(pooled_s, 2),
+                            "draws": [_logged(d) for d in draws], "chosen": chosen})
         return chosen
 
     def outcome(self, objective: str, option: str, won: bool, seconds: float = 0.0) -> Arm:

@@ -12,7 +12,7 @@ import argparse
 from collections import defaultdict
 from pathlib import Path
 
-from jev.learn.choices import ChoiceMemory, pooled
+from jev.learn.choices import PRIOR_VISITS, ChoiceMemory, pace, pooled
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,13 +33,17 @@ def main() -> None:
               f"{sum(a.tries for a in arms.values())} tries")
         busiest = sorted(objectives.items(), key=lambda kv: -sum(a.tries for a in kv[1].values()))
         for objective, options in busiest[:args.top]:
-            rate = pooled(options.values())
+            rate, pooled_s = pooled(options.values()), pace(options.values()) or 1.0
             tries = sum(a.tries for a in options.values())
-            ranked = sorted(options.items(), key=lambda kv: -(kv[1].wins + 2 * rate) / (kv[1].tries + 2))
-            best = ", ".join(f"{a.wins}/{a.tries}" for _, a in ranked[:3])
+            # Payoffs a second, each shrunk toward the pool as the draw is (V310).
+            ranked = sorted(options.items(), key=lambda kv: -(
+                (kv[1].wins + PRIOR_VISITS * rate) / (kv[1].seconds + PRIOR_VISITS * pooled_s)))
+            best = ", ".join(f"{a.wins:g}/{a.tries:g} in {a.seconds / max(a.tries, 1):.0f} s"
+                             for _, a in ranked[:3])
             barren = sum(1 for a in options.values() if a.tries >= 3 and a.wins == 0)
-            print(f"  {objective:28s} {len(options):3d} stations {tries:4d} visits "
-                  f"pays off {rate:4.0%} | best {best} | barren (3+ visits, none) {barren}")
+            print(f"  {objective:28s} {len(options):3d} options {tries:4g} tries "
+                  f"pays off {rate:4.0%} in {pooled_s:.0f} s | best a second {best} | "
+                  f"barren (3+ tries, none) {barren}")
 
 
 if __name__ == "__main__":
