@@ -375,6 +375,40 @@ def test_a_restock_buys_only_with_what_is_above_the_trainers_due():
         "nothing to buy, nothing asked of the spellbook"
 
 
+def test_a_supply_out_of_reach_is_not_asked_for_again_this_session():
+    """V302: the bar on the step (V175) held for that step alone, and in the hive's two hours
+    to 11:11 on 28 Sep the purchase came back "too far" or "no supplier" 298 times, a level 8
+    draenei asking at each new step, death and session for a merchant 900 to 3,400 yards off.
+    Out of all it eats and drinks with its gear broken, the cap does not hold for it."""
+    from test_runtime_records import seen
+
+    from jev.coach.policy import Context, services
+    from jev.world.state_v1 import Bags
+
+    def bags(durability, drink):
+        return seen(bags=Bags(free=10, durability_min=durability, money_copper=500,
+                              food_id=2070, food_count=0, drink_id=159, drink_count=drink))
+
+    def asks(state, context):
+        return any(p.decision.skill == "BUY_AMMO_REAGENT_FOOD"
+                   for p in services(state, context=context))
+
+    context = Context()
+    assert asks(bags(1.0, 0), context)
+    context.supplies_out_of_reach("too_far")
+    assert not asks(bags(1.0, 0), context), "noted: not on this step, nor any other"
+    assert not context.can_restock(500, "another step")
+    assert asks(bags(0.0, 0), context), "out of both with broken gear: the cap does not hold"
+    assert not asks(bags(0.0, 3), context), "water left: not stranded"
+    context.supplies_out_of_reach("no_supplier")
+    assert not asks(bags(0.0, 0), context), "none sold in the zone: no walk would find one"
+    assert Context().can_restock(500), "the next session asks again"
+    conjuring = Context()
+    conjuring.conjures = lambda: frozenset({"drink"})
+    conjuring.supplies_out_of_reach("too_far")
+    assert asks(bags(0.0, 3), conjuring), "the water it conjures is not what it is out of"
+
+
 def test_a_repair_the_purse_could_not_pay_waits_for_the_purse_to_grow():
     """V196: after a repair the purse could not pay, any copper more walked a broke level 2
     mage back to the smith after every kill."""

@@ -1617,6 +1617,9 @@ class LiveBody:
             # to walk to on this step, and no fault of the session's (V292). A human warlock's
             # starting food, the Forest Mushroom Cap, is sold nowhere in Elwynn, and every
             # session stopped on it at once, 2515 times in a quarter of an hour (the hive).
+            # Nor on any step after it this session (V302).
+            if supplies:
+                self.policy_context.supplies_out_of_reach("no_supplier")
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone",
                           "no_supplier" if supplies else "unsupported")
         world = map_to_world(*here, self.client.bounds)
@@ -1625,10 +1628,31 @@ class LiveBody:
         reserve = self.training_reserve() if supplies else 0
         if supplies:
             walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
-            if walk > SUPPLY_WALK_MAX_YARDS:
+            if walk > SUPPLY_WALK_MAX_YARDS and not self._stranded(state, values):
+                self.policy_context.supplies_out_of_reach("too_far")     # this session (V302)
                 return Result(SkillOutcome.ABORTED,
                               f"the nearest merchant with them, {ranked[0].name}, is a "
                               f"{walk:.0f}-yard walk", "too_far")
+            if walk > SUPPLY_WALK_MAX_YARDS:
+                # Out of all it eats and drinks with its gear broken, the cap does not hold
+                # (V302): home by hearthstone first when a merchant by home sells them, as for
+                # a repair (V278), else the walk. With neither, the hive's characters died 40
+                # times an hour of play, against 11 with broken gear alone and 4 with food and
+                # whole gear, most of them at the graveyards of V300 (28 Sep, 09:11-11:11).
+                if self._home_supplies(wanted, walk, world):
+                    home = self._go_home()
+                    self.say(f"  out of food and drink with broken gear, the nearest merchant "
+                             f"with them {walk:.0f} yards off: hearthstone {home.value} "
+                             f"{self.hearth.detail}".rstrip())
+                    moved = self._position() if home.ok else None
+                    if moved is not None:
+                        world = map_to_world(*moved, self.client.bounds)
+                        by_home = self._in_zone(m for m in merchants(self.client.bounds.map_id)
+                                                if wanted & m.items)
+                        ranked = self._ranked(by_home, world) if by_home else ranked
+                else:
+                    self.say(f"  out of food and drink with broken gear: walking {walk:.0f} "
+                             f"yards to {ranked[0].name}")
         for merchant in ranked:
             def visit(merchant=merchant):
                 return self._open_merchant(merchant.name, merchant.world,
@@ -1671,6 +1695,28 @@ class LiveBody:
             return self._result(outcome, vendor.detail or
                                 f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
         raise AssertionError("unreachable: the last merchant returns or raises")
+
+    def _stranded(self, state, values: dict) -> bool:
+        """Out of all it eats and drinks that it does not conjure, with its gear broken: no cap
+        on the walk to a merchant with them (V302)."""
+        conjured = self.conjured_roles()
+        roles = [s for s in supplies_for(values.get("char.class_id"), values.get("char.race_id"))
+                 if s.role.lower() not in conjured]
+        durability = state.bags.durability_min
+        return (bool(roles) and durability is not None and durability <= BROKEN_DURABILITY
+                and all(getattr(state.bags, f"{s.role.lower()}_count", None) == 0 for s in roles))
+
+    def _home_supplies(self, wanted: set[int], walk: float, world) -> bool:
+        """Home by hearthstone is the way to a merchant with `wanted` (V302), as it is to a
+        repairer (V278): one stands within the walk's cap of home, and the walk back from home
+        is shorter than the walk to the nearest merchant with them and back. A home not known
+        is no such way."""
+        home = load_home(self.home_memory)
+        if home is None:
+            return False
+        by_home = [m for m in merchants(self.client.bounds.map_id) if wanted & m.items
+                   and math.dist(m.world[:2], home[:2]) <= SUPPLY_WALK_MAX_YARDS]
+        return bool(by_home) and math.dist(home[:2], world[:2]) < 2 * walk
 
     def _bag_to_buy(self, values: dict) -> tuple:
         """The general bag to buy on this walk, as a supply of one, or none: the belt short of

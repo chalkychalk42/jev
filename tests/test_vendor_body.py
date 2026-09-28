@@ -131,6 +131,99 @@ def test_a_supply_no_merchant_in_the_zone_sells_leaves_the_session_playing(monke
     visit.assert_not_called()
 
 
+# Elwynn's map box, where the character stands at HERE and a hearthstone sets it down at HOME.
+ELWYNN = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+HERE, HOME = (-9000.0, 0.0), (-8000.0, 1000.0)
+
+
+def shopping(monkeypatch, vendors, walks):
+    """A body in Elwynn out to buy a human paladin's food and water from `vendors`, its walks'
+    lengths by merchant name from where it stands (`walks`: "here", then "home")."""
+    from jev.guide.coords import world_to_map
+
+    b = body()
+    b.client.bounds = ELWYNN
+    b.client.read = lambda: {"vitals.hp": 1, "char.class_id": 2, "char.race_id": 1}
+    b.arm = Armed(Decision(goal="supplies", intent=Intent.SERVICE,
+                           skill="BUY_AMMO_REAGENT_FOOD", abort_if=["dead"],
+                           why="empty supplies", confidence=1), ArmedBy.POLICY, 0,
+                  "guide", "d", "quest")
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    where = {"at": "here"}
+    by_world = {m.world: m.name for m in vendors}
+    b.client.plan_to = lambda world: SimpleNamespace(
+        usable=True, points=[(0, 0, 0)] * 2,
+        length_yards=lambda: walks[where["at"]][by_world[tuple(world)]])
+    b.client.position = lambda: world_to_map(*(HERE if where["at"] == "here" else HOME), ELWYNN)
+    visit = Mock(return_value=Interacted.VENDOR)
+    b.interact = SimpleNamespace(open_on=visit)
+
+    class FakeVendor:
+        detail = "observed service"
+        def equip_bags(self, bags, **kw):
+            return 0
+        def bag_items(self, **kw):
+            return None
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
+            self.open_shop = open_shop
+        def run(self, **kwargs):
+            assert self.open_shop()
+            return Vended.DONE
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    return b, visit, where
+
+
+STRANDED = Bags(free=10, durability_min=0.0, money_copper=500, food_id=2070, food_count=0,
+                drink_id=159, drink_count=0)
+
+
+@pytest.mark.parametrize(("home", "hearths", "shop"), [
+    ((*HOME, 0.0), True, "Home Inn"),             # the inn by home sells them
+    ((-8100.0, -1800.0, 0.0), False, "Far Food"),  # none by home: the long walk
+    (None, False, "Far Food"),                    # home not known: the long walk
+])
+def test_out_of_food_and_drink_with_broken_gear_the_walk_has_no_cap(tmp_path, monkeypatch,
+                                                                     home, hearths, shop):
+    """V302: the hive's characters rose with neither food nor whole gear and were told
+    "too far" by every step, the nearest merchant with their food 900 to 3,400 yards off.
+    Home by hearthstone when a merchant by home sells them, as for a repair (V278); else
+    the walk, whatever its length."""
+    from jev.clients.hearth import Hearthed
+    from jev.world.home import save_home
+
+    vendors = (Merchant(1, "Far Food", 0, (-9600.0, 0.0, 0.0), frozenset({2070, 159})),
+               Merchant(2, "Home Inn", 0, (HOME[0] + 10.0, HOME[1], 0.0),
+                        frozenset({2070, 159})))
+    b, visit, where = shopping(monkeypatch, vendors, {
+        "here": {"Far Food": 900.0, "Home Inn": 1000.0},
+        "home": {"Far Food": 1000.0, "Home Inn": 5.0}})
+    b.home_memory = tmp_path / "home.json"
+    if home is not None:
+        save_home(b.home_memory, home, name="an inn")
+    pressed = []
+    b.hearth.run = lambda: pressed.append(1) or where.update(at="home") or Hearthed.HOME
+    result = b.execute(b.arm, seen().model_copy(update={"bags": STRANDED}), lambda: None)
+    assert result.outcome.value == "succeeded"
+    assert bool(pressed) is hearths
+    assert visit.call_args.args == (shop,)
+    assert b.policy_context.supplies_noted is None
+
+
+def test_a_supply_out_of_reach_is_noted_for_the_session(monkeypatch):
+    """V302: "too far" and "no supplier" hold for the session, not the step alone (V175)."""
+    vendors = (Merchant(1, "Far Food", 0, (-9600.0, 0.0, 0.0), frozenset({2070, 159})),)
+    b, visit, _ = shopping(monkeypatch, vendors, {"here": {"Far Food": 900.0}})
+    whole = STRANDED.model_copy(update={"durability_min": 1.0})
+    result = b.execute(b.arm, seen().model_copy(update={"bags": whole}), lambda: None)
+    assert result.code == "too_far" and not visit.called
+    assert b.policy_context.supplies_noted == "too_far"
+    b, visit, _ = shopping(monkeypatch, (Merchant(2, "Water", 0, (-9010.0, 0.0, 0.0),
+                                                  frozenset({159})),), {"here": {}})
+    water = STRANDED.model_copy(update={"drink_count": 5})
+    result = b.execute(b.arm, seen().model_copy(update={"bags": water}), lambda: None)
+    assert result.code == "no_supplier" and b.policy_context.supplies_noted == "no_supplier"
+
+
 def test_outside_zone_shop_is_not_selected_even_if_world_distance_is_shorter(monkeypatch):
     b = body()
     b.client.bounds = ZoneBounds(1, 0, 100, 0, 100, 0)

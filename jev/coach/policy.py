@@ -187,8 +187,24 @@ class Context:
     def supplies_unreachable(self, step_id: str | None) -> None:
         self.supplies_unreachable_step = step_id
 
-    def can_restock(self, money: int | None, step_id: str | None = None) -> bool:
+    # A supply whose nearest merchant is beyond the walk's cap (V205), or which no merchant in
+    # the zone sells (V292), is noted once a session and not asked for again in it (V302): the
+    # bar on the step (V175) held for that step alone, and in the hive's two hours to 11:11 on
+    # 28 Sep the purchase came back so 298 times, a level 8 draenei asking every few minutes,
+    # at each new step, death and session, for Caregiver Breel 900 to 3,400 yards off. A
+    # character out of all it eats and drinks with its gear broken (`stranded`) is asked past a
+    # merchant too far: for it the cap does not hold.
+    supplies_noted: str | None = None
+
+    def supplies_out_of_reach(self, code: str) -> None:
+        self.supplies_noted = code
+
+    def can_restock(self, money: int | None, step_id: str | None = None, *,
+                    stranded: bool = False) -> bool:
         if step_id is not None and step_id == self.supplies_unreachable_step:
+            return False
+        if self.supplies_noted == "no_supplier" or (self.supplies_noted == "too_far"
+                                                    and not stranded):
             return False
         if not self.supplies_blocked:
             return True
@@ -420,10 +436,14 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
                        ("dead", "combat"), service="repair"), True, "service.durability"))
 
     conjured = context.conjured() if context is not None else frozenset()
-    empty = [item for item, count, kind in ((b.food_id, b.food_count, "food"),
-                                             (b.drink_id, b.drink_count, "drink"))
-             if item is not None and count == 0 and kind not in conjured]
-    if empty and (context is None or context.can_restock(b.money_copper, state.guide.step_id)):
+    kept = [(item, count) for item, count, kind in ((b.food_id, b.food_count, "food"),
+                                                    (b.drink_id, b.drink_count, "drink"))
+            if item is not None and kind not in conjured]
+    empty = [item for item, count in kept if count == 0]
+    stranded = (bool(empty) and len(empty) == len(kept) and b.durability_min is not None
+                and b.durability_min <= 0.05)
+    if empty and (context is None or context.can_restock(b.money_copper, state.guide.step_id,
+                                                         stranded=stranded)):
         # What is above the trainer's due (V215), asked only with something to buy: the
         # spellbook's census is shared with the capture thread.
         spare = (b.money_copper - context.kept(state)
