@@ -41,7 +41,7 @@ from jev.guide.coords import (
 from jev.guide.exposure import ExposureQuery
 from jev.guide.path import Path as Route
 from jev.guide.path import PathQuery, PathStatus, TeleportQuery, load_teleports, stop_short_of
-from jev.guide.route_memory import AvoidingQuery, DangerAvoidingQuery
+from jev.guide.route_memory import CAMP_REFUSED, AvoidingQuery, DangerAvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
 from jev.perceive.spellbook import SpellCensus
@@ -789,6 +789,12 @@ class Client:
             path = query.path(self.bounds.map_id, (here[0], here[1], z), world)
             if path.usable and path.status is PathStatus.COMPLETE:
                 return path
+            if path.status is PathStatus.NOPATH and path.detail == CAMP_REFUSED:
+                # Refused through a death camp (V307): the start's height found the way, and
+                # a camp is kept in x and y, which no other height changes. Asked on, each
+                # height searched its rings again, about 4,700 queries a walk (review of 28
+                # Sep).
+                return best if best is not None else path
             if path.usable and (best is None or math.dist(path.points[-1][:2], world[:2])
                                 < math.dist(best.points[-1][:2], world[:2])):
                 best = path
@@ -974,36 +980,44 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     zones_path = str(root / "data/zones-tbc-243.json")
     client.coordinate_zones = bounds_by_radio_id(zones_path) if zones is None else zones
     client.coordinate_names = names_by_radio_id(zones_path) if zone_names is None else zone_names
+    # Who the character is is read once a plan, not at every point looked along (V266).
+    facts = {"at": -math.inf, "values": {}}
+
+    def values() -> dict:
+        now = time.monotonic()
+        if now - facts["at"] > HOSTILE_FACTS_S:
+            facts["values"], facts["at"] = client.read() or {}, now
+        return facts["values"]
+
     # Every plan, first and re-plan, stays clear of the spots walking found blocked, of where
-    # the character recently died, and of where it keeps being attacked at its level
-    # (`danger`, a `jev.learn.danger.DangerMap`).
+    # the character recently died at about its level and the death camps (V307), and of where
+    # it keeps being attacked at its level (`danger`, a `jev.learn.danger.DangerMap`).
     hot = None
     if danger is not None:
         def hot(map_id):
             return danger.hot(map_id, (client.read() or {}).get("char.level"))
-    client.query = (query if route_memory is None
-                    else DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory,
-                                             hot=hot))
+    deaths = None
+    if route_memory is not None:
+        deaths = DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory, hot=hot,
+                                     level=lambda: values().get("char.level"),
+                                     ghost=lambda: values().get("vitals.ghost") is True)
+    client.query = query if deaths is None else deaths
     if route_memory is not None:
         # ...and of the spawns of units that attack it on sight, where a way round costs less
-        # than passing them (`jev.guide.exposure`, V248). A ghost passes them unharmed. Who
-        # the character is is read once a plan, not at every point looked along (V266).
-        facts = {"at": -math.inf, "values": {}}
-
+        # than passing them (`jev.guide.exposure`, V248), by no way back through what the
+        # layer below went round (V307). A ghost passes them unharmed.
         def hostile(map_id, x, y, radius):
-            now = time.monotonic()
-            if now - facts["at"] > HOSTILE_FACTS_S:
-                facts["values"], facts["at"] = client.read() or {}, now
-            values = facts["values"]
-            if values.get("vitals.ghost") is True:
+            known = values()
+            if known.get("vitals.ghost") is True:
                 return []
-            race = radio_frame.RACE_BY_ID.get(values.get("char.race_id"))
-            level = values.get("char.level")
+            race = radio_frame.RACE_BY_ID.get(known.get("char.race_id"))
+            level = known.get("char.level")
             return hostiles.near(map_id, x, y, radius,
                                  side=radio_frame.FACTION_BY_RACE.get(race) if race else None,
                                  level=level if isinstance(level, int) else None)
         client.query = ExposureQuery(client.query, hostile,
-                                     legs=AvoidingQuery(query, route_memory))
+                                     legs=AvoidingQuery(query, route_memory),
+                                     keep=deaths.keeper)
     # Over them all, through a teleport where no walk gets there (V305): each of its two
     # walks is planned by the layers below, clear of all they keep clear of.
     if teleports is None:

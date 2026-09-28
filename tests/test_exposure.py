@@ -151,3 +151,28 @@ def test_going_round_places_stops_at_its_budget():
     route = query.path(0, (0.0, 0.0, 60.0), (3000.0, 0.0, 60.0))
     assert route.usable
     assert inner.asked <= 1 + 2 * 3 + 2 * 3, "a few legs each search, then the best found"
+
+
+def test_a_way_round_spawns_does_not_go_back_through_where_the_character_died():
+    """V307: after each of the level 8 mage Merany's first three deaths at one spot, its walk
+    to a repairer was planned "round 21 units that attack on sight" and passed within 6 yards
+    of the spot, kept in the route memory since the first (the hive, 28 Sep 12:15-12:23). The
+    ways round are planned below the layer that keeps clear of deaths (V257); a way round that
+    passes a place that layer went round is not taken, however few spawns it passes."""
+    from jev.guide.route_memory import DANGER_YARDS, DangerAvoidingQuery, RouteMemory, near_route
+
+    memory = RouteMemory()
+    memory.died(0, (200.0, 0.0), now=1000.0)
+    deaths = DangerAvoidingQuery(_OpenGround(), memory, clock=lambda: 1100.0)
+    start, end = (0.0, 0.0, 60.0), (400.0, 0.0, 60.0)
+    kept_round = deaths.path(0, start, end)
+    assert not near_route(kept_round, 200.0, 0.0, DANGER_YARDS)
+    camp = [(200.0, 60.0), (190.0, 55.0), (210.0, 55.0)]       # on that way round
+    before = ExposureQuery(deaths, _spawns(camp), legs=_OpenGround())
+    assert near_route(before.path(0, start, end), 200.0, 0.0, DANGER_YARDS), \
+        "without the layer's places kept, back through the death"
+    query = ExposureQuery(deaths, _spawns(camp), legs=_OpenGround(), keep=deaths.keeper)
+    route = query.path(0, start, end)
+    assert not near_route(route, 200.0, 0.0, DANGER_YARDS), "back through where it died"
+    assert not query.exposed(0, route.points, start, end), "and round the camp all the same"
+    assert "attack on sight" in route.detail

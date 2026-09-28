@@ -424,6 +424,23 @@ def test_walks_are_planned_clear_of_the_learned_danger_at_the_characters_level()
     danger.hot.assert_called_once_with(0, 12)
 
 
+def test_the_ways_round_spawns_keep_what_the_layer_below_went_round():
+    """V307: Merany's walks "round 21 units that attack on sight" passed within 6 yards of
+    where the level 8 mage had died, kept since the first death (the hive, 28 Sep); and the
+    deaths kept are those that count at the character's level, read once a plan."""
+    from jev.guide.route_memory import DangerAvoidingQuery, RouteMemory
+
+    client, values = client_in("Elwynn", (0.5, 0.5))
+    values["char.level"] = 12
+    memory = RouteMemory()
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=memory,
+                teleports=())
+    deaths = client.query.inner
+    assert isinstance(deaths, DangerAvoidingQuery)
+    assert client.query.keep == deaths.keeper
+    assert deaths.level() == 12
+
+
 def test_a_walks_cost_is_planned_without_the_search_for_a_way_round():
     """V257: ranking twelve repairers through the search from Windows ran the level 9 mage's
     repair past its time with not a step walked (sessions 226-227)."""

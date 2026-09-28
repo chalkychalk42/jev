@@ -589,3 +589,76 @@ def test_a_failure_costs_a_merchant_yards_not_its_place(failures, chosen, tmp_pa
     monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
     assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
     assert visit.call_args.args == (chosen,)
+
+
+def bag_service(b):
+    b.arm = Armed(Decision(goal="bags", intent=Intent.SERVICE, skill="BAG_MAKE_SPACE",
+                           abort_if=["dead"], why="full", confidence=1), ArmedBy.POLICY,
+                  0, "guide", "d", "quest")
+
+
+def test_a_slow_planner_leaves_the_merchant_walked_to_after_one_plan(monkeypatch):
+    """V309: the ranking planned a walk to each of the twelve nearest merchants before a step
+    was walked, an incomplete plan asked again at every start height, one sidecar at a time:
+    in the hive's runs begun 12:50-15:00 on 28 Sep, 136 of 181 service timeouts came after
+    300 s and more with nothing recorded where the ranking plans, Kules's restock 694 s of
+    it. With plans that take 30 s, the walk begins after one."""
+    b = body()
+    bag_service(b)
+    vendors = tuple(Merchant(i, f"Merchant {i}", 0, (50 + 2 * i, 50, 0), frozenset())
+                    for i in range(1, 13))
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    clock = [1000.0]
+    monkeypatch.setattr("jev.run.body.time.monotonic", lambda: clock[0])
+    planned = []
+
+    def plan_to(world):
+        planned.append(tuple(world))
+        clock[0] += 30.0
+        return SimpleNamespace(usable=True, points=[(0, 0, 0)] * 2, length_yards=lambda: 500.0)
+
+    b.client.plan_to = plan_to
+    visit = Mock(return_value=Interacted.VENDOR)
+    b.interact = SimpleNamespace(open_on=visit)
+    walked_after = []
+
+    class FakeVendor:
+        detail = "observed service"
+
+        def equip_bags(self, bags, **kw):
+            return 0
+
+        def bag_items(self, **kw):
+            return None
+
+        def __init__(self, hid, read, open_shop, origin, size, eligible=None):
+            self.open_shop = open_shop
+
+        def run(self, **kwargs):
+            walked_after.append(len(planned))
+            assert self.open_shop()
+            return Vended.DONE
+
+    monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
+    assert b.execute(b.arm, seen(), lambda: None).outcome.value == "succeeded"
+    assert walked_after == [1], "twelve plans before a step"
+    assert visit.call_args.args == ("Merchant 1",)
+
+
+def test_the_ranking_plans_one_merchant_at_a_time_after_a_checkpoint():
+    """V309: a walk is never shorter than its straight line, so no merchant farther in a
+    straight line than the best walk planned is planned; and each plan begins at a checkpoint,
+    where a timed-out service stops."""
+    b = body()
+    vendors = (Merchant(1, "Near", 0, (51, 50, 0), frozenset()),
+               Merchant(2, "Up A Stair", 0, (53, 50, 0), frozenset()),
+               Merchant(3, "Far", 0, (90, 50, 0), frozenset()))
+    events = []
+    walks = {(51, 50, 0): 60.0, (53, 50, 0): 5.0, (90, 50, 0): 45.0}
+    b.checkpoint = lambda: events.append("checkpoint")
+    b.client.plan_to = lambda world: (events.append(("plan", world[0])) or SimpleNamespace(
+        usable=True, points=[(0, 0, 0)] * 2, length_yards=lambda: walks[tuple(world)]))
+    ranked = b._ranked(vendors, (50.0, 50.0))
+    assert [m.name for m in ranked] == ["Up A Stair", "Near", "Far"]
+    assert events == ["checkpoint", ("plan", 51), "checkpoint", ("plan", 53)], \
+        "Far, 40 yards off in a straight line, cannot beat a walk of 5"

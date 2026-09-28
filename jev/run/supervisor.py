@@ -316,20 +316,45 @@ class Supervisor:
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                         and result.code not in ("too_poor",)):
                     # A merchant out of reach is not walked to again on this step (V175).
-                    self.runtime.policy_context.supplies_unreachable(worker.arm.step_id)
+                    self.runtime.policy_context.supplies_unreachable(
+                        worker.arm.step_id, state.t if state is not None else time.time())
                 if (worker.arm.decision.skill == "VENDOR_REPAIR"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                         and result.code not in ("too_poor",)):
                     # Nor a repairer (V185).
-                    self.runtime.policy_context.repair_unreachable(worker.arm.step_id)
+                    self.runtime.policy_context.repair_unreachable(
+                        worker.arm.step_id, state.t if state is not None else time.time())
+                if (worker.arm.decision.skill == "BAG_MAKE_SPACE"
+                        and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
+                        and result.code not in ("too_poor", "no_junk")):
+                    # Nor a merchant for the bags, and it stops no run (V309): 52 bag services
+                    # timed out in the hive from 13:00 to 14:59 on 28 Sep, and each ended its
+                    # session, the next arming the same service on the same step again.
+                    self.runtime.policy_context.bags_unreachable(
+                        worker.arm.step_id, state.t if state is not None else time.time())
                 if result.code == "too_poor":
                     if worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
                         self.runtime.policy_context.supplies_failed(state.bags.money_copper)
                     else:
                         self.runtime.policy_context.repair_failed(state.bags.money_copper)
                 key = worker.arm.step_id, worker.arm.decision.skill
+                # A giver that answers it will not give the quest refuses it however often it
+                # is asked: the whole quest is passed over at once, no grind and no second walk
+                # (V308). Botanist Taerix, a breadcrumb every draenei route takes after the
+                # quest it leads to, was refused 14 times on 8 bots from 12:00 to 13:08 on 28
+                # Sep, a walk to a grind and back between each first refusal and its second.
+                refused = getattr(self.runtime, "not_offered", None)
                 if result.outcome is SkillOutcome.SUCCEEDED:
                     self.failures.pop(key, None)
+                    # A merchant or a smith reached: a bar on its kind of service is lifted
+                    # (`Context.served`, review of 28 Sep).
+                    self.runtime.policy_context.served(worker.arm.decision.skill)
+                elif (result.code == "not_offered" and worker.arm.decision.skill == "ACCEPT_QUEST"
+                      and refused is not None and refused(worker.arm.step_id)):
+                    failed_over = True
+                    self.failures.pop(key, None)
+                    self.say(f"{worker.arm.step_id}: not offered; the quest is passed over, on "
+                             f"to {self.runtime.tracker.step_id}")
                 elif (result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                       and result.code not in ("too_poor", "no_junk")
                       # Training is optional: a trainer out of reach waits for the next
@@ -340,7 +365,7 @@ class Supervisor:
                       and worker.arm.decision.skill not in ("TRAIN_CLASS", "BIND_HEARTH",
                                                             "DISCOVER_FLIGHT", "EAT_DRINK",
                                                             "BUY_AMMO_REAGENT_FOOD",
-                                                            "VENDOR_REPAIR")
+                                                            "VENDOR_REPAIR", "BAG_MAKE_SPACE")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     # A body that can rescue the objective takes one more attempt at it before

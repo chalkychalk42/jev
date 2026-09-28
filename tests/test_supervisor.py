@@ -955,3 +955,98 @@ def test_a_step_failed_over_starts_nothing_on_the_step_it_left(tmp_path):
         assert steps == [first.id, second.id]
     finally:
         supervisor.close()
+
+
+def test_a_quest_its_giver_will_not_give_is_passed_over_and_never_stops_the_run(tmp_path):
+    """V308: a refusal the giver answers is no failed attempt to be retried after a grind:
+    Botanist Taerix was refused 14 times on 8 draenei from 12:00 to 13:08 on 28 Sep, a walk
+    to a grind and back between each first refusal and its second. The quest is passed over,
+    and the quest needing it with it."""
+    from test_runtime_records import chain_graph
+
+    from jev.clients.source import ScriptedSource
+    from jev.learn.episode import Recorder
+    from jev.orch.runtime import ClientRuntime
+
+    rt = ClientRuntime("c", chain_graph(), ScriptedSource([seen(t) for t in (0, 1, 2)]),
+                       Recorder(tmp_path))
+    body = Body(result=Result(SkillOutcome.ABORTED, "not in the log", "not_offered"))
+    body.allow_finish.set()
+    lines = []
+    supervisor = Supervisor(rt, body, say=lines.append, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == "ACCEPT_QUEST"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert not supervisor.stopped.is_set(), supervisor.failure
+        assert rt.tracker.step_id == "after" and {"accept", "next_accept"} <= rt._retried
+        assert rt.tracker.memory.rejoin_to is None, "no grind and no second walk"
+        assert any("not offered" in line for line in lines)
+    finally:
+        supervisor.close()
+
+
+def test_a_bag_service_that_times_out_is_not_asked_again_on_the_step_and_never_stops_the_run(
+        tmp_path):
+    """V309: 52 bag services timed out in the hive from 13:00 to 14:59 on 28 Sep, and each
+    stopped its session; Neris, a level 4 night elf, ended five sessions in a row from 13:25
+    to 14:10 on the same service on the same step. As a repair or a restock out of reach
+    (V175, V185), it is not asked again on the step, and the next session knows."""
+    from jev.coach.policy import Context
+    from jev.world.state_v1 import Bags
+
+    class SellingBody(Body):
+        available = Body.available | {"BAG_MAKE_SPACE"}
+
+    full = Bags(free=0, durability_min=1.0, money_copper=500)
+    rt = runtime(tmp_path, [seen(t, bags=full) for t in (0, 1, 2)])
+    body = SellingBody(result=Result(SkillOutcome.TIMED_OUT, "skill timeout", "timeout"))
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == "BAG_MAKE_SPACE"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert not supervisor.stopped.is_set(), supervisor.failure
+        step = rt.tracker.step_id
+        assert rt.policy_context.bags_unreachable_step == step
+        assert not rt.policy_context.can_make_space(0, step)
+        assert rt.policy_context.can_make_space(0, "another step")
+        later = Context()
+        later.restore_purse(rt.policy_context.purse())
+        assert not later.can_make_space(0, step), "the next session knows"
+    finally:
+        supervisor.close()
+
+
+def test_a_service_barred_on_a_step_is_asked_again_when_the_bar_expires_and_a_success_lifts_it(
+        tmp_path):
+    """Review of 28 Sep (V309): the bars on a step are kept in the purse, and a grind rib is
+    shared and revisited, so one held forever never sold on that rib again. After
+    `UNREACHABLE_RETRY_S` the service is asked again, and one done lifts the bar."""
+    from jev.coach.policy import UNREACHABLE_RETRY_S
+    from jev.world.state_v1 import Bags
+
+    class SellingBody(Body):
+        available = Body.available | {"BAG_MAKE_SPACE"}
+
+    full = Bags(free=0, durability_min=1.0, money_copper=500)
+    rt = runtime(tmp_path, [seen(t, bags=full) for t in (0, 1, 2)])
+    rt.policy_context.bags_unreachable("accept", -UNREACHABLE_RETRY_S - 1)
+    body = SellingBody()
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == "BAG_MAKE_SPACE", "the bar expired"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert rt.policy_context.bags_unreachable_step is None, "sold: the bar is lifted"
+        assert rt.policy_context.bags_unreachable_until is None
+    finally:
+        supervisor.close()

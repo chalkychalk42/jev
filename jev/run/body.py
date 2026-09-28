@@ -171,6 +171,14 @@ MERCHANT_TRIES = 5
 CORNER_YARDS = 15.0
 MERCHANT_PLANS = 12
 UNPLANNED_FACTOR = 3.0
+# The merchants are planned one at a time, nearest in a straight line first, and no longer
+# than this; a walk is never shorter than its straight line, so planning stops at the first
+# merchant that could not beat the best walk planned (V309). Planning all twelve before a step
+# was walked, each incomplete plan asked again at every start height, stood the hive's
+# services still until they timed out: in the runs begun 12:50-15:00 on 28 Sep, 136 of 181
+# service timeouts came after 300 s and more with nothing recorded where the ranking plans,
+# and each timed-out bag service stopped its session, 52 of them from 13:00 to 14:59.
+RANKING_BUDGET_S = 20.0
 # Each failure since a merchant's last sale adds this to its walk. Ranked behind every
 # merchant that never failed, one missed hover at each nearby merchant (fifteen in Elwynn
 # and Westfall, 26 September) sent a level 3 mage from Northshire to Ben Trias in Stormwind,
@@ -368,6 +376,7 @@ class LiveBody:
         self._talents_failed: int | None = None           # the level a visit failed at (V261)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
         self._wedged = 0
+        self._walks: dict[int, float] = {}          # the last ranking's planned walks (V309)
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
         self.fight.realign = self.camera.face
@@ -1627,7 +1636,9 @@ class LiveBody:
         # A purchase keeps what the trainer is owed (V215).
         reserve = self.training_reserve() if supplies else 0
         if supplies:
-            walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
+            walk = self._walks.get(ranked[0].entry)          # planned once, by the ranking
+            if walk is None:
+                walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
             if walk > SUPPLY_WALK_MAX_YARDS and not self._stranded(state, values):
                 self.policy_context.supplies_out_of_reach("too_far")     # this session (V302)
                 return Result(SkillOutcome.ABORTED,
@@ -1760,16 +1771,29 @@ class LiveBody:
 
     def _ranked(self, candidates, world) -> list:
         """The first `MERCHANT_TRIES` merchants to try from `world`: the shortest walk,
-        each failure since the last sale counted in yards (V199)."""
+        each failure since the last sale counted in yards (V199). Planned one at a time,
+        nearest in a straight line first, each plan after a checkpoint, until the next could
+        not beat the best walk planned, `MERCHANT_PLANS` are planned or `RANKING_BUDGET_S` is
+        spent (V309); the merchants not planned follow in straight-line order. The walks
+        planned are kept for the caller (`_walks`)."""
         failed = load_merchant_failures(self.merchant_memory)
-        near = sorted(candidates, key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_PLANS]
-        walks = {m.entry: self._walk_yards(m.world, math.dist(m.world[:2], world)) for m in near}
-        ranked = sorted(near, key=lambda m: walks[m.entry]
-                        + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
-        ranked += sorted((m for m in candidates if m.entry not in walks),
-                         key=lambda m: math.dist(m.world[:2], world)
-                         + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
-        return ranked[:MERCHANT_TRIES]
+
+        def cost(merchant, yards: float) -> float:
+            return yards + FAILED_MERCHANT_YARDS * failed.get(merchant.entry, 0)
+
+        order = sorted(candidates, key=lambda m: cost(m, math.dist(m.world[:2], world)))
+        self._walks = {}
+        best, deadline = math.inf, time.monotonic() + RANKING_BUDGET_S
+        for merchant in order[:MERCHANT_PLANS]:
+            straight = math.dist(merchant.world[:2], world)
+            if cost(merchant, straight) >= best or time.monotonic() >= deadline:
+                break
+            self.checkpoint()
+            self._walks[merchant.entry] = self._walk_yards(merchant.world, straight)
+            best = min(best, cost(merchant, self._walks[merchant.entry]))
+        planned = sorted((m for m in order if m.entry in self._walks),
+                         key=lambda m: cost(m, self._walks[m.entry]))
+        return (planned + [m for m in order if m.entry not in self._walks])[:MERCHANT_TRIES]
 
     def _repairers(self) -> list:
         """The merchants in the zone that mend gear (the catalog's repair flag)."""
@@ -1962,6 +1986,8 @@ class LiveBody:
         nothing hostile round it."""
         if self.recover.graveyard is None:
             return None
+        if self._death_camp(self.recover.graveyard):
+            return -math.inf                 # where the character keeps dying (V307)
         at = map_to_world(*self.recover.graveyard, self.client.bounds)
         spawns = self._camp_spawns(at) if at is not None else ()
         if not spawns:
@@ -1970,6 +1996,19 @@ class LiveBody:
         if room >= CAMP_ROOM_YARDS or (body_room is not None and body_room <= room):
             return None
         return room
+
+    def _death_camp(self, point) -> bool:
+        """Whether the map point `point` lies in a death camp that counts at the character's
+        level (`RouteMemory.camp_at`, V307); no, with nothing read or no route memory."""
+        memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
+        if memory is None or bounds is None or point is None or None in point:
+            return False
+        at = map_to_world(*point, bounds)
+        if at is None:
+            return False
+        level = (self._read() or {}).get("char.level")
+        return memory.camp_at(bounds.map_id, at, time.time(),
+                              level if isinstance(level, int) else None) is not None
 
     def _talk_to(self, name: str):
         """Right-click a named unit: by its nameplate, or where a fresh hover finds it."""
@@ -2031,6 +2070,13 @@ class LiveBody:
         # and 2 of its 12 at the Spirit Healer (sessions 195-219, V247).
         room = self._body_room(state)
         camp = room is not None and room < CAMP_ROOM_YARDS
+        corpse = (state.pos.corpse_mx, state.pos.corpse_my) if getattr(state, "pos", None) else None
+        # A body where the character has died twice in ten minutes lies in a death camp (V307),
+        # whatever room the spawns leave round it: of 143 get-ups within 35 yards of the body's
+        # spot in the hive's runs begun 11:50-13:08 on 28 Sep, 80 died again before the next.
+        died_there = self._death_camp(corpse)
+        if died_there:
+            camp, room = True, -math.inf
         # But the Spirit Healer is a way out only from a graveyard with more room than the
         # body's spot (V300). In the hive's two hours to 11:11 on 28 Sep, 243 of 455 get-ups at
         # the Spirit Healer died within a minute, against 79 of 347 at the body, most to a unit
@@ -2039,7 +2085,6 @@ class LiveBody:
         # from Raven Hill's, and the level 2 undead and level 7 human who got up there had spots
         # by their bodies a median 32 and 37 yards clear of any unit's reach.
         healer_camp = self._healer_camp(room) if trapped or stronger or camp else None
-        corpse = (state.pos.corpse_mx, state.pos.corpse_my) if getattr(state, "pos", None) else None
         unreached = self._unreached_runs(corpse)
         if unreached >= UNREACHED_RUNS:
             # A body the ghost could not get up at, run after run, is out of its reach: under
@@ -2054,7 +2099,9 @@ class LiveBody:
                 return self._result(up, "up at the Spirit Healer; the body is out of reach")
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
         elif healer_camp is not None:
-            self.say(f"  the Spirit Healer is no way out: its graveyard lies in a camp, "
+            self.say("  the Spirit Healer is no way out: its graveyard lies in a death camp; up "
+                     "at the body" if healer_camp == -math.inf else
+                     f"  the Spirit Healer is no way out: its graveyard lies in a camp, "
                      f"{healer_camp:.0f} yards from a hostile spawn's reach at best; up at the body")
         elif trapped or stronger:
             up = self._spirit_healer()
@@ -2078,8 +2125,9 @@ class LiveBody:
             up = self._spirit_healer()
             if up is Recovered.ALIVE:
                 self._revived(None)
-                self.say(f"  up at the Spirit Healer: the body lies in a camp, "
-                         f"{room:.0f} yards from a hostile spawn at best")
+                self.say("  up at the Spirit Healer: the body lies in a death camp" if died_there
+                         else f"  up at the Spirit Healer: the body lies in a camp, "
+                              f"{room:.0f} yards from a hostile spawn at best")
                 self._wait_out_sickness()
                 return self._result(up, "up at the Spirit Healer; the body lies in a camp")
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
@@ -2229,12 +2277,25 @@ class LiveBody:
 
     def _release(self, state) -> Result:
         # Released where it died: walks keep clear of the spot for a while
-        # (`route_memory.DangerAvoidingQuery`).
+        # (`route_memory.DangerAvoidingQuery`), at about the level it died at; a second death
+        # near it within ten minutes, or one in a camp still held, makes the place a death
+        # camp, left once up (V307).
         memory, here = getattr(self.client, "route_memory", None), self._position()
         values = self._read() or {}
         if (memory is not None and here is not None and values.get("vitals.dead") is True
                 and values.get("vitals.ghost") is not True):
-            memory.died(self.client.bounds.map_id, map_to_world(*here, self.client.bounds))
+            level = values.get("char.level")
+            level = level if isinstance(level, int) else None
+            who = values.get("char.key")
+            at = map_to_world(*here, self.client.bounds)
+            death = memory.died(self.client.bounds.map_id, at, level=level,
+                                who=who if isinstance(who, int) else None)
+            # A camp is made of one character's deaths; one another made, that counts at this
+            # level, is left as well (review of 28 Sep).
+            if death.camp(time.time()) or memory.camp_at(self.client.bounds.map_id, at,
+                                                         time.time(), level) is not None:
+                self.policy_context.camp_left(self.client.bounds.map_id, at[0], at[1])
+                self.say("  died in a death camp: left once up")
         released = self.recover.run(release_only=True)
         self._keep_graveyard()
         return self._result(released, self.recover.detail)

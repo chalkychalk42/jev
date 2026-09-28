@@ -885,3 +885,222 @@ def test_a_finished_guides_grind_is_resumed_and_finishes_it(tmp_path, flag, leve
         rt.tick(choose=False)
     assert rt.tracker.step_id == expected_step
     assert rt.finished is finished
+
+
+def leave_graph():
+    """A step, a grind beside the death camp by (5, 0) and one 500 yards from it."""
+    base = dict(zone="zone", zone_id=1, map_id=0)
+    return Graph(graph_id="g", faction="alliance", entry="step", nodes=(
+        Node(id="step", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("after",), pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=2, pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="camp_rib", kind=StepKind.GRIND, level=(1, 10), pos=(0.51, 0.5),
+             world=(40.0, 0.0, 0.0), skills=("GRIND_UNTIL",), **base),
+        Node(id="far_rib", kind=StepKind.GRIND, level=(1, 10), pos=(0.9, 0.9),
+             world=(400.0, 300.0, 0.0), skills=("GRIND_UNTIL",), **base),
+    ))
+
+
+def test_after_a_death_in_a_death_camp_the_grind_of_its_level_comes_before_any_service(
+        tmp_path):
+    """V307: after each of Merany's first three deaths at one spot by Raven Hill's graveyard
+    came a meal and its walk to a repairer, back through the spot (the hive, 28 Sep
+    12:15-12:23). Up again, the character walks to the grind of its level out of the camp,
+    the step it was on kept for after, and no service is armed until it is there."""
+    from jev.world.state_v1 import Char
+
+    broken = dict(char=Char(level=5), bags=Bags(free=10, durability_min=0.0, money_copper=500))
+    states = [seen(0, **broken),
+              seen(1, vitals=Vitals(hp=0, power=0, dead=True, ghost=False, combat=False),
+                   **broken),
+              seen(2, **broken), seen(3, **broken),
+              seen(4, pos=Pos(zone="zone", mx=0.9, my=0.9), **broken)]
+    rt = ClientRuntime("c", leave_graph(), ScriptedSource(states), Recorder(tmp_path))
+    rt.tick(choose=False)
+    rt.policy_context.camp_left(0, 5.0, 0.0)              # the body, at the release
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "step", "not while dead"
+    rt.tick()
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("far_rib", "step")
+    assert rt.armed.decision.skill == "GRIND_UNTIL", "the grind before the repair"
+    rt.tick()
+    assert rt.armed.decision.skill == "GRIND_UNTIL"
+    rt.tick()                                               # there: the leave is made
+    assert rt.tracker.step_id == "far_rib"
+    assert rt.armed.decision.skill == "VENDOR_REPAIR", "then the services, as before"
+    assert rt.policy_context.death_camp is None and not rt.policy_context.leaving(4)
+
+
+def test_the_way_out_of_a_death_camp_is_no_wait_for_its_step(tmp_path):
+    """V307 with V220: a grind that waits to retry a step ends when the step cannot happen,
+    but the grind a death camp is left for is no wait for the step: the leave is made first."""
+    from jev.world.state_v1 import Char
+
+    base = dict(zone="zone", zone_id=1, map_id=0)
+    graph = Graph(graph_id="g", faction="alliance", entry="a7", nodes=(
+        Node(id="a7", kind=StepKind.QUEST_ACCEPT, quest_id=7, next=("step",), pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="step", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("after",), pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), quest_prerequisites=((7,),),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=2, pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="far_rib", kind=StepKind.GRIND, level=(1, 10), pos=(0.9, 0.9),
+             world=(400.0, 300.0, 0.0), skills=("GRIND_UNTIL",), **base),
+    ))
+    there = Pos(zone="zone", mx=0.9, my=0.9)
+    states = [seen(0, char=Char(level=5)), seen(1, char=Char(level=5)),
+              seen(2, char=Char(level=5), pos=there), seen(3, char=Char(level=5), pos=there)]
+    rt = ClientRuntime("c", graph, ScriptedSource(states), Recorder(tmp_path),
+                       start_step="step", start_retried=frozenset({"a7"}))
+    rt.policy_context.camp_left(0, 5.0, 0.0)
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("far_rib", "step")
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "far_rib", "the leave abandoned for a step that cannot happen"
+    rt.tick(choose=False)                                  # there
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "after", "then the grind's way back that cannot happen ends"
+
+
+def level_graph():
+    """A hand-in, then an accept whose quest asks level 5 (its band's floor, MinLevel)."""
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    return Graph(graph_id="g", faction="alliance", entry="before", nodes=(
+        Node(id="before", kind=StepKind.QUEST_TURNIN, quest_id=9, next=("accept",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, level=(5, 12),
+             next=("turnin",), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, level=(5, 12),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="low", kind=StepKind.GRIND, level=(2, 4), skills=("GRIND_UNTIL",), **base),
+        Node(id="high", kind=StepKind.GRIND, level=(6, 8), skills=("GRIND_UNTIL",), **base),
+    ))
+
+
+def test_an_accept_below_its_quests_level_waits_on_the_grind_of_the_characters_level(tmp_path):
+    """V308: of 117 accepts failed over to a grind in the hive from 12:00 to 13:08 on 28 Sep,
+    56 were below the quest's MinLevel, each walked to, refused, walked from to a grind and
+    back, and refused again: Hattheas, a level 2 blood elf, at Major Malfunction (MinLevel 4),
+    12:24 and 12:31. The accept reached at level 3 arms the grind for level 3, no walk to the
+    giver; a level later it waits on again, and at 5 the giver is walked to."""
+    from jev.world.state_v1 import Char
+
+    def at(t, level, *log):
+        return seen(t, char=Char(level=level), quests=tuple(Quest(quest_id=q) for q in log))
+
+    states = [at(0, 3, 9), at(1, 3), at(2, 3), at(3, 4), at(4, 4), at(5, 5), at(6, 5)]
+    rt = ClientRuntime("c", level_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       start_step="before")
+    rt.tick()
+    assert rt.tracker.step_id == "before"
+    rt.tick()                                             # handed in: the accept is reached
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("low", "accept")
+    assert rt.armed.decision.skill == "GRIND_UNTIL", "no walk to a giver who will refuse"
+    assert rt.armed.decision.params["until_level"] == 4
+    assert rt.tracker.memory.until is None and "accept" not in rt._retried, "not a failure"
+    rt.tick()
+    rt.tick()                                             # level 4: still below
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("low", "accept")
+    rt.tick()
+    rt.tick()                                             # level 5
+    assert rt.tracker.step_id == "accept"
+    assert rt.armed.decision.skill == "ACCEPT_QUEST"
+
+
+def test_the_rest_of_a_quest_handed_in_on_the_way_is_passed(tmp_path):
+    """V308: a hand-in on the way (V234) leaves the quest's objective on the route, and of 83
+    objectives failed over with their quest absent in the hive from 12:00 to 13:08 on 28 Sep,
+    40 were of quests handed in: a troll warrior's Simple Tablet, handed in at 12:15:54, its
+    objective armed 21 s later and failed over, "quest absent"."""
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    graph = Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("other",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="other", kind=StepKind.QUEST_ACCEPT, quest_id=2, next=("do",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="do", kind=StepKind.QUEST_OBJECTIVE, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "GRIND_UNTIL"), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("after",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=3,
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+    ))
+    states = [seen(0), seen(1, quests=(Quest(quest_id=2),))]
+    rt = ClientRuntime("c", graph, ScriptedSource(states), Recorder(tmp_path),
+                       start_step="other", completed={1})
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "other"
+    rt.tick()                                             # quest 2 taken: on to quest 1's
+    assert rt.tracker.step_id == "after", "the objective of a quest handed in"
+    assert rt.armed.decision.skill == "ACCEPT_QUEST"
+
+
+def test_an_accept_passed_by_for_a_lost_prerequisite_takes_the_rest_of_its_quest(tmp_path):
+    """V308: a tauren druid's Rite of Strength was passed by for a lost Rites of the
+    Earthmother, and its objective, further on, was walked to and failed twice, "quest
+    absent" (the hive, 28 Sep 12:05 and 12:11)."""
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    graph = Graph(graph_id="g", faction="alliance", entry="do1", nodes=(
+        Node(id="do1", kind=StepKind.QUEST_OBJECTIVE, quest_id=1, next=("turnin1",),
+             skills=("TRAVEL_TO", "GRIND_UNTIL"), **base),
+        Node(id="turnin1", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("accept2",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="accept2", kind=StepKind.QUEST_ACCEPT, quest_id=2, next=("accept3",),
+             quest_prerequisites=((1,),), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="accept3", kind=StepKind.QUEST_ACCEPT, quest_id=3, next=("do2",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="do2", kind=StepKind.QUEST_OBJECTIVE, quest_id=2, next=("turnin2",),
+             skills=("TRAVEL_TO", "GRIND_UNTIL"), **base),
+        Node(id="turnin2", kind=StepKind.QUEST_TURNIN, quest_id=2, next=("after",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=4,
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+    ))
+    unfinished = Quest(quest_id=1, complete=False)          # its objective passed over (V219)
+    states = [seen(0, quests=(unfinished,)), seen(1, quests=(unfinished, Quest(quest_id=3)))]
+    rt = ClientRuntime("c", graph, ScriptedSource(states), Recorder(tmp_path),
+                       start_step="accept2", start_retried=frozenset({"do1"}))
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "accept3" and "accept2" in rt._retried
+    rt.tick()                                             # quest 3 taken
+    assert rt.tracker.step_id == "after", "the objective of a quest never taken"
+    assert rt.armed.decision.skill == "ACCEPT_QUEST"
+
+
+def test_a_quest_its_giver_will_not_give_is_passed_over_at_once(tmp_path):
+    """V308: Botanist Taerix, a breadcrumb every draenei route takes after the quest it leads
+    to, was refused 14 times on 8 bots from 12:00 to 13:08 on 28 Sep, a walk to a grind and
+    back between each first refusal and its second. Refused, the quest is passed over at once,
+    accept to hand-in."""
+    rt = ClientRuntime("c", chain_graph(), ScriptedSource([seen(0)]), Recorder(tmp_path))
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "accept"
+    assert rt.not_offered("turnin") is False, "not the step the playhead is on"
+    assert rt.not_offered("accept") is True
+    assert rt.tracker.step_id == "next_accept" and "accept" in rt._retried
+    assert rt.tracker.memory.rejoin_to is None, "no grind and no second walk"
+
+
+def test_a_service_barred_on_a_step_is_barred_there_alone(tmp_path):
+    """Review of 28 Sep (V309): a repair, a restock or a bag service that could not be done
+    on a step is not asked again on it; the playhead gone from the step, the bar is lifted,
+    as a grind rib comes back later and one timed-out sale must not bar it for good."""
+    full = Bags(free=0, durability_min=1.0, money_copper=500)
+    rt = runtime(tmp_path, [seen(0, bags=full), seen(1, bags=full),
+                            seen(2, bags=full, quests=(Quest(quest_id=1),))])
+    context = rt.policy_context
+    context.bags_unreachable("accept", 0)
+    context.repair_unreachable("accept", 0)
+    context.supplies_unreachable("elsewhere", 0)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "accept"
+    assert context.bags_unreachable_step == context.repair_unreachable_step == "accept"
+    assert context.supplies_unreachable_step is None, "not the playhead's step"
+    assert not context.can_make_space(0, "accept", 1)
+    rt.tick(choose=False)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "turnin"
+    assert context.bags_unreachable_step is None and context.repair_unreachable_step is None
+    assert context.can_make_space(0, "accept", 3), "back on the step later, asked again"

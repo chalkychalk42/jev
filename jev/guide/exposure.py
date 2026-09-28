@@ -11,6 +11,14 @@ camp, a character stands where it stands).
 Of the direct route and ways round the passed spawns (via points on rings round their
 middle), the one that costs least is walked: its length, at a run, and `EXPOSURE_COST_S` for
 each spawn passed within `EXPOSED_YARDS`. Anything that goes wrong here plans as before.
+
+The route this layer is given has already gone round what the layers below keep clear of -
+where the character died, where it keeps being attacked, a death camp - and its ways round are
+planned below those layers (V257). So a way round passing any such place the route it would
+replace did not pass is not taken (`keep`, V307): after each of the level 8 mage Merany's
+first three deaths at one spot by Raven Hill's graveyard, its walk to a repairer was planned
+"round 21 units that attack on sight" (23 the third time) and passed within 6 yards of the
+spot, kept in the route memory since the first death (the hive, 28 Sep 12:15-12:23).
 """
 
 from __future__ import annotations
@@ -86,15 +94,17 @@ def _distance_to(points, p: tuple[float, float]) -> float:
 class ExposureQuery:
     """The planner, asked for routes that pass fewer hostile spawns. `hostile(map_id, x, y,
     radius)` gives the spawns round a point that attack this character (x, y, z each); none
-    for a ghost."""
+    for a ghost. `keep(map_id, start, end)` gives, for a walk, what a route passes of the
+    places the layers below keep clear of (`DangerAvoidingQuery.keeper`)."""
 
     def __init__(self, inner, hostile: Callable[[int, float, float, float], list], *,
-                 legs=None, clock: Callable[[], float] = time.monotonic):
+                 legs=None, clock: Callable[[], float] = time.monotonic, keep=None):
         # `legs` plans the ways round: below the layers that search rings of their own, whose
         # searches inside each of this one's legs multiplied the queries (V257).
         self.inner, self.hostile = inner, hostile
         self.legs = legs if legs is not None else inner
         self.clock = clock
+        self.keep = keep
 
     def estimate(self):
         """The planner for a walk's cost, without this layer's search (V257)."""
@@ -103,11 +113,12 @@ class ExposureQuery:
     def path(self, map_id: int, start, end) -> Path:
         direct = self.inner.path(map_id, start, end)
         try:
-            chosen = self._fewer(map_id, start, end, direct)
+            kept = self.keep(map_id, start, end) if self.keep is not None else _nothing
+            chosen = self._fewer(map_id, start, end, direct, kept)
         except Exception:
             return direct
         try:
-            return self._round_places(map_id, start, end, chosen)
+            return self._round_places(map_id, start, end, chosen, kept)
         except Exception:
             return chosen
 
@@ -128,13 +139,15 @@ class ExposureQuery:
     def cost(length: float, exposed: int) -> float:
         return length / RUN_YARDS_PER_S + EXPOSURE_COST_S * exposed
 
-    def _fewer(self, map_id: int, start, end, direct: Path) -> Path:
+    def _fewer(self, map_id: int, start, end, direct: Path, kept=None) -> Path:
         if (not direct.usable or direct.status is not PathStatus.COMPLETE
                 or start[:2] == end[:2]):
             return direct
         passed = self.exposed(map_id, direct.points, start, end)
         if not passed:
             return direct
+        kept = kept or _nothing
+        allowed = kept(direct.points)
         length = direct.length_yards()
         best_cost, best = self.cost(length, len(passed)), direct
         limit = length * EXPOSURE_DETOUR
@@ -160,6 +173,8 @@ class ExposureQuery:
                 if total > limit:
                     continue
                 points = first.points + second.points[1:]
+                if kept(points) - allowed:
+                    continue                 # back through what the layers below went round
                 cost = self.cost(total, len(self.exposed(map_id, points, start, end)))
                 if cost < best_cost:
                     best_cost = cost
@@ -167,7 +182,7 @@ class ExposureQuery:
                                 f"round {len(passed)} units that attack on sight")
         return best
 
-    def _round_places(self, map_id: int, start, end, route: Path) -> Path:
+    def _round_places(self, map_id: int, start, end, route: Path, kept=None) -> Path:
         """Go round each place `route` still passes spawns, on its own (V270)."""
         if (not route.usable or route.status is not PathStatus.COMPLETE
                 or len(route.points) < 2 or start[:2] == end[:2]):
@@ -188,7 +203,8 @@ class ExposureQuery:
             if hi - lo < 1.0:
                 continue
             stretch = _between(points, cum, lo, hi)
-            way = self._round_place(map_id, start, end, stretch, [s for _, s in place], deadline)
+            way = self._round_place(map_id, start, end, stretch, [s for _, s in place], deadline,
+                                    kept)
             if way is stretch:
                 continue
             _extend(out, _between(points, cum, done, lo))
@@ -201,13 +217,15 @@ class ExposureQuery:
                     f"round {len(passed)} units that attack on sight")
 
     def _round_place(self, map_id: int, start, end, stretch: list, spawns: list,
-                     deadline: float) -> list:
+                     deadline: float, kept=None) -> list:
         """The cheapest way from the stretch's first point to its last round these spawns, or
-        the stretch itself."""
+        the stretch itself; none passing a place kept clear of that the stretch does not."""
         a, b = stretch[0], stretch[-1]
         length = _length(stretch)
         best_cost = self.cost(length, len(self.exposed(map_id, stretch, start, end)))
         best = stretch
+        kept = kept or _nothing
+        allowed = kept(stretch)
         cx = sum(x for x, _ in spawns) / len(spawns)
         cy = sum(y for _, y in spawns) / len(spawns)
         spread = max(math.dist((cx, cy), s) for s in spawns)
@@ -229,10 +247,17 @@ class ExposureQuery:
                 total = _length(way)
                 if total > length * EXPOSURE_DETOUR + PLACE_SLACK_YARDS:
                     continue
+                if kept(way) - allowed:
+                    continue
                 cost = self.cost(total, len(self.exposed(map_id, way, start, end)))
                 if cost < best_cost:
                     best_cost, best = cost, way
         return best
+
+
+def _nothing(points) -> frozenset:
+    """Nothing kept clear of: a planner with no layer below that keeps anything."""
+    return frozenset()
 
 
 def _arcs(points) -> list[float]:
