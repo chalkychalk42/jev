@@ -124,6 +124,7 @@ class Context:
 
     def repair_unreachable(self, step_id: str | None) -> None:
         self.repair_unreachable_step = step_id
+        self._save()
 
     def can_repair(self, money: int | None, step_id: str | None = None) -> bool:
         if step_id is not None and step_id == self.repair_unreachable_step:
@@ -159,9 +160,13 @@ class Context:
 
     # What a session learns of the purse is true of the next: each new session forgot it,
     # and the level 4 mage's first act every session was its hearthstone and a walk to a
-    # smith it still could not pay, 45 copper against broken gear (26 September, V206).
+    # smith it still could not pay, 45 copper against broken gear (26 September, V206). So is
+    # a service that could not be done on a step (V309), as a trainer not reached is (V254):
+    # Neris, a level 4 night elf, ended five sessions in a row from 13:25 to 14:10 on 28 Sep
+    # on the same bag service on the same step, each timed out.
     PURSE = ("repair_blocked", "repair_money", "supplies_blocked", "supplies_money",
-             "supplies_needed", "train_blocked_level", "train_blocked_until")
+             "supplies_needed", "train_blocked_level", "train_blocked_until",
+             "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step")
 
     def purse(self) -> dict:
         return {name: getattr(self, name) for name in self.PURSE}
@@ -171,6 +176,8 @@ class Context:
             value = raw.get(name)
             if name.endswith("blocked"):
                 setattr(self, name, value is True)
+            elif name.endswith("_step"):
+                setattr(self, name, value if isinstance(value, str) else None)
             else:
                 setattr(self, name, value if isinstance(value, int) and not isinstance(value, bool)
                         else None)
@@ -186,6 +193,7 @@ class Context:
 
     def supplies_unreachable(self, step_id: str | None) -> None:
         self.supplies_unreachable_step = step_id
+        self._save()
 
     # A supply whose nearest merchant is beyond the walk's cap (V205), or which no merchant in
     # the zone sells (V292), is noted once a session and not asked for again in it (V302): the
@@ -221,7 +229,17 @@ class Context:
     def bags_failed(self, free: int | None = None) -> None:
         self.bags_blocked, self.bags_blocked_at, self.bags_freed = True, free or 0, False
 
-    def can_make_space(self, free: int | None) -> bool:
+    # A bag service that could not be done on a step - timed out, or no merchant reached - is
+    # not asked for again on it, as a repair or a restock is not (V175, V185, V309).
+    bags_unreachable_step: str | None = None
+
+    def bags_unreachable(self, step_id: str | None) -> None:
+        self.bags_unreachable_step = step_id
+        self._save()
+
+    def can_make_space(self, free: int | None, step_id: str | None = None) -> bool:
+        if step_id is not None and step_id == self.bags_unreachable_step:
+            return False
         # Bags with nothing a merchant may buy: another visit changes nothing until something
         # new is in them, and a run asking again stops on it.
         if self.bags_blocked and free is not None:
@@ -421,7 +439,7 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
         return plans
     b = state.bags
     can_repair = context is None or context.can_repair(b.money_copper, state.guide.step_id)
-    can_sell = context is None or context.can_make_space(b.free)
+    can_sell = context is None or context.can_make_space(b.free, state.guide.step_id)
 
     # A walk to a merchant or a smith waits for a meal first, as training does (V259): of the
     # bag and repair walks begun below 60% health or 50% mana in sessions 205-228, 16 of 26

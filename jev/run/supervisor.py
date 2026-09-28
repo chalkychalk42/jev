@@ -322,6 +322,13 @@ class Supervisor:
                         and result.code not in ("too_poor",)):
                     # Nor a repairer (V185).
                     self.runtime.policy_context.repair_unreachable(worker.arm.step_id)
+                if (worker.arm.decision.skill == "BAG_MAKE_SPACE"
+                        and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
+                        and result.code not in ("too_poor", "no_junk")):
+                    # Nor a merchant for the bags, and it stops no run (V309): 52 bag services
+                    # timed out in the hive from 13:00 to 14:59 on 28 Sep, and each ended its
+                    # session, the next arming the same service on the same step again.
+                    self.runtime.policy_context.bags_unreachable(worker.arm.step_id)
                 if result.code == "too_poor":
                     if worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
                         self.runtime.policy_context.supplies_failed(state.bags.money_copper)
@@ -352,7 +359,7 @@ class Supervisor:
                       and worker.arm.decision.skill not in ("TRAIN_CLASS", "BIND_HEARTH",
                                                             "DISCOVER_FLIGHT", "EAT_DRINK",
                                                             "BUY_AMMO_REAGENT_FOOD",
-                                                            "VENDOR_REPAIR")
+                                                            "VENDOR_REPAIR", "BAG_MAKE_SPACE")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     # A body that can rescue the objective takes one more attempt at it before

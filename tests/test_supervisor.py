@@ -986,3 +986,38 @@ def test_a_quest_its_giver_will_not_give_is_passed_over_and_never_stops_the_run(
         assert any("not offered" in line for line in lines)
     finally:
         supervisor.close()
+
+
+def test_a_bag_service_that_times_out_is_not_asked_again_on_the_step_and_never_stops_the_run(
+        tmp_path):
+    """V309: 52 bag services timed out in the hive from 13:00 to 14:59 on 28 Sep, and each
+    stopped its session; Neris, a level 4 night elf, ended five sessions in a row from 13:25
+    to 14:10 on the same service on the same step. As a repair or a restock out of reach
+    (V175, V185), it is not asked again on the step, and the next session knows."""
+    from jev.coach.policy import Context
+    from jev.world.state_v1 import Bags
+
+    class SellingBody(Body):
+        available = Body.available | {"BAG_MAKE_SPACE"}
+
+    full = Bags(free=0, durability_min=1.0, money_copper=500)
+    rt = runtime(tmp_path, [seen(t, bags=full) for t in (0, 1, 2)])
+    body = SellingBody(result=Result(SkillOutcome.TIMED_OUT, "skill timeout", "timeout"))
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == "BAG_MAKE_SPACE"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert not supervisor.stopped.is_set(), supervisor.failure
+        step = rt.tracker.step_id
+        assert rt.policy_context.bags_unreachable_step == step
+        assert not rt.policy_context.can_make_space(0, step)
+        assert rt.policy_context.can_make_space(0, "another step")
+        later = Context()
+        later.restore_purse(rt.policy_context.purse())
+        assert not later.can_make_space(0, step), "the next session knows"
+    finally:
+        supervisor.close()

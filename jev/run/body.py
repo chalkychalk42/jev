@@ -171,6 +171,14 @@ MERCHANT_TRIES = 5
 CORNER_YARDS = 15.0
 MERCHANT_PLANS = 12
 UNPLANNED_FACTOR = 3.0
+# The merchants are planned one at a time, nearest in a straight line first, and no longer
+# than this; a walk is never shorter than its straight line, so planning stops at the first
+# merchant that could not beat the best walk planned (V309). Planning all twelve before a step
+# was walked, each incomplete plan asked again at every start height, stood the hive's
+# services still until they timed out: in the runs begun 12:50-15:00 on 28 Sep, 136 of 181
+# service timeouts came after 300 s and more with nothing recorded where the ranking plans,
+# and each timed-out bag service stopped its session, 52 of them from 13:00 to 14:59.
+RANKING_BUDGET_S = 20.0
 # Each failure since a merchant's last sale adds this to its walk. Ranked behind every
 # merchant that never failed, one missed hover at each nearby merchant (fifteen in Elwynn
 # and Westfall, 26 September) sent a level 3 mage from Northshire to Ben Trias in Stormwind,
@@ -368,6 +376,7 @@ class LiveBody:
         self._talents_failed: int | None = None           # the level a visit failed at (V261)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
         self._wedged = 0
+        self._walks: dict[int, float] = {}          # the last ranking's planned walks (V309)
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
         self.fight.realign = self.camera.face
@@ -1627,7 +1636,9 @@ class LiveBody:
         # A purchase keeps what the trainer is owed (V215).
         reserve = self.training_reserve() if supplies else 0
         if supplies:
-            walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
+            walk = self._walks.get(ranked[0].entry)          # planned once, by the ranking
+            if walk is None:
+                walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
             if walk > SUPPLY_WALK_MAX_YARDS and not self._stranded(state, values):
                 self.policy_context.supplies_out_of_reach("too_far")     # this session (V302)
                 return Result(SkillOutcome.ABORTED,
@@ -1760,16 +1771,29 @@ class LiveBody:
 
     def _ranked(self, candidates, world) -> list:
         """The first `MERCHANT_TRIES` merchants to try from `world`: the shortest walk,
-        each failure since the last sale counted in yards (V199)."""
+        each failure since the last sale counted in yards (V199). Planned one at a time,
+        nearest in a straight line first, each plan after a checkpoint, until the next could
+        not beat the best walk planned, `MERCHANT_PLANS` are planned or `RANKING_BUDGET_S` is
+        spent (V309); the merchants not planned follow in straight-line order. The walks
+        planned are kept for the caller (`_walks`)."""
         failed = load_merchant_failures(self.merchant_memory)
-        near = sorted(candidates, key=lambda m: math.dist(m.world[:2], world))[:MERCHANT_PLANS]
-        walks = {m.entry: self._walk_yards(m.world, math.dist(m.world[:2], world)) for m in near}
-        ranked = sorted(near, key=lambda m: walks[m.entry]
-                        + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
-        ranked += sorted((m for m in candidates if m.entry not in walks),
-                         key=lambda m: math.dist(m.world[:2], world)
-                         + FAILED_MERCHANT_YARDS * failed.get(m.entry, 0))
-        return ranked[:MERCHANT_TRIES]
+
+        def cost(merchant, yards: float) -> float:
+            return yards + FAILED_MERCHANT_YARDS * failed.get(merchant.entry, 0)
+
+        order = sorted(candidates, key=lambda m: cost(m, math.dist(m.world[:2], world)))
+        self._walks = {}
+        best, deadline = math.inf, time.monotonic() + RANKING_BUDGET_S
+        for merchant in order[:MERCHANT_PLANS]:
+            straight = math.dist(merchant.world[:2], world)
+            if cost(merchant, straight) >= best or time.monotonic() >= deadline:
+                break
+            self.checkpoint()
+            self._walks[merchant.entry] = self._walk_yards(merchant.world, straight)
+            best = min(best, cost(merchant, self._walks[merchant.entry]))
+        planned = sorted((m for m in order if m.entry in self._walks),
+                         key=lambda m: cost(m, self._walks[m.entry]))
+        return (planned + [m for m in order if m.entry not in self._walks])[:MERCHANT_TRIES]
 
     def _repairers(self) -> list:
         """The merchants in the zone that mend gear (the catalog's repair flag)."""
