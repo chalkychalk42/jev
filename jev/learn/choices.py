@@ -231,7 +231,17 @@ class Stations:
         return [stations[i] for i in order]
 
     def _judged(self, stations: list[tuple], best: list[int], arms: dict) -> int | None:
-        """The station Jev would begin at, of `best`; `None` when it has no answer."""
+        """The station Jev would begin at, of `best`; `None` when it has no answer. The one it
+        named for this objective within the judge's `STATION_TTL_S` is taken again unasked,
+        while it is among the best: a hunt begun again is the same question."""
+        memo = getattr(self.judge, "stations", None)
+        if memo is not None:
+            from jev.coach.judge import STATION_TTL_S
+            kept = memo.get((self.point, self.objective))
+            if kept is not None and self.clock() - kept[1] < STATION_TTL_S:
+                for i in best:
+                    if station_key(self.objective, stations[i]) == kept[0]:
+                        return i
         try:
             origin = self.judge.origin() if hasattr(self.judge, "origin") else None
         except Exception:
@@ -249,7 +259,13 @@ class Stations:
             picked = self.judge.pick(self.point, self.objective, options)
         except Exception:
             picked = None
-        return best[int(picked[1:]) - 1] if picked in options else None
+        if picked not in options:
+            return None
+        chosen = best[int(picked[1:]) - 1]
+        if memo is not None:
+            memo[(self.point, self.objective)] = (station_key(self.objective, stations[chosen]),
+                                                  self.clock())
+        return chosen
 
     def arrive(self, station: Sequence[float]) -> None:
         """A station chosen: its visit is timed from here."""

@@ -56,6 +56,7 @@ FIGHT_FRESH_S = 2.0
 # the coach is asked each time a skill ends, and one ending a second after another has
 # seen nothing new.
 ARM_TTL_S = 30.0
+STATION_TTL_S = 60.0
 
 
 def _r(value, digits: int = 2):
@@ -145,6 +146,9 @@ class Judge:
         self.where = where                    # the character's world position, in yards
         self.record = record                  # where this character's calls are written
         self._last: tuple[tuple, float, str] | None = None
+        # The station each hunt objective was last told to begin at, and when: a hunt begun
+        # again within `STATION_TTL_S` begins there without asking (`jev.learn.choices`).
+        self.stations: dict[tuple[str, str], tuple[str, float]] = {}
         self.asked = self.taken = 0
 
     def arm(self, state: State, node: Node | None, candidates: list) -> Any | None:
@@ -208,7 +212,8 @@ def candidates(state: State, node: Node | None, context, floor) -> list:
     if floor.rule.startswith(("preempt.", "fight.", "sense.", "guide.finished")):
         return []
     plans = [floor]
-    plans += policy.services(state, context=context)
+    due = policy.services(state, context=context)
+    plans += due
     meal = policy._recover(state, context)
     if meal is not None:
         plans.append(meal)
@@ -217,6 +222,12 @@ def candidates(state: State, node: Node | None, context, floor) -> list:
         plans.append(step)
     if node is None or jamming(state, node):
         plans.append(policy._fallback(state))
+    # A hunt refuses to begin while a service is due (`LiveBody._service_needed`), so a grind
+    # is no choice then: offered one, Jev took it, the hunt refused, and the next decision
+    # was the same - a blood elf's hunt began and ended 296 times in six minutes, "bags are
+    # nearly full", each beginning a station question (the hive, 28 September).
+    if due:
+        plans = [p for p in plans if p is floor or p.decision.skill != "GRIND_UNTIL"]
     return plans
 
 

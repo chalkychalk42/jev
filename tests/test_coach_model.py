@@ -217,13 +217,15 @@ def test_jev_picks_where_a_lap_begins_once_a_minute(tmp_path):
             return (190.0, 0.0)
 
     model = Nearest()
-    clock = iter([0.0, 10.0, 100.0]).__next__
+    now = [0.0]
     chooser = Stations(memory, "hunt.station", "creature:1", rng=random.Random(2),
-                       clock=clock, judge=Here(model))
+                       clock=lambda: now[0], judge=Here(model))
     assert chooser.order(stations)[0] == stations[2]
     assert all(text.endswith("never tried") for text in model.asked[0][2].values())
+    now[0] = 10.0
     chooser.order(stations)
     assert len(model.asked) == 1                 # ten seconds on: the draw alone
+    now[0] = 100.0
     assert chooser.order(stations)[0] == stations[2] and len(model.asked) == 2
 
 
@@ -266,9 +268,9 @@ def test_jevs_pick_of_a_grind_on_a_loop_grinds_to_a_level(tmp_path):
     at = dict(pos=Pos(zone=rib.zone, zone_id=rib.zone_id, coord_zone_id=rib.coord_zone_id,
                       mx=rib.pos[0], my=rib.pos[1]),
               char=Char(level=rib.level[0], cls="mage"),
-              bags=Bags(free=1, durability_min=1.0, money_copper=0))
+              vitals=Vitals(hp=0.3, power=1.0, dead=False, ghost=False, combat=False))
     states = [State(t=float(i), client_id="c01", **{**_state().model_dump(
-        exclude={"t", "client_id", "pos", "bags", "char"}), **at}) for i in range(3)]
+        exclude={"t", "client_id", "pos", "vitals", "char"}), **at}) for i in range(3)]
     runtime = ClientRuntime(client_id="c01", graph=graph, source=ScriptedSource(states),
                             recorder=Recorder(root=tmp_path), judge=Judge(FakeModel("guide.step")),
                             start_step=rib.id, start_rejoin=graph.entry)
@@ -307,3 +309,33 @@ def test_a_lock_the_file_system_cannot_give_does_not_stop_the_count(tmp_path, mo
     model = CoachModel("key", budget=budget,
                        transport=httpx.MockTransport(lambda r: httpx.Response(200, json=_reply())))
     assert model.choose("p", {}, "?", OPTIONS).ok
+
+
+def test_a_grind_is_not_offered_while_a_service_the_hunt_waits_for_is_due():
+    graph = Graph.load(GRAPH)
+    rib = next(n for n in graph.nodes if n.kind.value == "grind")
+    state = _state(bags=Bags(free=1, durability_min=1.0, money_copper=0))
+    floor = policy.decide(state, rib, context=policy.Context())
+    options = jev_judge.candidates(state, rib, policy.Context(), floor)
+    assert floor.rule == "service.bags_full"
+    assert all(p.decision.skill != "GRIND_UNTIL" for p in options)
+
+
+def test_a_hunt_begun_again_begins_where_jev_said_without_asking(tmp_path):
+    memory = ChoiceMemory(tmp_path / "choices.json")
+    stations = [(0.0, 0.0, 0.0), (100.0, 0.0, 0.0), (200.0, 0.0, 0.0)]
+    model = FakeModel("s2", "s2", "s2")
+    judge = Judge(model, clock=lambda: 0.0)
+    clock = [0.0]
+    first = Stations(memory, "hunt.station", "creature:1", rng=random.Random(3),
+                     clock=lambda: clock[0], judge=judge)
+    begin = first.order(stations)[0]
+    again = Stations(memory, "hunt.station", "creature:1", rng=random.Random(4),
+                     clock=lambda: clock[0], judge=judge)
+    clock[0] = 30.0
+    assert again.order(stations)[0] == begin and len(model.asked) == 1
+    clock[0] = 100.0
+    third = Stations(memory, "hunt.station", "creature:1", rng=random.Random(5),
+                     clock=lambda: clock[0], judge=judge)
+    third.order(stations)
+    assert len(model.asked) == 2
