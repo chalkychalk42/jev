@@ -125,3 +125,24 @@ def test_a_power_drain_on_the_bar_is_not_pressed():
     profile = from_bar(bar, for_class(WARLOCK, BLOOD_ELF))
     assert all(a.spell_id != MANA_TAP for a in profile.abilities)
     assert any(a.name == "Shadow Bolt" for a in profile.by_role(Role.ATTACK))
+
+
+def test_a_racial_on_the_enemies_round_or_a_stealth_is_no_buff():
+    """War Stomp and Arcane Torrent land on every enemy round the caster, and Shadowmeld is a
+    stealth that holds only standing still out of combat: none is the character's own buff.
+    Night elves pressed Shadowmeld in fights, refused 18 times in ten minutes (the hive, V291).
+    Off the starting rows, the bar's census does not press them either: the spells' facts call
+    them utility."""
+    from jev.world.combat import from_bar
+    from jev.world.training import spell
+
+    war_stomp, shadowmeld, torrents = 20549, 20580, (28730, 25046)
+    for profile in PROFILES.values():
+        assert all(a.spell_id not in (war_stomp, shadowmeld, *torrents)
+                   for a in profile.abilities), profile.name
+    assert all(spell(s).role == "utility" for s in (war_stomp, shadowmeld, *torrents))
+    hunter = for_class(3, 4)                              # a night elf hunter
+    bar = {1: 6603, 2: 2973, 3: 75, 4: shadowmeld, 11: None, 12: None}
+    assert all(a.spell_id != shadowmeld for a in from_bar(bar, hunter).abilities)
+    mage = for_class(8, 1)
+    assert any(a.name == "Frost Armor" for a in mage.by_role(Role.BUFF)), "a buff stays one"

@@ -56,6 +56,13 @@ EFFECT_POWER_DRAIN = 8
 # fought 25 times, every cast refused (the hive, 28 September). A spell only for the caster
 # (1: Frost Armor, a seal) needs no modifier and keeps its plain key.
 FRIENDLY_TARGETS = {21}
+# An aura that lands on every enemy in an area (`EffectImplicitTargetB1` 15, 16) is no buff of
+# the character's: War Stomp (tauren) and Arcane Torrent (blood elves) were pressed as buffs,
+# with no aura of the character's own to keep up. Nor is a stealth (aura 16): night elves
+# pressed Shadowmeld in fights and were refused 18 times in ten minutes (the hive, 28
+# September); it holds only standing still, out of combat. Neither is in a starting rotation.
+ENEMY_AREA_TARGETS = {15, 16}
+AURA_MOD_STEALTH = 16
 
 # Consumable aura types: what the thing actually restores.
 AURA_MOD_REGEN = 84          # health -> food
@@ -70,12 +77,15 @@ CLASS_NAMES = {1: "warrior", 2: "paladin", 3: "hunter", 4: "rogue", 5: "priest",
 
 def spell_row(db, slot: int, action: int) -> dict | None:
     row = db.execute(
-        "select SpellName, Effect1, ManaCost, DurationIndex, EffectImplicitTargetA1 "
+        "select SpellName, Effect1, ManaCost, DurationIndex, EffectImplicitTargetA1, "
+        "EffectImplicitTargetB1, EffectApplyAuraName1 "
         "from world_spell_template where Id=?", (action,)).fetchone()
     if row is None:
         return None
-    name, effect, mana, duration_index, target = row
+    name, effect, mana, duration_index, target, area, aura = row
     if effect == EFFECT_POWER_DRAIN:
+        return None
+    if effect == EFFECT_APPLY_AURA and (area in ENEMY_AREA_TARGETS or aura == AURA_MOD_STEALTH):
         return None
     out = {"slot": slot, "spell": action, "name": name, "mana": mana or 0}
     if effect == EFFECT_HEAL:

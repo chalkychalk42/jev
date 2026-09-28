@@ -28,14 +28,6 @@
     "spell": 635
    },
    {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "Arcane Torrent",
-    "role": "buff",
-    "slot": 5,
-    "spell": 28730
-   },
-   {
     "item": 159,
     "name": "Refreshing Spring Water",
     "role": "drink",
@@ -75,14 +67,6 @@
     "role": "attack",
     "slot": 3,
     "spell": 75
-   },
-   {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "Arcane Torrent",
-    "role": "buff",
-    "slot": 5,
-    "spell": 28730
    },
    {
     "item": 159,
@@ -133,14 +117,6 @@
     "spell": 2764
    },
    {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "Arcane Torrent",
-    "role": "buff",
-    "slot": 6,
-    "spell": 25046
-   },
-   {
     "item": 20857,
     "name": "Honey Bread",
     "role": "food",
@@ -174,14 +150,6 @@
     "role": "heal",
     "slot": 3,
     "spell": 2050
-   },
-   {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "Arcane Torrent",
-    "role": "buff",
-    "slot": 5,
-    "spell": 28730
    },
    {
     "item": 159,
@@ -226,14 +194,6 @@
     "spell": 168
    },
    {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "Arcane Torrent",
-    "role": "buff",
-    "slot": 5,
-    "spell": 28730
-   },
-   {
     "item": 159,
     "name": "Refreshing Spring Water",
     "role": "drink",
@@ -274,14 +234,6 @@
     "role": "buff",
     "slot": 3,
     "spell": 687
-   },
-   {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "Arcane Torrent",
-    "role": "buff",
-    "slot": 5,
-    "spell": 28730
    },
    {
     "item": 159,
@@ -1309,14 +1261,6 @@
     "spell": 78
    },
    {
-    "every_s": 4294962.295,
-    "mana": 0,
-    "name": "Shadowmeld",
-    "role": "buff",
-    "slot": 75,
-    "spell": 20580
-   },
-   {
     "item": 117,
     "name": "Tough Jerky",
     "role": "food",
@@ -1350,14 +1294,6 @@
     "role": "heal",
     "slot": 3,
     "spell": 5185
-   },
-   {
-    "every_s": 4294962.295,
-    "mana": 0,
-    "name": "Shadowmeld",
-    "role": "buff",
-    "slot": 4,
-    "spell": 20580
    },
    {
     "item": 159,
@@ -1399,14 +1335,6 @@
     "role": "attack",
     "slot": 3,
     "spell": 75
-   },
-   {
-    "every_s": 4294962.295,
-    "mana": 0,
-    "name": "Shadowmeld",
-    "role": "buff",
-    "slot": 4,
-    "spell": 20580
    },
    {
     "item": 159,
@@ -1457,14 +1385,6 @@
     "spell": 2764
    },
    {
-    "every_s": 4294962.295,
-    "mana": 0,
-    "name": "Shadowmeld",
-    "role": "buff",
-    "slot": 5,
-    "spell": 20580
-   },
-   {
     "item": 4540,
     "name": "Tough Hunk of Bread",
     "role": "food",
@@ -1498,14 +1418,6 @@
     "role": "heal",
     "slot": 3,
     "spell": 2050
-   },
-   {
-    "every_s": 4294962.295,
-    "mana": 0,
-    "name": "Shadowmeld",
-    "role": "buff",
-    "slot": 4,
-    "spell": 20580
    },
    {
     "item": 159,
@@ -1737,14 +1649,6 @@
     "spell": 78
    },
    {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "War Stomp",
-    "role": "buff",
-    "slot": 75,
-    "spell": 20549
-   },
-   {
     "item": 4540,
     "name": "Tough Hunk of Bread",
     "role": "food",
@@ -1778,14 +1682,6 @@
     "role": "heal",
     "slot": 3,
     "spell": 5185
-   },
-   {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "War Stomp",
-    "role": "buff",
-    "slot": 4,
-    "spell": 20549
    },
    {
     "item": 159,
@@ -1829,14 +1725,6 @@
     "spell": 75
    },
    {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "War Stomp",
-    "role": "buff",
-    "slot": 4,
-    "spell": 20549
-   },
-   {
     "item": 159,
     "name": "Refreshing Spring Water",
     "role": "drink",
@@ -1876,14 +1764,6 @@
     "role": "heal",
     "slot": 3,
     "spell": 331
-   },
-   {
-    "every_s": 1.0,
-    "mana": 0,
-    "name": "War Stomp",
-    "role": "buff",
-    "slot": 4,
-    "spell": 20549
    },
    {
     "item": 159,
