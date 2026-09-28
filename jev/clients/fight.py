@@ -399,6 +399,26 @@ class Fought(StrEnum):
         return self is Fought.KILLED
 
 
+def _jev_name(ability: Ability) -> str:
+    """An attack as Jev names it: its spell's name, or its slot."""
+    return ability.name or f"slot {ability.slot}"
+
+
+def _jev_text(ability: Ability) -> str:
+    """What Jev is told of an attack: its cost, its cast and whether it slows."""
+    facts, known = reach(ability.spell_id), spell_facts(ability.spell_id)
+    parts = [f"{ability.mana} power" if ability.mana else "no cost"]
+    if facts is not None:
+        parts.append("instant" if facts.instant else
+                     f"{facts.cast_s:.1f} s {'channel' if facts.channel else 'cast'}")
+        parts.append(f"{facts.max_yd:.0f} yd")
+    if known is not None and known.slows:
+        parts.append("slows the target")
+    if _area(ability):
+        parts.append("hits all round the character")
+    return f"{_jev_name(ability)}: " + ", ".join(parts)
+
+
 @dataclass
 class Fight:
     hid: object
@@ -424,6 +444,8 @@ class Fight:
     # given (a `jev.learn.choices.Choice`).
     heal_below: float = HEAL_IN_COMBAT
     choices: object | None = None
+    # Jev, when it picks this character's attacks (`jev.coach.judge.CombatJudge`, V298).
+    judge: object | None = None
 
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
@@ -2086,6 +2108,14 @@ class Fight:
             attacks = self._caster_order(attacks, values)
         if crowd:
             attacks = (*areas, *attacks)
+        # Jev's pick among the attacks ready now, asked as the last press began (V298); the
+        # bar's order when it has none. Melee's toggle stays the bar's.
+        if self.judge is not None:
+            choices = {_jev_name(a): a for a in attacks
+                       if not a.toggle and pressable(a) and affordable(a)}
+            picked = self.judge.take(tuple(choices))
+            if picked is not None:
+                attacks = (choices[picked], *(a for a in attacks if a is not choices[picked]))
         for attack in attacks:
             if not pressable(attack) or not affordable(attack):
                 continue
@@ -2099,6 +2129,9 @@ class Fight:
                     for buff in profile.by_role(Role.BUFF):
                         if not buff.lasting:
                             self._last_use.pop(buff.slot, None)
+                if self.judge is not None:
+                    self.judge.ask(values, {_jev_name(a): _jev_text(a) for a in attacks
+                                            if not a.toggle and affordable(a)})
             return
 
     def _sample_race(self, values: dict) -> None:

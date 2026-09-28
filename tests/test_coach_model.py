@@ -101,7 +101,7 @@ class FakeModel:
     def __init__(self, *answers):
         self.answers, self.asked = list(answers), []
 
-    def choose(self, point, state, instructions, options, *, record=None):
+    def choose(self, point, state, instructions, options, *, record=None, note=None):
         self.asked.append((point, state, options))
         choice = self.answers.pop(0) if self.answers else None
         return (Answer("ok", choice=choice) if choice in options
@@ -207,7 +207,7 @@ def test_jev_picks_where_a_lap_begins_once_a_minute(tmp_path):
     stations = [(0.0, 0.0, 0.0), (100.0, 0.0, 0.0), (200.0, 0.0, 0.0)]
 
     class Nearest(FakeModel):
-        def choose(self, point, state, instructions, options, *, record=None):
+        def choose(self, point, state, instructions, options, *, record=None, note=None):
             self.asked.append((point, state, options))
             return Answer("ok", choice=next(k for k, text in options.items()
                                             if text.startswith("10 yd away")))
@@ -231,3 +231,47 @@ def test_jev_is_told_where_the_character_stands_by_the_body():
     judge = Judge(FakeModel(), where=lambda: (10.0, 20.0))
     assert judge.origin() == (10.0, 20.0)
     assert Judge(FakeModel()).origin() is None
+
+
+def test_a_fights_question_is_answered_in_the_background_and_taken_once_while_fresh():
+    import time as _time
+
+    from jev.coach.judge import CombatJudge
+
+    now = [100.0]
+    judge = CombatJudge(FakeModel("Rend", "Rend"), clock=lambda: now[0])
+    judge.ask({"vitals.hp": 0.8}, {"Strike": "a", "Rend": "b"})
+    for _ in range(50):
+        if judge._answer is not None:
+            break
+        _time.sleep(0.01)
+    assert judge.take(("Strike",)) is None                  # no longer one of the choices
+    judge.ask({"vitals.hp": 0.8}, {"Strike": "a", "Rend": "b"})
+    for _ in range(50):
+        if judge._answer is not None:
+            break
+        _time.sleep(0.01)
+    now[0] += 5.0                                             # stale by the next ready moment
+    assert judge.take(("Strike", "Rend")) is None
+    judge.close()
+
+
+def test_jevs_pick_of_a_grind_on_a_loop_grinds_to_a_level(tmp_path):
+    """Jev's pick of a loop's grind is armed with the level it grinds to, as the floor's is:
+    without it the body refused it and the session stopped (the hive, 28 September)."""
+    from jev.world.state_v1 import Char
+
+    graph = Graph.load(GRAPH)
+    rib = next(n for n in graph.nodes if n.kind.value == "grind")
+    at = dict(pos=Pos(zone=rib.zone, zone_id=rib.zone_id, coord_zone_id=rib.coord_zone_id,
+                      mx=rib.pos[0], my=rib.pos[1]),
+              char=Char(level=rib.level[0], cls="mage"),
+              bags=Bags(free=1, durability_min=1.0, money_copper=0))
+    states = [State(t=float(i), client_id="c01", **{**_state().model_dump(
+        exclude={"t", "client_id", "pos", "bags", "char"}), **at}) for i in range(3)]
+    runtime = ClientRuntime(client_id="c01", graph=graph, source=ScriptedSource(states),
+                            recorder=Recorder(root=tmp_path), judge=Judge(FakeModel("guide.step")),
+                            start_step=rib.id, start_rejoin=graph.entry)
+    runtime.run(ticks=1, period_s=0)
+    assert runtime.armed.by is ArmedBy.JEV and runtime.armed.decision.skill == "GRIND_UNTIL"
+    assert isinstance(runtime.armed.decision.params.get("until_level"), int)

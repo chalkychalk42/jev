@@ -118,10 +118,12 @@ class CoachModel:
         return self._http is not None and (self.budget is None or self.budget.allows())
 
     def choose(self, point: str, state: dict[str, Any], instructions: str,
-               options: dict[str, str], *, record: Path | None = None) -> Answer:
+               options: dict[str, str], *, record: Path | None = None,
+               note: dict | None = None) -> Answer:
         """One choice among `options` (name -> what it means, with its evidence) at
-        decision point `point`, given `state`; written to `record` (else the client's own)."""
-        done = lambda answer: self._done(point, state, options, answer, record)  # noqa: E731
+        decision point `point`, given `state`; written to `record` (else the client's own)
+        with `note` beside it (what the scripted coach would have done: never sent)."""
+        done = lambda answer: self._done(point, state, options, answer, record, note)  # noqa: E731
         if self._http is None:
             return done(Answer("off", detail="no credential"))
         if self.budget is not None and not self.budget.allows():
@@ -166,13 +168,13 @@ class CoachModel:
             probabilities=probabilities, model=str(document.get("model") or self.model)))
 
     def _done(self, point: str, state: dict, options: dict, answer: Answer,
-              record: Path | None = None) -> Answer:
+              record: Path | None = None, note: dict | None = None) -> Answer:
         if self.budget is not None and answer.status in ("ok", "error", "timeout"):
             self.budget.add(answer.tokens, answer.status)
         path = Path(record) if record is not None else self.record_path
         if path is not None:
             row = {"t": self.clock(), "point": point, "state": state,
-                   "options": options, **asdict(answer)}
+                   "options": options, **(note or {}), **asdict(answer)}
             with self._record_lock, path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
         return answer
@@ -187,8 +189,9 @@ def _ms(began: float) -> float:
 
 
 def settings(var: Path) -> dict[str, Any]:
-    """`var/coach-model.json`: whether Jev decides (`enabled`), and what it may spend a day
-    (`usd_per_day`). No file is Jev switched on at the default cap."""
+    """`var/coach-model.json`: whether Jev decides (`enabled`), what it may spend a day
+    (`usd_per_day`), and whether it picks a fight's attacks (`combat`). No file is Jev
+    switched on at the default cap, fights included."""
     path = Path(var) / SETTINGS
     try:
         document = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -196,7 +199,9 @@ def settings(var: Path) -> dict[str, Any]:
         document = {}
     return {"enabled": bool(document.get("enabled", True)),
             "usd_per_day": float(document.get("usd_per_day", USD_PER_DAY)),
-            "model": str(document.get("model", MODEL))}
+            "model": str(document.get("model", MODEL)),
+            # Whether it picks the attacks in a fight too (V298).
+            "combat": bool(document.get("combat", True))}
 
 
 def open_model(var: Path, env_file: Path | None, *, record: Path | None = None,

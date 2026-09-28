@@ -510,6 +510,12 @@ def _live(args, graph) -> int:
             if coach_model is not None:
                 judge = Judge(coach_model, state=client.state, where=body.here_world,
                               record=recorder.dir / "coach-model.jsonl")
+                from jev.coach.judge import CombatJudge
+                from jev.coach.model import settings as model_settings
+
+                if model_settings(ROOT / "var")["combat"]:
+                    body.fight.judge = CombatJudge(coach_model,
+                                                   record=recorder.dir / "coach-model.jsonl")
         body.judge = judge
         body.learn(choices, choice_log)
         visits = sum(arm.tries for arm in choices.arms("hunt.station", lent=False).values())

@@ -677,21 +677,25 @@ class ClientRuntime:
             }),
         }))
 
-    def _choose(self, state: State, node) -> tuple[Decision, ArmedBy, str, str]:
-        floor = scripted.decide(state, node, context=self.policy_context)
-        if node is not None and node.kind.value == "grind" and floor.decision.skill == "GRIND_UNTIL":
+    def _leveled(self, plan: scripted.Plan, node) -> scripted.Plan:
+        """A grind on a grind loop or a level gate, with the level it grinds to: a loop's one
+        level past where it was entered, a gate's own (V297). Whoever picked the plan: Jev's
+        pick of the same grind without it stopped the session, "grind arm has no level
+        predicate", 40 times in the hive's first twenty minutes of V297."""
+        if node is None or plan.decision.skill != "GRIND_UNTIL":
+            return plan
+        if node.kind is StepKind.GRIND:
             entered = self.tracker.memory.level_at_entry
-            floor = scripted.Plan(floor.decision.model_copy(update={"params": {
-                **floor.decision.params, "until_level": entered + 1 if entered is not None else node.level[1],
-            }}), floor.confident, floor.rule)
-        # A level gate on the spine grinds where the guide says until its level (V297): a
-        # route written by levelling players waits for a level before quests that need it,
-        # where a quest not yet offered fails over to a loop once and is passed by.
-        if (node is not None and node.kind is StepKind.DING_GATE
-                and floor.decision.skill == "GRIND_UNTIL"):
-            floor = scripted.Plan(floor.decision.model_copy(update={"params": {
-                **floor.decision.params, "until_level": node.level[1]}}),
-                floor.confident, floor.rule)
+            level = entered + 1 if entered is not None else node.level[1]
+        elif node.kind is StepKind.DING_GATE:
+            level = node.level[1]
+        else:
+            return plan
+        return scripted.Plan(plan.decision.model_copy(update={"params": {
+            **plan.decision.params, "until_level": level}}), plan.confident, plan.rule)
+
+    def _choose(self, state: State, node) -> tuple[Decision, ArmedBy, str, str]:
+        floor = self._leveled(scripted.decide(state, node, context=self.policy_context), node)
         if not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5:
             floor = scripted.Plan(Decision(goal="wait:blind", intent=Intent.WAIT, skill=None,
                                            abort_if=["senses_restored"], confidence=0,
@@ -744,6 +748,7 @@ class ClientRuntime:
                     state, node, self.policy_context, floor))
             except Exception:
                 picked = None
+            picked = self._leveled(picked, node) if picked is not None else None
             if picked is not None and self._verify(picked.decision, state).ok:
                 self.counters.jev_applied += 1
                 return picked.decision, ArmedBy.JEV, f"jev:{picked.rule}", ""

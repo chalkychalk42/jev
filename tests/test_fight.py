@@ -2874,3 +2874,37 @@ def test_damage_round_the_caster_comes_first_with_more_than_one_at_hand(combat_c
         f._rotate(values)
         assert hid.taps[:1] == [first], (values["combat.attackers"], values["target.in_melee"],
                                          hid.taps)
+
+
+def test_jev_picks_the_next_attack_asked_as_the_last_press_began():
+    """V298: the attack pressed is Jev's pick among those ready now, asked in the background
+    as the last press began; the bar's order when it has none."""
+    from jev.world.combat import CombatProfile
+
+    class Judge:
+        def __init__(self, answer):
+            self.answer, self.asked = answer, []
+
+        def take(self, options):
+            answer, self.answer = self.answer, None
+            return answer if answer in options else None
+
+        def ask(self, values, options):
+            self.asked.append(options)
+
+    profile = CombatProfile("test", (Ability(slot=1, role=Role.ATTACK, name="Strike"),
+                                     Ability(slot=2, role=Role.ATTACK, name="Rend")))
+    values = {**ALIVE, "bars.ready": 0b11, "bars.usable": 0b11}
+    hid = _Hid()
+    f = _fight([values], hid=hid)
+    f.profile, f.judge = profile, Judge("Rend")
+    f._rotate(values)
+    assert hid.taps == ["2"], "Jev's Rend, not the bar's first"
+    assert set(f.judge.asked[0]) == {"Strike", "Rend"}
+    assert f.judge.asked[0]["Rend"].startswith("Rend: no cost")
+
+    hid2 = _Hid()
+    f2 = _fight([values], hid=hid2)
+    f2.profile, f2.judge = profile, Judge(None)
+    f2._rotate(values)
+    assert hid2.taps == ["1"], "no answer: the bar's order"

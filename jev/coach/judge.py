@@ -20,8 +20,10 @@ What it saw, what it said and what came of it are written for the outcome to gra
 
 from __future__ import annotations
 
+import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from jev.coach.model import CoachModel
@@ -42,6 +44,12 @@ PICKS = {
                               "more attempt before the step is given up: the routine again or "
                               "the tutor?"),
 }
+FIGHT = ("A World of Warcraft character is in a fight. Pick the attack to press next, of those "
+         "ready now, to kill the target soonest without dying.")
+# A fight's answer is taken at the next ready moment only while it is this fresh: the question
+# is put as the last press begins, and a cast or a global cooldown later the fight may be
+# another.
+FIGHT_FRESH_S = 2.0
 # The same question, asked again within this long with the same options, keeps its answer:
 # the coach is asked each time a skill ends, and one ending a second after another has
 # seen nothing new.
@@ -126,7 +134,7 @@ class Judge:
         self.asked += 1
         answer = self.model.choose("coach.arm", situation(state, node), ARM,
                                    {rule: describe(plan) for rule, plan in by_rule.items()},
-                                   record=self.record)
+                                   record=self.record, note={"floor": candidates[0].rule})
         if not answer.ok:
             return None
         self._last = (key, now, answer.choice)
@@ -182,3 +190,71 @@ def candidates(state: State, node: Node | None, context, floor) -> list:
     if node is None or jamming(state, node):
         plans.append(policy._fallback(state))
     return plans
+
+
+def fight_situation(values: dict) -> dict[str, Any]:
+    """What Jev sees of a fight: the character, its target and how many are on it."""
+    me = {"lvl": values.get("char.level"), "hp": _r(values.get("vitals.hp")),
+          "pow": _r(values.get("vitals.power")), "casting": values.get("bars.casting")}
+    target = {"lvl": values.get("target.level"), "hp": _r(values.get("target.hp")),
+              "melee": values.get("target.in_melee"),
+              "on_me": values.get("target.attacking_me")}
+    return {"me": {k: v for k, v in me.items() if v is not None},
+            "tgt": {k: v for k, v in target.items() if v is not None},
+            "attackers": values.get("combat.attackers")}
+
+
+class CombatJudge:
+    """Jev's seat in a fight: which of the attacks ready now is pressed (the decision
+    catalog's `combat.pve` next action). A decision a fight waits on is a swing not taken, so
+    the question is put in the background as the last press begins, and the answer is taken
+    at the next ready moment while it is fresh and still one of the choices; otherwise the
+    bar's own order presses, as before. One question at a time."""
+
+    def __init__(self, model: CoachModel, *, record=None,
+                 clock: Callable[[], float] = time.monotonic):
+        self.model, self.record, self.clock = model, record, clock
+        self._lock = threading.Lock()
+        self._pending = False
+        self._answer: tuple[str, float] | None = None
+        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="jev-fight")
+        self.asked = self.taken = 0
+
+    def take(self, options: Sequence[str]) -> str | None:
+        """Jev's answer, once, if it is fresh and one of `options`."""
+        with self._lock:
+            answer, self._answer = self._answer, None
+        if answer is None:
+            return None
+        choice, at = answer
+        if self.clock() - at > FIGHT_FRESH_S or choice not in options:
+            return None
+        self.taken += 1
+        return choice
+
+    def ask(self, values: dict, options: dict[str, str]) -> None:
+        """Put the next choice (`options`: name -> what it is) to Jev in the background."""
+        if len(options) < 2:
+            return
+        with self._lock:
+            if self._pending:
+                return
+            self._pending = True
+        state = fight_situation(values)
+
+        def work():
+            try:
+                answer = self.model.choose("fight.attack", state, FIGHT, options,
+                                           record=self.record)
+                if answer.ok:
+                    with self._lock:
+                        self._answer = (answer.choice, self.clock())
+            finally:
+                with self._lock:
+                    self._pending = False
+
+        self.asked += 1
+        self._pool.submit(work)
+
+    def close(self) -> None:
+        self._pool.shutdown(wait=False)
