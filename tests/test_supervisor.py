@@ -1050,3 +1050,30 @@ def test_a_service_barred_on_a_step_is_asked_again_when_the_bar_expires_and_a_su
         assert rt.policy_context.bags_unreachable_until is None
     finally:
         supervisor.close()
+
+
+def test_the_sessions_end_closes_what_is_learned_only_when_the_next_thing_starts(tmp_path):
+    """V311: the heal line's last cycle is closed when the session ends, after the worker
+    has let go; a body that cannot settle, or fails to, still closes."""
+    rt = runtime(tmp_path, [seen()])
+    order = []
+
+    class Settling(Body):
+        def settle_learning(self):
+            order.append("settle")
+
+        def release(self):
+            order.append("release")
+            super().release()
+
+    supervisor = Supervisor(rt, Settling(), say=lambda line: None)
+    supervisor.close()
+    assert order == ["settle", "release"]
+
+    class Failing(Body):
+        def settle_learning(self):
+            raise RuntimeError("no memory")
+
+    failing = Failing()
+    Supervisor(runtime(tmp_path, [seen()]), failing, say=lambda line: None).close()
+    assert failing.releases == 1

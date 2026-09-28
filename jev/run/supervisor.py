@@ -7,6 +7,7 @@ heartbeat: the supervisor is the main loop and recorder failures propagate to cl
 
 from __future__ import annotations
 
+import contextlib
 import math
 import threading
 import time
@@ -569,5 +570,11 @@ class Supervisor:
             if result and self.worker.arm is not None and result.outcome is not SkillOutcome.PREEMPTED:
                 self.runtime.finish(result.outcome, result.detail)
             self.worker = None
+        # What the body learns only when the next thing starts is closed at the session's end:
+        # the heal line's last cycle (V311). A body without it, or one that fails, learns less.
+        settle = getattr(self.body, "settle_learning", None)
+        if settle is not None:
+            with contextlib.suppress(Exception):
+                settle()
         self.body.release()
         self.runtime.finish(SkillOutcome.UNKNOWN, "run ended")

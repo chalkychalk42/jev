@@ -74,6 +74,7 @@ from jev.clients.targeting import (
 )
 from jev.clients.travel import MIN_TRAVEL_FOR_HEADING, TURN_RATE_SEED
 from jev.guide.coords import ZoneBounds, distance_yards
+from jev.learn.choices import DEATH_S
 from jev.perceive.radio_frame import UI_ERROR_KEYS
 from jev.perceive.units import (
     PROPOSAL_COLOURS,
@@ -300,10 +301,20 @@ HEAL_FIRST_S = 8.0
 # to swinging by the client's own errors (`Targeting.face_selected`, `deadline_s`).
 FIGHT_FACE_S = 3.0
 # The heal lines a fight may hold (`Fight.heal_below`), learned from how fights went
-# (`jev.learn.choices`, "fight.heal_below"): a fight that fell below `BAD_FIGHT_HP`, or
-# died, went badly. Of 999 fights where something attacked first, 42% of those that began
+# (`jev.learn.choices`). Of 999 fights where something attacked first, 42% of those that began
 # below 60% health went badly against 4% above it (25 September).
 HEAL_LINES = ("0.40", "0.50", "0.60")
+# A line is learned by the seconds a kill costs (V311), "fight.heal_cycle": each fight's
+# outcome is its cycle, from its start to the next fight's that came to blows - the fight,
+# the rest after it, the loot, the walk to the next - won when it killed, with a death charged
+# `DEATH_S` more and never a win. Before, a line won when its fight did not go badly
+# ("fight.heal_below", V158), which never charged the rest a low line leaves: 0.50 had won 213
+# of 221 fights in the live memory (28 Sep) with no second of its rests counted.
+HEAL_POINT = "fight.heal_cycle"
+# A cycle counts at most this long: past it the time is a walk to a town or to the next
+# quest, whatever line the fight held. Of 405 cycles between the live bot's heal-line fights
+# to 28 Sep, the median was 49 s, the 90th percentile 140 s and the 95th 227 s.
+CYCLE_MAX_S = 300.0
 # A caster whose spell does not reach yet (the client's "out of range") steps this long
 # toward the unit, facing it first, at most this many times a fight (V164).
 RANGED_STEP_S = 0.8
@@ -551,6 +562,9 @@ class Fight:
     mana_costs: deque = field(default_factory=lambda: deque(maxlen=MANA_KILLS), init=False)
     # The heal line drawn for a fight against two or more (V172), and whether it heals at all.
     _pack_line: str | None = field(default=None, init=False)
+    # The last fight's cycle, open until the next fight that comes to blows or the session's
+    # end (V311): its objective, line, whether it killed, whether it died, and its start.
+    _cycle: tuple[str, str, bool, bool, float] | None = field(default=None, init=False)
     _heals: bool = field(default=True, init=False)
     _mana_seen: tuple[float | None, float | None] = field(default=(None, None), init=False)
     _last_near: bool = field(default=False, init=False)
@@ -563,8 +577,9 @@ class Fight:
         """Select, engage, and hold the rotation until something settles it.
 
         With `choices`, the fight's heal line is drawn from what each line has done, and
-        how the fight went is recorded for it: badly when it died or fell below
-        `BAD_FIGHT_HP`. A fight that never came to blows teaches nothing."""
+        its cycle is recorded for it when the next fight comes to blows (V311, `HEAL_POINT`).
+        A fight that never came to blows teaches nothing and closes no cycle; one cut short
+        is a cycle only when it was going badly (below `BAD_FIGHT_HP`)."""
         line = None
         # A class with no heal has no line to draw, and its fights say nothing of one.
         heals = self.profile is None or self.profile.first(Role.HEAL) is not None
@@ -595,8 +610,27 @@ class Fight:
             if line is not None and (came_to_blows or (result is None and went_badly)):
                 objective, option = (("pack", self._pack_line) if self._pack_line is not None
                                      else ("all", line))
-                self.choices.outcome(objective, option, not went_badly,
-                                     time.monotonic() - started)
+                self._close_cycle(started)          # the last fight's ends where this began
+                self._cycle = (objective, option, result is Fought.KILLED,
+                               result is Fought.DIED, started)
+
+    def _close_cycle(self, until: float) -> None:
+        """Record the open cycle for its line (V311): its seconds to `until`, at most
+        `CYCLE_MAX_S`, and `DEATH_S` more for a death; a win when it killed and lived. The
+        line with the most kills a second of cycle is the one with the fewest seconds a kill:
+        a rate, as the choices draw it, since the kills a cycle over its seconds is the long
+        run's kills a second, where a mean of each cycle's seconds a kill would have none for
+        a fight that did not kill."""
+        cycle, self._cycle = self._cycle, None
+        if cycle is None or self.choices is None:
+            return
+        objective, option, killed, died, since = cycle
+        seconds = min(max(0.0, until - since), CYCLE_MAX_S) + (DEATH_S if died else 0.0)
+        self.choices.outcome(objective, option, killed and not died, seconds)
+
+    def settle(self) -> None:
+        """The session ends: the open cycle is closed where it stands (V311)."""
+        self._close_cycle(time.monotonic())
 
     def _fight(self, name_id: int | None, timeout_s: float) -> Fought:
         self.pressed = []

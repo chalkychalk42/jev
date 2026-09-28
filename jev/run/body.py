@@ -17,7 +17,7 @@ from typing import ClassVar
 from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
-from jev.clients.fight import Fight
+from jev.clients.fight import HEAL_POINT, Fight
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth, Hearthed
 from jev.clients.interact import Interact
@@ -864,9 +864,15 @@ class LiveBody:
         hunts and gathers stand next, and the heal line each fight holds."""
         self.choice_memory, self.choice_log = memory, log
         # Jev sets a fight's heal line as it begins; the line for a pack, picked in the fight,
-        # is not a choice to wait on.
-        self.fight.choices = Choice(memory, "fight.heal_below", log=log, rng=self.choice_rng,
-                                    judge=self.judge, judged=frozenset({"all"}))
+        # is not a choice to wait on. A line's try is a fight's cycle (V311).
+        self.fight.choices = Choice(memory, HEAL_POINT, log=log, rng=self.choice_rng,
+                                    judge=self.judge, judged=frozenset({"all"}),
+                                    unit="a cycle")
+
+    def settle_learning(self) -> None:
+        """The session ends: what is learned only when the next thing starts is closed now
+        (the heal line's open cycle, V311)."""
+        self.fight.settle()
 
     def here_world(self) -> tuple[float, float] | None:
         """Where the character stands, in world yards: how far Jev is told each station is

@@ -302,3 +302,22 @@ def test_a_prior_that_cannot_be_read_is_no_prior(tmp_path):
     memory = ChoiceMemory(tmp_path / "choices.json", prior=tmp_path / "prior.json")
     assert memory.lent == {} and memory.arms("hunt.station") == {}
 
+
+def test_the_heal_line_with_the_fewest_seconds_a_kill_is_drawn():
+    """V311: a line's try is its fight's cycle, a death `DEATH_S` more and no kill. The low
+    line whose cycles were shorter but died once in ten costs 69 s a kill against the high
+    line's 60: a hundred cycles each tell them apart most of the time, not every time."""
+    from jev.clients.fight import HEAL_POINT
+    from jev.learn.choices import DEATH_S, Choice
+
+    memory = ChoiceMemory(clock=Clock())
+    for n in range(100):
+        died = n < 10
+        memory.record(HEAL_POINT, "all@0.40", not died, 50.0 + (DEATH_S if died else 0.0))
+        memory.record(HEAL_POINT, "all@0.60", True, 60.0)
+    picks = [Choice(memory, HEAL_POINT, rng=random.Random(seed)).pick("all", ("0.40", "0.60"))
+             for seed in range(300)]
+    assert picks.count("0.60") > 225
+    fresh = [Choice(memory, HEAL_POINT, rng=random.Random(seed))
+             .pick("all", ("0.40", "0.50", "0.60")) for seed in range(300)]
+    assert fresh.count("0.50") > 15, "the untried line gets its turn"

@@ -2274,15 +2274,17 @@ class _Lines:
 
     def outcome(self, objective, option, won, seconds=0.0):
         self.outcomes.append((objective, option, won))
+        self.seconds = [*getattr(self, "seconds", []), seconds]
 
 
 @pytest.mark.parametrize(("result", "low", "recorded"), [
-    (Fought.KILLED, 0.55, True),        # came to blows and never went low: it went well
-    (Fought.KILLED, 0.10, False),       # won, but below the bad line: it went badly
+    (Fought.KILLED, 0.55, True),        # came to blows and killed
+    (Fought.KILLED, 0.10, True),        # killed low: its rest is in its cycle, not a loss (V311)
     (Fought.DIED, 0.0, False),
+    (Fought.TIMEOUT, 0.8, False),       # came to blows and killed nothing
     (Fought.NO_TARGET, None, None),     # never came to blows: nothing learned
 ])
-def test_each_fight_holds_a_drawn_heal_line_and_records_how_it_went(result, low, recorded):
+def test_each_fight_holds_a_drawn_heal_line_and_records_its_cycle(result, low, recorded):
     from jev.clients.fight import HEAL_LINES
 
     f = _fight([ALIVE])
@@ -2296,7 +2298,45 @@ def test_each_fight_holds_a_drawn_heal_line_and_records_how_it_went(result, low,
     f._fight = fought
     assert f.run() is result
     assert lines.picks == [("all", HEAL_LINES)] and f.heal_below == 0.60
+    assert lines.outcomes == [], "open until the next fight or the session's end (V311)"
+    f.settle()
     assert lines.outcomes == ([] if recorded is None else [("all", "0.60", recorded)])
+
+
+def test_a_heal_lines_cycle_runs_to_the_next_fight_that_comes_to_blows(monkeypatch):
+    """V311: a line's try is its fight, the rest, the loot and the walk to the next fight that
+    came to blows - a look that found nothing is not one - at most `CYCLE_MAX_S`, a death
+    `DEATH_S` more and never a win."""
+    from jev.clients.fight import CYCLE_MAX_S, DEATH_S
+
+    clock = [1000.0]
+    monkeypatch.setattr("jev.clients.fight.time.monotonic", lambda: clock[0])
+    f = _fight([ALIVE])
+    lines = _Lines("0.50")
+    f.choices = lines
+    results = iter([Fought.KILLED, Fought.NO_TARGET, Fought.DIED, Fought.KILLED, Fought.KILLED])
+
+    def fought(name_id, timeout_s):
+        clock[0] += 20.0                          # each fight or look takes 20 s
+        return next(results)
+
+    f._fight = fought
+    f.run()                                        # killed at 1000
+    clock[0] += 40.0                               # its rest and loot
+    f.run()                                        # a look at 1060: nothing, no cycle closed
+    assert lines.outcomes == []
+    clock[0] += 10.0
+    f.run()                                        # died at 1090: the kill's cycle is 90 s
+    assert lines.outcomes == [("all", "0.50", True)] and lines.seconds == [90.0]
+    clock[0] += 1000.0                             # the corpse run and more
+    f.run()                                        # killed at 2110
+    assert lines.outcomes[-1] == ("all", "0.50", False)
+    assert lines.seconds[-1] == CYCLE_MAX_S + DEATH_S
+    clock[0] += 5.0
+    f.settle()                                     # the session ends 25 s after it began
+    f.settle()                                     # and once only
+    assert lines.outcomes[-1] == ("all", "0.50", True) and lines.seconds[-1] == 25.0
+    assert len(lines.outcomes) == 3
 
 
 def test_a_fight_cut_short_is_recorded_only_when_it_was_going_badly():
@@ -2314,6 +2354,7 @@ def test_a_fight_cut_short_is_recorded_only_when_it_was_going_badly():
         f._fight = cut(low)
         with pytest.raises(RuntimeError):
             f.run()
+    f.settle()
     assert lines.outcomes == [("all", "0.50", False)], "a stop at 80% says nothing"
 
 
@@ -2630,9 +2671,10 @@ def test_against_a_pack_the_heal_line_is_drawn_and_learned_apart():
     f._fight = fought
     assert f.run() is Fought.KILLED
     assert lines.picks == [("all", HEAL_LINES), ("pack", HEAL_LINES)]
-    assert lines.outcomes == [("pack", "0.40", True)]
     f._fight = lambda name_id, timeout_s: Fought.KILLED
     f.run()
+    assert lines.outcomes == [("pack", "0.40", True)], "the pack's cycle closed by the next"
+    f.settle()
     assert lines.outcomes[-1][0] == "all", "a fight against one teaches the single's line"
 
 

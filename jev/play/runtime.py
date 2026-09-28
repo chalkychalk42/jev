@@ -388,6 +388,9 @@ class PlayingBody:
     def release(self):
         self.spine.release()
 
+    def settle_learning(self):
+        self.spine.settle_learning()
+
     def close(self):
         if self._closed:
             return
