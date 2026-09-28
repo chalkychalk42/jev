@@ -508,8 +508,16 @@ def _live(args, graph) -> int:
 
             coach_model = open_model(ROOT / "var", ROOT / ".env")
             if coach_model is not None:
+                # What the hive measured each quest and grind to be worth, lent beside the
+                # other priors and read once (V312); without it Jev's options are as before.
+                from jev.learn.values import Values
+
+                values = Values.load(PRIOR / "values.json")
+                if values is not None:
+                    print(f"values: {len(values.quests)} quests and {len(values.grinds_by)} "
+                          f"grinds measured, from {PRIOR / 'values.json'}")
                 judge = Judge(coach_model, state=client.state, where=body.here_world,
-                              record=recorder.dir / "coach-model.jsonl")
+                              record=recorder.dir / "coach-model.jsonl", values=values)
                 from jev.coach.judge import CombatJudge
                 from jev.coach.model import settings as model_settings
 

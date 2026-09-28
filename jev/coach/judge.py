@@ -28,23 +28,32 @@ from typing import Any
 
 from jev.coach.model import CoachModel
 from jev.guide.graph import Node
-from jev.world.state_v1 import State
+from jev.world.state_v1 import State, StepKind
 
 # Neutral on purpose: "the guide step is the default" had Jev pass by nearly every meal,
-# repair and restock in its first hour (the hive, 28 September), at 40% health too.
-ARM = ("A World of Warcraft character is free to act. Pick what it does next so that it gains "
-       "levels fastest while dying as little as possible: fighting hurt, with broken gear or "
-       "without food and drink costs deaths, and every walk to a service costs minutes.")
+# repair and restock in its first hour (the hive, 28 September), at 40% health too. The
+# objective is the hive's reward, said as it is scored (V312): levels a played hour, a death
+# charged two minutes more (JevHive `docs/plans/reward.md`), not "fastest while dying as
+# little as possible", which weighed the two as Jev pleased.
+ARM = ("A World of Warcraft character is free to act. Pick what it does next to gain the most "
+       "levels per played hour, each death counting as two minutes more: fighting hurt, with "
+       "broken gear or without food and drink costs deaths, and every walk to a service costs "
+       "minutes. XP/h and deaths/h, where shown, were measured by other characters doing it at "
+       "this level.")
 PICKS = {
     "hunt.station": ("Where should the character look for its quarry next? Each station's "
-                     "record says how often it held the quarry and how long a visit took."),
+                     "record says how often it held the quarry and how long a visit took, its "
+                     "walk included; the best finds the most a second."),
     "gather.station": ("Where should the character look for the object it gathers next? Each "
-                       "station's record says how often it held one and how long a visit took."),
-    "fight.heal_below": ("At what share of health should the character heal itself in this "
-                         "fight? Each line's record says how often its fights went well."),
+                       "station's record says how often it held one and how long a visit took; "
+                       "the best finds the most a second."),
+    "fight.heal_cycle": ("At what share of health should the character heal itself in this "
+                         "fight? Each line's record says how often its fights killed and how "
+                         "long each took to the next fight, rest and deaths included; the best "
+                         "costs the fewest seconds a kill."),
     "recover.after_failure": ("A routine has just failed at its objective. Who takes the one "
                               "more attempt before the step is given up: the routine again or "
-                              "the tutor?"),
+                              "the tutor? The best is done soonest."),
 }
 FIGHT = ("A World of Warcraft character is in a fight. Pick the attack to press next, of those "
          "ready now, to kill the target soonest without dying.")
@@ -127,12 +136,33 @@ def evidence(rule: str, state: State | None) -> str:
     return ""
 
 
-def describe(plan, state: State | None = None) -> str:
-    """One option as Jev reads it: what the plan does, why the coach has it, and the numbers."""
+def measured(plan, state: State | None, node: Node | None, values) -> str:
+    """What the hive measured the plan's work to be worth at the character's level (V312):
+    a step's quest, a rib, or grinding where it stands; empty without values or a number."""
+    if values is None or state is None:
+        return ""
+    level, cls = state.char.level, state.char.cls
+    rule = plan.rule.removeprefix("jev:")
+    value = None
+    if rule.startswith("guide.") and node is not None:
+        if node.quest_id is not None:
+            value = values.quest(node.quest_id, level, cls)
+        elif node.kind in (StepKind.GRIND, StepKind.DING_GATE):
+            value = values.grind(node.id, level, cls) or values.grinds(level, cls)
+    elif rule.startswith("fallback.") or (plan.decision.skill == "GRIND_UNTIL"
+                                          and not rule.startswith("guide.")):
+        value = values.grinds(level, cls)
+    return value.text() if value is not None else ""
+
+
+def describe(plan, state: State | None = None, value: str = "") -> str:
+    """One option as Jev reads it: what the plan does, why the coach has it, the numbers, and
+    what its work was measured to be worth (`measured`)."""
     d = plan.decision
     what = d.skill or d.intent.value
     numbers = evidence(plan.rule, state)
-    return f"{what}: {d.why}{f' ({numbers})' if numbers else ''}"[:200]
+    text = f"{what}: {d.why}{f' ({numbers})' if numbers else ''}"[:200]
+    return f"{text}; {value}" if value else text
 
 
 class Judge:
@@ -141,8 +171,12 @@ class Judge:
 
     def __init__(self, model: CoachModel, *, state: Callable[[], State | None] | None = None,
                  where: Callable[[], tuple[float, float] | None] | None = None,
-                 record=None, clock: Callable[[], float] = time.monotonic, say=None):
+                 record=None, clock: Callable[[], float] = time.monotonic, say=None,
+                 values=None):
         self.model, self.state, self.clock, self.say = model, state, clock, say
+        # What the hive measured each quest and grind to be worth (`jev.learn.values`, V312),
+        # read once a session; `None` leaves the options as they were.
+        self.values = values
         self.where = where                    # the character's world position, in yards
         self.record = record                  # where this character's calls are written
         self._last: tuple[tuple, float, str] | None = None
@@ -165,7 +199,9 @@ class Judge:
             return by_rule.get(self._last[2])
         self.asked += 1
         answer = self.model.choose("coach.arm", situation(state, node), ARM,
-                                   {rule: describe(plan, state) for rule, plan in by_rule.items()},
+                                   {rule: describe(plan, state,
+                                                   measured(plan, state, node, self.values))
+                                    for rule, plan in by_rule.items()},
                                    record=self.record, note={"floor": candidates[0].rule})
         if not answer.ok:
             return None

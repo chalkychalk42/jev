@@ -188,14 +188,14 @@ def test_a_jev_armed_rule_is_still_the_coachs_rule():
 
 def test_jev_picks_a_learned_choice_with_the_records_in_front_of_it(tmp_path):
     memory = ChoiceMemory(tmp_path / "choices.json")
-    memory.record("fight.heal_below", "all@0.4", True, 30.0)
+    memory.record("fight.heal_cycle", "all@0.4", True, 30.0)
     model = FakeModel("0.4")
     log = ChoiceLog(tmp_path / "choices.jsonl")
-    choice = Choice(memory, "fight.heal_below", log=log, rng=random.Random(1),
+    choice = Choice(memory, "fight.heal_cycle", log=log, rng=random.Random(1),
                     judge=Judge(model), judged=frozenset({"all"}))
     assert choice.pick("all", ["0.3", "0.4", "0.5"]) == "0.4"
     point, seen, offered = model.asked[0]
-    assert point == "fight.heal_below" and offered["0.4"].startswith("tried 1, paid off 1")
+    assert point == "fight.heal_cycle" and offered["0.4"].startswith("tried 1, paid off 1")
     assert offered["0.3"] == "never tried" and seen["choice"]["objective"] == "all"
     assert read(tmp_path / "choices.jsonl")[0]["by"] == "jev"
     # An objective Jev is not given is drawn as before, and asks nothing.
@@ -351,3 +351,35 @@ def test_a_walk_is_not_offered_while_a_service_is_due_either():
     options = jev_judge.candidates(state, node, policy.Context(), floor)
     assert floor.rule == "service.bags_full"
     assert all(p.decision.skill not in ("TRAVEL_TO", "GRIND_UNTIL") for p in options)
+
+
+def test_jev_reads_each_options_measured_worth_and_the_objective_as_it_is_scored(tmp_path):
+    """V312: a quest step is shown its quest's XP/h and deaths/h at the character's level
+    band from the hive's values, a grind where it stands the band's grinds, a service
+    nothing more; without values the options are as before. The objective is the reward's:
+    levels a played hour, a death two minutes more."""
+    from jev.learn.values import Values
+    from jev.world.state_v1 import Char
+
+    (tmp_path / "values.json").write_text(json.dumps({"format": 1, "quests": {
+        "7": {"5-6": {"xp_h": 1900, "deaths_h": 0.4, "hours": 3.0, "characters": 7}}},
+        "grinds": {"grind_elwynn_5_7": {"5-6": {"xp_h": 1300, "deaths_h": 0.2, "hours": 2.0}}}}))
+    values = Values.load(tmp_path / "values.json")
+    graph = Graph.load(GRAPH)
+    node = graph.get("alli_human_1_12_7_kobold_camp_cleanup_do")
+    state = _state(char=Char(level=5, cls="warrior"),
+                   vitals=Vitals(hp=0.3, power=1.0, dead=False, ghost=False, combat=False))
+    floor = policy.decide(state, node, context=policy.Context())
+    plans = [floor, policy._guide(state, node), policy._fallback(state)]
+    assert [p.rule for p in plans] == ["recover.eat", "guide.step", "fallback.grind"]
+    model = FakeModel("guide.step")
+    assert Judge(model, values=values).arm(state, node, plans).rule == "guide.step"
+    _, _, offered = model.asked[0]
+    assert offered["guide.step"].endswith("; measured 1,900 XP/h, 0.4 deaths/h, 7 chars")
+    assert offered["fallback.grind"].endswith("; measured 1,300 XP/h, 0.2 deaths/h")
+    assert "measured" not in offered["recover.eat"]
+    bare = FakeModel("guide.step")
+    Judge(bare).arm(state, node, plans)
+    assert bare.asked[0][2] == {p.rule: jev_judge.describe(p, state) for p in plans}
+    assert all("measured" not in text for text in bare.asked[0][2].values())
+    assert "levels per played hour" in jev_judge.ARM and "two minutes" in jev_judge.ARM
