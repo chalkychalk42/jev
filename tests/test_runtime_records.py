@@ -1081,3 +1081,26 @@ def test_a_quest_its_giver_will_not_give_is_passed_over_at_once(tmp_path):
     assert rt.not_offered("accept") is True
     assert rt.tracker.step_id == "next_accept" and "accept" in rt._retried
     assert rt.tracker.memory.rejoin_to is None, "no grind and no second walk"
+
+
+def test_a_service_barred_on_a_step_is_barred_there_alone(tmp_path):
+    """Review of 28 Sep (V309): a repair, a restock or a bag service that could not be done
+    on a step is not asked again on it; the playhead gone from the step, the bar is lifted,
+    as a grind rib comes back later and one timed-out sale must not bar it for good."""
+    full = Bags(free=0, durability_min=1.0, money_copper=500)
+    rt = runtime(tmp_path, [seen(0, bags=full), seen(1, bags=full),
+                            seen(2, bags=full, quests=(Quest(quest_id=1),))])
+    context = rt.policy_context
+    context.bags_unreachable("accept", 0)
+    context.repair_unreachable("accept", 0)
+    context.supplies_unreachable("elsewhere", 0)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "accept"
+    assert context.bags_unreachable_step == context.repair_unreachable_step == "accept"
+    assert context.supplies_unreachable_step is None, "not the playhead's step"
+    assert not context.can_make_space(0, "accept", 1)
+    rt.tick(choose=False)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "turnin"
+    assert context.bags_unreachable_step is None and context.repair_unreachable_step is None
+    assert context.can_make_space(0, "accept", 3), "back on the step later, asked again"

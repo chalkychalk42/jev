@@ -316,6 +316,9 @@ class ClientRuntime:
                 self._tracker_event = "rejoin_or_skip"
         node = self.graph.get(self.tracker.step_id)
         state = self._with_guide(state, verdict)
+        # A service barred on a step is barred there alone: the playhead gone from it, the bar
+        # is lifted, as a grind rib is shared and comes back (`Context.on_step`, V309).
+        self.policy_context.on_step(state.guide.step_id)
         record = record or verdict.event in (Event.ADVANCE, Event.FAIL, Event.DEATH)
         # Persist only tracker-witnessed progress, never a caller's guessed completion.
         if self.on_progress is not None and (before != self.tracker.step_id

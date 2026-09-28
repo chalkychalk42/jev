@@ -488,3 +488,34 @@ def test_a_walk_to_a_merchant_or_a_smith_waits_for_a_meal(bags):
     healthy = _s(bags=bags)
     assert service(healthy, context=Context()).decision.skill in ("BAG_MAKE_SPACE",
                                                                    "VENDOR_REPAIR")
+
+
+def test_a_service_barred_on_a_step_is_lifted_by_time_a_success_or_another_step():
+    """Review of 28 Sep (V309): the bars were only ever overwritten, and kept in the purse:
+    one timed-out sale on a shared grind rib barred it in every later session."""
+    from jev.coach.policy import UNREACHABLE_RETRY_S, Context
+
+    saves = []
+    context = Context(saved=lambda: saves.append(1))
+    context.repair_unreachable("rib", 100)
+    context.supplies_unreachable("rib", 100)
+    context.bags_unreachable("rib", 100)
+    assert not context.can_repair(500, "rib", 101) and not context.can_make_space(0, "rib", 101)
+    assert not context.can_restock(500, "rib", now=101)
+    later = 100 + UNREACHABLE_RETRY_S
+    assert context.can_repair(500, "rib", later) and context.can_make_space(0, "rib", later)
+    assert context.can_restock(500, "rib", now=later)
+    restored = Context()
+    restored.restore_purse(context.purse())
+    assert not restored.can_make_space(0, "rib", 101), "the next session knows, until then"
+    assert restored.can_make_space(0, "rib", later)
+    context.served("VENDOR_REPAIR")
+    assert context.repair_unreachable_step is None and context.bags_unreachable_step == "rib"
+    context.served("ACCEPT_QUEST")
+    assert context.bags_unreachable_step == "rib"
+    count = len(saves)
+    context.on_step("rib")
+    assert context.bags_unreachable_step == "rib" and len(saves) == count, "still on the step"
+    context.on_step("next")
+    assert context.bags_unreachable_step is None and context.supplies_unreachable_step is None
+    assert len(saves) == count + 1

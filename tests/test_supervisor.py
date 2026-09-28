@@ -1021,3 +1021,32 @@ def test_a_bag_service_that_times_out_is_not_asked_again_on_the_step_and_never_s
         assert not later.can_make_space(0, step), "the next session knows"
     finally:
         supervisor.close()
+
+
+def test_a_service_barred_on_a_step_is_asked_again_when_the_bar_expires_and_a_success_lifts_it(
+        tmp_path):
+    """Review of 28 Sep (V309): the bars on a step are kept in the purse, and a grind rib is
+    shared and revisited, so one held forever never sold on that rib again. After
+    `UNREACHABLE_RETRY_S` the service is asked again, and one done lifts the bar."""
+    from jev.coach.policy import UNREACHABLE_RETRY_S
+    from jev.world.state_v1 import Bags
+
+    class SellingBody(Body):
+        available = Body.available | {"BAG_MAKE_SPACE"}
+
+    full = Bags(free=0, durability_min=1.0, money_copper=500)
+    rt = runtime(tmp_path, [seen(t, bags=full) for t in (0, 1, 2)])
+    rt.policy_context.bags_unreachable("accept", -UNREACHABLE_RETRY_S - 1)
+    body = SellingBody()
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == "BAG_MAKE_SPACE", "the bar expired"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert rt.policy_context.bags_unreachable_step is None, "sold: the bar is lifted"
+        assert rt.policy_context.bags_unreachable_until is None
+    finally:
+        supervisor.close()

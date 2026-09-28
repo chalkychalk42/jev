@@ -316,19 +316,22 @@ class Supervisor:
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                         and result.code not in ("too_poor",)):
                     # A merchant out of reach is not walked to again on this step (V175).
-                    self.runtime.policy_context.supplies_unreachable(worker.arm.step_id)
+                    self.runtime.policy_context.supplies_unreachable(
+                        worker.arm.step_id, state.t if state is not None else time.time())
                 if (worker.arm.decision.skill == "VENDOR_REPAIR"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                         and result.code not in ("too_poor",)):
                     # Nor a repairer (V185).
-                    self.runtime.policy_context.repair_unreachable(worker.arm.step_id)
+                    self.runtime.policy_context.repair_unreachable(
+                        worker.arm.step_id, state.t if state is not None else time.time())
                 if (worker.arm.decision.skill == "BAG_MAKE_SPACE"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                         and result.code not in ("too_poor", "no_junk")):
                     # Nor a merchant for the bags, and it stops no run (V309): 52 bag services
                     # timed out in the hive from 13:00 to 14:59 on 28 Sep, and each ended its
                     # session, the next arming the same service on the same step again.
-                    self.runtime.policy_context.bags_unreachable(worker.arm.step_id)
+                    self.runtime.policy_context.bags_unreachable(
+                        worker.arm.step_id, state.t if state is not None else time.time())
                 if result.code == "too_poor":
                     if worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
                         self.runtime.policy_context.supplies_failed(state.bags.money_copper)
@@ -343,6 +346,9 @@ class Supervisor:
                 refused = getattr(self.runtime, "not_offered", None)
                 if result.outcome is SkillOutcome.SUCCEEDED:
                     self.failures.pop(key, None)
+                    # A merchant or a smith reached: a bar on its kind of service is lifted
+                    # (`Context.served`, review of 28 Sep).
+                    self.runtime.policy_context.served(worker.arm.decision.skill)
                 elif (result.code == "not_offered" and worker.arm.decision.skill == "ACCEPT_QUEST"
                       and refused is not None and refused(worker.arm.step_id)):
                     failed_over = True

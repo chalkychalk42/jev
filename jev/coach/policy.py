@@ -72,6 +72,20 @@ def routine_only(rule: str) -> bool:
     return own_rule(rule).startswith(ROUTINE_RULES)
 
 
+# A repair, a restock or a bag service that could not be done on a step is not asked again on
+# it (V175, V185, V309) until the playhead leaves the step, a service of its kind is done, or
+# this long has passed, as a trainer not reached is asked again after half an hour (V254). The
+# bar is kept in the purse file, and a grind rib is shared and revisited: held for the step
+# alone, one timed-out sale on a rib barred every later visit to it, in every session, full
+# bags and gear worn to nothing (review of 28 Sep). Neris's five sessions on one bag service
+# (13:25-14:10 on 28 Sep) were five tries in 45 minutes, each ending its session; at most one
+# a half hour, a failed one ending none (V309), costs a timeout.
+UNREACHABLE_RETRY_S = 1800.0
+# The services barred so, by skill, and the name of each one's bar in `Context`.
+UNREACHABLE_KINDS = {"VENDOR_REPAIR": "repair", "BUY_AMMO_REAGENT_FOOD": "supplies",
+                     "BAG_MAKE_SPACE": "bags"}
+
+
 @dataclass(frozen=True)
 class Plan:
     decision: Decision
@@ -120,14 +134,48 @@ class Context:
     # A repairer out of reach is not walked to again on this step, as a merchant for
     # supplies is not (V175, V185): the walk out of Sentinel Hill's inn to William MacGregor
     # stuck in its doorway, and one failed repair stopped session 144.
+    # Until the step is left, a repair is made or `UNREACHABLE_RETRY_S` (wall time) passes.
     repair_unreachable_step: str | None = None
+    repair_unreachable_until: int | None = None
 
-    def repair_unreachable(self, step_id: str | None) -> None:
-        self.repair_unreachable_step = step_id
+    def repair_unreachable(self, step_id: str | None, now: float | None = None) -> None:
+        self._unreachable("repair", step_id, now)
+
+    def _unreachable(self, kind: str, step_id: str | None, now: float | None) -> None:
+        setattr(self, f"{kind}_unreachable_step", step_id)
+        setattr(self, f"{kind}_unreachable_until",
+                None if now is None else int(now + UNREACHABLE_RETRY_S))
         self._save()
 
-    def can_repair(self, money: int | None, step_id: str | None = None) -> bool:
-        if step_id is not None and step_id == self.repair_unreachable_step:
+    def _barred(self, kind: str, step_id: str | None, now: float | None) -> bool:
+        """Is `kind`'s service barred on `step_id` at `now`? With no `now`, or no time kept
+        with the bar, it stands until the step is left or a service of its kind is done."""
+        until = getattr(self, f"{kind}_unreachable_until")
+        return (step_id is not None and step_id == getattr(self, f"{kind}_unreachable_step")
+                and (now is None or until is None or now < until))
+
+    def _clear_unreachable(self, kind: str) -> bool:
+        if getattr(self, f"{kind}_unreachable_step") is None:
+            return False
+        setattr(self, f"{kind}_unreachable_step", None)
+        setattr(self, f"{kind}_unreachable_until", None)
+        return True
+
+    def served(self, skill: str) -> None:
+        """A service done: a bar on its kind is lifted, a merchant or a smith reached."""
+        kind = UNREACHABLE_KINDS.get(skill)
+        if kind is not None and self._clear_unreachable(kind):
+            self._save()
+
+    def on_step(self, step_id: str | None) -> None:
+        """The playhead's step: a bar on another step is lifted, as the playhead has left it."""
+        if any([self._clear_unreachable(kind) for kind in UNREACHABLE_KINDS.values()
+                if getattr(self, f"{kind}_unreachable_step") not in (None, step_id)]):
+            self._save()
+
+    def can_repair(self, money: int | None, step_id: str | None = None,
+                   now: float | None = None) -> bool:
+        if self._barred("repair", step_id, now):
             return False
         # An unknown purse cannot establish that an unaffordable repair became payable. The
         # repair's price is not read before it is asked for: the purse must have doubled, or
@@ -166,7 +214,8 @@ class Context:
     # on the same bag service on the same step, each timed out.
     PURSE = ("repair_blocked", "repair_money", "supplies_blocked", "supplies_money",
              "supplies_needed", "train_blocked_level", "train_blocked_until",
-             "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step")
+             "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step",
+             "repair_unreachable_until", "supplies_unreachable_until", "bags_unreachable_until")
 
     def purse(self) -> dict:
         return {name: getattr(self, name) for name in self.PURSE}
@@ -190,10 +239,10 @@ class Context:
     # this step, as a trainer is not (V175): Goldshire's innkeeper, upstairs of whom the
     # walk kept ending, stopped two sessions at T-0.
     supplies_unreachable_step: str | None = None
+    supplies_unreachable_until: int | None = None
 
-    def supplies_unreachable(self, step_id: str | None) -> None:
-        self.supplies_unreachable_step = step_id
-        self._save()
+    def supplies_unreachable(self, step_id: str | None, now: float | None = None) -> None:
+        self._unreachable("supplies", step_id, now)
 
     # A supply whose nearest merchant is beyond the walk's cap (V205), or which no merchant in
     # the zone sells (V292), is noted once a session and not asked for again in it (V302): the
@@ -208,8 +257,8 @@ class Context:
         self.supplies_noted = code
 
     def can_restock(self, money: int | None, step_id: str | None = None, *,
-                    stranded: bool = False) -> bool:
-        if step_id is not None and step_id == self.supplies_unreachable_step:
+                    stranded: bool = False, now: float | None = None) -> bool:
+        if self._barred("supplies", step_id, now):
             return False
         if self.supplies_noted == "no_supplier" or (self.supplies_noted == "too_far"
                                                     and not stranded):
@@ -232,13 +281,14 @@ class Context:
     # A bag service that could not be done on a step - timed out, or no merchant reached - is
     # not asked for again on it, as a repair or a restock is not (V175, V185, V309).
     bags_unreachable_step: str | None = None
+    bags_unreachable_until: int | None = None
 
-    def bags_unreachable(self, step_id: str | None) -> None:
-        self.bags_unreachable_step = step_id
-        self._save()
+    def bags_unreachable(self, step_id: str | None, now: float | None = None) -> None:
+        self._unreachable("bags", step_id, now)
 
-    def can_make_space(self, free: int | None, step_id: str | None = None) -> bool:
-        if step_id is not None and step_id == self.bags_unreachable_step:
+    def can_make_space(self, free: int | None, step_id: str | None = None,
+                       now: float | None = None) -> bool:
+        if self._barred("bags", step_id, now):
             return False
         # Bags with nothing a merchant may buy: another visit changes nothing until something
         # new is in them, and a run asking again stops on it.
@@ -438,8 +488,9 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     if context is not None and context.leaving(state.t):
         return plans
     b = state.bags
-    can_repair = context is None or context.can_repair(b.money_copper, state.guide.step_id)
-    can_sell = context is None or context.can_make_space(b.free, state.guide.step_id)
+    can_repair = context is None or context.can_repair(b.money_copper, state.guide.step_id,
+                                                       state.t)
+    can_sell = context is None or context.can_make_space(b.free, state.guide.step_id, state.t)
 
     # A walk to a merchant or a smith waits for a meal first, as training does (V259): of the
     # bag and repair walks begun below 60% health or 50% mana in sessions 205-228, 16 of 26
@@ -478,7 +529,7 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     stranded = (bool(empty) and len(empty) == len(kept) and b.durability_min is not None
                 and b.durability_min <= 0.05)
     if empty and (context is None or context.can_restock(b.money_copper, state.guide.step_id,
-                                                         stranded=stranded)):
+                                                         stranded=stranded, now=state.t)):
         # What is above the trainer's due (V215), asked only with something to buy: the
         # spellbook's census is shared with the capture thread.
         spare = (b.money_copper - context.kept(state)
