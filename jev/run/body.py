@@ -1567,7 +1567,12 @@ class LiveBody:
         candidates = self._in_zone(m for m in merchants(self.client.bounds.map_id)
                                    if not wanted or wanted & m.items)
         if not candidates:
-            return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone", "unsupported")
+            # None in the zone sells what is wanted: as a merchant too far off (V205), nothing
+            # to walk to on this step, and no fault of the session's (V292). A human warlock's
+            # starting food, the Forest Mushroom Cap, is sold nowhere in Elwynn, and every
+            # session stopped on it at once, 2515 times in a quarter of an hour (the hive).
+            return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone",
+                          "no_supplier" if supplies else "unsupported")
         world = map_to_world(*here, self.client.bounds)
         ranked = self._ranked(candidates, world)
         # A purchase keeps what the trainer is owed (V215).

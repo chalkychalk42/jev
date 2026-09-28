@@ -109,6 +109,28 @@ def test_body_does_not_bind_a_zero_count_to_another_food_identity(monkeypatch):
     select.assert_not_called()
 
 
+def test_a_supply_no_merchant_in_the_zone_sells_leaves_the_session_playing(monkeypatch):
+    """V292: a human warlock's starting food, the Forest Mushroom Cap, is sold nowhere in
+    Elwynn. The purchase answered "unsupported", which stops a session, and every session
+    stopped on it at once, 2515 times (the hive). None in the zone is as a merchant too far
+    off (V205): nothing is walked to, and the supervisor keeps the step from asking again."""
+    b = body()
+    b.client.read = lambda: {"vitals.hp": 1, "char.class_id": 2, "char.race_id": 1}
+    b.arm = Armed(Decision(goal="supplies", intent=Intent.SERVICE,
+                           skill="BUY_AMMO_REAGENT_FOOD", abort_if=["dead"],
+                           why="empty supplies", confidence=1), ArmedBy.POLICY, 0,
+                  "guide", "d", "quest")
+    vendors = (Merchant(2, "Water", 0, (51, 50, 0), frozenset({159})),)
+    monkeypatch.setattr("jev.run.body.merchants", lambda map_id: vendors)
+    visit = Mock(return_value=Interacted.VENDOR)
+    b.interact = SimpleNamespace(open_on=visit)
+    state = seen().model_copy(update={"bags": Bags(food_id=2070, food_count=0,
+                                                    drink_id=159, drink_count=5)})
+    result = b.execute(b.arm, state, lambda: None)
+    assert (result.outcome.value, result.code) == ("aborted", "no_supplier")
+    visit.assert_not_called()
+
+
 def test_outside_zone_shop_is_not_selected_even_if_world_distance_is_shorter(monkeypatch):
     b = body()
     b.client.bounds = ZoneBounds(1, 0, 100, 0, 100, 0)
