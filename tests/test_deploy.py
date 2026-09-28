@@ -31,7 +31,11 @@ def _checkout(tmp_path: Path) -> tuple[Path, dict]:
     _git(live, "init", "-q", "-b", "main")
     (live / "tools").mkdir()
     shutil.copy(ROOT / "tools" / "deploy.sh", live / "tools" / "deploy.sh")
-    (live / ".gitignore").write_text("var/\ncaptures/\nsuite.log\n")
+    (live / ".gitignore").write_text("/data\ndata/\nvar/\ncaptures/\nsuite.log\n")
+    # The untracked data the deploy reads after its merge, as the live checkout has it.
+    (live / "data" / "knowledge").mkdir(parents=True)
+    (live / "data" / "knowledge" / "tbc-243.sqlite").write_bytes(b"SQLite format 3\x00")
+    (live / "data" / "zones-tbc-243.json").write_text('{"zones": []}')
     _git(live, "add", ".")
     _git(live, "commit", "-q", "-m", "live")
     _git(live, "remote", "add", "origin", str(remote))
@@ -79,6 +83,36 @@ def test_a_failed_suite_or_offline_check_leaves_main_as_it_was(tmp_path):
     (tmp_path / "offline-fails").touch()
     result = _deploy(live, env, "exit=0\n")
     assert result.returncode == 1 and "taken back" in result.stdout
+    assert _git(live, "rev-parse", "HEAD") == before
+    assert _git(tmp_path / "origin.git", "rev-parse", "main") == before, "nothing pushed"
+    assert not (live / "var" / "loop" / "hold").exists()
+
+
+@needs_tools
+def test_a_branch_that_touches_data_is_not_merged(tmp_path):
+    """28 Sep: a tracked symlink named data replaced the live checkout's data directory with a
+    link to itself, and the offline check passed without reading it."""
+    live, env = _checkout(tmp_path)
+    before = _git(live, "rev-parse", "HEAD")
+    _git(live, "checkout", "-q", "dev")
+    (live / "data" / "stray.txt").write_text("tracked by mistake\n")
+    _git(live, "add", "-f", "data/stray.txt")
+    _git(live, "commit", "-q", "-m", "a file under data/")
+    _git(live, "checkout", "-q", "main")
+    result = _deploy(live, env, "exit=0\n")
+    assert result.returncode == 1 and "touches data/" in result.stdout, result.stdout
+    assert _git(live, "rev-parse", "HEAD") == before
+    assert (live / "data" / "knowledge" / "tbc-243.sqlite").exists()
+    assert not (live / "var" / "loop" / "hold").exists()
+
+
+@needs_tools
+def test_a_merge_after_which_the_data_cannot_be_read_is_taken_back(tmp_path):
+    live, env = _checkout(tmp_path)
+    before = _git(live, "rev-parse", "HEAD")
+    (live / "data" / "zones-tbc-243.json").unlink()
+    result = _deploy(live, env, "exit=0\n")
+    assert result.returncode == 1 and "not readable after the merge" in result.stdout, result.stdout
     assert _git(live, "rev-parse", "HEAD") == before
     assert _git(tmp_path / "origin.git", "rev-parse", "main") == before, "nothing pushed"
     assert not (live / "var" / "loop" / "hold").exists()
