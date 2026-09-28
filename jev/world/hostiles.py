@@ -26,6 +26,13 @@ CELL_YARDS = 60.0
 # (session 224); most of the low levels' units wander 10 or less.
 ORDINARY_WANDER_YARDS = 10.0
 MAX_WANDER_YARDS = 30.0
+# A unit notices a character from farther the higher it stands above it: about 18 yards at the
+# same level and a yard more for each level above, 25 at most (CMaNGOS `Unit::GetAttackDistance`).
+# Those yards are carried as a wander's are (V300). Raven Hill's graveyard in Duskwood lies 29
+# yards from level 23-25 spawns, outside the ordinary reach and inside a level 24's of a level 7
+# (about 35): a level 7 human got up by its Spirit Healer 53 times in two hours and died 66
+# (the hive, 28 Sep).
+MAX_LEVEL_YARDS = 25
 
 
 @cache
@@ -47,8 +54,10 @@ def near(map_id: int, x: float, y: float, radius: float, *, side: str | None,
          level: int | None) -> list[tuple[float, float, float, float]]:
     """The spawn points within `radius` yards of (x, y) whose units attack `side` on sight
     and are worth experience at `level` (above its grey level): (x, y, z, extra) each, extra
-    the yards its unit strays beyond the ordinary (`ORDINARY_WANDER_YARDS`). None for an
-    unknown side; every level's for an unknown level."""
+    the yards its unit strays beyond the ordinary (`ORDINARY_WANDER_YARDS`) and the yards it
+    notices a character of `level` from beyond the ordinary, a yard a level it stands above
+    it (`MAX_LEVEL_YARDS`). None for an unknown side; every level's for an unknown level,
+    with no yards for a level."""
     bit = SIDES.get(side or "")
     if bit is None:
         return []
@@ -62,5 +71,7 @@ def near(map_id: int, x: float, y: float, radius: float, *, side: str | None,
             for sx, sy, sz, _low, high, sides, wander in cells.get((i, j), ()):
                 if sides & bit and high > grey and math.dist((sx, sy), (x, y)) <= radius:
                     extra = max(0.0, min(wander, MAX_WANDER_YARDS) - ORDINARY_WANDER_YARDS)
+                    if isinstance(level, int):
+                        extra += min(max(0, high - level), MAX_LEVEL_YARDS)
                     found.append((sx, sy, sz, extra))
     return found

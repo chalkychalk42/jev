@@ -761,6 +761,105 @@ def test_a_character_killed_by_a_far_stronger_unit_gets_up_at_the_spirit_healer(
     assert calls == (["healer", "hearth"] if healer else ["corpse"])
 
 
+def near_to(spawns):
+    """`hostiles.near` over a fixed list of (x, y, z, extra) spawns: those inside the radius."""
+    import math
+
+    return lambda map_id, x, y, radius, **kw: [s for s in spawns
+                                               if math.dist(s[:2], (x, y)) <= radius]
+
+
+# Raven Hill's graveyard as the hive's level 7 human met it: its level 23-25 spawns 29 to 36
+# yards off, each reaching a level 7 17 yards beyond the ordinary (V300).
+RAVEN_HILL = ((29.0, -15.0), (36.0, -17.0), (42.0, -39.0))
+
+
+@pytest.mark.parametrize(("why", "spawns", "expected"), [
+    ("killed by a level 24 at the graveyard", RAVEN_HILL, ["corpse"]),
+    ("killed by a level 24, the graveyard clear", (), ["healer", "hearth"]),
+    ("a body that killed it again, at the graveyard", RAVEN_HILL, ["corpse"]),
+])
+def test_the_spirit_healer_is_no_way_out_from_a_graveyard_in_a_camp(monkeypatch, why, spawns,
+                                                                     expected):
+    """V300: a level 7 human died at Raven Hill's graveyard to a level 24, and every get-up at
+    its Spirit Healer, chosen for a stronger killer or a body that killed it again, was
+    attacked a median 2 s later: 67 deaths in two hours (the hive, 28 Sep). A spot 25 yards
+    from the body, on the far side from the graveyard's units, was out of their reach."""
+    import math
+
+    from jev.clients.hearth import Hearthed
+    from jev.guide.coords import map_to_world, world_to_map
+    from jev.world.state_v1 import Char, Pos, Vitals
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._side = "alliance"
+    b._wait_out_sickness = lambda: 0.0
+    now = 10_000.0
+    monkeypatch.setattr("jev.run.body.time.time", lambda: now)
+    trapped = why.startswith("a body that killed it again")
+    b._revived_at = now - 60.0 if trapped else None
+    b.fight._target_level = None if trapped else 24
+    graveyard = (-9000.0, 100.0)
+    corpse = (graveyard[0] - 3.0, graveyard[1])              # it died beside the healer
+    units = [(graveyard[0] + dx, graveyard[1] + dy, 30.0, 17.0) for dx, dy in spawns]
+    monkeypatch.setattr("jev.run.body.hostiles.near", near_to(units))
+    b.recover.graveyard = world_to_map(*graveyard, b.client.bounds)
+    cx, cy = world_to_map(*corpse, b.client.bounds)
+    ghost = seen(char=Char(level=7), vitals=Vitals(hp=0.0, dead=False, ghost=True),
+                 pos=Pos(mx=b.recover.graveyard[0], my=b.recover.graveyard[1],
+                         corpse_mx=cx, corpse_my=cy, zone="Duskwood"))
+    calls, walked = [], []
+    b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+    b.hearth.run = lambda: calls.append("hearth") or Hearthed.HOME
+
+    def run(corpse_point):
+        calls.append("corpse")
+        b.recover.walk_to(corpse_point)
+        return Recovered.ALIVE
+
+    b.recover.run = run
+    b.recover.corpse = (cx, cy)
+    b._corpse_walk = lambda point: walked.append(map_to_world(*point, b.client.bounds)) or True
+    assert b._recover(ghost).code == "alive"
+    assert calls == expected
+    assert bool(walked) is (expected == ["corpse"])
+    if walked:
+        spot = walked[0]
+        assert min(math.dist(spot[:2], u[:2]) - u[3] for u in units) >= 18.0, \
+            "got up out of the graveyard's units' reach"
+
+
+def test_of_two_camps_the_ghost_gets_up_in_the_roomier(monkeypatch):
+    """V300 beside V247: a body in a camp is left for the Spirit Healer only while the
+    healer's graveyard has more room than the body's spot."""
+    from jev.guide.coords import world_to_map
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._side = "alliance"
+    b._revived_at = None
+    b._wait_out_sickness = lambda: 0.0
+    corpse = (-9000.0, 100.0)
+    camp = [(corpse[0] + dx, corpse[1] + dy, 60.0, 0.0) for dx, dy in (
+        (0.0, 0.0), (20.0, 0.0), (-20.0, 0.0), (0.0, 20.0), (0.0, -20.0), (18.0, 18.0),
+        (-18.0, 18.0), (18.0, -18.0), (-18.0, -18.0), (40.0, 0.0), (-40.0, 0.0), (0.0, 40.0),
+        (0.0, -40.0))]
+    graveyard = (corpse[0] - 300.0, corpse[1])
+    for crowded, expected in ((False, "healer"), (True, "corpse")):
+        units = camp + ([(graveyard[0] + 4.0, graveyard[1], 60.0, 5.0)] if crowded else [])
+        monkeypatch.setattr("jev.run.body.hostiles.near", near_to(units))
+        b.recover.graveyard = world_to_map(*graveyard, b.client.bounds)
+        calls = []
+        b.recover.run_spirit_healer = lambda calls=calls: (calls.append("healer")
+                                                           or Recovered.ALIVE)
+        b.recover.run = lambda corpse_point, calls=calls: (calls.append("corpse")
+                                                           or Recovered.ALIVE)
+        b._corpse_walk = lambda point: True
+        assert b._recover(ghost_at(corpse, b.client.bounds)).code == "alive"
+        assert calls == [expected], "a graveyard 4 yards from a spawn is the smaller camp"
+
+
 def test_resurrection_sickness_is_waited_out_before_going_on(monkeypatch):
     """V189: walking out under the sickness, a level 13 paladin met a Dust Devil 90 s
     after getting up at the Spirit Healer and died (session 150)."""

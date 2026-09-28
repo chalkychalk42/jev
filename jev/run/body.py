@@ -1814,13 +1814,15 @@ class LiveBody:
             return self._corpse_walk(point)
         body = map_to_world(*point, self.client.bounds)
         start = map_to_world(*origin, self.client.bounds)
-        apart = math.dist(body, start)
-        if apart <= self._reclaim_yards:
-            return True
-        share = self._reclaim_yards / apart
-        short = (body[0] + (start[0] - body[0]) * share, body[1] + (start[1] - body[1]) * share)
+        short = self._short_spot(body, start)
         spawns = self._camp_spawns(body)
         clear = reclaim_spot(body[:2], short, spawns, self._reclaim_yards)
+        if clear == short and math.dist(body[:2], start[:2]) <= self._reclaim_yards:
+            # Inside the body's reach already and clear of the camp: up where it stands. Inside
+            # a camp's reach it walks to the spot with the most room first (V300): at Raven Hill
+            # the level 7 human's body lay 3 yards from the Spirit Healer, in the reach of the
+            # level 23-25s round it.
+            return True
         if clear != short:
             self.say(f"  getting up out of the camp's reach, "
                      f"{min(math.dist(clear, sp[:2]) - _extra(sp) for sp in spawns):.0f} yards "
@@ -1831,6 +1833,16 @@ class LiveBody:
                      f"against {floors[0]:.0f}): to the body itself")
             return self._corpse_walk(point)
         return self._corpse_walk(world_to_map(*clear, self.client.bounds))
+
+    def _short_spot(self, body, start) -> tuple[float, float]:
+        """Where a ghost from `start` gets up by its body at `body` (world yards), before the
+        camp round it is looked at: `_reclaim_yards` short of it on `start`'s side, or `start`
+        itself when that is nearer."""
+        apart = math.dist(body[:2], start[:2])
+        if apart <= self._reclaim_yards:
+            return (start[0], start[1])
+        share = self._reclaim_yards / apart
+        return (body[0] + (start[0] - body[0]) * share, body[1] + (start[1] - body[1]) * share)
 
     def _hostiles(self, world, radius: float = HOSTILE_LOOK_YARDS):
         """The spawns round `world` of units that attack this character on sight and are
@@ -1849,8 +1861,8 @@ class LiveBody:
 
     def _body_room(self, state) -> float | None:
         """The most room from hostile spawns a ghost could get up with: at the graveyard's
-        side of the body or `_reclaim_yards` round it. `None` with no body read or nothing
-        hostile near it."""
+        side of the body, where it stands inside the body's reach, or `_reclaim_yards` round
+        the body (`_short_of_body`). `None` with no body read or nothing hostile near it."""
         pos = getattr(state, "pos", None)
         if pos is None or pos.corpse_mx is None or pos.corpse_my is None:
             return None
@@ -1862,14 +1874,25 @@ class LiveBody:
                                             and pos.my is not None else None)
         short = body[:2]
         if origin is not None:
-            start = map_to_world(*origin, self.client.bounds)
-            apart = math.dist(body[:2], start[:2])
-            if apart > self._reclaim_yards:
-                share = self._reclaim_yards / apart
-                short = (body[0] + (start[0] - body[0]) * share,
-                         body[1] + (start[1] - body[1]) * share)
+            short = self._short_spot(body, map_to_world(*origin, self.client.bounds))
         spot = reclaim_spot(body[:2], short, spawns, self._reclaim_yards)
         return min(math.dist(spot, sp[:2]) - _extra(sp) for sp in spawns)
+
+    def _healer_camp(self, body_room: float | None) -> float | None:
+        """The room from hostile spawns at the Spirit Healer, where the ghost appeared, when its
+        graveyard lies in a camp and the body's spot (`body_room`, `None` for nothing hostile
+        round the body) has more room (V300); else `None`, as with no graveyard seen or
+        nothing hostile round it."""
+        if self.recover.graveyard is None:
+            return None
+        at = map_to_world(*self.recover.graveyard, self.client.bounds)
+        spawns = self._camp_spawns(at) if at is not None else ()
+        if not spawns:
+            return None
+        room = min(math.dist(at[:2], sp[:2]) - _extra(sp) for sp in spawns)
+        if room >= CAMP_ROOM_YARDS or (body_room is not None and body_room <= room):
+            return None
+        return room
 
     def _talk_to(self, name: str):
         """Right-click a named unit: by its nameplate, or where a fresh hover finds it."""
@@ -1924,7 +1947,24 @@ class LiveBody:
         # The clock is the wall's, kept in the purse file: session 219 began with the get-up
         # at the end of 218 forgotten, got up at the body again and died (V247).
         trapped = self._revived_at is not None and time.time() - self._revived_at < DEATH_TRAP_S
-        if trapped or self._killed_by_stronger(state):
+        stronger = self._killed_by_stronger(state)
+        # A body with no spot in reach clear of the units that attack on sight lies in a
+        # camp: 15 of the mage's 22 get-ups at the body died again, a median of 39 s later,
+        # and 2 of its 12 at the Spirit Healer (sessions 195-219, V247).
+        room = self._body_room(state)
+        camp = room is not None and room < CAMP_ROOM_YARDS
+        # But the Spirit Healer is a way out only from a graveyard with more room than the
+        # body's spot (V300). In the hive's two hours to 11:11 on 28 Sep, 243 of 455 get-ups at
+        # the Spirit Healer died within a minute, against 79 of 347 at the body, most to a unit
+        # 3 or more levels up that attacked a median 2 s after the get-up: a level 5-6 unit that
+        # wanders 15 yards spawns 16 yards from Brill's Spirit Healer, level 23-25s 29 yards
+        # from Raven Hill's, and the level 2 undead and level 7 human who got up there had spots
+        # by their bodies a median 32 and 37 yards clear of any unit's reach.
+        healer_camp = self._healer_camp(room) if trapped or stronger or camp else None
+        if healer_camp is not None:
+            self.say(f"  the Spirit Healer is no way out: its graveyard lies in a camp, "
+                     f"{healer_camp:.0f} yards from a hostile spawn's reach at best; up at the body")
+        elif trapped or stronger:
             up = self.recover.run_spirit_healer()
             if up is Recovered.ALIVE:
                 self._revived(None)
@@ -1941,21 +1981,16 @@ class LiveBody:
                 return self._result(up, detail)
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body, "
                      f"to get up {TRAP_RECLAIM_YARDS:.0f} yards short of it")
-        else:
-            # A body with no spot in reach clear of the units that attack on sight lies in a
-            # camp: 15 of the mage's 22 get-ups at the body died again, a median of 39 s
-            # later, and 2 of its 12 at the Spirit Healer (sessions 195-219, V247). Up there,
-            # and on: the hearthstone is kept for a wedge.
-            room = self._body_room(state)
-            if room is not None and room < CAMP_ROOM_YARDS:
-                up = self.recover.run_spirit_healer()
-                if up is Recovered.ALIVE:
-                    self._revived(None)
-                    self.say(f"  up at the Spirit Healer: the body lies in a camp, "
-                             f"{room:.0f} yards from a hostile spawn at best")
-                    self._wait_out_sickness()
-                    return self._result(up, "up at the Spirit Healer; the body lies in a camp")
-                self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
+        elif camp:
+            # Up there, and on: the hearthstone is kept for a wedge.
+            up = self.recover.run_spirit_healer()
+            if up is Recovered.ALIVE:
+                self._revived(None)
+                self.say(f"  up at the Spirit Healer: the body lies in a camp, "
+                         f"{room:.0f} yards from a hostile spawn at best")
+                self._wait_out_sickness()
+                return self._result(up, "up at the Spirit Healer; the body lies in a camp")
+            self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
         # Always short of the body. Whatever killed the character stands beside it, back at
         # its spawn: the first reclaim at the body itself, at half health, died again four
         # times in runs 20260924T045140-ec8686 and ...050644-f9f9fa, and a new session

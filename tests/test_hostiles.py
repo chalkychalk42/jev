@@ -90,6 +90,37 @@ def test_a_far_wanderer_carries_its_reach(tmp_path, monkeypatch):
     assert math.dist(got_up, (0.0, 0.0)) >= 34.0, "the far side of the body from it"
 
 
+def test_a_unit_above_the_character_carries_a_yard_of_reach_a_level(tmp_path, monkeypatch):
+    """V300: a unit notices a character a yard farther for each level it stands above it, 25
+    at most (CMaNGOS `Unit::GetAttackDistance`). Raven Hill's level 23-25 spawns stand 29 yards
+    from its Spirit Healer, outside the ordinary reach and inside a level 24's of a level 7;
+    a level 7 human got up there and was attacked a median 2 s later (the hive, 28 Sep)."""
+    import math
+
+    from jev.run.body import REST_CLEAR_YARDS, rest_spot
+
+    rows = [[29.0, 0.0, 30.0, 23, 24, 3, 5.0],     # a level 23-24 unit, 29 yards off
+            [0.0, 40.0, 30.0, 70, 70, 3, 0.0],     # far above: 25 yards at most
+            [0.0, -20.0, 30.0, 5, 6, 3, 30.0]]     # below the character: its wander only
+    path = tmp_path / "hostile-spawns.json"
+    path.write_text(json.dumps({"format": 1, "maps": {"0": rows}}))
+    monkeypatch.setattr(hostiles, "HOSTILES_PATH", path)
+    hostiles._index.cache_clear()
+    try:
+        extras = {s[:2]: s[3] for s in hostiles.near(0, 0.0, 0.0, 70.0, side="alliance",
+                                                     level=7)}
+        unlevelled = {s[:2]: s[3] for s in hostiles.near(0, 0.0, 0.0, 70.0, side="alliance",
+                                                         level=None)}
+    finally:
+        hostiles._index.cache_clear()
+    assert extras == {(29.0, 0.0): 17.0, (0.0, 40.0): 25.0, (0.0, -20.0): 20.0}
+    assert unlevelled == {(29.0, 0.0): 0.0, (0.0, 40.0): 0.0, (0.0, -20.0): 20.0}
+    unit = (29.0, 0.0, 30.0, extras[(29.0, 0.0)])
+    spot = rest_spot((0.0, 0.0), [unit])
+    assert spot is not None, "29 yards from a level 24 is inside its reach of a level 7"
+    assert math.dist(spot[:2], unit[:2]) >= REST_CLEAR_YARDS + 17.0
+
+
 def test_a_spawn_whose_creature_is_drawn_from_a_list_is_indexed():
     """V258: all 103 murloc and 97 Riverpaw spawn points in Elwynn draw their creature from a
     list as they spawn (`world_creature.id` 0), and an index without them saw none of the
