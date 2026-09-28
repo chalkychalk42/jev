@@ -31,7 +31,11 @@ ZONE_LINK = 0
 def _graveyards() -> tuple[tuple[int, float, float, float, int, int, int], ...]:
     """(map, x, y, z, zone or map it serves, link kind, faction) for every linked graveyard;
     none without the world DB."""
-    uri = WORLD_DB.resolve().as_uri() + "?mode=ro&immutable=1"
+    from jev.play.world_knowledge import readonly_uri
+
+    # The live session's Python opens it over the WSL share: `readonly_uri` keeps a UNC path
+    # whole where `Path.as_uri` would hand SQLite its host as the URI's authority.
+    uri = readonly_uri(WORLD_DB)
     try:
         with contextlib.closing(sqlite3.connect(uri, uri=True, timeout=1)) as db:
             return tuple(db.execute(
