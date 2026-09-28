@@ -2278,7 +2278,8 @@ class LiveBody:
     def _release(self, state) -> Result:
         # Released where it died: walks keep clear of the spot for a while
         # (`route_memory.DangerAvoidingQuery`), at about the level it died at; a second death
-        # near it within ten minutes makes the place a death camp, left once up (V307).
+        # near it within ten minutes, or one in a camp still held, makes the place a death
+        # camp, left once up (V307).
         memory, here = getattr(self.client, "route_memory", None), self._position()
         values = self._read() or {}
         if (memory is not None and here is not None and values.get("vitals.dead") is True
@@ -2289,7 +2290,7 @@ class LiveBody:
                                 level=level if isinstance(level, int) else None)
             if death.camp(time.time()):
                 self.policy_context.camp_left(self.client.bounds.map_id, at[0], at[1])
-                self.say("  a death camp: died here again within ten minutes; left once up")
+                self.say("  a death camp: died again where it died before; left once up")
         released = self.recover.run(release_only=True)
         self._keep_graveyard()
         return self._result(released, self.recover.detail)

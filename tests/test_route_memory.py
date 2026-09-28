@@ -417,3 +417,20 @@ def test_a_walk_refused_through_a_death_camp_is_planned_once():
     asked = corridor.asked
     Client._plan(client, (-200.0, 0.0), (400.0, 0.0, 60.0))
     assert corridor.asked - asked > 1, "a minute on, searched again"
+
+
+def test_a_death_in_a_camp_still_held_is_a_death_of_the_camp():
+    """Review of 28 Sep (V307): a camp holds an hour, its deaths older than the ten minutes
+    counted. A death there then was no camp death: the character was not led out of it
+    (`Context.camp_left`) and walked straight back in. It is one, and holds the camp on."""
+    from jev.guide.route_memory import CAMP_S, CAMP_WINDOW_S
+
+    memory = RouteMemory()
+    memory.died(0, (0.0, 0.0), now=1000.0, level=8)
+    memory.died(0, (5.0, 0.0), now=1100.0, level=8)
+    now = 1100.0 + 2 * CAMP_WINDOW_S
+    third = memory.died(0, (60.0, 0.0), now=now, level=8)
+    assert third.camp(now), "died in a camp still held"
+    assert all(d.camp(now + CAMP_S - 1.0) for d in memory.dangers), "the camp holds on"
+    past = memory.died(0, (0.0, 300.0), now=now + 1.0, level=8)
+    assert not past.camp(now + 1.0), "out of the camp, one death is a death spot"

@@ -195,12 +195,17 @@ class RouteMemory:
              level: int | None = None) -> Danger:
         """Remember where the character died, at what level, for walks to keep clear of
         (`DANGER_S`); a death near another at about its level within `CAMP_WINDOW_S` makes
-        both a death camp (V307). The death kept, a camp's when it made or fell in one."""
+        both a death camp (V307), and one near a camp still held is a death of that camp,
+        which it holds for `CAMP_S` more. The death kept, a camp's when it made or fell in one."""
         now = time.time() if now is None else now
         self.dangers = [d for d in self.dangers if now - d.at < DANGER_S or d.camp(now)]
         near = [d for d in self.dangers if d.map_id == map_id and counts_for(d.level, level)
                 and math.dist((d.x, d.y), spot[:2]) <= CAMP_YARDS]
         recent = [d for d in near if now - d.at <= CAMP_WINDOW_S]
+        # A camp's deaths may all be older than `CAMP_WINDOW_S` while it holds: a death there
+        # is one of the camp's, or the character was never led out and walked back in
+        # (review of 28 Sep).
+        held = [d for d in near if d.camp(now)]
         found = next((d for d in near if math.dist((d.x, d.y), spot[:2]) <= DANGER_MERGE_YARDS),
                      None)
         if found is None:
@@ -208,8 +213,8 @@ class RouteMemory:
             self.dangers.append(found)
         else:
             found.at, found.level = now, level if level is not None else found.level
-        if recent:
-            for death in (*recent, found):
+        if recent or held:
+            for death in (*recent, *held, found):
                 death.camp_until = now + CAMP_S
         self._save()
         return found
