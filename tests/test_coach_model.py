@@ -137,15 +137,15 @@ def test_jev_picks_among_the_coachs_own_plans_and_a_single_plan_is_not_asked():
     node = graph.get(graph.entry)
     model = FakeModel("guide.travel")
     judge = Judge(model)
-    state = _state(bags=Bags(free=1, durability_min=1.0, money_copper=0))
+    state = _state(vitals=Vitals(hp=0.3, power=1.0, dead=False, ghost=False, combat=False))
     floor = policy.decide(state, node, context=policy.Context())
     options = jev_judge.candidates(state, node, policy.Context(), floor)
-    assert floor.rule == "service.bags_full"
+    assert floor.rule == "recover.eat"
     picked = judge.arm(state, node, options)
     assert picked is not None and picked.rule == "guide.travel"
     point, seen, offered = model.asked[0]
-    assert point == "coach.arm" and set(offered) == {"service.bags_full", "guide.travel"}
-    assert seen["bags"]["free"] == 1 and seen["step"]["kind"] == node.kind.value
+    assert point == "coach.arm" and set(offered) == {"recover.eat", "guide.travel"}
+    assert seen["me"]["hp"] == 0.3 and seen["step"]["kind"] == node.kind.value
     # The same question again within the minute keeps its answer.
     assert judge.arm(state, node, options).rule == "guide.travel" and len(model.asked) == 1
     assert judge.arm(state, node, options[:1]) is None and len(model.asked) == 1
@@ -156,9 +156,9 @@ def test_the_runtime_arms_jevs_pick_and_says_so(tmp_path):
     node = graph.get(graph.entry)
     at = dict(pos=Pos(zone=node.zone, zone_id=node.zone_id, coord_zone_id=node.coord_zone_id,
                       mx=node.pos[0] + 0.2, my=node.pos[1]),
-              bags=Bags(free=1, durability_min=1.0, money_copper=0))
+              vitals=Vitals(hp=0.3, power=1.0, dead=False, ghost=False, combat=False))
     states = [State(t=float(i), client_id="c01", **{**_state().model_dump(
-        exclude={"t", "client_id", "pos", "bags"}), **at}) for i in range(3)]
+        exclude={"t", "client_id", "pos", "vitals"}), **at}) for i in range(3)]
     model = FakeModel("guide.travel")
     runtime = ClientRuntime(client_id="c01", graph=graph, source=ScriptedSource(states),
                             recorder=Recorder(root=tmp_path), judge=Judge(model))
@@ -339,3 +339,15 @@ def test_a_hunt_begun_again_begins_where_jev_said_without_asking(tmp_path):
                      clock=lambda: clock[0], judge=judge)
     third.order(stations)
     assert len(model.asked) == 2
+
+
+def test_a_walk_is_not_offered_while_a_service_is_due_either():
+    graph = Graph.load(GRAPH)
+    node = graph.get(graph.entry)
+    far = Pos(zone=node.zone, zone_id=node.zone_id, coord_zone_id=node.coord_zone_id,
+              mx=node.pos[0] + 0.2, my=node.pos[1])
+    state = _state(pos=far, bags=Bags(free=1, durability_min=1.0, money_copper=0))
+    floor = policy.decide(state, node, context=policy.Context())
+    options = jev_judge.candidates(state, node, policy.Context(), floor)
+    assert floor.rule == "service.bags_full"
+    assert all(p.decision.skill not in ("TRAVEL_TO", "GRIND_UNTIL") for p in options)

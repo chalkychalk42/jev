@@ -222,12 +222,15 @@ def candidates(state: State, node: Node | None, context, floor) -> list:
         plans.append(step)
     if node is None or jamming(state, node):
         plans.append(policy._fallback(state))
-    # A hunt refuses to begin while a service is due (`LiveBody._service_needed`), so a grind
-    # is no choice then: offered one, Jev took it, the hunt refused, and the next decision
-    # was the same - a blood elf's hunt began and ended 296 times in six minutes, "bags are
-    # nearly full", each beginning a station question (the hive, 28 September).
+    # While a service is due a hunt refuses to begin (`LiveBody._service_needed`) and a walk
+    # is cancelled (`Supervisor`: "service needed"), so neither is a choice then: offered one,
+    # Jev took it, the body refused, and the next decision was the same - a blood elf's hunt
+    # began and ended 296 times in six minutes, "bags are nearly full" (V303), and walks were
+    # cancelled every second or two on five bots after it (the coach, 28 September). A quest
+    # taken or handed in where the character stands still is.
     if due:
-        plans = [p for p in plans if p is floor or p.decision.skill != "GRIND_UNTIL"]
+        plans = [p for p in plans if p is floor
+                 or p.decision.skill not in ("GRIND_UNTIL", "TRAVEL_TO")]
     return plans
 
 
