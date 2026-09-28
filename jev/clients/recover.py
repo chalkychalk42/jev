@@ -105,6 +105,10 @@ class Recover:
     interact: Callable[[str], object] | None = None
     # Click a gossip line by its title, through the shared hash-matched chooser.
     choose: Callable[[str], object] | None = None
+    # Map points (the ghost's, its body's) -> whether the body lies within the server's reach
+    # of a ghost there, by the map alone; `None` when that is not known. Injected, like
+    # `walk_to`: the yards of a map fraction are the caller's.
+    reach: Callable[[tuple[float, float], tuple[float, float]], bool | None] | None = None
 
     corpse: tuple[float, float] | None = field(default=None, init=False)
     # Where the ghost appeared: the graveyard, and its Spirit Healer.
@@ -179,6 +183,16 @@ class Recover:
             if v.get("vitals.dead") is False and v.get("vitals.ghost") is False:
                 return Recovered.ALIVE
             self.corpse = _painted(v) or self.corpse
+            here = (v.get("pos.mx"), v.get("pos.my"))
+            if (self.reach is not None and None not in here and self.corpse is not None
+                    and self.reach(here, self.corpse) is False):
+                # The walk ended out of the body's reach, and the server refuses a reclaim
+                # from beyond its radius whatever is pressed (`HandleReclaimCorpseOpcode`): 13
+                # of the hive's 171 corpse runs that ended still a ghost on 28 Sep pressed on
+                # there for their 150 looks.
+                event("corpse.out_of_reach", data={"ghost": here, "corpse": self.corpse})
+                self.detail = "the walk ended out of the body's reach; still a ghost"
+                return Recovered.STILL_GHOST
             self._press(v)
             time.sleep(1.0)
 

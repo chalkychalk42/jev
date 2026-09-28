@@ -564,6 +564,95 @@ def test_the_spirit_healer_raises_a_ghost_where_it_appeared(monkeypatch):
     walked.assert_not_called()                  # still beside it, no walk back
 
 
+@pytest.mark.parametrize(("ghost_x", "stops"), [(0.30, True), (0.49, False)])
+def test_a_ghost_the_walk_left_out_of_its_bodys_reach_stops_pressing(monkeypatch, ghost_x,
+                                                                     stops):
+    """V301: the server refuses a reclaim from beyond 39 yards whatever is pressed
+    (`HandleReclaimCorpseOpcode`), and 13 of the hive's 171 corpse runs that ended still a
+    ghost on 28 Sep pressed on from there for their 150 looks."""
+    import jev.clients.recover
+    monkeypatch.setattr(jev.clients.recover.time, "sleep", lambda seconds: None)
+    ghost = {"vitals.dead": False, "vitals.ghost": True, "pos.mx": ghost_x, "pos.my": 0.5,
+             "pos.corpse_mx": 0.5, "pos.corpse_my": 0.5}
+    looks, pressed = [], []
+    recovery = Recover(hid=None, read=lambda: looks.append(1) or dict(ghost),
+                       walk_to=lambda point: False,
+                       reach=lambda here, corpse: abs(here[0] - corpse[0]) <= 0.1)
+    recovery._press = lambda values: pressed.append(1) or True
+    assert recovery.run(tries=20) is Recovered.STILL_GHOST
+    assert (pressed, len(looks)) == (([], 2) if stops else ([1] * 20, 21))
+    assert ("out of the body's reach" in recovery.detail) is stops
+
+
+def test_the_body_measures_the_reach_on_its_own_map():
+    b = body()                                        # 100 yards a map fraction
+    assert b._in_reclaim_reach((0.5, 0.5), (0.5, 0.88)) is True
+    assert b._in_reclaim_reach((0.5, 0.5), (0.5, 0.9)) is False
+
+
+def unreached_ghost(corpse=(0.5, 0.5)):
+    from jev.world.state_v1 import Pos, Vitals
+
+    return seen(pos=Pos(mx=0.5, my=0.5, corpse_mx=corpse[0], corpse_my=corpse[1], zone="zone"),
+                vitals=Vitals(hp=0.0, dead=False, ghost=True))
+
+
+def test_a_body_no_corpse_run_gets_up_at_is_left_for_the_spirit_healer(tmp_path, monkeypatch):
+    """V301: two drowned orcs' bodies lay on the seabed off Ratchet, 60 to 70 yards under the
+    ghosts walking the water over them, and every corpse run ended still a ghost, 29 and 34 of
+    them in the hive's two hours to 11:11 on 28 Sep. Two in a row at one body, and the Spirit
+    Healer raises the ghost; the next session remembers the body and where the ghost appeared."""
+    from jev.coach.policy import Context
+    from jev.world.state_v1 import Char
+
+    b = body()
+    b.purse_memory = tmp_path / "character-1.purse.json"
+    b.policy_context = Context()
+    b._over_body = lambda: None
+    b._wait_out_sickness = lambda: 0.0
+    calls = []
+    b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+
+    def release(release_only):
+        b.recover.graveyard = (0.2, 0.5)             # the ghost appears at the graveyard
+        return Recovered.RELEASED
+
+    b.recover.run = release
+    b._release(seen(char=Char(level=5)))
+    b.recover.run = lambda corpse: calls.append("corpse") or Recovered.STILL_GHOST
+    assert b._recover(unreached_ghost()).code == "still_ghost"
+    assert b._recover(unreached_ghost((0.5, 0.52))).code == "still_ghost", "2 yards off: it"
+    assert calls == ["corpse", "corpse"]
+
+    later = body()                                   # the next session, begun as a ghost
+    later.purse_memory = b.purse_memory
+    later.policy_context = Context()
+    later._wait_out_sickness = lambda: 0.0
+    assert later.recover.graveyard is None
+    seen_at = []
+    later.recover.run_spirit_healer = lambda: (seen_at.append(later.recover.graveyard)
+                                               or Recovered.ALIVE)
+    later.recover.run = lambda corpse: pytest.fail("a third corpse run at the same body")
+    result = later._recover(unreached_ghost())
+    assert result.code == "alive" and "out of reach" in result.detail
+    assert seen_at[0] == pytest.approx((0.2, 0.5)), "where the last session saw it appear"
+    assert later._unreached is None and later._graveyard is None, "up: nothing to keep"
+
+
+def test_another_body_is_walked_to_afresh(monkeypatch):
+    """V301: the count is the body's, not the character's: a new death is a new corpse run."""
+    b = body()
+    b._over_body = lambda: None
+    calls = []
+    b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+    b.recover.run = lambda corpse: calls.append("corpse") or Recovered.STILL_GHOST
+    b._recover(unreached_ghost())
+    b._recover(unreached_ghost((0.5, 0.7)))          # 20 yards off: another body
+    b.recover.run = lambda corpse: calls.append("corpse") or Recovered.ALIVE
+    assert b._recover(unreached_ghost((0.5, 0.7))).code == "alive"
+    assert calls == ["corpse", "corpse", "corpse"]
+
+
 @pytest.mark.parametrize(("since_revived", "healer"), [(60.0, True), (600.0, False), (None, False)])
 def test_a_body_that_killed_the_character_again_is_left_for_the_spirit_healer(
         monkeypatch, since_revived, healer):

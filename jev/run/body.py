@@ -107,6 +107,18 @@ TRAP_RECLAIM_YARDS = 25.0
 # (V289): on the hill over Shadowthread Cave, 110 yards above a body in it, every plan from
 # there started on the cave's floor under the ghost and arrived at once (the hive, 28 Sep).
 OVER_BODY_YARDS = 5.0
+# The server's reach for a reclaim: 39 yards, measured with the height (mangos-tbc
+# `CORPSE_RECLAIM_RADIUS`, `HandleReclaimCorpseOpcode`). A ghost farther than that on the map
+# alone cannot get up at its body whatever it presses.
+RECLAIM_REACH_YARDS = 39.0
+# Corpse runs that end still a ghost at the same body before the ghost gets up at the Spirit
+# Healer instead (V301), and how near another body lies to be the same place. Two drowned orcs'
+# bodies lay on the seabed off Ratchet, 60 to 70 yards under the ghosts walking the water over
+# them: every walk arrived and every reclaim was refused. Ghosts since 08:05 and 08:20 on 28
+# Sep, their 29 and 34 corpse runs of about 150 s in the hive's two hours to 11:11 all ended
+# still a ghost.
+UNREACHED_RUNS = 2
+SAME_BODY_YARDS = 5.0
 # How far round a body or a meal the spawns of units that attack on sight are looked for
 # (`jev.world.hostiles`, V247), and the least room from them a get-up spot must have: under
 # it, the body lies in a camp and the ghost gets up at the Spirit Healer. At the 34 bodies of
@@ -347,6 +359,11 @@ class LiveBody:
         self.hearth = Hearth(hid=client.hid, read=self._read,
                              window_origin=client.origin, window_size=client.size)
         self._revived_at: float | None = None
+        # The body no corpse run got up at, as (map, world x, world y), and how many runs in a
+        # row ended still a ghost there; and where the ghost last appeared, beside its Spirit
+        # Healer, for a session that begins as a ghost. Both in the purse file (V301).
+        self._unreached: tuple[tuple[int, float, float], int] | None = None
+        self._graveyard: tuple[int, float, float] | None = None
         self._hearth_ready_at: float | None = None      # wall time, in the purse file (V253)
         self._talents_failed: int | None = None           # the level a visit failed at (V261)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
@@ -1174,6 +1191,15 @@ class LiveBody:
                 ready = raw.get("hearth_ready_at") if isinstance(raw, dict) else None
                 if isinstance(ready, (int, float)) and not isinstance(ready, bool):
                     self._hearth_ready_at = float(ready)
+                # A body the last session could not get up at is the same body now, and its
+                # Spirit Healer where the ghost appeared (V301): a session in the hive lasted
+                # about five corpse runs, and one that begins as a ghost never saw the graveyard.
+                unreached = _numbers(raw.get("unreached_body") if isinstance(raw, dict) else None, 4)
+                if unreached is not None:
+                    self._unreached = ((int(unreached[0]), *unreached[1:3]), int(unreached[3]))
+                graveyard = _numbers(raw.get("graveyard") if isinstance(raw, dict) else None, 3)
+                if graveyard is not None:
+                    self._graveyard = (int(graveyard[0]), graveyard[1], graveyard[2])
             context.saved = self._save_purse
         context.trainable = self.trainable
         context.reserve = self.training_reserve
@@ -1244,10 +1270,15 @@ class LiveBody:
         from jev.persist import atomic_json
 
         with contextlib.suppress(OSError):
+            unreached = (None if self._unreached is None
+                         else [*self._unreached[0], self._unreached[1]])
             atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse(),
                                                   "conjured": sorted(self._conjured_last),
                                                   "revived_at": self._revived_at,
-                                                  "hearth_ready_at": self._hearth_ready_at})
+                                                  "hearth_ready_at": self._hearth_ready_at,
+                                                  "unreached_body": unreached,
+                                                  "graveyard": (list(self._graveyard)
+                                                                if self._graveyard else None)})
 
     def _go_home(self):
         """Home by hearthstone; where it sets the character down is home from then on. Not
@@ -1941,6 +1972,7 @@ class LiveBody:
 
     def _recover(self, state) -> Result:
         self.fight.buffs_lost()
+        self._kept_graveyard()
         # A body where the character keeps dying is not worth getting up at: run
         # 20260923T181209-bc03ba got up beside a level 6 wolf at half health and died,
         # four times. Up at the Spirit Healer instead, and home by hearthstone.
@@ -1961,7 +1993,21 @@ class LiveBody:
         # from Raven Hill's, and the level 2 undead and level 7 human who got up there had spots
         # by their bodies a median 32 and 37 yards clear of any unit's reach.
         healer_camp = self._healer_camp(room) if trapped or stronger or camp else None
-        if healer_camp is not None:
+        corpse = (state.pos.corpse_mx, state.pos.corpse_my) if getattr(state, "pos", None) else None
+        unreached = self._unreached_runs(corpse)
+        if unreached >= UNREACHED_RUNS:
+            # A body the ghost could not get up at, run after run, is out of its reach: under
+            # water it cannot dive into, or ground it cannot walk to (V301). The Spirit Healer
+            # is the one way up left, camp or not; up there, and on.
+            up = self.recover.run_spirit_healer()
+            if up is Recovered.ALIVE:
+                self._revived(None)
+                self.say(f"  up at the Spirit Healer: {unreached} corpse runs in a row did not "
+                         "get up at the body")
+                self._wait_out_sickness()
+                return self._result(up, "up at the Spirit Healer; the body is out of reach")
+            self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
+        elif healer_camp is not None:
             self.say(f"  the Spirit Healer is no way out: its graveyard lies in a camp, "
                      f"{healer_camp:.0f} yards from a hostile spawn's reach at best; up at the body")
         elif trapped or stronger:
@@ -1995,12 +2041,14 @@ class LiveBody:
         # its spawn: the first reclaim at the body itself, at half health, died again four
         # times in runs 20260924T045140-ec8686 and ...050644-f9f9fa, and a new session
         # never knows the last one's revive. Recover reads painted corpse coordinates.
-        walk = self.recover.walk_to
-        self.recover.walk_to = self._short_of_body
+        # And a ghost the walk left out of the body's reach stops pressing there (V301).
+        walk, reach = self.recover.walk_to, getattr(self.recover, "reach", None)
+        self.recover.walk_to, self.recover.reach = self._short_of_body, self._in_reclaim_reach
         try:
             outcome = self.recover.run(self.recover.corpse)
         finally:
-            self.recover.walk_to = walk
+            self.recover.walk_to, self.recover.reach = walk, reach
+        self._keep_graveyard()                      # a body not yet released releases here
         if outcome is Recovered.ALIVE:
             self._revived(time.time())
             self._reclaim_yards = TRAP_RECLAIM_YARDS
@@ -2008,7 +2056,58 @@ class LiveBody:
             # Out of the body's reach from there, it seems: half as far short next time.
             self._reclaim_yards = self._reclaim_yards / 2 if self._reclaim_yards > 4 else 0.0
             self._over_body()
+            self._note_unreached(self.recover.corpse or corpse)
         return self._result(outcome, self.recover.detail)
+
+    def _in_reclaim_reach(self, ghost, corpse) -> bool | None:
+        """Whether a ghost at map point `ghost` stands within the server's reach of its body at
+        `corpse` on the map alone (`RECLAIM_REACH_YARDS`); `None` when either is off the map."""
+        here, there = (map_to_world(*ghost, self.client.bounds),
+                       map_to_world(*corpse, self.client.bounds))
+        if here is None or there is None:
+            return None
+        return math.dist(here[:2], there[:2]) <= RECLAIM_REACH_YARDS
+
+    def _on_map(self, point) -> tuple[int, float, float] | None:
+        """A map point as (map, world x, world y), as the purse file keeps it: the map frame is
+        the guide's, and the next guide may have another."""
+        if point is None or None in point or self.client.bounds is None:
+            return None
+        world = map_to_world(*point, self.client.bounds)
+        return None if world is None else (self.client.bounds.map_id, world[0], world[1])
+
+    def _unreached_runs(self, corpse) -> int:
+        """The corpse runs in a row that ended still a ghost at the body at map point `corpse`
+        (V301): none for another body, or none read."""
+        at = self._on_map(corpse)
+        if self._unreached is None or at is None:
+            return 0
+        kept, runs = self._unreached
+        same = kept[0] == at[0] and math.dist(kept[1:], at[1:]) <= SAME_BODY_YARDS
+        return runs if same else 0
+
+    def _note_unreached(self, corpse) -> None:
+        """One more corpse run that ended still a ghost at the body at map point `corpse`."""
+        at = self._on_map(corpse)
+        if at is None:
+            return
+        self._unreached = (at, self._unreached_runs(corpse) + 1)
+        self._save_purse()
+
+    def _keep_graveyard(self) -> None:
+        """Where the ghost appeared, kept for a session that begins as a ghost (V301)."""
+        at = self._on_map(getattr(self.recover, "graveyard", None))
+        if at is not None and at != self._graveyard:
+            self._graveyard = at
+            self._save_purse()
+
+    def _kept_graveyard(self) -> None:
+        """A ghost that did not see where it appeared gets up there by the last session's
+        sight of it (V301): without it the Spirit Healer is not looked for."""
+        kept, bounds = self._graveyard, self.client.bounds
+        if (self.recover.graveyard is None and kept is not None and bounds is not None
+                and kept[0] == bounds.map_id):
+            self.recover.graveyard = world_to_map(kept[1], kept[2], bounds)
 
     def _over_body(self) -> None:
         """A ghost over its body on the map and still a ghost is on another floor than it
@@ -2031,8 +2130,10 @@ class LiveBody:
 
     def _revived(self, at: float | None) -> None:
         """When the character last got up at its body (wall time), kept in the purse file
-        for the next session's recovery."""
+        for the next session's recovery. Any get-up leaves no body unreached and no graveyard
+        to keep (V301)."""
         self._revived_at = at
+        self._unreached = self._graveyard = None
         self._save_purse()
 
     def _killed_by_stronger(self, state) -> bool:
@@ -2065,7 +2166,9 @@ class LiveBody:
         if (memory is not None and here is not None and values.get("vitals.dead") is True
                 and values.get("vitals.ghost") is not True):
             memory.died(self.client.bounds.map_id, map_to_world(*here, self.client.bounds))
-        return self._result(self.recover.run(release_only=True), self.recover.detail)
+        released = self.recover.run(release_only=True)
+        self._keep_graveyard()
+        return self._result(released, self.recover.detail)
 
     def _wait(self, state) -> Result:
         return Result(SkillOutcome.SUCCEEDED)
@@ -2092,6 +2195,14 @@ def reclaim_spot(body: tuple[float, float], short: tuple[float, float], spawns,
              body[1] + reach * math.sin(2 * math.pi * i / bearings)) for i in range(bearings)]
     best = max([short, *ring], key=lambda p: (round(room(p), 1), -math.dist(p, short)))
     return best
+
+
+def _numbers(value, count: int) -> list[float] | None:
+    """`value` as `count` numbers, as the purse file keeps them; `None` for anything else."""
+    if (isinstance(value, list) and len(value) == count
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value)):
+        return [float(v) for v in value]
+    return None
 
 
 def _extra(spawn) -> float:
