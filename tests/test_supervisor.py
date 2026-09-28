@@ -955,3 +955,34 @@ def test_a_step_failed_over_starts_nothing_on_the_step_it_left(tmp_path):
         assert steps == [first.id, second.id]
     finally:
         supervisor.close()
+
+
+def test_a_quest_its_giver_will_not_give_is_passed_over_and_never_stops_the_run(tmp_path):
+    """V308: a refusal the giver answers is no failed attempt to be retried after a grind:
+    Botanist Taerix was refused 14 times on 8 draenei from 12:00 to 13:08 on 28 Sep, a walk
+    to a grind and back between each first refusal and its second. The quest is passed over,
+    and the quest needing it with it."""
+    from test_runtime_records import chain_graph
+
+    from jev.clients.source import ScriptedSource
+    from jev.learn.episode import Recorder
+    from jev.orch.runtime import ClientRuntime
+
+    rt = ClientRuntime("c", chain_graph(), ScriptedSource([seen(t) for t in (0, 1, 2)]),
+                       Recorder(tmp_path))
+    body = Body(result=Result(SkillOutcome.ABORTED, "not in the log", "not_offered"))
+    body.allow_finish.set()
+    lines = []
+    supervisor = Supervisor(rt, body, say=lines.append, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert body.started.wait(1)
+        assert supervisor.worker.arm.decision.skill == "ACCEPT_QUEST"
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(1)
+        assert not supervisor.stopped.is_set(), supervisor.failure
+        assert rt.tracker.step_id == "after" and {"accept", "next_accept"} <= rt._retried
+        assert rt.tracker.memory.rejoin_to is None, "no grind and no second walk"
+        assert any("not offered" in line for line in lines)
+    finally:
+        supervisor.close()

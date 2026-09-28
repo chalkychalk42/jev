@@ -61,6 +61,9 @@ class Advanced(StrEnum):
     NO_FRAME = "no_frame"      # the radio reports no open frame to advance
     NO_BUTTON = "no_button"    # frame open, but nothing advanceable painted
     BLIND = "blind"            # nothing readable
+    # The giver answered that it will not give the quest (V308): a server's refusal, which a
+    # bridge reports (the hive's, on `SMSG_QUESTGIVER_QUEST_INVALID`) and a client never paints.
+    NOT_OFFERED = "not_offered"
 
     @property
     def ok(self) -> bool:

@@ -272,7 +272,9 @@ class ClientRuntime:
             elif onward != self.tracker.step_id:
                 self.tracker.enter(onward, state)
                 self._tracker_event = "rejoin_or_skip"
-        if verdict.event is Event.NONE and not self.finished:
+        # A step that cannot be done is passed in the tick it is reached, before anything is
+        # armed for it (V308): armed a tick early, a hunt or a walk began and was cancelled.
+        if verdict.event in (Event.NONE, Event.ADVANCE) and not self.finished:
             beyond = self._abandoned_now(state)
             if beyond is not None:
                 self.tracker.enter(beyond, state)
@@ -280,21 +282,37 @@ class ClientRuntime:
         if self._leave_camp(state):
             self._tracker_event = "rejoin_or_skip"
         # Every tick that stays on the step, arriving included: standing at the quest giver
-        # re-reports ARRIVED, never NONE.
-        if (not self.finished and self.tracker.step_id == before
-                and verdict.event not in (Event.ADVANCE, Event.FAIL, Event.DEATH)):
-            # On a rib waiting to retry a step, that step is the one asked about (V220).
+        # re-reports ARRIVED, never NONE; and the tick a step is reached.
+        stayed = (self.tracker.step_id == before
+                  and verdict.event not in (Event.ADVANCE, Event.FAIL, Event.DEATH))
+        reached = verdict.event is Event.ADVANCE and self.tracker.step_id != before
+        if not self.finished and (stayed or reached):
+            # On a rib waiting to retry a step, that step is the one asked about (V220); not on
+            # the way out of a death camp, which is no wait for the step (V307).
             here = self.graph.get(self.tracker.step_id)
             step = (self.tracker.memory.rejoin_to
                     if here is not None and here.kind is StepKind.GRIND
-                    and self.tracker.memory.rejoin_to else self.tracker.step_id)
-            if (lost := (self._prerequisite_lost(state, step)
-                         or self._unfinished_hand_in(state, step))) is not None:
+                    and self.tracker.memory.rejoin_to and self._leaving != here.id
+                    else self.tracker.step_id)
+            lost = self._prerequisite_lost(state, step)
+            if lost is not None:
+                # Passed by, the accept is passed over: the rest of its quest is passed when
+                # reached, and the quests needing it are lost too (V245, V308). A tauren druid's
+                # Rite of Strength was passed by for a lost Rites of the Earthmother, and its
+                # objective, reached later, was walked to and failed twice, "quest absent" (the
+                # hive, 28 Sep 12:05 and 12:11).
+                self._retried.add(step)
+            else:
+                lost = self._unfinished_hand_in(state, step)
+            if lost is not None:
                 self.tracker.enter(lost, state)
                 self._tracker_event = "rejoin_or_skip"
-            elif (detour := self._handin_detour(state)) is not None:
+            elif stayed and (detour := self._handin_detour(state)) is not None:
                 self._retried.add(f"{DETOUR}{detour}@{state.char.level}")
                 self.tracker.enter(detour, state, rejoin_to=before)
+                self._tracker_event = "rejoin_or_skip"
+            elif (grind := self._below_level(state)) is not None:
+                self.tracker.enter(grind, state, rejoin_to=self.tracker.step_id)
                 self._tracker_event = "rejoin_or_skip"
         node = self.graph.get(self.tracker.step_id)
         state = self._with_guide(state, verdict)
@@ -383,6 +401,32 @@ class ClientRuntime:
         if self.on_progress is not None:
             self._progress()
         return self.tracker.step_id != before
+
+    def not_offered(self, step_id: str | None) -> bool:
+        """The giver answered the accept at `step_id` that it will not give the quest: the
+        quest is passed over at once, accept to hand-in, without the grind and the second walk
+        a failure earns (V308); its steps further on are passed when reached (`_abandoned_now`)
+        and the quests needing it are lost (V245). `False` when the playhead is not on it."""
+        node, state = self.graph.get(self.tracker.step_id), self.last_state
+        if (node is None or state is None or self.finished or node.id != step_id
+                or node.kind is not StepKind.QUEST_ACCEPT or node.quest_id is None):
+            return False
+        beyond = self._past(node)
+        if beyond is None:
+            return False
+        self._retried.add(node.id)
+        self.tracker.enter(beyond, state)
+        self._tracker_event = "rejoin_or_skip"
+        if self.on_progress is not None:
+            self._progress()
+        return True
+
+    def _past(self, node) -> str | None:
+        """The first step after `node` and the steps of its quest that follow it."""
+        step = node
+        while step is not None and step.quest_id == node.quest_id and step.next:
+            step = self.graph.get(step.next[0])
+        return step.id if step is not None and step.quest_id != node.quest_id else None
 
     def _leave_camp(self, state: State) -> bool:
         """After a death that made or fell in a death camp (`Context.death_camp`, V307), once
@@ -594,14 +638,41 @@ class ClientRuntime:
             return node.id
         return min(hand_ins, key=lambda s: math.dist(s.pos, here)).id
 
-    def _beyond_abandoned(self) -> str | None:
+    def _below_level(self, state: State) -> str | None:
+        """For an accept whose quest asks a higher level than the character's, the grind of
+        its level to wait on (`rib_for`), its way back the accept; else `None` (V308). A
+        quest step's band starts at the quest's MinLevel (`max(1, MinLevel)`, as the generator
+        and the hive's route builder make every one), and the server gives no quest below it:
+        of 117 accepts failed over to a grind in the hive from 12:00 to 13:08 on 28 Sep, 56
+        were below it, each a walk to the giver, a refusal, a walk to a grind and back, and
+        another refusal. Hattheas, a level 2 blood elf, was refused Major Malfunction
+        (MinLevel 4) at 12:24 and again at 12:31, 1,073 yards to a grind and 1,061 back
+        between."""
         node = self.graph.get(self.tracker.step_id)
-        if (node is None or node.quest_id is None or node.quest_id in self.completed
+        level = state.char.level
+        if (node is None or node.kind is not StepKind.QUEST_ACCEPT or node.quest_id is None
+                or node.quest_id in self.completed or level is None or level >= node.level[0]):
+            return None
+        here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
+                and state.pos.my is not None else None)
+        rib = self.graph.rib_for(level, near=here)
+        return rib.id if rib is not None else None
+
+    def _beyond_abandoned(self) -> str | None:
+        """The first step past the current quest's, for one of its objective or hand-in steps
+        when the quest's accept was passed over, or when the quest was handed in already (V308):
+        a hand-in on the way (V234) leaves its objective on the route, and of 83 objectives
+        failed over with their quest absent in the hive from 12:00 to 13:08 on 28 Sep, 40 were
+        of quests the character had handed in: a troll warrior's Simple Tablet, handed in at
+        12:15:54, its objective armed 21 s later and failed over to a grind, "quest absent"."""
+        node = self.graph.get(self.tracker.step_id)
+        if (node is None or node.quest_id is None
                 or node.kind not in (StepKind.QUEST_OBJECTIVE, StepKind.QUEST_TURNIN)):
             return None
         accepts = [n.id for n in self.graph.nodes
                    if n.quest_id == node.quest_id and n.kind is StepKind.QUEST_ACCEPT]
-        if not accepts or not set(accepts) & self._retried:
+        if node.quest_id not in self.completed and (not accepts
+                                                    or not set(accepts) & self._retried):
             return None
         step = node
         while step is not None and step.quest_id == node.quest_id and step.next:

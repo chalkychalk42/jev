@@ -328,8 +328,20 @@ class Supervisor:
                     else:
                         self.runtime.policy_context.repair_failed(state.bags.money_copper)
                 key = worker.arm.step_id, worker.arm.decision.skill
+                # A giver that answers it will not give the quest refuses it however often it
+                # is asked: the whole quest is passed over at once, no grind and no second walk
+                # (V308). Botanist Taerix, a breadcrumb every draenei route takes after the
+                # quest it leads to, was refused 14 times on 8 bots from 12:00 to 13:08 on 28
+                # Sep, a walk to a grind and back between each first refusal and its second.
+                refused = getattr(self.runtime, "not_offered", None)
                 if result.outcome is SkillOutcome.SUCCEEDED:
                     self.failures.pop(key, None)
+                elif (result.code == "not_offered" and worker.arm.decision.skill == "ACCEPT_QUEST"
+                      and refused is not None and refused(worker.arm.step_id)):
+                    failed_over = True
+                    self.failures.pop(key, None)
+                    self.say(f"{worker.arm.step_id}: not offered; the quest is passed over, on "
+                             f"to {self.runtime.tracker.step_id}")
                 elif (result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                       and result.code not in ("too_poor", "no_junk")
                       # Training is optional: a trainer out of reach waits for the next
