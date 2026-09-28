@@ -72,6 +72,7 @@ class Budget:
     def __init__(self, path: Path, usd_per_day: float):
         self.path, self.usd_per_day = Path(path), float(usd_per_day)
         self.lock = self.path.with_suffix(".lock")
+        self._local = threading.Lock()
 
     def _today(self) -> dict:
         day = time.strftime("%Y-%m-%d")
@@ -88,14 +89,24 @@ class Budget:
         return self.spent() < self.usd_per_day
 
     def add(self, tokens: int, status: str) -> None:
-        with file_lock(self.lock):
-            document = self._today()
-            document["calls"] = document.get("calls", 0) + 1
-            document["tokens"] = document.get("tokens", 0) + max(0, int(tokens))
-            document["usd"] = round(document["tokens"] / 1_000_000 * USD_PER_MTOK, 6)
-            counts = document.setdefault("status", {})
-            counts[status] = counts.get(status, 0) + 1
-            atomic_json(self.path, document)
+        try:
+            with file_lock(self.lock):
+                self._add(tokens, status)
+        except OSError:
+            # A lock the file system cannot give: Windows Python over the WSL share answers
+            # "Resource deadlock avoided" (28 September), and the live session is the one
+            # process writing its `var/`. Its own lock then; the count is the same.
+            with self._local:
+                self._add(tokens, status)
+
+    def _add(self, tokens: int, status: str) -> None:
+        document = self._today()
+        document["calls"] = document.get("calls", 0) + 1
+        document["tokens"] = document.get("tokens", 0) + max(0, int(tokens))
+        document["usd"] = round(document["tokens"] / 1_000_000 * USD_PER_MTOK, 6)
+        counts = document.setdefault("status", {})
+        counts[status] = counts.get(status, 0) + 1
+        atomic_json(self.path, document)
 
 
 class CoachModel:
@@ -170,7 +181,10 @@ class CoachModel:
     def _done(self, point: str, state: dict, options: dict, answer: Answer,
               record: Path | None = None, note: dict | None = None) -> Answer:
         if self.budget is not None and answer.status in ("ok", "error", "timeout"):
-            self.budget.add(answer.tokens, answer.status)
+            try:
+                self.budget.add(answer.tokens, answer.status)
+            except (OSError, ValueError):
+                pass              # the count is lost, the decision is not (the cap reads on)
         path = Path(record) if record is not None else self.record_path
         if path is not None:
             row = {"t": self.clock(), "point": point, "state": state,

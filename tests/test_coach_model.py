@@ -286,3 +286,24 @@ def test_jev_is_shown_the_numbers_behind_each_option_and_no_default():
     assert j.evidence("recover.eat", state) == "health 42%, power 30%"
     assert j.evidence("service.supplies", state) == "food 0, drink 3, 150 copper"
     assert "default" not in j.ARM
+
+
+def test_a_lock_the_file_system_cannot_give_does_not_stop_the_count(tmp_path, monkeypatch):
+    """Windows Python over the WSL share answers "Resource deadlock avoided" to the lock (28
+    September): the live session counts under its own lock, and its decisions go on."""
+    from contextlib import contextmanager
+
+    import jev.coach.model as model_module
+
+    @contextmanager
+    def refused(path, blocking=True):
+        raise OSError(36, "Resource deadlock avoided")
+        yield
+
+    monkeypatch.setattr(model_module, "file_lock", refused)
+    budget = Budget(tmp_path / "usage.json", 1.0)
+    budget.add(1_000_000, "ok")
+    assert budget.spent() == 0.04
+    model = CoachModel("key", budget=budget,
+                       transport=httpx.MockTransport(lambda r: httpx.Response(200, json=_reply())))
+    assert model.choose("p", {}, "?", OPTIONS).ok
