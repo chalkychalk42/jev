@@ -46,6 +46,13 @@ TOUR_DECAY = 0.85
 # (V274): a station where a pair keeps killing the character is one to stand at less. The
 # level 10 mage's deaths were Prowler pairs about once a session (sessions 244-253).
 DEATH_VISITS = 4
+# Another's record of the same choices, read beside the character's own and never written
+# (V290): the hive's, whose bots play this code on a server of their own. Each of its visits
+# counts as `PRIOR_WEIGHT` of the character's own, and an option takes at most `PRIOR_CAP`
+# visits' worth from it, so a few of the character's own outweigh it. Without the file,
+# nothing changes; deleting it undoes it.
+PRIOR_WEIGHT = 0.25
+PRIOR_CAP = 10.0
 
 
 @dataclass
@@ -61,7 +68,8 @@ class Arm:
 class ChoiceMemory:
     """Every choice point's options and their records, kept as one JSON file."""
 
-    def __init__(self, file: str | Path | None = None, *, clock: Callable[[], float] = time.time):
+    def __init__(self, file: str | Path | None = None, *, clock: Callable[[], float] = time.time,
+                 prior: str | Path | None = None):
         self.file = Path(file) if file is not None else None
         self.clock = clock
         self._lock = threading.Lock()
@@ -69,17 +77,27 @@ class ChoiceMemory:
         # Runs already counted from their evidence before choices were logged (`backfill`).
         self.backfilled: set[str] = set()
         if self.file is not None and self.file.exists():
-            document = json.loads(self.file.read_text(encoding="utf-8"))
-            if document.get("format") == FORMAT:
-                self.points = {point: {key: Arm(**arm) for key, arm in arms.items()}
-                               for point, arms in (document.get("points") or {}).items()}
-                self.backfilled = set(document.get("backfilled") or ())
+            self.points, self.backfilled = _read(self.file)
+        # The prior's records (`PRIOR_WEIGHT`), in the same format; never saved.
+        self.lent: dict[str, dict[str, Arm]] = {}
+        if prior is not None and Path(prior).exists():
+            self.lent, _ = _read(Path(prior))
 
-    def arms(self, point: str, prefix: str = "") -> dict[str, Arm]:
-        """A choice point's options whose key starts with `prefix`."""
+    def arms(self, point: str, prefix: str = "", *, lent: bool = True) -> dict[str, Arm]:
+        """A choice point's options whose key starts with `prefix`: the character's own
+        record, and with `lent` the prior's added at its discount."""
         with self._lock:
-            return {key: Arm(**asdict(arm)) for key, arm in (self.points.get(point) or {}).items()
-                    if key.startswith(prefix)}
+            out = {key: Arm(**asdict(arm)) for key, arm in (self.points.get(point) or {}).items()
+                   if key.startswith(prefix)}
+            for key, arm in (self.lent.get(point) or {}).items() if lent else ():
+                if not key.startswith(prefix) or arm.tries <= 0:
+                    continue
+                share = min(PRIOR_WEIGHT, PRIOR_CAP / arm.tries)
+                mine = out.setdefault(key, Arm())
+                mine.tries += arm.tries * share
+                mine.wins += arm.wins * share
+                mine.seconds += arm.seconds * share
+            return out
 
     def record(self, point: str, key: str, won: bool, seconds: float, *,
                save: bool = True) -> Arm:
@@ -105,6 +123,15 @@ class ChoiceMemory:
             "points": {point: {key: asdict(arm) for key, arm in arms.items()}
                        for point, arms in self.points.items()},
             "backfilled": sorted(self.backfilled)})
+
+
+def _read(file: Path) -> tuple[dict[str, dict[str, Arm]], set[str]]:
+    document = json.loads(file.read_text(encoding="utf-8"))
+    if document.get("format") != FORMAT:
+        return {}, set()
+    return ({point: {key: Arm(**arm) for key, arm in arms.items()}
+             for point, arms in (document.get("points") or {}).items()},
+            set(document.get("backfilled") or ()))
 
 
 class ChoiceLog:

@@ -48,6 +48,12 @@ LEVELS_ABOVE = 2
 # hot were attacked 1.55 times a minute in the later runs, the rest 0.71 (25 September).
 HOT_FACTOR = 2.0
 HOT_EVENTS = 3
+# Another's map of the same cells, read beside the character's own and never written (V290):
+# the hive's. Each of its seconds and attacks counts as `PRIOR_WEIGHT` of the character's
+# own, and a cell takes at most `PRIOR_CAP_S` seconds' worth from it at a level, so a few
+# minutes of the character's own outweigh it. Without the file, nothing changes.
+PRIOR_WEIGHT = 0.25
+PRIOR_CAP_S = 600.0
 
 
 def cell_of(map_id: int, x: float, y: float) -> str:
@@ -63,7 +69,7 @@ def centre_of(cell: str) -> tuple[int, float, float]:
 class DangerMap:
     """Seconds out of combat and attacks begun, per cell and character level, as JSON."""
 
-    def __init__(self, file: str | Path | None = None):
+    def __init__(self, file: str | Path | None = None, *, prior: str | Path | None = None):
         self.file = Path(file) if file is not None else None
         self._lock = threading.Lock()
         # cell -> level -> [seconds, attacks, bad attacks]
@@ -74,6 +80,12 @@ class DangerMap:
             if document.get("format") == FORMAT:
                 self.cells = document.get("cells") or {}
                 self.counted = set(document.get("counted") or ())
+        # The prior's cells (`PRIOR_WEIGHT`), in the same format; never saved.
+        self.lent: dict[str, dict[str, list[float]]] = {}
+        if prior is not None and Path(prior).exists():
+            document = json.loads(Path(prior).read_text(encoding="utf-8"))
+            if document.get("format") == FORMAT:
+                self.lent = document.get("cells") or {}
 
     def add(self, cell: str, level: int, *, seconds: float = 0.0, attacks: int = 0,
             bad: int = 0) -> None:
@@ -84,11 +96,18 @@ class DangerMap:
             row[2] += bad
 
     def _totals(self, cell: str, level: int) -> tuple[float, int, int]:
-        seconds = attacks = bad = 0
-        for at, (s, a, b) in (self.cells.get(cell) or {}).items():
-            if level - LEVELS_BELOW <= int(at) <= level + LEVELS_ABOVE:
-                seconds, attacks, bad = seconds + s, attacks + a, bad + b
+        seconds, attacks, bad = _band(self.cells.get(cell), level)
+        lent_s, lent_a, lent_b = _band(self.lent.get(cell), level)
+        if lent_s > 0:
+            share = min(PRIOR_WEIGHT, PRIOR_CAP_S / lent_s)
+            seconds, attacks, bad = (seconds + lent_s * share, attacks + lent_a * share,
+                                     bad + lent_b * share)
         return seconds, attacks, bad
+
+    def _cells(self, map_id: int) -> list[str]:
+        """The cells of `map_id` either map knows, the character's own first."""
+        return [cell for cell in (*self.cells, *(c for c in self.lent if c not in self.cells))
+                if cell.startswith(f"{map_id}:")]
 
     def rate(self, cell: str, level: int, pooled: float) -> float:
         """Attacks a minute in `cell` at about `level`, shrunk toward `pooled`."""
@@ -98,10 +117,9 @@ class DangerMap:
     def pooled(self, map_id: int, level: int) -> float:
         """The map's own attacks a minute at about `level`."""
         seconds = attacks = 0
-        for cell in self.cells:
-            if cell.startswith(f"{map_id}:"):
-                s, a, _ = self._totals(cell, level)
-                seconds, attacks = seconds + s, attacks + a
+        for cell in self._cells(map_id):
+            s, a, _ = self._totals(cell, level)
+            seconds, attacks = seconds + s, attacks + a
         return attacks / (seconds / 60) if seconds else 0.0
 
     def hot(self, map_id: int, level: int | None) -> list[tuple[float, float, float]]:
@@ -112,9 +130,7 @@ class DangerMap:
         with self._lock:
             pooled = self.pooled(map_id, level)
             result = []
-            for cell in self.cells:
-                if not cell.startswith(f"{map_id}:"):
-                    continue
+            for cell in self._cells(map_id):
                 _, attacks, _ = self._totals(cell, level)
                 rate = self.rate(cell, level, pooled)
                 if attacks >= HOT_EVENTS and rate >= HOT_FACTOR * pooled:
@@ -128,6 +144,15 @@ class DangerMap:
                 return
             atomic_json(self.file, {"format": FORMAT, "cells": self.cells,
                                     "counted": sorted(self.counted)})
+
+
+def _band(levels: dict[str, list[float]] | None, level: int) -> tuple[float, int, int]:
+    """A cell's seconds, attacks and bad attacks from one level below `level` to two above."""
+    seconds = attacks = bad = 0
+    for at, (s, a, b) in (levels or {}).items():
+        if level - LEVELS_BELOW <= int(at) <= level + LEVELS_ABOVE:
+            seconds, attacks, bad = seconds + s, attacks + a, bad + b
+    return seconds, attacks, bad
 
 
 def count_runs(runs: Iterable[Path], danger: DangerMap,

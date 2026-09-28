@@ -35,6 +35,9 @@ from jev.run.watchdog import Watchdog, reconnect_client
 from jev.world.state_v1 import StepKind
 
 ROOT = Path(__file__).resolve().parents[2]
+# Another's learning, read beside the character's own at a discount and never written
+# (V290): the operator puts it here; deleting the directory undoes it.
+PRIOR = ROOT / "var" / "prior"
 # How long an operator stop waits for a fight in progress to end before stopping anyway.
 STOP_COMBAT_GRACE_S = 90.0
 # Reads to wait at start for one whole quest-log cycle (about 0.13 s each). Forty failed
@@ -410,8 +413,11 @@ def _live(args, graph) -> int:
             raise NotRunning("zone has no measured coordinate bounds")
         launcher = ("wsl.exe", "-d", "Ubuntu-24.04", "-e") if win32.IS_WINDOWS else ()
         # Where the character keeps being attacked, counted from every run not yet counted
-        # (`jev.learn.danger`, V161): routes keep clear of it at the character's level.
-        danger = DangerMap(ROOT / "var" / "danger.json")
+        # (`jev.learn.danger`, V161): routes keep clear of it at the character's level. A
+        # prior beside it (V290), when the operator has put one there, is read at a discount.
+        danger = DangerMap(ROOT / "var" / "danger.json", prior=PRIOR / "danger.json")
+        if danger.lent:
+            print(f"danger: a prior of {len(danger.lent)} cells from {PRIOR / 'danger.json'}")
         by_area = {zone.area_id: zone for zone in zones.values()}
         runs_dir = Path(args.runs_dir)
         this_run = recorder.dir.name if recorder is not None else None
@@ -446,14 +452,17 @@ def _live(args, graph) -> int:
             recorder = Recorder(root=args.runs_dir)
         # What each choice has paid off before (`jev.learn.choices`), counted first from any
         # runs that predate the choices' own log; this run logs its own.
-        choices = ChoiceMemory(ROOT / "var" / "choices.json")
+        choices = ChoiceMemory(ROOT / "var" / "choices.json", prior=PRIOR / "choices.json")
         counted = backfill_hunts((run for run in Path(args.runs_dir).iterdir() if run.is_dir()),
                                  choices)
         choice_log = ChoiceLog(recorder.dir / "choices.jsonl")
         body.learn(choices, choice_log)
-        visits = sum(arm.tries for arm in choices.arms("hunt.station").values())
+        visits = sum(arm.tries for arm in choices.arms("hunt.station", lent=False).values())
         print(f"choices: {visits} hunt station visits remembered"
               + (f", {counted} counted from earlier runs" if counted else ""))
+        if choices.lent:
+            lent = sum(arm.tries for arm in (choices.lent.get("hunt.station") or {}).values())
+            print(f"choices: a prior of {lent} hunt station visits from {PRIOR / 'choices.json'}")
         if args.play_mode != "off":
             from jev.play.controller import PlayConfig
             from jev.play.runtime import PlayingBody

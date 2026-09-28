@@ -121,3 +121,25 @@ def test_each_run_is_counted_once(tmp_path):
     again = DangerMap(tmp_path / "danger.json")
     assert count_runs(runs.iterdir(), again, {12: FIELD}.get) == 0
     assert again.cells[cell_of(0, 100, 100)] == {"12": [22.0, 2, 0]}
+
+
+def test_a_prior_marks_a_camp_the_character_has_not_walked_at_a_discount(tmp_path):
+    """V290: the hive's map of the same cells is read beside the character's own. A camp
+    only the hive was attacked in is kept clear of; its seconds and attacks count a quarter
+    of the character's own, ten minutes' worth at most, and they are never saved."""
+    from jev.learn.danger import PRIOR_CAP_S, PRIOR_WEIGHT
+
+    hive = DangerMap(tmp_path / "prior.json")
+    camp, field = cell_of(0, 100, 100), cell_of(0, 400, 400)
+    hive.add(camp, 5, seconds=600.0, attacks=40)
+    hive.add(field, 5, seconds=36000.0, attacks=12)
+    hive.save()
+    danger = DangerMap(tmp_path / "danger.json", prior=tmp_path / "prior.json")
+    assert [(x, y) for x, y, _ in danger.hot(0, 5)] == [centre_of(camp)[1:]]
+    assert danger._totals(camp, 5)[:2] == (600.0 * PRIOR_WEIGHT, 40 * PRIOR_WEIGHT)
+    seconds, attacks, _ = danger._totals(field, 5)
+    assert seconds == PRIOR_CAP_S and attacks == 12 * PRIOR_CAP_S / 36000.0
+    danger.add(field, 5, seconds=5.0)
+    danger.save()
+    assert DangerMap(tmp_path / "danger.json").cells == {field: {"5": [5.0, 0, 0]}}
+    assert DangerMap(prior=tmp_path / "none.json").hot(0, 5) == []

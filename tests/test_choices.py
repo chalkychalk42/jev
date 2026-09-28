@@ -168,3 +168,26 @@ def test_earlier_runs_are_counted_once_from_their_evidence(tmp_path):
     assert (arms["creature:9@40,0"].wins, arms["creature:9@40,0"].seconds) == (0, 20.0)
     assert backfill_hunts(runs.iterdir(), ChoiceMemory(tmp_path / "choices.json")) == 0, \
         "a run is counted once"
+
+
+def test_a_prior_counts_at_a_discount_up_to_a_cap_and_is_never_written(tmp_path):
+    """V290: another's record of the same choices (the hive's) is read beside the
+    character's own: each of its visits a quarter of one, an option taking at most ten
+    visits' worth from it, and the character's own file holding only its own."""
+    from jev.learn.choices import PRIOR_CAP, PRIOR_WEIGHT
+
+    hive = ChoiceMemory(tmp_path / "prior.json", clock=Clock())
+    for won in (True, True, False, False):
+        hive.record("hunt.station", "creature:1@10,20", won, 30.0)
+    for _ in range(200):
+        hive.record("hunt.station", "creature:1@50,60", False, 10.0)
+    memory = ChoiceMemory(tmp_path / "choices.json", clock=Clock(), prior=tmp_path / "prior.json")
+    memory.record("hunt.station", "creature:1@10,20", True, 12.0)
+    arms = memory.arms("hunt.station")
+    near = arms["creature:1@10,20"]
+    assert (near.tries, near.wins) == (1 + 4 * PRIOR_WEIGHT, 1 + 2 * PRIOR_WEIGHT)
+    assert arms["creature:1@50,60"].tries == PRIOR_CAP, "a few of its own outweigh it"
+    assert memory.arms("hunt.station", lent=False).keys() == {"creature:1@10,20"}
+    again = ChoiceMemory(tmp_path / "choices.json")
+    assert again.arms("hunt.station").keys() == {"creature:1@10,20"}, "the prior is not saved"
+    assert ChoiceMemory(tmp_path / "choices.json", prior=tmp_path / "none.json").lent == {}
