@@ -39,13 +39,14 @@ from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
+from jev.guide.path import PathStatus
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.choices import Choice, Stations, objective_key
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
-from jev.run.client import FOCUS_QUICK_S, Client, surfaces_under
+from jev.run.client import FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
 from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
@@ -102,6 +103,10 @@ SICKNESS_WAIT_MAX_S = 300.0
 # again and again, "still a ghost" (session 178). After each such get-up that did not come,
 # the next stops half as far short (V213).
 TRAP_RECLAIM_YARDS = 25.0
+# A ghost this near its body on the map and still a ghost is on another floor than the body
+# (V289): on the hill over Shadowthread Cave, 110 yards above a body in it, every plan from
+# there started on the cave's floor under the ghost and arrived at once (the hive, 28 Sep).
+OVER_BODY_YARDS = 5.0
 # How far round a body or a meal the spawns of units that attack on sight are looked for
 # (`jev.world.hostiles`, V247), and the least room from them a get-up spot must have: under
 # it, the body lies in a camp and the ghost gets up at the Spirit Healer. At the 34 bodies of
@@ -1739,12 +1744,44 @@ class LiveBody:
 
     def _corpse_walk(self, point) -> bool:
         wx, wy = map_to_world(*point, self.client.bounds)
+        z = self._body_height((wx, wy))
+        if z is None:
+            return False
+        return self._approach((wx, wy, z))
+
+    def _body_height(self, world) -> float | None:
+        """The height a walk to a body plans to: the nearest step's. The body's own is not
+        read."""
         placed = [n for n in self.graph.nodes if n.world is not None
                   and n.map_id == self.client.bounds.map_id]
         if not placed:
-            return False
-        z = min(placed, key=lambda n: math.dist(n.world[:2], (wx, wy))).world[2]
-        return self._approach((wx, wy, z))
+            return None
+        return min(placed, key=lambda n: math.dist(n.world[:2], world[:2])).world[2]
+
+    def _floor_at(self, world, z: float) -> float | None:
+        """The floor a plan to `world` at height `z` ends on: the planner's nearest."""
+        query = getattr(self.client, "query", None)
+        if query is None:
+            return None
+        snapped = query.path(self.client.bounds.map_id, (world[0], world[1], z),
+                             (world[0], world[1], z))
+        if snapped.status in (PathStatus.COMPLETE, PathStatus.PARTIAL) and snapped.points:
+            return snapped.points[0][2]
+        return None
+
+    def _other_floor(self, body, spot) -> tuple[float, float] | None:
+        """The floors of a get-up spot and its body, when the spot's is another: further from
+        the body's than the spot is short of it, and more (V289). A walk plans to the spot at
+        the body's height, which the planner puts on the floor nearest it; over a body in a
+        cave that was the hill, 110 yards up."""
+        z = self._body_height(body)
+        if z is None:
+            return None
+        floors = self._floor_at(body, z), self._floor_at(spot, z)
+        if None in floors:
+            return None
+        apart = math.dist((*body[:2], floors[0]), (*spot[:2], floors[1]))
+        return floors if apart > self._reclaim_yards + FLOOR_SWITCH_YARDS else None
 
     def _short_of_body(self, point) -> bool:
         """Walk to within `TRAP_RECLAIM_YARDS` of the body, from the graveyard's side.
@@ -1768,6 +1805,11 @@ class LiveBody:
             self.say(f"  getting up out of the camp's reach, "
                      f"{min(math.dist(clear, sp[:2]) - _extra(sp) for sp in spawns):.0f} yards "
                      "from its nearest spawn's reach")
+        floors = self._other_floor(body, clear)
+        if floors is not None:
+            self.say(f"  the get-up spot is on another floor than the body ({floors[1]:.0f} "
+                     f"against {floors[0]:.0f}): to the body itself")
+            return self._corpse_walk(point)
         return self._corpse_walk(world_to_map(*clear, self.client.bounds))
 
     def _hostiles(self, world, radius: float = HOSTILE_LOOK_YARDS):
@@ -1910,7 +1952,27 @@ class LiveBody:
         elif outcome is Recovered.STILL_GHOST:
             # Out of the body's reach from there, it seems: half as far short next time.
             self._reclaim_yards = self._reclaim_yards / 2 if self._reclaim_yards > 4 else 0.0
+            self._over_body()
         return self._result(outcome, self.recover.detail)
+
+    def _over_body(self) -> None:
+        """A ghost over its body on the map and still a ghost is on another floor than it
+        (V289): the next walk is to the body itself, from the next floor under the ghost, the
+        floor the plans here started on counted as tried."""
+        body, here, bounds = self.recover.corpse, self._position(), self.client.bounds
+        if body is None or here is None or bounds is None:
+            return
+        body_w, here_w = map_to_world(*body, bounds), map_to_world(*here, bounds)
+        if math.dist(body_w[:2], here_w[:2]) > OVER_BODY_YARDS:
+            return
+        self._reclaim_yards = 0.0
+        self.say("  over the body and still a ghost: on another floor than the body")
+        z = self._body_height(body_w)
+        if getattr(self.client, "_ground", None) is None and z is not None:
+            floor = self._floor_at(here_w, z)
+            if floor is not None:
+                self.client._ground = (here_w[0], here_w[1], floor)
+        self.client._next_floor(around=z)
 
     def _revived(self, at: float | None) -> None:
         """When the character last got up at its body (wall time), kept in the purse file

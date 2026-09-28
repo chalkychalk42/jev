@@ -979,6 +979,90 @@ def test_a_ghost_that_does_not_get_up_short_of_the_body_goes_closer(monkeypatch)
     assert b._reclaim_yards == TRAP_RECLAIM_YARDS, "up at last: the next death starts afresh"
 
 
+def test_a_get_up_spot_on_another_floor_than_the_body_is_no_spot():
+    """V289: the get-up spot 25 yards short of a body in Shadowthread Cave was on the hill
+    over it, 110 yards up, and the ghost walked there and never got up (the hive, 28 Sep).
+    A spot whose floor is further from the body's than the reach allows: to the body."""
+    import math
+
+    from jev.guide.coords import map_to_world, world_to_map
+    from jev.guide.path import Path, PathStatus
+    from jev.run.body import TRAP_RECLAIM_YARDS
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._revived_at = None
+    b.recover.corpse = world_to_map(-9000.0, 100.0, b.client.bounds)
+    b.client.position = lambda: world_to_map(-9000.0, 300.0, b.client.bounds)
+    b._body_height = lambda world: 55.0
+
+    def mesh(floor_off_the_body):
+        def path(map_id, start, end):
+            x, y, _ = start
+            near = math.dist((x, y), (-9000.0, 100.0)) < 10.0
+            return Path(PathStatus.COMPLETE, ((x, y, 50.0 if near else floor_off_the_body),))
+        return SimpleNamespace(path=path)
+
+    walked = []
+    b._corpse_walk = lambda point: walked.append(map_to_world(*point, b.client.bounds)) or True
+
+    def run(corpse_point):
+        b.recover.walk_to(corpse_point)
+        return Recovered.ALIVE
+
+    b.recover.run = run
+    b.client.query = mesh(160.0)                         # the hill over the cave
+    assert b._recover(seen()).code == "alive"
+    assert math.dist(walked[-1], (-9000.0, 100.0)) < 0.5, "to the body itself"
+    b.client.query = mesh(56.0)                          # a slope: the same floor
+    b._recover(seen())
+    assert math.dist(walked[-1], (-9000.0, 100.0)) == pytest.approx(TRAP_RECLAIM_YARDS, abs=0.5)
+
+
+def test_a_ghost_over_its_body_that_does_not_get_up_walks_from_another_floor():
+    """V289: on the hill over Shadowthread Cave the ghost stood 0.4 yards from its body on
+    the map, 110 yards above it; every plan from there started on the cave's floor under it
+    and arrived at once, forty minutes of "still a ghost" (the hive, 28 Sep). Over the body
+    and not up: the next walk is to the body itself, from the next floor under the ghost,
+    the floor the plans started on counted as tried."""
+    from jev.guide.coords import world_to_map
+    from jev.guide.path import Path, PathStatus
+    from jev.run.body import TRAP_RECLAIM_YARDS
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._revived_at = None
+    b.recover.corpse = world_to_map(-9000.0, 100.0, b.client.bounds)
+    b.client.position = lambda: world_to_map(-9000.3, 100.2, b.client.bounds)
+    b.client._ground = None
+    b.client.query = SimpleNamespace(
+        path=lambda m, start, end: Path(PathStatus.COMPLETE, ((start[0], start[1], 50.0),)))
+    b._body_height = lambda world: 55.0
+    turned = []
+    b.client._next_floor = lambda around=None: turned.append((around, b.client._ground[2]))
+    b._corpse_walk = lambda point: True
+
+    def run(corpse_point):
+        b.recover.walk_to(corpse_point)
+        return Recovered.STILL_GHOST
+
+    b.recover.run = run
+    assert b._recover(seen()).code == "still_ghost"
+    assert b._reclaim_yards == 0.0, "the next walk is to the body itself"
+    assert turned == [(55.0, 50.0)], "round the body's height, the floor tried counted"
+
+    far = body()
+    far.client.bounds = b.client.bounds
+    far._revived_at = None
+    far.recover.corpse = b.recover.corpse
+    far.client.position = lambda: world_to_map(-9000.0, 300.0, far.client.bounds)
+    far._corpse_walk = lambda point: True
+    far.recover.run = lambda corpse_point: (far.recover.walk_to(corpse_point),
+                                            Recovered.STILL_GHOST)[1]
+    far._recover(seen())
+    assert far._reclaim_yards == TRAP_RECLAIM_YARDS / 2, "short of it: V213's halving only"
+
+
 def test_a_ghost_gets_up_out_of_the_camps_reach():
     """V233: the mage got up beside its body at Fargodeep with half its health and mana,
     among the Kobold Tunnelers that had killed it, and died again (sessions 196-197)."""

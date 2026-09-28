@@ -605,7 +605,8 @@ def test_wedged_with_no_way_in_known_the_next_plan_starts_on_another_floor(monke
     client.travel = SimpleNamespace()
     here = map_to_world(0.49, 0.42, ELWYNN)
     client._ground = (here[0], here[1], 57.0)
-    monkeypatch.setattr(client_module, "surfaces_under", lambda q, m, x, y: [50.0, 57.0, 71.5])
+    monkeypatch.setattr(client_module, "surfaces_under",
+                        lambda q, m, x, y, around=None: [50.0, 57.0, 71.5])
     assert client.back_out() is False
     assert client._ground[2] == 50.0, "the cellar first"
     client.back_out()
@@ -707,3 +708,27 @@ def test_a_spot_off_the_navmesh_reads_the_floors_round_it():
     asked.clear()
     assert surfaces_under(mesh, 0, -9471.1, 29.0) == [57.0, 74.7]
     assert len(asked) == len(PROBE_HEIGHTS), "two floors under the spot: nothing round it read"
+
+
+def test_the_floors_over_a_high_spot_are_looked_for_round_a_height_known_there():
+    """V289: over a body in Shadowthread Cave (1327.7) a ghost stood on the hill (1440.1).
+    The fixed asks, 480 yards up at most, found no floor there at all; 40 yards apart round
+    the body's height they found the cave's floor and missed the hill, whose slope answers
+    an ask more than a few yards off it yards aside (the hive, 28 Sep)."""
+    from jev.guide.path import Path, PathStatus
+    from jev.run.client import surfaces_under
+
+    cave, hill = 1327.7, 1440.1
+
+    def path(map_id, start, end):
+        x, y, z = start
+        if min(abs(z - cave), abs(z - hill)) > 200.0:
+            return Path(PathStatus.NOPATH)
+        if abs(z - cave) <= abs(z - hill):
+            return Path(PathStatus.COMPLETE, ((x, y, cave),))
+        aside = 0.0 if abs(z - hill) <= 4.0 else 6.0
+        return Path(PathStatus.COMPLETE, ((x + aside, y, hill),))
+
+    mesh = SimpleNamespace(path=path)
+    assert surfaces_under(mesh, 1, 10884.5, 912.5) == []
+    assert surfaces_under(mesh, 1, 10884.5, 912.5, around=1333.5) == [cave, hill]
