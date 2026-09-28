@@ -1977,6 +1977,14 @@ class Fight:
         profile = self.profile or for_class(values.get("char.class_id"),
                                             values.get("char.race_id"))
         self._watch_heal(values, ready)
+        # An attack whose slot the client marks out of range is not pressed (V294), a ranged
+        # one's dead zone beside the unit included: hunters pressed Auto Shot in melee 129
+        # times an hour each, every press "too close" (the hive). Melee's toggle is left alone.
+        out = values.get("bars.out_range")
+        if isinstance(out, int) and out:
+            for attack in profile.by_role(Role.ATTACK):
+                if not attack.toggle:
+                    usable &= ~(out & (1 << (attack.slot - 1)))
 
         looked = time.monotonic()
 

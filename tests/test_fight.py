@@ -267,6 +267,25 @@ def test_a_seal_is_not_re_pressed_every_tick():
     assert seal is not None and seal.every_s == 25.0   # 30s duration, 5s margin
 
 
+def test_an_attack_the_client_marks_out_of_range_is_not_pressed():
+    """V294: hunters pressed Auto Shot in melee 129 times an hour each, every press "too
+    close" (the hive): the rotation pressed any attack ready and usable, and a ranged one is
+    both beside the unit. One the client marks out of range waits; melee's toggle does not."""
+    from jev.world.combat import CombatProfile
+
+    hid = _Hid()
+    f = _fight([ALIVE], hid=hid)
+    f.profile = CombatProfile(name="hunter", abilities=(
+        Ability(slot=1, role=Role.ATTACK, name="Attack", toggle=True),
+        Ability(slot=3, role=Role.ATTACK, name="Auto Shot")))
+    close = {**ALIVE, "bars.ready": 0b101, "bars.usable": 0b101, "bars.out_range": 0b100}
+    for _ in range(3):
+        _rotate_answered(f, close)
+    assert "3" not in hid.taps and hid.taps.count("1") == 1, hid.taps
+    _rotate_answered(f, {**close, "bars.out_range": 0})
+    assert hid.taps[-1] == "3", "in range again, it is pressed"
+
+
 def test_melee_auto_attack_is_a_toggle_and_is_pressed_once():
     """Spell 6603 toggles the swing: pressing it while already swinging stops it. The
     first live rotation pressed `[1, 2, 2, ..., 1, 2, ...]` and turned the character's
