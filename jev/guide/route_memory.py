@@ -87,6 +87,16 @@ SPOT_MIN_KEEP = 10.0
 CAMP_YARDS = 100.0
 CAMP_WINDOW_S = 600.0
 CAMP_S = 3600.0
+# A walk refused through a death camp (`CAMP_REFUSED`) is refused again without a search for
+# `REFUSAL_S`, asked from and to within `REFUSAL_YARDS` of where it was with the same camp on
+# its way through (review of 28 Sep). A refusal is two ring searches, up to 144 planner
+# queries, and was asked again at each of `jev.run.client`'s 33 start heights, by each
+# teleport's walk in and by every ranking of merchants (V309): about 4,700 queries a walk,
+# where one merchant behind a camp could spend `RANKING_BUDGET_S` alone. A minute holds a
+# walk's re-plans and a ranking's; the camp's own hour does not, as a camp beside it may end.
+CAMP_REFUSED = "no way that keeps out of a death camp"
+REFUSAL_S = 60.0
+REFUSAL_YARDS = 5.0
 
 
 @dataclass
@@ -360,6 +370,8 @@ class DangerAvoidingQuery:
         self.hot = hot
         self.level = level
         self.ghost = ghost
+        # (when, map, start, end, camp) of each walk refused through a camp (`REFUSAL_S`).
+        self._refused: list[tuple[float, int, tuple, tuple, tuple]] = []
 
     def path(self, map_id: int, start: Point, end: Point) -> Path:
         direct = self.inner.path(map_id, start, end)
@@ -415,6 +427,9 @@ class DangerAvoidingQuery:
             return direct
         camps = [spot for spot in spots if spot[4]]
         camp = next((spot for spot in camps if near_route(direct, *spot[:3])), None)
+        now = self.clock()
+        if camp is not None and self._refused_before(map_id, start, end, camp, now):
+            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED)
         # Round every spot within `DANGER_DETOUR` of the way through; through a death camp,
         # round every spot, then round the camps alone, however far (V307).
         tries = [(hit, spots, direct.length_yards() * DANGER_DETOUR)] if camp is None else [
@@ -424,9 +439,17 @@ class DangerAvoidingQuery:
             if way is not None:
                 return way
         if camp is not None:
-            return Path(PathStatus.NOPATH, (), direct.source,
-                        "no way that keeps out of a death camp")
+            self._refused.append((now, map_id, tuple(start[:2]), tuple(end[:2]), camp[:2]))
+            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED)
         return direct
+
+    def _refused_before(self, map_id: int, start: Point, end: Point, camp, now: float) -> bool:
+        """Was this walk refused through the same camp within `REFUSAL_S`?"""
+        self._refused = [r for r in self._refused if 0 <= now - r[0] < REFUSAL_S]
+        return any(m == map_id and was == camp[:2]
+                   and math.dist(a, start[:2]) <= REFUSAL_YARDS
+                   and math.dist(b, end[:2]) <= REFUSAL_YARDS
+                   for _, m, a, b, was in self._refused)
 
     def _ring(self, map_id: int, start: Point, end: Point, direct: Path, hit, spots,
               limit: float) -> Path | None:

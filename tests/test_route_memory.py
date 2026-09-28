@@ -384,3 +384,36 @@ def test_the_keeper_names_what_a_route_passes_of_what_the_layer_keeps_clear_of()
     assert passed(((0.0, 0.0, 60.0), (100.0, 80.0, 60.0), (200.0, 0.0, 60.0))) == set()
     at_the_body = query.keeper(0, (0.0, 0.0, 60.0), (100.0, 0.0, 60.0))
     assert at_the_body(((0.0, 0.0, 60.0), (100.0, 0.0, 60.0))) == set(), "the walk's own end"
+
+
+def test_a_walk_refused_through_a_death_camp_is_planned_once():
+    """Review of 28 Sep (V307): a walk refused through a death camp asked the planner at each
+    of `Client._plan`'s 33 start heights, two ring searches each, about 4,700 queries, and
+    as often again at each re-plan and each ranking of merchants (V309). The refusal ends the
+    plan, and the same walk asked again within `REFUSAL_S` is refused without a search."""
+    from types import SimpleNamespace
+
+    from jev.guide.path import PathStatus
+    from jev.guide.route_memory import (CAMP_REFUSED, DANGER_RINGS, REFUSAL_S,
+                                        VIA_BEARINGS, DangerAvoidingQuery)
+    from jev.run.client import Client
+
+    camp = RouteMemory()
+    camp.died(0, (100.0, 0.0), now=1000.0, level=8)
+    camp.died(0, (100.0, 4.0), now=1100.0, level=8)
+    now = [1200.0]
+    corridor = _Corridor()
+    query = DangerAvoidingQuery(corridor, camp, clock=lambda: now[0], level=lambda: 8)
+    client = SimpleNamespace(query=query, bounds=SimpleNamespace(map_id=0),
+                             _ground=(-200.0, 0.0, 61.0))
+    refused = Client._plan(client, (-200.0, 0.0), (400.0, 0.0, 60.0))
+    assert refused.status is PathStatus.NOPATH and refused.detail == CAMP_REFUSED
+    one_search = 1 + 2 * len(DANGER_RINGS) * VIA_BEARINGS * 2
+    assert corridor.asked <= one_search, "one start height, not 33"
+    asked = corridor.asked
+    again = Client._plan(client, (-198.0, 1.0), (401.0, 0.0, 60.0))
+    assert again.detail == CAMP_REFUSED and corridor.asked - asked == 1, "the way through alone"
+    now[0] += REFUSAL_S
+    asked = corridor.asked
+    Client._plan(client, (-200.0, 0.0), (400.0, 0.0, 60.0))
+    assert corridor.asked - asked > 1, "a minute on, searched again"

@@ -41,7 +41,7 @@ from jev.guide.coords import (
 from jev.guide.exposure import ExposureQuery
 from jev.guide.path import Path as Route
 from jev.guide.path import PathQuery, PathStatus, TeleportQuery, load_teleports, stop_short_of
-from jev.guide.route_memory import AvoidingQuery, DangerAvoidingQuery
+from jev.guide.route_memory import CAMP_REFUSED, AvoidingQuery, DangerAvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
 from jev.perceive.spellbook import SpellCensus
@@ -789,6 +789,12 @@ class Client:
             path = query.path(self.bounds.map_id, (here[0], here[1], z), world)
             if path.usable and path.status is PathStatus.COMPLETE:
                 return path
+            if path.status is PathStatus.NOPATH and path.detail == CAMP_REFUSED:
+                # Refused through a death camp (V307): the start's height found the way, and
+                # a camp is kept in x and y, which no other height changes. Asked on, each
+                # height searched its rings again, about 4,700 queries a walk (review of 28
+                # Sep).
+                return best if best is not None else path
             if path.usable and (best is None or math.dist(path.points[-1][:2], world[:2])
                                 < math.dist(best.points[-1][:2], world[:2])):
                 best = path
