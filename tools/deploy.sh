@@ -29,7 +29,20 @@ say "the suite passed; waiting for the session to end"
 while pgrep -f "tools/[s]tart_teaching.py --run" > /dev/null; do sleep "$POLL_S"; done
 [ -e "$HOLD" ] || { say "the hold was taken away; not merging"; exit 1; }
 say "no session running; merging $BRANCH"
+# Nothing the branch brings may stand where the untracked data lives: on 28 Sep a tracked
+# symlink named data replaced the live checkout's data directory with a link to itself.
+if git diff --name-only HEAD "$BRANCH" | grep -qE '^data(/|$)'; then
+  say "the branch touches data/: not merging"
+  exit 1
+fi
 git merge -q --ff-only "$BRANCH" || { say "the merge failed"; exit 1; }
+for need in data/knowledge/tbc-243.sqlite data/zones-tbc-243.json; do
+  if [ ! -r "$need" ] || [ ! -s "$need" ]; then
+    say "$need is not readable after the merge: the merge is taken back"
+    git reset -q --keep ORIG_HEAD
+    exit 1
+  fi
+done
 timeout 300 "$WINPY" tools/start_teaching.py --dispatch hybrid > captures/deploy-offline.log 2>&1
 rc=$?
 say "offline check exit=$rc"
