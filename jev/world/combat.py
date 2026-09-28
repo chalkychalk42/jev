@@ -164,6 +164,9 @@ class Reach(NamedTuple):
     max_yd: float
     cast_s: float
     channel: bool = False
+    # Waits for the next melee swing (V306): no cast, no global cooldown, nothing spent until
+    # the swing lands.
+    next_swing: bool = False
 
     @property
     def instant(self) -> bool:
@@ -176,7 +179,8 @@ def _reaches() -> dict[int, Reach]:
         raw = json.loads(REACH_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return {int(k): Reach(v["min_yd"], v["max_yd"], v["cast_s"], bool(v.get("channel")))
+    return {int(k): Reach(v["min_yd"], v["max_yd"], v["cast_s"], bool(v.get("channel")),
+                          bool(v.get("next_swing")))
             for k, v in (raw.get("spells") or {}).items()}
 
 

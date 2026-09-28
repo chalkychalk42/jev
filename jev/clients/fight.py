@@ -142,6 +142,12 @@ PRESS_GIVE_UP = 3
 # in 19 s against a murloc at 23% (session 201) and 12 in 13 s against two wolves (214),
 # "Spell is not ready yet" each time, and died both times.
 NOT_READY_HOLD_S = 4.0
+# An attack that waits for the next swing (Heroic Strike, Raptor Strike, Maul) is answered by
+# nothing the client shows: no cast, no global cooldown, nothing spent until the swing. Counted
+# unanswered, it was undone and pressed again, each press replacing the one queued: 1,205
+# refused "interrupted" in a quarter of an hour of the hive (28 Sep, 12:00-12:15), and the
+# rotation waited out each answer. It is counted as done and left for about a swing (V306).
+NEXT_SWING_HOLD_S = 2.5
 # After a press the client acted on, no other is made before this (V285): its global cooldown
 # ends later than the bar paints it. Of the mage's 78 presses refused as not ready (sessions
 # 246-283), 75 came within 2 s of the press before; at 1.7 s after one, 106 presses were
@@ -2263,7 +2269,10 @@ class Fight:
             self.detail = f"ability slot {ability.slot} input refused"
             return False
         now = time.monotonic()
-        if not ability.toggle:
+        facts = reach(ability.spell_id)
+        if facts is not None and facts.next_swing:
+            self._held[ability.slot] = now + NEXT_SWING_HOLD_S
+        elif not ability.toggle:
             self._pending_press = (ability, now, dict(self._last_use), dict(self._lasting),
                                    self._saved_at, self._mana_seen[1])
         self._last_use[ability.slot] = now

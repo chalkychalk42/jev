@@ -35,7 +35,8 @@
   "78": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "99": {
    "min_yd": 0.0,
@@ -131,12 +132,14 @@
   "284": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "285": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "324": {
    "min_yd": 0.0,
@@ -563,7 +566,8 @@
   "845": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "853": {
    "min_yd": 0.0,
@@ -941,7 +945,8 @@
   "1608": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "1671": {
    "min_yd": 0.0,
@@ -1403,7 +1408,8 @@
   "2973": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "2974": {
    "min_yd": 0.0,
@@ -2206,12 +2212,14 @@
   "6808": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "6809": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "6940": {
    "min_yd": 0.0,
@@ -2256,7 +2264,8 @@
   "7369": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "7372": {
    "min_yd": 0.0,
@@ -3013,7 +3022,8 @@
   "8972": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "8983": {
    "min_yd": 0.0,
@@ -3103,7 +3113,8 @@
   "9745": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "9747": {
    "min_yd": 0.0,
@@ -3275,12 +3286,14 @@
   "9880": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "9881": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "9884": {
    "min_yd": 0.0,
@@ -4368,22 +4381,26 @@
   "11564": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "11565": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "11566": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "11567": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "11572": {
    "min_yd": 0.0,
@@ -4458,12 +4475,14 @@
   "11608": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "11609": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "11659": {
    "min_yd": 0.0,
@@ -4886,37 +4905,44 @@
   "14260": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "14261": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "14262": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "14263": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "14264": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "14265": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "14266": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "14267": {
    "min_yd": 0.0,
@@ -5881,7 +5907,8 @@
   "20569": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "20580": {
    "min_yd": 0.0,
@@ -6386,7 +6413,8 @@
   "25231": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "25233": {
    "min_yd": 0.0,
@@ -6461,7 +6489,8 @@
   "25286": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "25288": {
    "min_yd": 0.0,
@@ -7089,7 +7118,8 @@
   "26996": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "26997": {
    "min_yd": 0.0,
@@ -7170,7 +7200,8 @@
   "27014": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "27015": {
    "min_yd": 0.0,
@@ -7795,7 +7826,8 @@
   "29707": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "29722": {
    "min_yd": 0.0,
@@ -7836,7 +7868,8 @@
   "30324": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "next_swing": true
   },
   "30330": {
    "min_yd": 0.0,

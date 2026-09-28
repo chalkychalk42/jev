@@ -26,6 +26,10 @@ OUT = ROOT / "content/tbc/spell-reach.json"
 # AttributesEx bits of a channelled spell (Arcane Missiles, Evocation): no cast time, and
 # yet not instant - the character stands still while it lasts.
 CHANNELED = 0x4 | 0x40
+# Attributes bits of a spell that waits for the next melee swing (Heroic Strike, Cleave, Raptor
+# Strike, Maul; the server's `IsNextMeleeSwingSpell`): pressed, it starts no cast, no global
+# cooldown and spends nothing until the swing lands.
+NEXT_SWING = 0x4 | 0x400
 
 
 def _float(bits: int) -> float:
@@ -47,14 +51,16 @@ def reach(db: sqlite3.Connection, ids: list[int]) -> dict[str, dict]:
               for row in db.execute("SELECT id, c1, c2 FROM dbc_SpellRange")}
     casts = {row[0]: row[1] for row in db.execute("SELECT id, c1 FROM dbc_SpellCastTimes")}
     out = {}
-    for spell_id, range_index, cast_index, attributes_ex in db.execute(
-            f"SELECT Id, RangeIndex, CastingTimeIndex, AttributesEx FROM world_spell_template "
-            f"WHERE Id IN ({','.join('?' * len(ids))})", ids):
+    for spell_id, range_index, cast_index, attributes_ex, attributes in db.execute(
+            f"SELECT Id, RangeIndex, CastingTimeIndex, AttributesEx, Attributes "
+            f"FROM world_spell_template WHERE Id IN ({','.join('?' * len(ids))})", ids):
         low, high = ranges.get(range_index, (0.0, 0.0))
         out[str(spell_id)] = {"min_yd": round(low, 1), "max_yd": round(high, 1),
                               "cast_s": round(max(0, casts.get(cast_index, 0)) / 1000, 2)}
         if (attributes_ex or 0) & CHANNELED:
             out[str(spell_id)]["channel"] = True
+        if (attributes or 0) & NEXT_SWING:
+            out[str(spell_id)]["next_swing"] = True
     return dict(sorted(out.items(), key=lambda item: int(item[0])))
 
 

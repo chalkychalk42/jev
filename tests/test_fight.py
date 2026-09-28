@@ -2908,3 +2908,21 @@ def test_jev_picks_the_next_attack_asked_as_the_last_press_began():
     f2.profile, f2.judge = profile, Judge(None)
     f2._rotate(values)
     assert hid2.taps == ["1"], "no answer: the bar's order"
+
+
+def test_an_attack_that_waits_for_the_swing_is_pressed_once_a_swing():
+    """V306: Heroic Strike starts no cast and no global cooldown; its press is counted done and
+    the slot left for about a swing, not undone and pressed again each look."""
+    from jev.world.combat import CombatProfile, reach
+
+    assert reach(78) is not None and reach(78).next_swing
+    profile = CombatProfile("test", (Ability(slot=1, role=Role.ATTACK, name="Heroic Strike",
+                                             spell_id=78),))
+    values = {**ALIVE, "bars.ready": 0b1, "bars.usable": 0b1}
+    hid = _Hid()
+    f = _fight([values], hid=hid)
+    f.profile = profile
+    f._rotate(values)
+    assert hid.taps == ["1"] and f._pending_press is None
+    f._rotate(values)
+    assert hid.taps == ["1"], "pressed again before the swing"
