@@ -1403,6 +1403,20 @@ def test_self_defence_takes_no_bystander_while_something_attacks():
     assert f._acceptable(1161, values=hunting) is True, "a pull is not self-defence"
 
 
+def test_a_friendly_selection_is_never_the_fight():
+    """V293: up at the Spirit Healer beside a Rotting Dead, the level 2 warlock's selection
+    was the healer, in reach, and the fight took it for the unit it fought: every Shadow Bolt
+    was refused "bad targets" and it died every quarter of a minute (the hive, 28 September).
+    A friendly unit is never the fight: the one attacking is looked for."""
+    healer = {**ALIVE, "vitals.combat": True, "target.reaction": 5, "target.in_melee": True,
+              "target.attacking_me": False, "target.name_id": 77}
+    f = _fight([healer, healer])
+    looked = []
+    f.acquire = lambda name_id, **kw: looked.append(kw.get("defend")) or Fought.NO_TARGET
+    assert f.run(77) is Fought.NO_TARGET
+    assert looked == [True], "the healer, even by the name wanted, is not the fight"
+
+
 def test_a_refused_turn_stops_the_look_round():
     hid = _Hid()
     hid.hold = lambda key, seconds, **_: False

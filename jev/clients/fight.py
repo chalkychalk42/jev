@@ -661,16 +661,20 @@ class Fight:
         # the character, every fight spent trying to prove the bystander's plate (run
         # 20260924T064025-090aa8).
         bystander = (v.get("target.attacking_me") is False and v.get("target.in_melee") is False)
+        # Nor is a friendly unit ever the fight (V293), in reach or not: up at the Spirit
+        # Healer beside a Rotting Dead, a level 2 warlock's selection was the healer, and
+        # every Shadow Bolt was refused "bad targets" while the dead killed it (the hive).
+        friendly = isinstance(v.get("target.reaction"), int) and v["target.reaction"] >= 5
         engaged = (in_combat and v.get("target.has") is True
                    and v.get("target.hp") is not None and v["target.hp"] > DEAD_HP
-                   and not bystander)
+                   and not bystander and not friendly)
         # Already selected and alive, and the unit we came for: that is the fight. Whoever
         # selected it - the tutor, a previous look - re-acquiring could only swap it for
         # another of the same name, or for something else entirely.
         chosen = (not engaged and name_id is not None and v.get("target.has") is True
                   and v.get("target.name_id") == name_id
                   and isinstance(v.get("target.hp"), (int, float)) and v["target.hp"] > DEAD_HP
-                  and not (in_combat and bystander))
+                  and not (in_combat and bystander) and not friendly)
         if chosen:
             engaged = True
         if not engaged:
