@@ -151,9 +151,10 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         facts["role"] = "long_buff" if duration_s >= LONG_BUFF_S else "short_buff"
         facts["aura"] = aura
         facts["every_s"] = max(1.0, duration_s - BUFF_MARGIN_S)
-    elif (effect in (EFFECT_SCHOOL_DAMAGE, EFFECT_DUMMY, EFFECT_SCRIPT, EFFECT_POWER_DRAIN,
-                     *EFFECTS_WEAPON)
+    elif (effect in (EFFECT_SCHOOL_DAMAGE, EFFECT_DUMMY, EFFECT_SCRIPT, *EFFECTS_WEAPON)
           and target == TARGET_ENEMY and not creature_type):
+        # Not a power drain (Mana Tap, Drain Mana): it takes mana and hurts nothing, and
+        # against a unit without mana every press is refused (V288).
         facts["role"] = "strike"
     elif (effect == EFFECT_APPLY_AURA and target == TARGET_ENEMY and not creature_type
           and (EFFECT_SCHOOL_DAMAGE in (effect2, effect3) or aura == AURA_PERIODIC_TRIGGER)):

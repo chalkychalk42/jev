@@ -112,3 +112,16 @@ def test_an_aura_for_a_friend_is_cast_on_the_character():
     mage = for_class(8, HUMAN)
     frost_armor = next(a for a in mage.abilities if a.name == "Frost Armor")
     assert not frost_armor.self_cast
+
+
+def test_a_power_drain_on_the_bar_is_not_pressed():
+    """The bar keeps Mana Tap, and the fight's profile, read off the bar, has no row for it:
+    the spells' facts call it no strike either (V288)."""
+    from jev.world.combat import from_bar
+    from jev.world.training import spell
+
+    assert spell(MANA_TAP).role == "utility"
+    bar = {1: 6603, 2: 686, 3: 687, 4: MANA_TAP, 5: 28730, 11: None, 12: None}
+    profile = from_bar(bar, for_class(WARLOCK, BLOOD_ELF))
+    assert all(a.spell_id != MANA_TAP for a in profile.abilities)
+    assert any(a.name == "Shadow Bolt" for a in profile.by_role(Role.ATTACK))
