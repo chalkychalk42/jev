@@ -434,3 +434,27 @@ def test_a_death_in_a_camp_still_held_is_a_death_of_the_camp():
     assert all(d.camp(now + CAMP_S - 1.0) for d in memory.dangers), "the camp holds on"
     past = memory.died(0, (0.0, 300.0), now=now + 1.0, level=8)
     assert not past.camp(now + 1.0), "out of the camp, one death is a death spot"
+
+
+def test_a_death_camp_is_made_of_one_characters_own_deaths(tmp_path):
+    """Review of 28 Sep (V307): the hive keeps its ~240 bots' deaths in one route memory, and
+    two bots of a level dying apart within 100 yards and ten minutes made a camp that refused
+    every walk through it for an hour, a starting valley's one road among them. V307's
+    evidence is one character dying twice: a camp is made of one character's deaths, and
+    once made holds for every character it counts for. A file kept before the key loads."""
+    file = tmp_path / "memory.json"
+    file.write_text(json.dumps({"format": 1, "passages": [], "blocked": [], "dangers": [
+        {"map_id": 0, "x": 500.0, "y": 0.0, "at": 1000.0, "level": 8, "camp_until": None}]}))
+    memory = RouteMemory(file)
+    assert memory.dangers[0].who is None, "kept before the key"
+    first = memory.died(0, (0.0, 0.0), now=1000.0, level=8, who=11)
+    other = memory.died(0, (5.0, 0.0), now=1100.0, level=8, who=22)
+    assert not first.camp(1100.0) and not other.camp(1100.0), "two characters' deaths"
+    assert other is not first and other.who == 22, "each kept as its own"
+    old = memory.died(0, (505.0, 0.0), now=1100.0, level=8, who=11)
+    assert not old.camp(1100.0), "a death kept with no key is no character's"
+    again = memory.died(0, (8.0, 0.0), now=1200.0, level=8, who=11)
+    assert again.camp(1200.0) and first.camp(1200.0) and not other.camp(1200.0)
+    assert memory.camp_at(0, (0.0, 0.0), 1200.0, level=8) is not None, "held for all"
+    kept = RouteMemory(file)
+    assert sorted(d.who or 0 for d in kept.dangers) == [0, 11, 11, 22], "the key kept on disk"

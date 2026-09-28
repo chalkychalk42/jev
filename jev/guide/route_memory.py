@@ -83,7 +83,10 @@ SPOT_MIN_KEEP = 10.0
 # and after each of the first three got up 26 to 31 yards from it, and its walk to a repairer
 # passed within 6 yards of it. A death counts for the levels a danger cell's attacks do (`jev.learn.danger`, V161): the hive
 # keeps every character's deaths in one memory, and 348 on the Eastern Kingdoms at 12:23 were
-# kept from every walk alike.
+# kept from every walk alike. A camp is made of one character's own deaths (`Danger.who`), as
+# the evidence is: in the hive's shared memory two bots of a level dying apart within 100
+# yards and ten minutes, on a starting valley's one road, would refuse every walk along it
+# for an hour (review of 28 Sep). A camp made holds for every character it counts for.
 CAMP_YARDS = 100.0
 CAMP_WINDOW_S = 600.0
 CAMP_S = 3600.0
@@ -137,6 +140,9 @@ class Danger:
     at: float = 0.0     # when, as wall time; the latest death within `DANGER_MERGE_YARDS`
     level: int | None = None        # the character's then, when read (V307): None counts for all
     camp_until: float | None = None  # wall time a death camp holds to (V307); None: none
+    # Who died: the character's key (`char.key`), a camp being one character's own deaths.
+    # None, unread or kept before the key was: such a death makes a camp only with another.
+    who: int | None = None
 
     def camp(self, now: float) -> bool:
         """Is this death part of a death camp at `now` (V307)?"""
@@ -192,15 +198,16 @@ class RouteMemory:
             self.dangers = [Danger(**row) for row in document.get("dangers", ())]
 
     def died(self, map_id: int, spot: tuple[float, float], now: float | None = None,
-             level: int | None = None) -> Danger:
+             level: int | None = None, who: int | None = None) -> Danger:
         """Remember where the character died, at what level, for walks to keep clear of
         (`DANGER_S`); a death near another at about its level within `CAMP_WINDOW_S` makes
         both a death camp (V307), and one near a camp still held is a death of that camp,
-        which it holds for `CAMP_S` more. The death kept, a camp's when it made or fell in one."""
+        which it holds for `CAMP_S` more; each only among the deaths of the character `who`.
+        The death kept, a camp's when it made or fell in one."""
         now = time.time() if now is None else now
         self.dangers = [d for d in self.dangers if now - d.at < DANGER_S or d.camp(now)]
         near = [d for d in self.dangers if d.map_id == map_id and counts_for(d.level, level)
-                and math.dist((d.x, d.y), spot[:2]) <= CAMP_YARDS]
+                and d.who == who and math.dist((d.x, d.y), spot[:2]) <= CAMP_YARDS]
         recent = [d for d in near if now - d.at <= CAMP_WINDOW_S]
         # A camp's deaths may all be older than `CAMP_WINDOW_S` while it holds: a death there
         # is one of the camp's, or the character was never led out and walked back in
@@ -209,7 +216,7 @@ class RouteMemory:
         found = next((d for d in near if math.dist((d.x, d.y), spot[:2]) <= DANGER_MERGE_YARDS),
                      None)
         if found is None:
-            found = Danger(map_id, spot[0], spot[1], now, level)
+            found = Danger(map_id, spot[0], spot[1], now, level, who=who)
             self.dangers.append(found)
         else:
             found.at, found.level = now, level if level is not None else found.level

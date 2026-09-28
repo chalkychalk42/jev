@@ -1859,6 +1859,38 @@ def test_a_second_death_at_one_place_is_a_death_camp_left_once_up():
     assert b.policy_context.death_camp == (0, 48.0, 50.0)
 
 
+def test_a_death_is_kept_as_the_characters_and_a_camp_another_made_is_left_too():
+    """Review of 28 Sep (V307): a death camp is made of one character's own deaths, the hive
+    sharing one route memory among its bots (`char.key` is who died); a character dying in a
+    camp another made, that counts at its level, leaves it as well."""
+    from jev.clients.recover import Recovered
+    from jev.coach.policy import Context
+    from jev.guide.route_memory import RouteMemory
+
+    b = body()
+    b.client.route_memory = RouteMemory()
+    b.policy_context = Context()
+    b.recover = SimpleNamespace(run=lambda release_only: Recovered.RELEASED, detail="",
+                                graveyard=None)
+    reading = {"vitals.dead": True, "vitals.ghost": False, "char.level": 8, "char.key": 11}
+    b._read = lambda: reading
+    b._position = lambda: (0.5, 0.5)
+    b._release(None)
+    reading["char.key"] = 22
+    b._position = lambda: (0.5, 0.52)
+    b._release(None)
+    assert b.policy_context.death_camp is None, "two characters' deaths are no camp"
+    assert [d.who for d in b.client.route_memory.dangers] == [11, 22]
+    reading["char.key"] = 11
+    b._release(None)
+    assert b.policy_context.death_camp is not None, "the first character's second death"
+    b.policy_context = Context()
+    reading["char.key"] = 33
+    b._position = lambda: (0.5, 0.51)
+    b._release(None)
+    assert b.policy_context.death_camp is not None, "a camp another made, left as well"
+
+
 @pytest.mark.parametrize(("deaths", "graveyard_off", "expected"), [
     (1, 300.0, ["corpse"]),            # one death: a death spot, up by the body as before
     (2, 300.0, ["healer"]),            # a death camp: up at the Spirit Healer

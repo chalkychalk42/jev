@@ -2285,12 +2285,17 @@ class LiveBody:
         if (memory is not None and here is not None and values.get("vitals.dead") is True
                 and values.get("vitals.ghost") is not True):
             level = values.get("char.level")
+            level = level if isinstance(level, int) else None
+            who = values.get("char.key")
             at = map_to_world(*here, self.client.bounds)
-            death = memory.died(self.client.bounds.map_id, at,
-                                level=level if isinstance(level, int) else None)
-            if death.camp(time.time()):
+            death = memory.died(self.client.bounds.map_id, at, level=level,
+                                who=who if isinstance(who, int) else None)
+            # A camp is made of one character's deaths; one another made, that counts at this
+            # level, is left as well (review of 28 Sep).
+            if death.camp(time.time()) or memory.camp_at(self.client.bounds.map_id, at,
+                                                         time.time(), level) is not None:
                 self.policy_context.camp_left(self.client.bounds.map_id, at[0], at[1])
-                self.say("  a death camp: died again where it died before; left once up")
+                self.say("  died in a death camp: left once up")
         released = self.recover.run(release_only=True)
         self._keep_graveyard()
         return self._result(released, self.recover.detail)
