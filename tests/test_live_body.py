@@ -639,6 +639,74 @@ def test_a_body_no_corpse_run_gets_up_at_is_left_for_the_spirit_healer(tmp_path,
     assert later._unreached is None and later._graveyard is None, "up: nothing to keep"
 
 
+def test_a_ghost_twice_over_its_body_on_another_floor_finds_a_spirit_healer(monkeypatch):
+    """V301: two orcs drowned off Ratchet, their bodies on the seabed under the ghosts, and
+    released before V301 kept a graveyard: every session began as a ghost that had seen none.
+    Two corpse runs "over the body and still a ghost: on another floor than the body" (V289),
+    then the Spirit Healer, which refused at once, "no graveyard seen", and back to the body,
+    run after run (the hive, 28 Sep 12:17-12:19). The healer is where the server sends a
+    ghost of its side from where it stands: Ratchet's, the Barrens' own graveyard, not the
+    Valley of Trials', nearer in a straight line."""
+    import jev.clients.recover
+    from jev.clients.recover import RETURN_TO_LIFE
+    from jev.guide.coords import bounds_by_radio_id, map_to_world, world_to_map
+    from jev.guide.path import Path, PathStatus
+    from jev.world.state_v1 import Char, Pos, Vitals
+
+    monkeypatch.setattr(jev.clients.recover.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr("jev.run.body.hostiles.near", lambda *a, **k: [])
+    zones = bounds_by_radio_id("data/zones-tbc-243.json")
+    b = body()
+    b.client.bounds, b.client.coordinate_zones = zones[842], zones   # Durotar's map frame
+    b._side, b._revived_at = "horde", None
+    b._wait_out_sickness = lambda: 0.0
+    body_at = (0.37330690473368977, 0.8115300286572622)             # Bildo's, in the Barrens
+    world = {"at": body_at, "gossip": False, "modal": False, "alive": False}
+
+    def read():
+        if world["alive"]:
+            return {"vitals.dead": False, "vitals.ghost": False, "pos.zone_id": 6112}
+        values = {"vitals.dead": False, "vitals.ghost": True, "pos.zone_id": 6112,
+                  "pos.mx": world["at"][0], "pos.my": world["at"][1],
+                  "pos.corpse_mx": body_at[0], "pos.corpse_my": body_at[1]}
+        if world["gossip"]:
+            values["ui.gossip"] = True
+        if world["modal"]:
+            values.update({"ui.modal": True, "ui.advance_x": 0.5, "ui.advance_y": 0.3})
+        return values
+
+    b.client.read, b.client.position = read, lambda: world["at"]
+    # Under the ghost, the water at 0.1 over a seabed the planner reaches from no floor (V289).
+    b.client._ground = None
+    b.client.query = SimpleNamespace(
+        path=lambda m, start, end: Path(PathStatus.COMPLETE, ((start[0], start[1], 0.1),)))
+    b._body_height = lambda world_point: -65.2
+    floors, walked, talked, chosen = [], [], [], []
+    b.client._next_floor = lambda around=None: floors.append(around)
+    b._corpse_walk = lambda point: True                 # over the body: the walk arrives
+    b.recover.walk_to = lambda point: walked.append(point) or world.update(at=point) or True
+    b.recover.interact = lambda name: talked.append(name) or world.update(gossip=True) or "gossip"
+    b.recover.choose = lambda title: (chosen.append(title), world.update(gossip=False, modal=True),
+                                      SimpleNamespace(ok=True))[-1]
+    b.recover._press = lambda values: bool(values.get("ui.modal")) and not world.update(alive=True)
+    said = []
+    b.say = said.append
+    cx, cy = body_at
+    ghost = seen(char=Char(level=5, faction="horde"), vitals=Vitals(hp=0.0, dead=False, ghost=True),
+                 pos=Pos(mx=cx, my=cy, corpse_mx=cx, corpse_my=cy, zone="Barrens"))
+    for run in (1, 2):
+        assert b._recover(ghost).code == "still_ghost", f"corpse run {run}"
+        assert "  over the body and still a ghost: on another floor than the body" in said
+        assert len(floors) == run and not talked
+    assert b.recover.graveyard is None, "a session begun as a ghost saw no graveyard"
+    result = b._recover(ghost)
+    assert (result.code, talked, chosen) == ("alive", ["Spirit Healer"], [RETURN_TO_LIFE])
+    ratchet = map_to_world(*walked[0], b.client.bounds)
+    assert ratchet == pytest.approx((-1081.4, -3478.7), abs=0.5), "the Barrens' graveyard"
+    assert world_to_map(*ratchet, b.client.bounds) == pytest.approx(walked[0])
+    assert b._unreached is None, "up: nothing left unreached"
+
+
 def test_another_body_is_walked_to_afresh(monkeypatch):
     """V301: the count is the body's, not the character's: a new death is a new corpse run."""
     b = body()

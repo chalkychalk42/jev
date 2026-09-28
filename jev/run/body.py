@@ -50,7 +50,7 @@ from jev.run.client import FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_u
 from jev.run.evidence import event
 from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
-from jev.world import hostiles
+from jev.world import graveyards, hostiles
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
 from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import keep as gear_keep
@@ -2045,7 +2045,7 @@ class LiveBody:
             # A body the ghost could not get up at, run after run, is out of its reach: under
             # water it cannot dive into, or ground it cannot walk to (V301). The Spirit Healer
             # is the one way up left, camp or not; up there, and on.
-            up = self.recover.run_spirit_healer()
+            up = self._spirit_healer()
             if up is Recovered.ALIVE:
                 self._revived(None)
                 self.say(f"  up at the Spirit Healer: {unreached} corpse runs in a row did not "
@@ -2057,7 +2057,7 @@ class LiveBody:
             self.say(f"  the Spirit Healer is no way out: its graveyard lies in a camp, "
                      f"{healer_camp:.0f} yards from a hostile spawn's reach at best; up at the body")
         elif trapped or stronger:
-            up = self.recover.run_spirit_healer()
+            up = self._spirit_healer()
             if up is Recovered.ALIVE:
                 self._revived(None)
                 if self._home_near_work(state):
@@ -2075,7 +2075,7 @@ class LiveBody:
                      f"to get up {TRAP_RECLAIM_YARDS:.0f} yards short of it")
         elif camp:
             # Up there, and on: the hearthstone is kept for a wedge.
-            up = self.recover.run_spirit_healer()
+            up = self._spirit_healer()
             if up is Recovered.ALIVE:
                 self._revived(None)
                 self.say(f"  up at the Spirit Healer: the body lies in a camp, "
@@ -2154,6 +2154,29 @@ class LiveBody:
         if (self.recover.graveyard is None and kept is not None and bounds is not None
                 and kept[0] == bounds.map_id):
             self.recover.graveyard = world_to_map(kept[1], kept[2], bounds)
+
+    def _spirit_healer(self) -> Recovered:
+        """Up at the Spirit Healer where the ghost appeared (`Recover.run_spirit_healer`): seen,
+        kept (V301), or, for a ghost that has neither, the graveyard the server sends a ghost of
+        its side to from where it stands (`_server_graveyard`). With none the healer refuses at
+        once: the two orcs drowned off Ratchet had released before V301 kept a graveyard, and
+        each second corpse run over their bodies went to a healer that answered "no graveyard
+        seen" in half a millisecond, and back to the body (the hive, 28 Sep 12:17-12:19)."""
+        if self.recover.graveyard is None:
+            self.recover.graveyard = self._server_graveyard()
+        return self.recover.run_spirit_healer()
+
+    def _server_graveyard(self) -> tuple[float, float] | None:
+        """As a map point, the graveyard nearest the character that the server sends a ghost of
+        its side to, among those serving the zone it stands in (`jev.world.graveyards`)."""
+        bounds, here = self.client.bounds, self._position()
+        at = map_to_world(*here, bounds) if here is not None and bounds is not None else None
+        if at is None:
+            return None
+        zone = self._zone_here()
+        found = graveyards.nearest(bounds.map_id, at[0], at[1], side=self._side,
+                                   zone=zone.area_id if zone is not None else None)
+        return world_to_map(found[0], found[1], bounds) if found is not None else None
 
     def _over_body(self) -> None:
         """A ghost over its body on the map and still a ghost is on another floor than it
