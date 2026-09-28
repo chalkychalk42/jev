@@ -272,6 +272,13 @@ def _guide_on(args, graph, path: Path):
 ENTRY_LEVELS_ABOVE = 2
 
 
+def own_end(graph: Graph) -> int | None:
+    """The level a guide with none after it is outgrown at: one past its highest grind's
+    (V295). `None` with no grind in it."""
+    top = max((n.level[1] for n in graph.nodes if n.kind is StepKind.GRIND), default=None)
+    return None if top is None else top + 1
+
+
 def entry_level(guide: Path) -> int | None:
     """The level a guide starts at: two levels above its lowest grind's. Below its lowest
     grind's, its every grind is above the character (V262); at it, all its mobs are at or
@@ -307,9 +314,14 @@ def remembered(args, graph, key: int | None, level: int | None = None):
         if used is not graph:
             memory = playhead.load(used.graph_id, path)
         following = NEXT_GUIDE.get(graph.graph_id)
-        if not memory.finished or following is None or not following.exists():
+        last = following is None or not following.exists()
+        if not memory.finished:
             return path, memory, route, used
-        entry = entry_level(following)
+        # With no guide after it, a guide run out grinds its own until it is outgrown (V295):
+        # the generated draenei guide ends with Azuremyst's last quest, near level 7, and three
+        # of the hive's characters stood finished at levels 2 to 7, each session doing nothing;
+        # the 12-20 guide has none after it either.
+        entry = own_end(used) if last else entry_level(following)
         if level is not None and entry is not None and level < entry:
             # Run out early: V245 passed a dead chain by, and the level 9 mage's 1-12 route
             # ended at 9.85. In the 12-20 guide's Westfall its walk in met a level 14-15
@@ -329,10 +341,13 @@ def remembered(args, graph, key: int | None, level: int | None = None):
                              and level <= kept.level[1] + ENTRY_LEVELS_ABOVE))):
                 rib = kept
             if rib is not None:
-                print(f"guide {graph.graph_id} finished at level {level}, below "
-                      f"{following.name}'s {entry}: grinding {rib.id} until then")
+                below = f"its own end, {entry}" if last else f"{following.name}'s {entry}"
+                print(f"guide {graph.graph_id} finished at level {level}, below {below}: "
+                      f"grinding {rib.id} until then")
                 return path, replace(memory, step_id=rib.id, finished=True, rejoin_to=None,
                                      rib_until=None, entry_level=entry - 1), route, used
+        if last:
+            return path, memory, route, used
         # This character finished the guide: the next one takes over, its quests carried.
         print(f"guide {graph.graph_id} finished; continuing with {following.name}")
         args.graph = following

@@ -666,6 +666,30 @@ def test_a_guide_run_out_below_the_next_ones_first_level_grinds_until_then(
     assert "grinding" in capsys.readouterr().out
 
 
+def test_a_guide_with_none_after_it_grinds_its_own_until_it_is_outgrown(tmp_path, capsys):
+    """V295: the generated draenei guide ends with Azuremyst's last quest, near level 7, and
+    three of the hive's characters stood finished at levels 2 to 7, each session doing
+    nothing (28 September). The 12-20 guide has none after it either: run out at 17, it
+    grinds its own for the level, to one past its highest grind; outgrown, it is done."""
+    from jev.guide import playhead
+
+    path = tmp_path / "character.json"
+    playhead.save("alli_human_12_20.supported", "alli_human_12_20_102_patrolling_westfall_do",
+                  {54}, path, finished=True)
+    args = SimpleNamespace(playhead=path, route_mode="supported",
+                           graph=cli.ROOT / "content/tbc/ally_human_12_20.json")
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 17)
+    rib = graph.get(memory.step_id)
+    assert rib is not None and rib.kind is StepKind.GRIND and memory.finished
+    assert rib.level[0] <= 17 <= rib.level[1] + 1, "a grind for its level"
+    assert cli.own_end(graph) == 21 and memory.entry_level == 20
+    assert "grinding" in capsys.readouterr().out
+    playhead.save("alli_human_12_20.supported", "alli_human_12_20_102_patrolling_westfall_do",
+                  {54}, path, finished=True)
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 21)
+    assert memory.finished and memory.step_id == "alli_human_12_20_102_patrolling_westfall_do"
+
+
 def test_a_grind_still_suited_to_the_level_is_kept(tmp_path):
     """V272: at 11 the level 9-11 Prowlers' rib would have given way to the 11-12 one, eight
     Riverpaw Gnolls 5 to 9 yards apart, where every pull is two or three."""
