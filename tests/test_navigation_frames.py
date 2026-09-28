@@ -36,7 +36,8 @@ def client_in(region, raw, corpse=None):
                    "pos.corpse_my": corpse[1] if corpse else None})
     client = Client(hwnd=1, hid=Mock(), cap=Mock(), origin=(0, 0), size=(1600, 900))
     client.reading = lambda: RadioReading(values=values, ok=True, fault=SenseFault.NONE, seq=1)
-    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES)
+    # On foot alone: the query is the fake itself, which the tests below ask about (V305).
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, teleports=())
     return client, values
 
 
@@ -416,7 +417,7 @@ def test_walks_are_planned_clear_of_the_learned_danger_at_the_characters_level()
     danger = Mock()
     danger.hot.return_value = [(1.0, 2.0, 0.9)]
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES,
-                route_memory=RouteMemory(), danger=danger)
+                route_memory=RouteMemory(), danger=danger, teleports=())
     assert isinstance(client.query, ExposureQuery), "and round hostile spawns (V248)"
     assert isinstance(client.query.inner, DangerAvoidingQuery)
     assert client.query.inner.hot(0) == [(1.0, 2.0, 0.9)]
@@ -431,7 +432,8 @@ def test_a_walks_cost_is_planned_without_the_search_for_a_way_round():
     from jev.guide.route_memory import RouteMemory
 
     client, values = client_in("Elwynn", (0.5, 0.5))
-    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory())
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory(),
+                teleports=())
     asked = []
 
     class Estimate:
@@ -460,7 +462,8 @@ def test_the_planner_asks_for_the_spawns_that_attack_this_character(monkeypatch)
     client.read = lambda: reads.append(1) or read()
     monkeypatch.setattr("jev.run.client.hostiles.near",
                         lambda *a, **k: asked.append((a, k)) or [(1.0, 2.0, 3.0)])
-    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory())
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory(),
+                teleports=())
     for _ in range(20):
         assert client.query.hostile(0, 10.0, 20.0, 50.0) == [(1.0, 2.0, 3.0)]
     assert len(reads) == 1, "twenty points looked along, one read"

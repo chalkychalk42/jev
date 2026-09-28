@@ -40,7 +40,7 @@ from jev.guide.coords import (
 )
 from jev.guide.exposure import ExposureQuery
 from jev.guide.path import Path as Route
-from jev.guide.path import PathQuery, PathStatus, stop_short_of
+from jev.guide.path import PathQuery, PathStatus, TeleportQuery, load_teleports, stop_short_of
 from jev.guide.route_memory import AvoidingQuery, DangerAvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
@@ -150,6 +150,18 @@ def _route_height(points, xy: tuple[float, float]) -> float | None:
 RUN_YARDS_PER_S = 7.0
 WALK_SLACK = 2.0
 MAX_WALK_S = 540.0
+# Through a teleport (V305). Two reads this much farther apart than a run covers in the time
+# between them are a jump - a teleport, a hearthstone, a death - and a jump that lands within
+# `LANDED_YARDS` of a teleport's exit went through it. The Darnassus portal moves a character
+# 2,400 yards; the least a teleport the planner takes moves one is 10 (`JUMP_SEEN_YARDS`).
+JUMP_YARDS = 5.0
+LANDED_YARDS = 5.0
+# How long a character stands in a trigger for the server to move it: a client says it walked
+# in as it does, and the hive's bridge looks every 0.5 s.
+TELEPORT_WAIT_S = 5.0
+TELEPORT_LOOK_S = 0.25
+# Teleports gone through in one walk at most, each walk on planned from where the last landed.
+TELEPORTS_MAX = 2
 
 
 class NotRunning(RuntimeError):
@@ -214,6 +226,10 @@ class Client:
     _ground_pending: tuple | None = field(default=None, init=False)
     # Where a wedge with no way in known last moved the height, and the floors tried (V268).
     _floors_tried: tuple = field(default=(None, ()), init=False)
+    # The last read, as (monotonic, world x, world y), and the last jump between two reads, as
+    # (monotonic, from, to): where a teleport put the character (V305).
+    _seen: tuple | None = field(default=None, init=False)
+    _jump: tuple | None = field(default=None, init=False)
     # One window, one capture, one set of GDI handles. `WindowCapture` creates its device
     # context and bitmap once and reuses them, so two threads grabbing at the same time
     # tear each other's frame in half. The heartbeat samples on its own thread, so every
@@ -315,7 +331,50 @@ class Client:
         self._take_ground(v)
         self._track_height(v)
         self._note_trail(v)
+        self._note_jump(v)
         return (v["pos.mx"], v["pos.my"])
+
+    def _note_jump(self, values: dict) -> None:
+        """Keep the last jump between two reads (`JUMP_YARDS`), for a walk through a teleport
+        to know where it landed (V305)."""
+        if self.bounds is None:
+            return
+        now = time.monotonic()
+        x, y = map_to_world(values["pos.mx"], values["pos.my"], self.bounds)[:2]
+        seen, self._seen = self._seen, (now, x, y)
+        if (seen is not None
+                and math.dist(seen[1:], (x, y)) > JUMP_YARDS + RUN_YARDS_PER_S * (now - seen[0])):
+            self._jump = (now, seen[1:], (x, y))
+
+    def _landed(self, teleport, since: float) -> tuple[float, float, float] | None:
+        """Where `teleport` put the character, if a jump since `since` landed at its exit."""
+        jump = self._jump
+        if jump is None or jump[0] < since or math.dist(jump[2], teleport.exit[:2]) > LANDED_YARDS:
+            return None
+        return (*jump[2], teleport.exit[2])
+
+    def _through(self, teleport, since: float, walked_to) -> tuple[float, float, float] | None:
+        """Where the teleport put the character after its walk in: at once if it has, else
+        after standing where the walk ended - in the trigger - up to `TELEPORT_WAIT_S`.
+        `None` if it was not moved: a walk that ended outside does not wait."""
+        landed = self._landed(teleport, since)
+        if landed is not None or self.travel is None:
+            return landed
+        here = self.travel.position()
+        at = map_to_world(here[0], here[1], self.bounds) if here is not None else None
+        if at is None or teleport.room((*at, walked_to[2])) < 0:
+            return self._landed(teleport, since)
+        deadline = time.monotonic() + TELEPORT_WAIT_S
+        while landed is None and time.monotonic() < deadline:
+            time.sleep(TELEPORT_LOOK_S)
+            self.travel.position()                  # each read notes a jump
+            landed = self._landed(teleport, since)
+        return landed
+
+    def _on_foot(self):
+        """The planner without its teleports (V305): a re-plan and an early arrival's walk are
+        walked by the follower, which knows nothing of a jump."""
+        return self.query.inner if isinstance(self.query, TeleportQuery) else self.query
 
     def _next_floor(self, around: float | None = None) -> None:
         """Wedged indoors with no way in known, the floor the character is thought to be on
@@ -536,6 +595,12 @@ class Client:
         only where to click. Nine yards of blind walking finds a fence the mesh had
         already routed around. With `stop_short`, the walk ends that far before the point,
         along the route (a caster's stand-off, V167); already within it, nothing is walked.
+
+        A route through a teleport (V305) is walked into its trigger, and the position is
+        expected to jump to the exit: that is the walk going on, neither a stuck walk nor one
+        gone off its route. From where the character lands the rest is planned again and
+        walked, `TELEPORTS_MAX` teleports at most. A teleport that does not move it ends the
+        walk short of the destination, said so.
         """
         if self.travel is None or self.query is None or self.bounds is None:
             return False
@@ -543,103 +608,149 @@ class Client:
         if here is None:
             self._say("  cannot read a position")
             return False
-        hw = map_to_world(here[0], here[1], self.bounds)
-        path = self._plan(hw, world)
-        if stop_short > 0 and path.usable:
-            short = stop_short_of(path, stop_short)
-            if short is None:
-                self._say(f"  already within {stop_short:.0f} yards")
+        hw = began = map_to_world(here[0], here[1], self.bounds)
+        destination = world
+        path = self._plan(hw, destination)
+        teleports = 0
+        while True:
+            teleport = path.teleport if path.usable else None
+            if teleport is not None and teleports >= TELEPORTS_MAX:
+                self._say(f"  {teleports} teleports on this walk already: not through "
+                          f"areatrigger {teleport.trigger_id}")
+                return False
+            if teleport is not None:
+                path = path.walk_in()
+                world = path.points[-1]
+            elif stop_short > 0 and path.usable:
+                short = stop_short_of(path, stop_short)
+                if short is None:
+                    self._say(f"  already within {stop_short:.0f} yards")
+                    return True
+                path, world = short, short.points[-1]
+            # Why the way bends, when it keeps clear of something (`route_memory`): a death, a
+            # hot cell, a blocked spot; or goes through a teleport. The walk's trial reads it.
+            why = path.detail if (path.detail or "").startswith(("round ", "through ")) else ""
+            self._say(f"  {path.status.value}: {len(path.points)} waypoints, "
+                      f"{path.length_yards():.1f} yards" + (f", {why}" if why else ""))
+            if not path.usable:
+                return False
+            if self._height_near(hw) is None:
+                self._ground = (hw[0], hw[1], path.points[0][2])   # the plan's floor, tracked on
+            walk_s = max(timeout_s, min(MAX_WALK_S,
+                                        path.length_yards() / RUN_YARDS_PER_S * WALK_SLACK))
+
+            followed = [path]
+            self._following = tuple(path.points)
+            starts = [(hw[0], hw[1], path.points[0][2])]
+
+            def replan(here_map, world=world, followed=followed, starts=starts):
+                # The start's height is unknown (the radio paints map x/y). The destination's
+                # snapped a character on Northshire Abbey's stone ledge - off the navmesh on
+                # both sides of the back wall - onto the interior floor, and each re-plan was
+                # a straight line into the wall: measured 23 September, 27 stuck events 8.2
+                # yards from Marshal McBride. The route being followed got the character
+                # there, so its nearest point's height is the side of the wall it is on.
+                w = map_to_world(here_map[0], here_map[1], self.bounds)
+                z = self._height_near(w)
+                if z is None:
+                    z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
+                # ...unless a plan already started near here, on that floor, and it is blocked
+                # again: then another floor under the spot (`REPLAN_SPOT_YARDS`).
+                tried = [s[2] for s in starts if math.dist(s[:2], w[:2]) <= REPLAN_SPOT_YARDS]
+                if (any(abs(t - z) <= FLOOR_GAP for t in tried)
+                        and (self.read() or {}).get("pos.indoors") is True):
+                    others = [f for f in surfaces_under(self.query, self.bounds.map_id,
+                                                        w[0], w[1])
+                              if all(abs(f - t) > FLOOR_GAP for t in tried)
+                              and abs(f - z) <= FLOOR_SWITCH_YARDS]
+                    if others:
+                        # The floor below first: a walk blocked indoors has fallen or come
+                        # down more often than it has climbed, and above the top storey is a
+                        # roof. From the inn's upper floor the nearer surface was its roof, 4
+                        # yards up, and the plans from there ended 600 yards short (session
+                        # 209, V239).
+                        below = [f for f in others if f < z]
+                        z = max(below) if below else min(others, key=lambda f: abs(f - z))
+                        self._say(f"  blocked again here: planning from the floor at {z:.1f}")
+                starts.append((w[0], w[1], z))
+                planned = self._on_foot().path(self.bounds.map_id, (w[0], w[1], z), world)
+                if planned.usable:
+                    followed.append(planned)
+                    self._following = tuple(planned.points)
+                return planned
+
+            def reach(here_map, world=world):
+                # The planner's walk from here to the destination, which an early arrival must
+                # be near as well as the straight line (`travel.EARLY_WALK_YARDS`).
+                w = map_to_world(here_map[0], here_map[1], self.bounds)
+                z = self._height_near(w)
+                if z is None:
+                    return None
+                walk = self._on_foot().path(self.bounds.map_id, (w[0], w[1], z), world)
+                return walk.length_yards() if walk.status is PathStatus.COMPLETE else None
+
+            # Into a trigger the walk stops well inside it, and a jump to its exit ends it.
+            since = time.monotonic()
+            abort = None if teleport is None else (
+                lambda teleport=teleport, since=since: self._landed(teleport, since) is not None)
+            arrival = getattr(self.travel, "arrival_yards", None)
+            tighten = teleport is not None and isinstance(arrival, float | int)
+            if tighten:
+                self.travel.arrival_yards = max(1.0, min(arrival, teleport.room(world) / 2))
+            try:
+                result = self.travel.follow(path, timeout_s=walk_s, replan=replan,
+                                            memory=self.route_memory, reach=reach, abort=abort)
+                if result.outcome is Outcome.REFUSED:
+                    # Nothing was pressed because the window was not focused - a notification
+                    # panel, or anything else that takes the foreground. `Hid` is right to
+                    # refuse, and `Travel` is right to say so rather than call it stuck, but
+                    # somebody has to take the window back. A live run made three kills and
+                    # then spent twelve stations refused, walking nowhere.
+                    self._say("  the window lost focus; taking it back")
+                    if self.focused(FOCUS_QUICK_S):
+                        result = self.travel.follow(path, timeout_s=walk_s, replan=replan,
+                                                    memory=self.route_memory, reach=reach,
+                                                    abort=abort)
+                landed = None if teleport is None else self._through(teleport, since, world)
+            except BaseException:
+                self._following = ()             # a walk given up is no route to track against
+                raise
+            finally:
+                if tighten:
+                    self.travel.arrival_yards = arrival
+            if landed is None:
+                break
+            teleports += 1
+            hw = landed[:2]
+            self._ground = landed                 # where the teleport put it, height and all
+            self._say(f"  through areatrigger {teleport.trigger_id}: landed at "
+                      f"({landed[0]:.1f}, {landed[1]:.1f}), planning on from there")
+            world = destination
+            if math.dist(hw, destination[:2]) <= max(stop_short, arrival or 0.0):
+                self._following = ()
+                self.last_travel = result
+                self.last_distance = math.dist(began[:2], destination[:2])
+                self.last_headway = self.last_distance - math.dist(hw, destination[:2])
                 return True
-            path, world = short, short.points[-1]
-        # Why the way bends, when it keeps clear of something (`route_memory`): a death, a
-        # hot cell, a blocked spot. The walk's trial reads it here.
-        why = path.detail if (path.detail or "").startswith("round ") else ""
-        self._say(f"  {path.status.value}: {len(path.points)} waypoints, "
-                  f"{path.length_yards():.1f} yards" + (f", {why}" if why else ""))
-        if not path.usable:
-            return False
-        if self._height_near(hw) is None:
-            self._ground = (hw[0], hw[1], path.points[0][2])   # the plan's floor, tracked on
-        timeout_s = max(timeout_s, min(MAX_WALK_S,
-                                       path.length_yards() / RUN_YARDS_PER_S * WALK_SLACK))
-
-        followed = [path]
-        self._following = tuple(path.points)
-        starts = [(hw[0], hw[1], path.points[0][2])]
-
-        def replan(here_map):
-            # The start's height is unknown (the radio paints map x/y). The destination's
-            # snapped a character on Northshire Abbey's stone ledge - off the navmesh on
-            # both sides of the back wall - onto the interior floor, and each re-plan was
-            # a straight line into the wall: measured 23 September, 27 stuck events 8.2
-            # yards from Marshal McBride. The route being followed got the character
-            # there, so its nearest point's height is the side of the wall it is on.
-            w = map_to_world(here_map[0], here_map[1], self.bounds)
-            z = self._height_near(w)
-            if z is None:
-                z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
-            # ...unless a plan already started near here, on that floor, and it is blocked
-            # again: then another floor under the spot (`REPLAN_SPOT_YARDS`).
-            tried = [s[2] for s in starts if math.dist(s[:2], w[:2]) <= REPLAN_SPOT_YARDS]
-            if (any(abs(t - z) <= FLOOR_GAP for t in tried)
-                    and (self.read() or {}).get("pos.indoors") is True):
-                others = [f for f in surfaces_under(self.query, self.bounds.map_id, w[0], w[1])
-                          if all(abs(f - t) > FLOOR_GAP for t in tried)
-                          and abs(f - z) <= FLOOR_SWITCH_YARDS]
-                if others:
-                    # The floor below first: a walk blocked indoors has fallen or come down
-                    # more often than it has climbed, and above the top storey is a roof. From
-                    # the inn's upper floor the nearer surface was its roof, 4 yards up, and
-                    # the plans from there ended 600 yards short (session 209, V239).
-                    below = [f for f in others if f < z]
-                    z = max(below) if below else min(others, key=lambda f: abs(f - z))
-                    self._say(f"  blocked again here: planning from the floor at {z:.1f}")
-            starts.append((w[0], w[1], z))
-            planned = self.query.path(self.bounds.map_id, (w[0], w[1], z), world)
-            if planned.usable:
-                followed.append(planned)
-                self._following = tuple(planned.points)
-            return planned
-
-        def reach(here_map):
-            # The planner's walk from here to the destination, which an early arrival must
-            # be near as well as the straight line (`travel.EARLY_WALK_YARDS`).
-            w = map_to_world(here_map[0], here_map[1], self.bounds)
-            z = self._height_near(w)
-            if z is None:
-                return None
-            walk = self.query.path(self.bounds.map_id, (w[0], w[1], z), world)
-            return walk.length_yards() if walk.status is PathStatus.COMPLETE else None
-
-        try:
-            result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
-                                        memory=self.route_memory, reach=reach)
-            if result.outcome is Outcome.REFUSED:
-                # Nothing was pressed because the window was not focused - a notification
-                # panel, or anything else that takes the foreground. `Hid` is right to
-                # refuse, and `Travel` is right to say so rather than call it stuck, but
-                # somebody has to take the window back. A live run made three kills and
-                # then spent twelve stations refused, walking nowhere.
-                self._say("  the window lost focus; taking it back")
-                if self.focused(FOCUS_QUICK_S):
-                    result = self.travel.follow(path, timeout_s=timeout_s, replan=replan,
-                                                memory=self.route_memory, reach=reach)
-        except BaseException:
-            self._following = ()             # a walk given up is no route to track against
-            raise
+            path = self._plan(hw, destination)
         ended = self.travel.position()
         self._following = ()
-        arrived = result.outcome.value == "arrived"
+        arrived = result.outcome.value == "arrived" and teleport is None
         self.last_headway = None
-        self.last_distance = math.dist(hw[:2], world[:2])
-        if ended is not None:
+        self.last_distance = math.dist(began[:2], world[:2])
+        if teleport is not None:
+            # Walked into a teleport that did not move the character: short of where it was
+            # going, and no wedge for `LiveBody._note_wedged` to count.
+            self._say(f"  areatrigger {teleport.trigger_id} ({teleport.name}) did not move "
+                      "the character")
+        elif ended is not None:
             w = map_to_world(ended[0], ended[1], self.bounds)
             z = self._height_near(w)
             if z is None:
                 z = min(followed[-1].points, key=lambda p: math.dist(p[:2], w[:2]))[2]
             self._ground = (w[0], w[1], z)
             short = math.dist(w[:2], world[:2])
-            self.last_headway = math.dist(hw[:2], world[:2]) - short
+            self.last_headway = math.dist(began[:2], world[:2]) - short
             if arrived and short > ARRIVED_NEAR_YARDS:
                 arrived = False
                 self._say(f"  the route ended {short:.1f} yards from the destination")
@@ -852,11 +963,15 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                 arrival_yards: float, say: Callable[[str], None] | None = None,
                 zones: dict[int, ZoneBounds] | None = None,
                 zone_names: dict[int, str] | None = None,
-                route_memory=None, danger=None) -> Client:
-    """Give a client the ability to walk. Separate because reading needs no planner."""
+                route_memory=None, danger=None, teleports=None) -> Client:
+    """Give a client the ability to walk. Separate because reading needs no planner.
+
+    `teleports`, the ones a walk may go through (V305): by default the world database's
+    (`load_teleports`); none, planning on foot alone."""
     client.bounds = bounds
     client.route_memory = route_memory
-    zones_path = str(Path(__file__).resolve().parents[2] / "data/zones-tbc-243.json")
+    root = Path(__file__).resolve().parents[2]
+    zones_path = str(root / "data/zones-tbc-243.json")
     client.coordinate_zones = bounds_by_radio_id(zones_path) if zones is None else zones
     client.coordinate_names = names_by_radio_id(zones_path) if zone_names is None else zone_names
     # Every plan, first and re-plan, stays clear of the spots walking found blocked, of where
@@ -889,6 +1004,12 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                                  level=level if isinstance(level, int) else None)
         client.query = ExposureQuery(client.query, hostile,
                                      legs=AvoidingQuery(query, route_memory))
+    # Over them all, through a teleport where no walk gets there (V305): each of its two
+    # walks is planned by the layers below, clear of all they keep clear of.
+    if teleports is None:
+        teleports = load_teleports(str(root / "data/knowledge/tbc-243.sqlite"))
+    if teleports:
+        client.query = TeleportQuery(client.query, teleports)
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards,
