@@ -538,3 +538,32 @@ def test_an_unsolicited_answer_is_never_stale(tmp_path):
 
     assert rt.counters.teacher_stale == 0
     assert rt.counters.teacher_applied == 4
+
+
+def test_an_arms_end_records_the_levels_it_earned_and_whether_it_died(tmp_path):
+    """V313: each armed plan's reward, for the hive to score plan choices by - the levels
+    earned from its arming to its end (a level crossed counts whole), its seconds, and a
+    death. Rows without a level read say nothing of it."""
+    from jev.learn.episode import SkillOutcome
+    from jev.world.state_v1 import Char
+
+    graph = Graph.load(GRAPH)
+    node = graph.get(graph.entry)
+    rt = _runtime([_at(node, 0.0, char=Char(level=5, xp_pct=0.9))], tmp_path)
+    rt.tick()
+    assert rt.armed is not None and rt.armed.decision.skill is not None
+    rule = rt.armed.rule
+    rt.finish(SkillOutcome.SUCCEEDED, "done", state=_at(node, 30.0, char=Char(level=6, xp_pct=0.1)))
+    rt.tick(state=_at(node, 31.0, char=Char(level=6, xp_pct=0.1)))
+    dead = _at(node, 50.0, char=Char(level=6, xp_pct=0.1),
+               vitals=Vitals(hp=0.0, power=0.0, dead=True, ghost=False, combat=False))
+    rt.finish(SkillOutcome.PREEMPTED, "died", state=dead)
+    rt.tick(state=_at(node, 60.0))
+    rt.finish(SkillOutcome.UNKNOWN, "run ended", state=_at(node, 70.0))
+    rows = read(rt.recorder.dir / "skills.jsonl")
+    assert len(rows) == 3
+    first, second, third = rows
+    assert first["levels_gained"] == 0.2 and first["died"] is False and first["duration_s"] == 30.0
+    assert first["rule"] == rule and rule.startswith("guide.")
+    assert second["levels_gained"] == 0.0 and second["died"] is True
+    assert third["levels_gained"] is None, "no level read: nothing said of it"

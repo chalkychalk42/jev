@@ -171,6 +171,12 @@ class SkillResultRow:
     detail: str | None = None
     decision_id: str | None = None
     arm_id: str | None = None
+    # The arm's reward (V313): the coach's rule that armed it, the levels the character
+    # earned while it ran (`level + xp_pct` at its end less at its start), and whether it
+    # died. `None` in rows written before, or where the level was unread.
+    rule: str | None = None
+    levels_gained: float | None = None
+    died: bool | None = None
 
     @property
     def counts_toward_rate(self) -> bool:

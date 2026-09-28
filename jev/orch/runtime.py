@@ -117,6 +117,23 @@ class Armed:
     step_id: str | None = None
     situation_key: str = ""
     arm_id: str = ""
+    # Where the character stood when it was armed (V313): its progress in levels
+    # (`progress_levels`), the session's deaths so far, and whether it was dead already, so
+    # the arm's end can say what it earned and whether it died.
+    progress: float | None = None
+    deaths: int = 0
+    dead: bool = False
+
+
+def progress_levels(state: State) -> float | None:
+    """The character's progress in levels, the hive's reward's unit: its level and the share
+    of the next one earned (JevHive `docs/plans/reward.md`); `None` while either is unread."""
+    level, xp = state.char.level, state.char.xp_pct
+    return None if level is None or xp is None else level + float(xp)
+
+
+def _dead(state: State) -> bool:
+    return state.vitals.dead is True or state.vitals.ghost is True
 
 
 # A teacher is optional and is only ever asked, never awaited. `ask` enqueues and returns
@@ -340,7 +357,9 @@ class ClientRuntime:
                 self._arm_seq += 1
                 self.armed = Armed(plan, by, state.t, rule, decision_id,
                                    state.guide.step_id, state.situation_key or "",
-                                   f"{self.recorder.run_id}:{self.client_id}:arm{self._arm_seq}")
+                                   f"{self.recorder.run_id}:{self.client_id}:arm{self._arm_seq}",
+                                   progress=progress_levels(state),
+                                   deaths=self.counters.deaths, dead=_dead(state))
             elif decision_id:
                 # A new accepted teacher answer is a new decision even if its action
                 # agrees with the previous one; retain the body's original start time.
@@ -939,6 +958,12 @@ class ClientRuntime:
             return
         self.counters.skills_closed += 1
         self.counters.skills_succeeded += int(outcome is SkillOutcome.SUCCEEDED)
+        # The arm's reward, for the hive to score each plan choice by (V313): the levels it
+        # earned and whether it died, beside its seconds (`duration_s`).
+        end = progress_levels(state)
+        gained = (None if prev.progress is None or end is None
+                  else round(end - prev.progress, 5))
+        died = self.counters.deaths > prev.deaths or (_dead(state) and not prev.dead)
         self.recorder.skill_result(SkillResultRow(
             run_id=self.recorder.run_id, client_id=self.client_id, t=state.t,
             tick_id=self.recorder._tick_id, skill=prev.decision.skill, armed_by=prev.by,
@@ -946,6 +971,7 @@ class ClientRuntime:
             situation_key=prev.situation_key, step_id=prev.step_id, detail=detail,
             decision_id=prev.decision_id,
             arm_id=prev.arm_id or None,
+            rule=prev.rule, levels_gained=gained, died=died,
         ))
 
     def _record_unresolved(self, state: State, plan: scripted.Plan) -> str:
