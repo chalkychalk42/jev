@@ -191,3 +191,10 @@ def test_a_prior_counts_at_a_discount_up_to_a_cap_and_is_never_written(tmp_path)
     again = ChoiceMemory(tmp_path / "choices.json")
     assert again.arms("hunt.station").keys() == {"creature:1@10,20"}, "the prior is not saved"
     assert ChoiceMemory(tmp_path / "choices.json", prior=tmp_path / "none.json").lent == {}
+
+
+def test_a_prior_that_cannot_be_read_is_no_prior(tmp_path):
+    """V290: the prior is another's file; a broken one leaves the session its own memory."""
+    (tmp_path / "prior.json").write_text("{not json")
+    memory = ChoiceMemory(tmp_path / "choices.json", prior=tmp_path / "prior.json")
+    assert memory.lent == {} and memory.arms("hunt.station") == {}

@@ -80,12 +80,18 @@ class DangerMap:
             if document.get("format") == FORMAT:
                 self.cells = document.get("cells") or {}
                 self.counted = set(document.get("counted") or ())
-        # The prior's cells (`PRIOR_WEIGHT`), in the same format; never saved.
+        # The prior's cells (`PRIOR_WEIGHT`), in the same format; never saved. One that cannot
+        # be read is no prior: it is another's file, and the session plays without it.
         self.lent: dict[str, dict[str, list[float]]] = {}
         if prior is not None and Path(prior).exists():
-            document = json.loads(Path(prior).read_text(encoding="utf-8"))
-            if document.get("format") == FORMAT:
-                self.lent = document.get("cells") or {}
+            try:
+                document = json.loads(Path(prior).read_text(encoding="utf-8"))
+                if document.get("format") == FORMAT:
+                    self.lent = {cell: {str(level): [float(v) for v in row][:3]
+                                        for level, row in levels.items()}
+                                 for cell, levels in (document.get("cells") or {}).items()}
+            except (OSError, ValueError, TypeError, AttributeError):
+                self.lent = {}
 
     def add(self, cell: str, level: int, *, seconds: float = 0.0, attacks: int = 0,
             bad: int = 0) -> None:

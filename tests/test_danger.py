@@ -143,3 +143,11 @@ def test_a_prior_marks_a_camp_the_character_has_not_walked_at_a_discount(tmp_pat
     danger.save()
     assert DangerMap(tmp_path / "danger.json").cells == {field: {"5": [5.0, 0, 0]}}
     assert DangerMap(prior=tmp_path / "none.json").hot(0, 5) == []
+
+
+def test_a_danger_prior_that_cannot_be_read_is_no_prior(tmp_path):
+    """V290: a broken prior file leaves the character's own map as it is."""
+    (tmp_path / "prior.json").write_text('{"format": 1, "cells": {"0:1,1": {"5": ["x"]}}}')
+    assert DangerMap(prior=tmp_path / "prior.json").lent == {}
+    (tmp_path / "prior.json").write_text("[]")
+    assert DangerMap(prior=tmp_path / "prior.json").lent == {}

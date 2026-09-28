@@ -78,10 +78,14 @@ class ChoiceMemory:
         self.backfilled: set[str] = set()
         if self.file is not None and self.file.exists():
             self.points, self.backfilled = _read(self.file)
-        # The prior's records (`PRIOR_WEIGHT`), in the same format; never saved.
+        # The prior's records (`PRIOR_WEIGHT`), in the same format; never saved. One that
+        # cannot be read is no prior: it is another's file, and the session plays without it.
         self.lent: dict[str, dict[str, Arm]] = {}
         if prior is not None and Path(prior).exists():
-            self.lent, _ = _read(Path(prior))
+            try:
+                self.lent, _ = _read(Path(prior))
+            except (OSError, ValueError, TypeError, AttributeError):
+                self.lent = {}
 
     def arms(self, point: str, prefix: str = "", *, lent: bool = True) -> dict[str, Arm]:
         """A choice point's options whose key starts with `prefix`: the character's own
