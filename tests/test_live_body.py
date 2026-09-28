@@ -1835,6 +1835,62 @@ def test_where_the_character_died_is_remembered_for_walks_to_keep_clear_of(dead,
         assert (dangers[0].x, dangers[0].y) == (50.0, 50.0)
 
 
+def test_a_second_death_at_one_place_is_a_death_camp_left_once_up():
+    """V307: Merany, a level 8 mage, died four times in 8 minutes at one spot by Raven Hill's
+    graveyard, and after each of the first three got up by its body and walked to a repairer
+    the same way (the hive, 28 Sep 12:15-12:23). The death is kept at the level it happened
+    at, and a second within ten minutes at one place is a death camp, left once up."""
+    from jev.clients.recover import Recovered
+    from jev.coach.policy import Context
+    from jev.guide.route_memory import RouteMemory
+
+    b = body()
+    b.client.route_memory = RouteMemory()
+    b.policy_context = Context()
+    b._read = lambda: {"vitals.dead": True, "vitals.ghost": False, "char.level": 8}
+    b._position = lambda: (0.5, 0.5)
+    b.recover = SimpleNamespace(run=lambda release_only: Recovered.RELEASED, detail="",
+                                graveyard=None)
+    b._release(None)
+    assert b.policy_context.death_camp is None, "one death is no camp"
+    assert b.client.route_memory.dangers[0].level == 8
+    b._position = lambda: (0.5, 0.52)                  # two yards on
+    b._release(None)
+    assert b.policy_context.death_camp == (0, 48.0, 50.0)
+
+
+@pytest.mark.parametrize(("deaths", "graveyard_off", "expected"), [
+    (1, 300.0, ["corpse"]),            # one death: a death spot, up by the body as before
+    (2, 300.0, ["healer"]),            # a death camp: up at the Spirit Healer
+    (2, 40.0, ["corpse"]),             # its graveyard in the camp too: by the body
+])
+def test_a_body_in_a_death_camp_is_got_up_from_at_the_spirit_healer(monkeypatch, deaths,
+                                                                     graveyard_off, expected):
+    """V307: of 143 get-ups within 35 yards of the body's spot in the hive's runs begun
+    11:50-13:08 on 28 Sep, 80 died again before the next; the Spirit Healer's graveyard is no
+    way out when it lies in the death camp too, as Raven Hill's did, 43 yards from Merany's."""
+    from jev.guide.coords import world_to_map
+    from jev.guide.route_memory import RouteMemory
+
+    b = body()
+    b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
+    b._side = "alliance"
+    b._revived_at = None
+    b._wait_out_sickness = lambda: 0.0
+    monkeypatch.setattr("jev.run.body.hostiles.near", lambda *a, **k: [])
+    corpse = (-9000.0, 100.0)
+    b.client.route_memory = RouteMemory()
+    for i in range(deaths):
+        b.client.route_memory.died(0, (corpse[0] + 3.0 * i, corpse[1]))
+    b.recover.graveyard = world_to_map(corpse[0] - graveyard_off, corpse[1], b.client.bounds)
+    calls = []
+    b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
+    b.recover.run = lambda corpse_point: calls.append("corpse") or Recovered.ALIVE
+    b._corpse_walk = lambda point: True
+    assert b._recover(ghost_at(corpse, b.client.bounds)).code == "alive"
+    assert calls == expected
+
+
 def test_a_caster_conjures_what_it_is_short_of_after_a_meal(monkeypatch):
     """V166: fewer than four Conjured Water in the bags, three casts; enough, none; and a
     paladin, with no conjure on its bar, never takes a census."""

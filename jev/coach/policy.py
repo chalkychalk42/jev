@@ -306,6 +306,20 @@ class Context:
             return False
         return self.discoverable(state)
 
+    # A death that made or fell in a death camp (V307), as (map, world x, world y): the runtime
+    # leaves it for the grind of the character's level once it is up (`ClientRuntime`), and no
+    # service is armed until the walk there is made (`leaving_until`, wall time). After each of
+    # Merany's first three deaths at one spot by Raven Hill's graveyard, its walk to a repairer
+    # went back through it (the hive, 28 Sep 12:15-12:23).
+    death_camp: tuple[int, float, float] | None = None
+    leaving_until: float | None = None
+
+    def camp_left(self, map_id: int, x: float, y: float) -> None:
+        self.death_camp = (map_id, x, y)
+
+    def leaving(self, now: float) -> bool:
+        return self.leaving_until is not None and now < self.leaving_until
+
 
 def _d(intent: Intent, skill: str | None, why: str, confidence: float,
        abort_if: tuple[str, ...] = ("dead",), goal: str = "", **params) -> Decision:
@@ -401,6 +415,9 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
             plans.append(plan)
 
     if state.vitals.combat is not False:
+        return plans
+    # Out of a death camp first: the walk to a service went back through it (V307).
+    if context is not None and context.leaving(state.t):
         return plans
     b = state.bags
     can_repair = context is None or context.can_repair(b.money_copper, state.guide.step_id)

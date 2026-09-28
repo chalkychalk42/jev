@@ -258,3 +258,129 @@ def test_walks_keep_clear_of_where_the_character_keeps_being_attacked():
         "a walk to the camp goes there"
     assert len(query.path(1, (0.0, 0.0, 60.0), (200.0, 0.0, 60.0)).points) == 2
     assert asked == [0, 0, 1]
+
+
+def test_a_second_death_near_the_first_within_ten_minutes_makes_a_death_camp(tmp_path):
+    """V307: Merany, a level 8 mage, died four times in 8 minutes at one spot by Raven Hill's
+    graveyard (the hive, 28 Sep 12:15-12:23), and in the hive's runs begun 11:50-13:08, 172
+    of 406 deaths came within 100 yards of the same character's death in the ten minutes
+    before. A second death so near makes the place a death camp for its level for an hour."""
+    from jev.guide.route_memory import CAMP_S, CAMP_WINDOW_S, CAMP_YARDS
+
+    memory = RouteMemory(tmp_path / "memory.json")
+    first = memory.died(0, (0.0, 0.0), now=1000.0, level=8)
+    assert not first.camp(1000.0), "one death is a death spot"
+    second = memory.died(0, (CAMP_YARDS - 5.0, 0.0), now=1000.0 + CAMP_WINDOW_S - 5.0, level=9)
+    now = 1000.0 + CAMP_WINDOW_S
+    assert second.camp(now) and first.camp(now), "both deaths are the camp"
+    assert memory.camp_at(0, (-20.0, 0.0), now, level=8) is first
+    assert memory.camp_at(0, (500.0, 0.0), now, level=8) is None, "out of the camp"
+    assert memory.camp_at(0, (-20.0, 0.0), now, level=20) is None, "not a level 20's camp"
+    assert memory.camp_at(0, (-20.0, 0.0), now + CAMP_S, level=8) is None, "an hour"
+    again = RouteMemory(tmp_path / "memory.json")
+    assert again.camp_at(0, (-20.0, 0.0), now, level=8) is not None, "kept on disk"
+
+    apart = RouteMemory()
+    apart.died(0, (0.0, 0.0), now=1000.0, level=8)
+    late = apart.died(0, (10.0, 0.0), now=1000.0 + CAMP_WINDOW_S + 5.0, level=8)
+    far = apart.died(0, (300.0, 0.0), now=1100.0, level=8)
+    other = apart.died(0, (40.0, 0.0), now=1200.0, level=20)
+    assert not late.camp(1700.0) and not far.camp(1700.0) and not other.camp(1700.0), \
+        "too late, too far, another level"
+
+
+def test_a_death_counts_for_about_the_level_it_happened_at():
+    """V307, V161: the hive keeps every character's deaths in one memory, 348 on the Eastern
+    Kingdoms at 12:23 on 28 Sep, and each was kept from every walk at every level."""
+    from jev.guide.route_memory import DANGER_YARDS, DangerAvoidingQuery, near_route
+
+    memory = RouteMemory()
+    memory.died(0, (50.0, 0.0), now=1000.0, level=3)
+    memory.died(0, (150.0, 0.0), now=1000.0)                # a death at no level read
+    level = [3]
+    query = DangerAvoidingQuery(_OpenGround(), memory, clock=lambda: 1100.0,
+                                level=lambda: level[0])
+    start, end = (0.0, 0.0, 60.0), (200.0, 0.0, 60.0)
+    assert not near_route(query.path(0, start, end), 50.0, 0.0, DANGER_YARDS)
+    level[0] = 12
+    route = query.path(0, start, end)
+    assert near_route(route, 50.0, 0.0, DANGER_YARDS), "a level 3's death, walked by at 12"
+    assert not near_route(route, 150.0, 0.0, DANGER_YARDS), "one at no level counts for all"
+    assert [d.level for d in memory.dangers_on(0, 1100.0, level=4)] == [3, None]
+    assert [d.level for d in memory.dangers_on(0, 1100.0, level=12)] == [None]
+
+
+class _Corridor(_OpenGround):
+    """A corridor along the x axis: nothing off its line."""
+
+    def path(self, map_id, start, end):
+        from jev.guide.path import Path, PathStatus
+
+        self.asked += 1
+        if abs(end[1]) > 1.0 or abs(start[1]) > 1.0:
+            return Path(PathStatus.NOPATH, ())
+        return Path(PathStatus.COMPLETE, (tuple(start), tuple(end)))
+
+
+class _FarRound(_OpenGround):
+    """Open ground along the x axis; any leg off it goes round a ridge 500 yards out."""
+
+    def path(self, map_id, start, end):
+        from jev.guide.path import Path, PathStatus
+
+        self.asked += 1
+        if abs(start[1]) < 1.0 and abs(end[1]) < 1.0:
+            return Path(PathStatus.COMPLETE, (tuple(start), tuple(end)))
+        side = 500.0 if (end[1] + start[1]) >= 0 else -500.0
+        return Path(PathStatus.COMPLETE, (tuple(start), (start[0], side, 60.0),
+                                          (end[0], side, 60.0), tuple(end)))
+
+
+def test_a_walk_keeps_a_death_camp_clear_however_long_the_way_round_or_is_refused():
+    """V307: a death camp is kept 100 yards off by every walk not begun or ended in it, by a
+    way round of any length where a death spot's may be twice the way through
+    (`DANGER_DETOUR`), and a walk with none is refused: the planner given a death camp on its
+    way returns a way round or no way."""
+    from jev.guide.path import PathStatus
+    from jev.guide.route_memory import CAMP_YARDS, DANGER_DETOUR, DangerAvoidingQuery, near_route
+
+    start, end = (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0)
+    spot = RouteMemory()
+    spot.died(0, (100.0, 0.0), now=1000.0, level=8)
+    through = DangerAvoidingQuery(_FarRound(), spot, clock=lambda: 1200.0, level=lambda: 8)
+    assert len(through.path(0, start, end).points) == 2, "a death spot's way round is too long"
+
+    camp = RouteMemory()
+    camp.died(0, (100.0, 0.0), now=1000.0, level=8)
+    camp.died(0, (100.0, 4.0), now=1100.0, level=8)
+    query = DangerAvoidingQuery(_FarRound(), camp, clock=lambda: 1200.0, level=lambda: 8)
+    route = query.path(0, start, end)
+    assert route.usable and route.detail == "round a death camp"
+    assert not near_route(route, 100.0, 0.0, CAMP_YARDS)
+    assert route.length_yards() > 600.0 * DANGER_DETOUR, "however long the way round"
+
+    blocked = DangerAvoidingQuery(_Corridor(), camp, clock=lambda: 1200.0, level=lambda: 8)
+    refused = blocked.path(0, start, end)
+    assert refused.status is PathStatus.NOPATH and not refused.usable
+    assert blocked.path(0, (90.0, 0.0, 60.0), end).usable, "a walk begun in the camp leaves it"
+    assert blocked.path(0, start, (100.0, 0.0, 60.0)).usable, "a walk to the body goes there"
+    later = DangerAvoidingQuery(_Corridor(), camp, clock=lambda: 1100.0 + 3601.0,
+                                level=lambda: 8)
+    assert later.path(0, start, end).usable, "an hour on, a death spot walked by as before"
+    ghost = DangerAvoidingQuery(_Corridor(), camp, clock=lambda: 1200.0, level=lambda: 8,
+                                ghost=lambda: True)
+    assert len(ghost.path(0, start, end).points) == 2, "a ghost passes it unharmed"
+
+
+def test_the_keeper_names_what_a_route_passes_of_what_the_layer_keeps_clear_of():
+    """V307: for the exposure layer over it, whose ways round must not go back through."""
+    from jev.guide.route_memory import DangerAvoidingQuery
+
+    memory = RouteMemory()
+    memory.died(0, (100.0, 0.0), now=1000.0)
+    query = DangerAvoidingQuery(_OpenGround(), memory, clock=lambda: 1100.0)
+    passed = query.keeper(0, (0.0, 0.0, 60.0), (200.0, 0.0, 60.0))
+    assert passed(((0.0, 0.0, 60.0), (200.0, 0.0, 60.0))) == {(100.0, 0.0)}
+    assert passed(((0.0, 0.0, 60.0), (100.0, 80.0, 60.0), (200.0, 0.0, 60.0))) == set()
+    at_the_body = query.keeper(0, (0.0, 0.0, 60.0), (100.0, 0.0, 60.0))
+    assert at_the_body(((0.0, 0.0, 60.0), (100.0, 0.0, 60.0))) == set(), "the walk's own end"

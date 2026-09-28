@@ -885,3 +885,48 @@ def test_a_finished_guides_grind_is_resumed_and_finishes_it(tmp_path, flag, leve
         rt.tick(choose=False)
     assert rt.tracker.step_id == expected_step
     assert rt.finished is finished
+
+
+def leave_graph():
+    """A step, a grind beside the death camp by (5, 0) and one 500 yards from it."""
+    base = dict(zone="zone", zone_id=1, map_id=0)
+    return Graph(graph_id="g", faction="alliance", entry="step", nodes=(
+        Node(id="step", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("after",), pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=2, pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="camp_rib", kind=StepKind.GRIND, level=(1, 10), pos=(0.51, 0.5),
+             world=(40.0, 0.0, 0.0), skills=("GRIND_UNTIL",), **base),
+        Node(id="far_rib", kind=StepKind.GRIND, level=(1, 10), pos=(0.9, 0.9),
+             world=(400.0, 300.0, 0.0), skills=("GRIND_UNTIL",), **base),
+    ))
+
+
+def test_after_a_death_in_a_death_camp_the_grind_of_its_level_comes_before_any_service(
+        tmp_path):
+    """V307: after each of Merany's first three deaths at one spot by Raven Hill's graveyard
+    came a meal and its walk to a repairer, back through the spot (the hive, 28 Sep
+    12:15-12:23). Up again, the character walks to the grind of its level out of the camp,
+    the step it was on kept for after, and no service is armed until it is there."""
+    from jev.world.state_v1 import Char
+
+    broken = dict(char=Char(level=5), bags=Bags(free=10, durability_min=0.0, money_copper=500))
+    states = [seen(0, **broken),
+              seen(1, vitals=Vitals(hp=0, power=0, dead=True, ghost=False, combat=False),
+                   **broken),
+              seen(2, **broken), seen(3, **broken),
+              seen(4, pos=Pos(zone="zone", mx=0.9, my=0.9), **broken)]
+    rt = ClientRuntime("c", leave_graph(), ScriptedSource(states), Recorder(tmp_path))
+    rt.tick(choose=False)
+    rt.policy_context.camp_left(0, 5.0, 0.0)              # the body, at the release
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "step", "not while dead"
+    rt.tick()
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("far_rib", "step")
+    assert rt.armed.decision.skill == "GRIND_UNTIL", "the grind before the repair"
+    rt.tick()
+    assert rt.armed.decision.skill == "GRIND_UNTIL"
+    rt.tick()                                               # there: the leave is made
+    assert rt.tracker.step_id == "far_rib"
+    assert rt.armed.decision.skill == "VENDOR_REPAIR", "then the services, as before"
+    assert rt.policy_context.death_camp is None and not rt.policy_context.leaving(4)

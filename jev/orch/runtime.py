@@ -35,8 +35,9 @@ from jev.coach import policy as scripted
 from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
-from jev.guide.graph import Graph
+from jev.guide.graph import Graph, rib_for
 from jev.guide.objectives import progress
+from jev.guide.route_memory import CAMP_YARDS
 from jev.guide.tracker import SHORT_RIB_S, Event, Tracker
 from jev.guide.tracker import Verdict as TrackVerdict
 from jev.learn.episode import (
@@ -74,6 +75,9 @@ DETOUR = "detour:"
 # How far an outgrown guide goes for a hand-in, in map fractions: a quarter of the zone's map,
 # 580 to 870 yards across Elwynn. A hand-in on the way out, not a trip back (V162).
 OUTGROWN_REACH = 0.25
+# The longest a leave from a death camp holds services back (V307): the walk to the grind of
+# the character's level, some 4,000 yards at a run.
+LEAVE_S = 600.0
 
 
 @dataclass
@@ -173,6 +177,8 @@ class ClientRuntime:
     finished: bool = field(default=False, init=False)
     # Steps that have failed into a rib and been retried once after it.
     _retried: set[str] = field(default_factory=set, init=False)
+    # The grind a leave from a death camp walks to, while services wait for it (V307).
+    _leaving: str | None = field(default=None, init=False)
 
     counters: Counters = field(default_factory=Counters)
     armed: Armed | None = None
@@ -271,6 +277,8 @@ class ClientRuntime:
             if beyond is not None:
                 self.tracker.enter(beyond, state)
                 self._tracker_event = "rejoin_or_skip"
+        if self._leave_camp(state):
+            self._tracker_event = "rejoin_or_skip"
         # Every tick that stays on the step, arriving included: standing at the quest giver
         # re-reports ARRIVED, never NONE.
         if (not self.finished and self.tracker.step_id == before
@@ -375,6 +383,40 @@ class ClientRuntime:
         if self.on_progress is not None:
             self._progress()
         return self.tracker.step_id != before
+
+    def _leave_camp(self, state: State) -> bool:
+        """After a death that made or fell in a death camp (`Context.death_camp`, V307), once
+        the character is up and out of a fight: the grind of its level (`rib_for`, as V295's
+        own grind) whose place lies out of the camp, the nearest, rejoining where the step was
+        going, and no service armed until it is there (`Context.leaving`). After each of
+        Merany's first three deaths at one spot by Raven Hill's graveyard came a meal and then
+        its walk to a repairer, back through the spot (the hive, 28 Sep 12:15-12:23). `True`
+        when the playhead moved."""
+        context = self.policy_context
+        if self._leaving is not None and (self.tracker.step_id != self._leaving
+                                          or self.tracker.memory.arrived
+                                          or not context.leaving(state.t)):
+            context.leaving_until, self._leaving = None, None
+        camp, v = context.death_camp, state.vitals
+        if (camp is None or self.finished or v.dead is not False or v.ghost is not False
+                or v.combat is True):
+            return False
+        context.death_camp = None
+        ribs = [r for r in self.graph.ribs() if r.world is not None and r.map_id == camp[0]
+                and math.dist(r.world[:2], camp[1:]) > CAMP_YARDS]
+        here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
+                and state.pos.my is not None else None)
+        rib = rib_for(ribs, state.char.level, near=here)
+        if rib is None:
+            return False
+        context.leaving_until, self._leaving = state.t + LEAVE_S, rib.id
+        if rib.id == self.tracker.step_id:
+            return False
+        node, memory = self.graph.get(self.tracker.step_id), self.tracker.memory
+        back = (memory.rejoin_to if memory.rejoin_to or node is None or node.kind is StepKind.GRIND
+                else self.tracker.step_id)
+        self.tracker.enter(rib.id, state, rejoin_to=back)
+        return True
 
     def _past_abandoned_quest(self, verdict) -> str | None:
         """The first step after the current quest's, when the step failed on its quest's
