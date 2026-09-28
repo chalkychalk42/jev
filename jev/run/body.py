@@ -438,7 +438,7 @@ class LiveBody:
             return f"body cannot execute intent {decision.intent}"
         kinds = {"ACCEPT_QUEST": {StepKind.QUEST_ACCEPT},
                  "TURNIN_QUEST": {StepKind.QUEST_TURNIN},
-                 "GRIND_UNTIL": {StepKind.GRIND, StepKind.QUEST_OBJECTIVE}}
+                 "GRIND_UNTIL": {StepKind.GRIND, StepKind.QUEST_OBJECTIVE, StepKind.DING_GATE}}
         if decision.skill in kinds and (node is None or node.kind not in kinds[decision.skill]):
             return f"{decision.skill} does not match the armed guide step"
         expected = {"zone": node.zone, "step_id": node.id} if node else {}
@@ -464,7 +464,8 @@ class LiveBody:
             if key == "profile" and decision.skill == "COMBAT_PROFILE" and value in ("default", "panic"):
                 continue  # Fight's measured health branch owns panic within the rotation.
             if (key == "until_level" and decision.skill == "GRIND_UNTIL" and node
-                    and node.kind is StepKind.GRIND and type(value) is int and value > 0):
+                    and node.kind in (StepKind.GRIND, StepKind.DING_GATE)
+                    and type(value) is int and value > 0):
                 continue
             if key not in expected or value != expected[key]:
                 return f"unsupported {decision.skill} parameter: {key}={value!r}"
@@ -708,7 +709,7 @@ class LiveBody:
     def _hunt(self, state) -> Result:
         node = self._node()
         if (node is None or node.world is None
-                or node.kind not in (StepKind.QUEST_OBJECTIVE, StepKind.GRIND)
+                or node.kind not in (StepKind.QUEST_OBJECTIVE, StepKind.GRIND, StepKind.DING_GATE)
                 or node.map_id != self.client.bounds.map_id):
             return Result(SkillOutcome.ABORTED, "no supported objective destination", "unsupported")
         destination = node
@@ -748,7 +749,7 @@ class LiveBody:
         if (destination.target_kind != "creature" or not destination.target_name
                 or destination.world is None or destination.map_id != self.client.bounds.map_id):
             return Result(SkillOutcome.ABORTED, "objective needs a supported creature target; objects need their own locator", "unsupported")
-        if node.kind is StepKind.GRIND:
+        if node.kind in (StepKind.GRIND, StepKind.DING_GATE):
             target = self.arm.decision.params.get("until_level")
             if not isinstance(target, int):
                 return Result(SkillOutcome.ABORTED, "grind arm has no level predicate", "unsupported")
@@ -840,6 +841,14 @@ class LiveBody:
         # is not a choice to wait on.
         self.fight.choices = Choice(memory, "fight.heal_below", log=log, rng=self.choice_rng,
                                     judge=self.judge, judged=frozenset({"all"}))
+
+    def here_world(self) -> tuple[float, float] | None:
+        """Where the character stands, in world yards: how far Jev is told each station is
+        (`jev.coach.judge.Judge`)."""
+        state = self.client.state()
+        if state is None or state.pos.mx is None or state.pos.my is None:
+            return None
+        return tuple(map_to_world(state.pos.mx, state.pos.my, self.client.bounds)[:2])
 
     def _stations(self, point: str, objective: str):
         """A chooser of stations for `point`, learning under `objective`; `None` without a

@@ -225,3 +225,9 @@ def test_jev_picks_where_a_lap_begins_once_a_minute(tmp_path):
     chooser.order(stations)
     assert len(model.asked) == 1                 # ten seconds on: the draw alone
     assert chooser.order(stations)[0] == stations[2] and len(model.asked) == 2
+
+
+def test_jev_is_told_where_the_character_stands_by_the_body():
+    judge = Judge(FakeModel(), where=lambda: (10.0, 20.0))
+    assert judge.origin() == (10.0, 20.0)
+    assert Judge(FakeModel()).origin() is None

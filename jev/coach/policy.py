@@ -494,7 +494,7 @@ def _guide(state: State, node: Node | None) -> Plan | None:
     skill = next((s for s in node.skills if s in NAMES and s != "TRAVEL_TO"), None)
     if skill is None and "TRAVEL_TO" in node.skills:
         skill = "TRAVEL_TO"
-    if node.kind in (StepKind.QUEST_OBJECTIVE, StepKind.GRIND):
+    if node.kind in (StepKind.QUEST_OBJECTIVE, StepKind.GRIND, StepKind.DING_GATE):
         skill = "GRIND_UNTIL"
     if skill is None:
         return None

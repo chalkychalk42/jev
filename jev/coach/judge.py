@@ -103,8 +103,10 @@ class Judge:
     learned choices; `state` reads the character now (for `pick`, whose callers hold none)."""
 
     def __init__(self, model: CoachModel, *, state: Callable[[], State | None] | None = None,
+                 where: Callable[[], tuple[float, float] | None] | None = None,
                  record=None, clock: Callable[[], float] = time.monotonic, say=None):
         self.model, self.state, self.clock, self.say = model, state, clock, say
+        self.where = where                    # the character's world position, in yards
         self.record = record                  # where this character's calls are written
         self._last: tuple[tuple, float, str] | None = None
         self.asked = self.taken = 0
@@ -133,6 +135,8 @@ class Judge:
 
     def origin(self) -> tuple[float, float] | None:
         """Where the character stands, in world yards: how far each station is from it."""
+        if self.where is not None:
+            return self.where()
         state = self.state() if self.state is not None else None
         world = state.pos.world if state is not None else None
         return (world[0], world[1]) if world else None

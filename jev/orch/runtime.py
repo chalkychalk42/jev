@@ -684,6 +684,14 @@ class ClientRuntime:
             floor = scripted.Plan(floor.decision.model_copy(update={"params": {
                 **floor.decision.params, "until_level": entered + 1 if entered is not None else node.level[1],
             }}), floor.confident, floor.rule)
+        # A level gate on the spine grinds where the guide says until its level (V297): a
+        # route written by levelling players waits for a level before quests that need it,
+        # where a quest not yet offered fails over to a loop once and is passed by.
+        if (node is not None and node.kind is StepKind.DING_GATE
+                and floor.decision.skill == "GRIND_UNTIL"):
+            floor = scripted.Plan(floor.decision.model_copy(update={"params": {
+                **floor.decision.params, "until_level": node.level[1]}}),
+                floor.confident, floor.rule)
         if not state.sense.addon_ok and (state.sense.vision_conf or 0.0) < 0.5:
             floor = scripted.Plan(Decision(goal="wait:blind", intent=Intent.WAIT, skill=None,
                                            abort_if=["senses_restored"], confidence=0,

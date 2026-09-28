@@ -293,6 +293,26 @@ def entry_level(guide: Path) -> int | None:
     return None if lowest is None else lowest + ENTRY_LEVELS_ABOVE
 
 
+def level_start(graph: Graph, level: int | None) -> str | None:
+    """Where a character with no place in `graph` begins (V297): the first quest taken on its
+    spine whose band reaches the character's level, or a level gate above it. A level 9 orc
+    given a route from level 1 would otherwise walk back to the Valley of Trials for quests
+    grey to it; `None` (the entry, as before) when nothing is below the character."""
+    if level is None:
+        return None
+    by_id, cursor, seen = graph.by_id(), graph.entry, set()
+    while cursor is not None and cursor not in seen:
+        seen.add(cursor)
+        node = by_id.get(cursor)
+        if node is None:
+            return None
+        if ((node.kind is StepKind.QUEST_ACCEPT or node.kind is StepKind.DING_GATE)
+                and node.level[1] > level - (0 if node.kind is StepKind.DING_GATE else 1)):
+            return None if cursor == graph.entry else cursor
+        cursor = node.next[0] if node.next else None
+    return None
+
+
 def remembered(args, graph, key: int | None, level: int | None = None):
     """This character's playhead and route: its own file, found by the key the strip
     paints, so each character keeps its own place in the guide (`playhead`). A guide run
@@ -315,6 +335,11 @@ def remembered(args, graph, key: int | None, level: int | None = None):
         used = route.graph if args.route_mode == "supported" else graph
         if used is not graph:
             memory = playhead.load(used.graph_id, path)
+        if memory.step_id is None and not memory.finished:
+            start = level_start(used, level)
+            if start is not None:
+                print(f"level {level}, new to {used.graph_id}: beginning at {start}")
+                memory = replace(memory, step_id=start)
         following = NEXT_GUIDE.get(graph.graph_id)
         last = following is None or not following.exists()
         if not memory.finished:
@@ -483,7 +508,7 @@ def _live(args, graph) -> int:
 
             coach_model = open_model(ROOT / "var", ROOT / ".env")
             if coach_model is not None:
-                judge = Judge(coach_model, state=client.state,
+                judge = Judge(coach_model, state=client.state, where=body.here_world,
                               record=recorder.dir / "coach-model.jsonl")
         body.judge = judge
         body.learn(choices, choice_log)
