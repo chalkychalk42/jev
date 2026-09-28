@@ -121,6 +121,7 @@ class ArmedBy(StrEnum):
     S1_PREEMPT = "s1_preempt"   # System 1 safety override, no deliberation
     TRACKER = "tracker"         # step predicate fired, mechanical
     POLICY = "policy"           # the distilled local coach
+    JEV = "jev"                 # the coach's model, picking among the policy's plans (PLAN §9)
     TEACHER = "teacher"         # Claude or GLM
     HUMAN = "human"             # hotkey takeover; the strongest label we have
 

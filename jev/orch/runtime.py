@@ -98,6 +98,7 @@ class Counters:
     # The headline number (ARCHITECTURE.md §1): ticks no rule could settle. It is the one
     # that must fall, and it distinguishes a perception problem from an intelligence one.
     unresolved: int = 0
+    jev_applied: int = 0
 
 
 @dataclass
@@ -130,6 +131,9 @@ class ClientRuntime:
     ask: AskFn | None = None
     take: TakeFn | None = None
     validate_action: Callable[[Decision, str | None], str | None] | None = None
+    # Jev, the coach's model (`jev.coach.judge.Judge`): with one, what to arm next among the
+    # scripted coach's own plans is its pick wherever there is more than one (PLAN §9).
+    judge: object | None = None
 
     available_skills: frozenset[str] = NAMES
     keys_down: Callable[[], list[str]] | None = None
@@ -345,7 +349,7 @@ class ClientRuntime:
             # quest that was there all along (session 90).
             if (outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
                     and self.armed.step_id == self.tracker.step_id
-                    and self.armed.rule.startswith("guide.")):
+                    and scripted.own_rule(self.armed.rule).startswith("guide.")):
                 self.tracker.memory.attempts += 1
         self.armed = None
 
@@ -719,6 +723,22 @@ class ClientRuntime:
                     self.counters.teacher_applied += 1
                     return answer, ArmedBy.TEACHER, "teacher", decision_id
                 self.counters.rejected += 1
+
+        # Jev picks among the plans the scripted coach would stand behind now, when there is
+        # more than one; a preempt, a fight, blindness and a finished guide are never put to
+        # it (`jev.coach.judge.candidates`). Its pick is checked as any plan is, and one that
+        # fails the check, or no answer, leaves the floor's.
+        if self.judge is not None:
+            from jev.coach import judge as jev_judge
+
+            try:
+                picked = self.judge.arm(state, node, jev_judge.candidates(
+                    state, node, self.policy_context, floor))
+            except Exception:
+                picked = None
+            if picked is not None and self._verify(picked.decision, state).ok:
+                self.counters.jev_applied += 1
+                return picked.decision, ArmedBy.JEV, f"jev:{picked.rule}", ""
 
         if scripted.wants_teacher(floor) or (state.guide.attempts and floor.rule.startswith("guide.")):
             self.counters.unresolved += 1

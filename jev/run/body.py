@@ -290,6 +290,9 @@ class LiveBody:
         # What each choice has paid off before, and this run's log of them
         # (`jev.learn.choices`); without a memory, tours keep their own order.
         self.choice_memory = None
+        # Jev, when it coaches this character (`jev.coach.judge.Judge`): it picks in the
+        # learned choices below, with each option's record in front of it.
+        self.judge = None
         self.choice_log = None
         self.choice_rng = None               # the draws' source; `None` seeds itself
         # What this character has been given to wear, slot by slot (`jev.world.gear`).
@@ -833,7 +836,10 @@ class LiveBody:
         """Choices learned from their outcomes (`jev.learn.choices`, DECISIONS V158): where
         hunts and gathers stand next, and the heal line each fight holds."""
         self.choice_memory, self.choice_log = memory, log
-        self.fight.choices = Choice(memory, "fight.heal_below", log=log, rng=self.choice_rng)
+        # Jev sets a fight's heal line as it begins; the line for a pack, picked in the fight,
+        # is not a choice to wait on.
+        self.fight.choices = Choice(memory, "fight.heal_below", log=log, rng=self.choice_rng,
+                                    judge=self.judge, judged=frozenset({"all"}))
 
     def _stations(self, point: str, objective: str):
         """A chooser of stations for `point`, learning under `objective`; `None` without a
@@ -841,7 +847,7 @@ class LiveBody:
         if self.choice_memory is None:
             return None
         return Stations(self.choice_memory, point, objective, log=self.choice_log,
-                        rng=self.choice_rng)
+                        rng=self.choice_rng, judge=self.judge)
 
     def _service_needed(self) -> str | None:
         self.checkpoint()

@@ -48,8 +48,14 @@ CONFIDENT = 0.6
 REFLEX_RULES = ("fight.", "preempt.dead", "preempt.ghost", "preempt.critical")
 
 
+def own_rule(rule: str) -> str:
+    """The coach's rule behind an arm, whoever picked it: Jev's picks are the coach's own
+    plans, armed as "jev:<rule>" (`jev.coach.judge`)."""
+    return rule[4:] if rule.startswith("jev:") else rule
+
+
 def reflex(rule: str) -> bool:
-    return rule.startswith(REFLEX_RULES)
+    return own_rule(rule).startswith(REFLEX_RULES)
 
 
 # Services only a routine can do, never put to the tutor: training ends in drags from the
@@ -63,7 +69,7 @@ ROUTINE_RULES = ("service.train", "service.bind", "service.discover", "recover.e
 
 
 def routine_only(rule: str) -> bool:
-    return rule.startswith(ROUTINE_RULES)
+    return own_rule(rule).startswith(ROUTINE_RULES)
 
 
 @dataclass(frozen=True)
@@ -365,8 +371,21 @@ def _affordable(item_id: int, money: int | None) -> bool:
 
 def service(state: State, *, context: Context | None = None) -> Plan | None:
     """The service priority, shared by idle selection and long-skill handoff."""
+    plans = services(state, context=context)
+    return plans[0] if plans else None
+
+
+def services(state: State, *, context: Context | None = None) -> list[Plan]:
+    """Every service due now, the most urgent first (`service` is the first): what the coach's
+    model chooses among (`jev.coach.judge`), where the floor takes only the first."""
+    plans: list[Plan] = []
+
+    def due(plan: Plan) -> None:
+        if all(p.rule != plan.rule for p in plans):
+            plans.append(plan)
+
     if state.vitals.combat is not False:
-        return None
+        return plans
     b = state.bags
     can_repair = context is None or context.can_repair(b.money_copper, state.guide.step_id)
     can_sell = context is None or context.can_make_space(b.free)
@@ -380,12 +399,12 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
     # unread number is the failure the verifier's `no_service_loop` rule also guards.
     if (can_repair and not hurt and b.durability_min is not None
             and b.durability_min <= 0.05):
-        return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "equipment is broken", 0.85,
-                       ("dead", "combat"), service="repair"), True, "service.broken")
+        due(Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "equipment is broken", 0.85,
+                       ("dead", "combat"), service="repair"), True, "service.broken"))
 
     if can_sell and not hurt and b.free is not None and b.free <= BAGS_LOW:
-        return Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are nearly full",
-                       0.75, ("dead", "combat"), service="bags"), True, "service.bags_full")
+        due(Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are nearly full",
+                       0.75, ("dead", "combat"), service="bags"), True, "service.bags_full"))
 
     # A spell the purse can pay for comes before a repair of gear not yet broken (V240): a
     # repair at a third of the durability buys no armour back, and the level 7 mage's
@@ -393,12 +412,12 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
     # to boars and bears it had no slow for.
     if (context is not None and b.durability_min is not None and b.durability_min < 0.35
             and _recover(state, context) is None and context.can_train(state)):
-        return Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
-                       0.6, ("dead", "combat"), service="train"), True, "service.train")
+        due(Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
+                       0.6, ("dead", "combat"), service="train"), True, "service.train"))
 
     if can_repair and not hurt and b.durability_min is not None and b.durability_min < 0.35:
-        return Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is low", 0.65,
-                       ("dead", "combat"), service="repair"), True, "service.durability")
+        due(Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is low", 0.65,
+                       ("dead", "combat"), service="repair"), True, "service.durability"))
 
     conjured = context.conjured() if context is not None else frozenset()
     empty = [item for item, count, kind in ((b.food_id, b.food_count, "food"),
@@ -410,29 +429,29 @@ def service(state: State, *, context: Context | None = None) -> Plan | None:
         spare = (b.money_copper - context.kept(state)
                  if context is not None and b.money_copper is not None else b.money_copper)
         if any(_affordable(item, spare) for item in empty):
-            return Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD",
+            due(Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD",
                            "confirmed food or drink is empty", 0.8, ("dead", "combat"),
-                           service="supplies"), True, "service.supplies")
+                           service="supplies"), True, "service.supplies"))
 
     # Last: spells a trainer would teach now. A paladin that never trained fought to level
     # 8 on Seal of Righteousness and Holy Light rank 1, losing to two wolves at once. It can
     # wait for a meal: the walk to Goldshire's trainer is 640 yards of Elwynn.
     if context is not None and _recover(state, context) is None and context.can_train(state):
-        return Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
-                       0.6, ("dead", "combat"), service="train"), True, "service.train")
+        due(Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
+                       0.6, ("dead", "combat"), service="train"), True, "service.train"))
 
     # And a home near the work: a hearthstone bound to Northshire took a level 9 back
     # there four times in a day from Goldshire and Fargodeep.
     if context is not None and _recover(state, context) is None and context.can_bind(state):
-        return Plan(_d(Intent.SERVICE, "BIND_HEARTH", "home is far from the guide's work",
-                       0.55, ("dead", "combat"), service="bind"), True, "service.bind")
+        due(Plan(_d(Intent.SERVICE, "BIND_HEARTH", "home is far from the guide's work",
+                       0.55, ("dead", "combat"), service="bind"), True, "service.bind"))
 
     # A flight master passed is a node to fly back to later: only a visited node can be.
     if context is not None and _recover(state, context) is None and context.can_discover(state):
-        return Plan(_d(Intent.SERVICE, "DISCOVER_FLIGHT", "an unvisited flight master is near",
-                       0.5, ("dead", "combat"), service="discover"), True, "service.discover")
+        due(Plan(_d(Intent.SERVICE, "DISCOVER_FLIGHT", "an unvisited flight master is near",
+                       0.5, ("dead", "combat"), service="discover"), True, "service.discover"))
 
-    return None
+    return plans
 
 
 def _recover(state: State, context: Context | None = None) -> Plan | None:

@@ -53,6 +53,11 @@ DEATH_VISITS = 4
 # nothing changes; deleting it undoes it.
 PRIOR_WEIGHT = 0.25
 PRIOR_CAP = 10.0
+# Jev (`jev.coach.judge`) picks a lap's first station among the draw's best this many, and is
+# asked once in this long by one chooser: a hunt orders all its laps at its start, and the
+# laps after the first begin where the one before ended.
+JEV_STATIONS = 8
+JEV_AGAIN_S = 60.0
 
 
 @dataclass
@@ -168,6 +173,15 @@ def draw(arm: Arm | None, rate: float, rng: random.Random) -> float:
     return rng.betavariate(max(alpha, 1e-6), max(beta, 1e-6))
 
 
+def record_text(arm: Arm | None, unit: str = "each") -> str:
+    """An option's record as Jev reads it (`jev.coach.judge`)."""
+    if arm is None or arm.tries <= 0:
+        return "never tried"
+    tries = round(arm.tries, 1)
+    return (f"tried {tries:g}, paid off {round(arm.wins, 1):g} ({arm.wins / arm.tries:.0%}), "
+            f"{arm.seconds / arm.tries:.0f} s {unit}")
+
+
 def station_key(objective: str, station: Sequence[float]) -> str:
     """A station is its objective and its point to the yard: spawn points are the world
     database's own, the same every time they are toured."""
@@ -180,11 +194,15 @@ class Stations:
 
     def __init__(self, memory: ChoiceMemory, point: str, objective: str, *,
                  log: ChoiceLog | None = None, rng: random.Random | None = None,
-                 clock: Callable[[], float] = time.monotonic):
+                 clock: Callable[[], float] = time.monotonic, judge=None):
         self.memory, self.point, self.objective = memory, point, objective
         self.log = log
         self.rng = rng or random.Random()
         self.clock = clock
+        # Jev, when it coaches the character (`jev.coach.judge.Judge`): it picks where a lap
+        # begins among the draw's best, with their records and how far each is.
+        self.judge = judge
+        self._judged_at: float | None = None
         self._open: tuple[tuple, float] | None = None
 
     def order(self, stations: Sequence[Sequence[float]]) -> list[tuple]:
@@ -195,13 +213,43 @@ class Stations:
         rate = pooled(arms.values())
         draws = [draw(arms.get(station_key(self.objective, s)), rate, self.rng) for s in stations]
         order = sorted(range(len(stations)), key=lambda i: -draws[i] * TOUR_DECAY ** i)
+        by = "local"
+        now = self.clock()
+        if (self.judge is not None and len(stations) > 1
+                and (self._judged_at is None or now - self._judged_at >= JEV_AGAIN_S)):
+            self._judged_at = now
+            first = self._judged(stations, order[:JEV_STATIONS], arms)
+            if first is not None:
+                order = [first] + [i for i in order if i != first]
+                by = "jev"
         if self.log is not None:
             self.log.write({"event": "choice", "point": self.point, "objective": self.objective,
-                            "rate": round(rate, 4),
+                            "rate": round(rate, 4), "by": by,
                             "options": [station_key(self.objective, s) for s in stations],
                             "draws": [round(d, 4) for d in draws],
                             "order": [station_key(self.objective, stations[i]) for i in order]})
         return [stations[i] for i in order]
+
+    def _judged(self, stations: list[tuple], best: list[int], arms: dict) -> int | None:
+        """The station Jev would begin at, of `best`; `None` when it has no answer."""
+        try:
+            origin = self.judge.origin() if hasattr(self.judge, "origin") else None
+        except Exception:
+            origin = None
+        options = {}
+        for n, i in enumerate(best, 1):
+            station = stations[i]
+            where = ""
+            if origin is not None:
+                where = (f"{((station[0] - origin[0]) ** 2 + (station[1] - origin[1]) ** 2) ** 0.5:.0f}"
+                         " yd away; ")
+            options[f"s{n}"] = where + record_text(
+                arms.get(station_key(self.objective, station)), "a visit")
+        try:
+            picked = self.judge.pick(self.point, self.objective, options)
+        except Exception:
+            picked = None
+        return best[int(picked[1:]) - 1] if picked in options else None
 
     def arrive(self, station: Sequence[float]) -> None:
         """A station chosen: its visit is timed from here."""
@@ -298,18 +346,34 @@ class Choice:
     `pick` draws; `outcome` records how the option it gave did."""
 
     def __init__(self, memory: ChoiceMemory, point: str, *, log: ChoiceLog | None = None,
-                 rng: random.Random | None = None):
+                 rng: random.Random | None = None, judge=None,
+                 judged: frozenset[str] | None = None):
         self.memory, self.point, self.log = memory, point, log
         self.rng = rng or random.Random()
+        # Jev, when it coaches the character (`jev.coach.judge.Judge`), picks with each
+        # option's record in front of it; `judged` limits it to those objectives (a choice
+        # made in the middle of a fight is not one to wait on).
+        self.judge, self.judged = judge, judged
 
     def pick(self, objective: str, options: Sequence[str]) -> str:
         arms = self.memory.arms(self.point, f"{objective}@")
         rate = pooled(arms.values())
         draws = [draw(arms.get(f"{objective}@{option}"), rate, self.rng) for option in options]
         chosen = options[max(range(len(options)), key=lambda i: draws[i])]
+        by = "local"
+        if (self.judge is not None and len(options) > 1
+                and (self.judged is None or objective in self.judged)):
+            try:
+                picked = self.judge.pick(self.point, objective, {
+                    option: record_text(arms.get(f"{objective}@{option}"))
+                    for option in options})
+            except Exception:
+                picked = None
+            if picked in options:
+                chosen, by = picked, "jev"
         if self.log is not None:
             self.log.write({"event": "choice", "point": self.point, "objective": objective,
-                            "rate": round(rate, 4), "options": list(options),
+                            "rate": round(rate, 4), "options": list(options), "by": by,
                             "draws": [round(d, 4) for d in draws], "chosen": chosen})
         return chosen
 

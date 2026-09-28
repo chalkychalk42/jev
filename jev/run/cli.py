@@ -105,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="optional reconnect credentials; environment takes precedence")
     parser.add_argument("--blind-grace", type=float, default=20)
     parser.add_argument("--no-progress", type=float, default=900)
+    parser.add_argument("--no-coach-model", action="store_true",
+                        help="the scripted coach decides alone; Jev is not asked")
     parser.add_argument("--reconnect-limit", type=int, default=3)
     args = parser.parse_args(argv)
     if not args.check:
@@ -471,6 +473,19 @@ def _live(args, graph) -> int:
         counted = backfill_hunts((run for run in Path(args.runs_dir).iterdir() if run.is_dir()),
                                  choices)
         choice_log = ChoiceLog(recorder.dir / "choices.jsonl")
+        # Jev, the coach's model (PLAN §9, `jev.coach.judge`): what to arm next and the learned
+        # choices are its picks wherever there is more than one. Without its key, or switched
+        # off in var/coach-model.json, the scripted coach decides alone.
+        judge = None
+        if not args.no_coach_model:
+            from jev.coach.judge import Judge
+            from jev.coach.model import open_model
+
+            coach_model = open_model(ROOT / "var", ROOT / ".env")
+            if coach_model is not None:
+                judge = Judge(coach_model, state=client.state,
+                              record=recorder.dir / "coach-model.jsonl")
+        body.judge = judge
         body.learn(choices, choice_log)
         visits = sum(arm.tries for arm in choices.arms("hunt.station", lent=False).values())
         print(f"choices: {visits} hunt station visits remembered"
@@ -492,7 +507,8 @@ def _live(args, graph) -> int:
                 binding_paths=args.bindings, world_db=args.world_db,
                 config=PlayConfig(teacher_timeout_s=args.play_decision_timeout))
             # After a routine fails: the tutor, or the routine again, learned (V158).
-            playing.recovery = Choice(choices, "recover.after_failure", log=choice_log)
+            playing.recovery = Choice(choices, "recover.after_failure", log=choice_log,
+                                      judge=judge)
             body = playing
         atomic_json(recorder.dir / "route.json", {
             "mode": args.route_mode, "source": route.source_graph_id, "graph": graph.graph_id,
@@ -519,6 +535,7 @@ def _live(args, graph) -> int:
             outgrown_at=outgrown_at(route.source_graph_id),
             available_skills=body.available,
             validate_action=body.validate,
+            judge=judge,
         )
         if runtime.outgrown_at is not None:
             print(f"guide {route.source_graph_id}: outgrown at level {runtime.outgrown_at}, "
