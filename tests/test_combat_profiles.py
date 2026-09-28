@@ -88,3 +88,27 @@ def test_class_alone_is_enough_when_the_race_is_unknown():
     """Races differ in their starting bread, not in which slot holds the seal."""
     assert for_class(PALADIN).name == "paladin"
     assert for_class(PALADIN, 999).name == "paladin"
+
+
+MANA_TAP, GIFT_OF_THE_NAARU, BLOOD_ELF, DRAENEI, WARLOCK, SHAMAN = 28734, 28880, 10, 11, 9, 7
+
+
+def test_a_power_drain_is_not_an_attack():
+    """Mana Tap takes a unit's mana and hurts nothing: a blood elf warlock in the hive pressed
+    it 127 times at a lynx, all refused "bad target", and cast nothing else (V288)."""
+    for profile in PROFILES.values():
+        assert all(a.spell_id != MANA_TAP for a in profile.abilities)
+    warlock = for_class(WARLOCK, BLOOD_ELF)
+    assert warlock.first(Role.ATTACK) is not None      # Attack and Shadow Bolt remain
+
+
+def test_an_aura_for_a_friend_is_cast_on_the_character():
+    """Gift of the Naaru, a heal over time on a single friend, is self-cast as a heal is: a
+    draenei shaman in the hive cast it at its enemy 25 times (V288). A spell only for the
+    caster keeps its plain key."""
+    shaman = for_class(SHAMAN, DRAENEI)
+    gift = next(a for a in shaman.abilities if a.spell_id == GIFT_OF_THE_NAARU)
+    assert gift.friendly and gift.self_cast
+    mage = for_class(8, HUMAN)
+    frost_armor = next(a for a in mage.abilities if a.name == "Frost Armor")
+    assert not frost_armor.self_cast

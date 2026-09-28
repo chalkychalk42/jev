@@ -28,13 +28,6 @@
     "spell": 635
    },
    {
-    "mana": 0,
-    "name": "Mana Tap",
-    "role": "attack",
-    "slot": 4,
-    "spell": 28734
-   },
-   {
     "every_s": 1.0,
     "mana": 0,
     "name": "Arcane Torrent",
@@ -82,13 +75,6 @@
     "role": "attack",
     "slot": 3,
     "spell": 75
-   },
-   {
-    "mana": 0,
-    "name": "Mana Tap",
-    "role": "attack",
-    "slot": 4,
-    "spell": 28734
    },
    {
     "every_s": 1.0,
@@ -147,13 +133,6 @@
     "spell": 2764
    },
    {
-    "mana": 0,
-    "name": "Mana Tap",
-    "role": "attack",
-    "slot": 5,
-    "spell": 28734
-   },
-   {
     "every_s": 1.0,
     "mana": 0,
     "name": "Arcane Torrent",
@@ -195,13 +174,6 @@
     "role": "heal",
     "slot": 3,
     "spell": 2050
-   },
-   {
-    "mana": 0,
-    "name": "Mana Tap",
-    "role": "attack",
-    "slot": 4,
-    "spell": 28734
    },
    {
     "every_s": 1.0,
@@ -254,13 +226,6 @@
     "spell": 168
    },
    {
-    "mana": 0,
-    "name": "Mana Tap",
-    "role": "attack",
-    "slot": 4,
-    "spell": 28734
-   },
-   {
     "every_s": 1.0,
     "mana": 0,
     "name": "Arcane Torrent",
@@ -309,13 +274,6 @@
     "role": "buff",
     "slot": 3,
     "spell": 687
-   },
-   {
-    "mana": 0,
-    "name": "Mana Tap",
-    "role": "attack",
-    "slot": 4,
-    "spell": 28734
    },
    {
     "every_s": 1.0,
@@ -369,6 +327,7 @@
    },
    {
     "every_s": 10.0,
+    "friendly": true,
     "mana": 0,
     "name": "Gift of the Naaru",
     "role": "buff",
@@ -437,6 +396,7 @@
    },
    {
     "every_s": 10.0,
+    "friendly": true,
     "mana": 0,
     "name": "Gift of the Naaru",
     "role": "buff",
@@ -492,6 +452,7 @@
    },
    {
     "every_s": 10.0,
+    "friendly": true,
     "mana": 0,
     "name": "Gift of the Naaru",
     "role": "buff",
@@ -575,6 +536,7 @@
    },
    {
     "every_s": 10.0,
+    "friendly": true,
     "mana": 0,
     "name": "Gift of the Naaru",
     "role": "buff",
@@ -630,6 +592,7 @@
    },
    {
     "every_s": 10.0,
+    "friendly": true,
     "mana": 0,
     "name": "Gift of the Naaru",
     "role": "buff",
@@ -680,6 +643,7 @@
    },
    {
     "every_s": 10.0,
+    "friendly": true,
     "mana": 0,
     "name": "Gift of the Naaru",
     "role": "buff",

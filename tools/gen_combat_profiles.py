@@ -45,6 +45,17 @@ TYPE_ITEM = 128
 EFFECT_HEAL = 10
 EFFECT_APPLY_AURA = 6
 EFFECT_ATTACK = 78
+# A power drain takes the unit's mana and does no harm to a unit without any: not an attack.
+# In the hive (JevHive, 28 September) a level 1 blood elf warlock pressed Mana Tap 127 times
+# at a Springpaw Lynx, every press refused "bad target", and cast nothing else twelve fights
+# running: it costs nothing and starts no global cooldown, so the rotation took it again at once.
+EFFECT_POWER_DRAIN = 8
+# Where a spell's first effect lands (`EffectImplicitTargetA1`) when a friend may be chosen:
+# a single friend (21). An aura put there is cast on the character, as a heal is: a level 1
+# draenei shaman's Gift of the Naaru, a heal over time on a friend, was cast at the unit it
+# fought 25 times, every cast refused (the hive, 28 September). A spell only for the caster
+# (1: Frost Armor, a seal) needs no modifier and keeps its plain key.
+FRIENDLY_TARGETS = {21}
 
 # Consumable aura types: what the thing actually restores.
 AURA_MOD_REGEN = 84          # health -> food
@@ -59,11 +70,13 @@ CLASS_NAMES = {1: "warrior", 2: "paladin", 3: "hunter", 4: "rogue", 5: "priest",
 
 def spell_row(db, slot: int, action: int) -> dict | None:
     row = db.execute(
-        "select SpellName, Effect1, ManaCost, DurationIndex "
+        "select SpellName, Effect1, ManaCost, DurationIndex, EffectImplicitTargetA1 "
         "from world_spell_template where Id=?", (action,)).fetchone()
     if row is None:
         return None
-    name, effect, mana, duration_index = row
+    name, effect, mana, duration_index, target = row
+    if effect == EFFECT_POWER_DRAIN:
+        return None
     out = {"slot": slot, "spell": action, "name": name, "mana": mana or 0}
     if effect == EFFECT_HEAL:
         out["role"] = "heal"
@@ -76,6 +89,8 @@ def spell_row(db, slot: int, action: int) -> dict | None:
         out["toggle"] = True
     elif effect == EFFECT_APPLY_AURA:
         out["role"] = "buff"
+        if target in FRIENDLY_TARGETS:
+            out["friendly"] = True
         ms = db.execute("select c1 from dbc_SpellDuration where id=?",
                         (duration_index,)).fetchone()
         if ms and ms[0]:

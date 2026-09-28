@@ -240,7 +240,8 @@ def _load() -> dict[str, CombatProfile]:
         abilities = tuple(
             Ability(slot=r["slot"], role=Role(r["role"]), name=r.get("name", ""),
                     mana=r.get("mana", 0), every_s=r.get("every_s", 0.0),
-                    toggle=r.get("toggle", False), spell_id=r.get("spell"),
+                    toggle=r.get("toggle", False), friendly=r.get("friendly", False),
+                    spell_id=r.get("spell"),
                     lasting=Role(r["role"]) is Role.BUFF and r.get("every_s", 0.0) >= LASTING_S)
             for r in entry.get("rows", ())
         )
