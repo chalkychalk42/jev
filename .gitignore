@@ -1,3 +1,6 @@
+# the data directory, and a symlink of it in a worktree: never tracked (a symlink of it was, 24dd8fc,
+# and a deploy put it in place of the live checkout's data, 28 Sep)
+/data
 data/
 .venv/
 __pycache__/
