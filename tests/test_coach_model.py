@@ -275,3 +275,14 @@ def test_jevs_pick_of_a_grind_on_a_loop_grinds_to_a_level(tmp_path):
     runtime.run(ticks=1, period_s=0)
     assert runtime.armed.by is ArmedBy.JEV and runtime.armed.decision.skill == "GRIND_UNTIL"
     assert isinstance(runtime.armed.decision.params.get("until_level"), int)
+
+
+def test_jev_is_shown_the_numbers_behind_each_option_and_no_default():
+    from jev.coach import judge as j
+
+    state = _state(vitals=Vitals(hp=0.42, power=0.3, dead=False, ghost=False, combat=False),
+                   bags=Bags(free=1, durability_min=0.2, money_copper=150, food_count=0,
+                             drink_count=3))
+    assert j.evidence("recover.eat", state) == "health 42%, power 30%"
+    assert j.evidence("service.supplies", state) == "food 0, drink 3, 150 copper"
+    assert "default" not in j.ARM

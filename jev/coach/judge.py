@@ -30,9 +30,11 @@ from jev.coach.model import CoachModel
 from jev.guide.graph import Node
 from jev.world.state_v1 import State
 
-ARM = ("A World of Warcraft character is free to act. Pick what it does next to gain levels "
-       "fastest without dying. The guide step is the default; a service or a meal only when "
-       "it pays for its walk.")
+# Neutral on purpose: "the guide step is the default" had Jev pass by nearly every meal,
+# repair and restock in its first hour (the hive, 28 September), at 40% health too.
+ARM = ("A World of Warcraft character is free to act. Pick what it does next so that it gains "
+       "levels fastest while dying as little as possible: fighting hurt, with broken gear or "
+       "without food and drink costs deaths, and every walk to a service costs minutes.")
 PICKS = {
     "hunt.station": ("Where should the character look for its quarry next? Each station's "
                      "record says how often it held the quarry and how long a visit took."),
@@ -99,11 +101,37 @@ def jamming(state: State, node: Node | None) -> bool:
             and g.age_s > 0.5 * (node.timeout_s or 300.0))
 
 
-def describe(plan) -> str:
-    """One option as Jev reads it: what the plan does and why the coach has it."""
+def _pct(value) -> str:
+    return "?" if value is None else f"{float(value):.0%}"
+
+
+def evidence(rule: str, state: State | None) -> str:
+    """The numbers behind an option: what the character has that the option answers."""
+    if state is None:
+        return ""
+    v, b, g = state.vitals, state.bags, state.guide
+    if rule.startswith("recover."):
+        return f"health {_pct(v.hp)}, power {_pct(v.power)}"
+    if rule in ("service.broken", "service.durability"):
+        return f"worst gear at {_pct(b.durability_min)}, {b.money_copper or 0} copper"
+    if rule == "service.bags_full":
+        return f"{b.free} bag slots free"
+    if rule == "service.supplies":
+        return f"food {b.food_count}, drink {b.drink_count}, {b.money_copper or 0} copper"
+    if rule.startswith("service."):
+        return f"{b.money_copper or 0} copper"
+    if rule.startswith(("guide.", "fallback.")):
+        return (f"on the step {g.age_s or 0:.0f} s, {g.attempts} failed attempts, "
+                f"{g.deaths_on_step} deaths")
+    return ""
+
+
+def describe(plan, state: State | None = None) -> str:
+    """One option as Jev reads it: what the plan does, why the coach has it, and the numbers."""
     d = plan.decision
     what = d.skill or d.intent.value
-    return f"{what}: {d.why}"[:160]
+    numbers = evidence(plan.rule, state)
+    return f"{what}: {d.why}{f' ({numbers})' if numbers else ''}"[:200]
 
 
 class Judge:
@@ -133,7 +161,7 @@ class Judge:
             return by_rule.get(self._last[2])
         self.asked += 1
         answer = self.model.choose("coach.arm", situation(state, node), ARM,
-                                   {rule: describe(plan) for rule, plan in by_rule.items()},
+                                   {rule: describe(plan, state) for rule, plan in by_rule.items()},
                                    record=self.record, note={"floor": candidates[0].rule})
         if not answer.ok:
             return None
