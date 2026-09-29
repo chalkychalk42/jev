@@ -23,7 +23,7 @@ from jev.guide.path import MmapQuery
 from jev.guide.route import compile_route
 from jev.guide.route_memory import RouteMemory
 from jev.learn.choices import Choice, ChoiceLog, ChoiceMemory, backfill_hunts
-from jev.learn.danger import DangerMap, count_runs
+from jev.learn.danger import DangerMap, count_runs, runs_in
 from jev.learn.episode import Recorder
 from jev.orch.runtime import ClientRuntime
 from jev.persist import atomic_json, file_lock, input_lock_path
@@ -466,9 +466,7 @@ def _live(args, graph) -> int:
         by_area = {zone.area_id: zone for zone in zones.values()}
         runs_dir = Path(args.runs_dir)
         this_run = recorder.dir.name if recorder is not None else None
-        attacks = count_runs((run for run in runs_dir.iterdir()
-                              if run.is_dir() and run.name != this_run)
-                             if runs_dir.is_dir() else (), danger, by_area.get)
+        attacks = count_runs(runs_in(runs_dir, danger, skip=this_run), danger, by_area.get)
         print(f"danger: {len(danger.cells)} cells learned"
               + (f", {attacks} attacks counted from earlier runs" if attacks else ""))
         stamp("danger counted")

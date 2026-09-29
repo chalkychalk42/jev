@@ -151,3 +151,80 @@ def test_a_danger_prior_that_cannot_be_read_is_no_prior(tmp_path):
     assert DangerMap(prior=tmp_path / "prior.json").lent == {}
     (tmp_path / "prior.json").write_text("[]")
     assert DangerMap(prior=tmp_path / "prior.json").lent == {}
+
+
+def _run(runs, name, *, ticks=True):
+    (runs / name).mkdir(parents=True)
+    if ticks:
+        _write(runs / name / "ticks.jsonl", [_tick(t, 100, 100) for t in range(0, 12)])
+        _write(runs / name / "executions.jsonl", _fight(11.0, 15.0, combat=True))
+
+
+def test_runs_begun_two_hours_before_the_newest_are_settled_and_not_looked_at_again(
+        tmp_path, monkeypatch):
+    """V326: the hive's map named 34,182 runs and every session start sorted its 31,770 run
+    directories. A run's name begins with its start; those begun `SETTLE_S` before the
+    newest seen are settled, and neither named in the map nor looked at again."""
+    import jev.learn.danger as danger_module
+    from jev.learn.danger import runs_in
+
+    runs = tmp_path / "runs"
+    for name in ("20260929T080000-aaaaaa", "20260929T095959-bbbbbb", "20260929T100001-cccccc",
+                 "20260929T120000-dddddd", "r1"):
+        _run(runs, name)
+    _run(runs, "20260929T070000-eeeeee", ticks=False)       # a session that never played
+    _run(runs, "20260929T115000-ffffff", ticks=False)       # one not playing yet
+    danger = DangerMap(tmp_path / "danger.json")
+    assert count_runs(runs_in(runs, danger), danger, {12: FIELD}.get) == 5
+    assert danger.through == "20260929T100000"
+    assert danger.counted == {"20260929T100001-cccccc", "20260929T120000-dddddd", "r1"}
+    again = DangerMap(tmp_path / "danger.json")
+    assert (again.through, again.counted) == (danger.through, danger.counted)
+    assert sorted(r.name for r in runs_in(runs, again)) == [
+        "20260929T100001-cccccc", "20260929T115000-ffffff", "20260929T120000-dddddd", "r1"]
+    assert runs_in(runs, again, skip="r1")[-1].name != "r1"
+    assert runs_in(tmp_path / "none", again) == []
+
+    # Only the run not yet playing is opened, and counted once it has ticks; one settled
+    # without ticks stays as it was.
+    opened = []
+    real = danger_module.count_run
+    monkeypatch.setattr(danger_module, "count_run",
+                        lambda ticks, *rest: opened.append(ticks.parent.name) or real(ticks, *rest))
+    for name in ("20260929T070000-eeeeee", "20260929T115000-ffffff"):
+        _write(runs / name / "ticks.jsonl", [_tick(t, 100, 100) for t in range(0, 12)])
+    assert count_runs(runs.iterdir(), again, {12: FIELD}.get) == 0
+    assert opened == ["20260929T115000-ffffff"]
+    assert again.cells[cell_of(0, 100, 100)] == {"12": [66.0, 5, 0]}
+
+
+def test_the_map_is_saved_only_when_a_run_was_counted(tmp_path):
+    """V326: every session start rewrote the map, the hive's 2.5 MB, new runs or none."""
+    runs = tmp_path / "runs"
+    _run(runs, "20260929T100000-aaaaaa")
+    danger = DangerMap(tmp_path / "danger.json")
+    count_runs(runs.iterdir(), danger, {12: FIELD}.get)
+    (tmp_path / "danger.json").unlink()
+    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get) == 0
+    assert not (tmp_path / "danger.json").exists()
+    _run(runs, "20260929T101500-bbbbbb")
+    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get) == 1
+    assert (tmp_path / "danger.json").exists()
+
+
+def test_a_map_from_before_the_mark_is_read_by_its_names_and_then_settled(tmp_path):
+    """V326: a file of V161-V325 has no `through`; its runs are known by name, counted
+    never again, and its old names leave it at the next save."""
+    runs = tmp_path / "runs"
+    for name in ("20260928T100000-aaaaaa", "20260929T100000-bbbbbb", "20260929T110000-cccccc"):
+        _run(runs, name)
+    (tmp_path / "danger.json").write_text(json.dumps(
+        {"format": 1, "cells": {cell_of(0, 100, 100): {"12": [22.0, 2, 0]}},
+         "counted": ["20260928T100000-aaaaaa", "20260929T100000-bbbbbb", "20260927T000000-gone00"]}))
+    danger = DangerMap(tmp_path / "danger.json")
+    assert danger.through == ""
+    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get) == 1
+    saved = json.loads((tmp_path / "danger.json").read_text())
+    assert saved["format"] == 1 and saved["through"] == "20260929T090000"
+    assert saved["counted"] == ["20260929T100000-bbbbbb", "20260929T110000-cccccc"]
+    assert saved["cells"][cell_of(0, 100, 100)] == {"12": [33.0, 3, 0]}
