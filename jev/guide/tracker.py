@@ -84,6 +84,9 @@ class StepMemory:
     # A rib entered for a failure the character's level cannot cure rejoins at this wall
     # time (`SHORT_RIB_S`), whatever else it has or has not done.
     until: float | None = None
+    # The run's watchdog ran the step's clock out (`Tracker.expire`): it earned nothing for a
+    # whole window. On a rib that is the rib failing, whatever its clock or its way back says.
+    expired: bool = False
 
 
 @dataclass(frozen=True)
@@ -95,6 +98,10 @@ class Verdict:
     # re-derive what the tracker already measured.
     off_route_s: float = 0.0
     completed: bool = False  # a predicate succeeded; a timed-out rib rejoin did not
+    # A rib left because it failed - it earned nothing for the watchdog's window, or kept
+    # killing the character - rather than because its time or its level came (V317): the
+    # runtime bars it at the level and takes the way back, never the next rib over.
+    failed: bool = False
 
 
 @dataclass
@@ -241,10 +248,21 @@ class Tracker:
                 and self.memory.until is not None and state.t >= self.memory.until):
             return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
                            reason="a short rib's time is up", off_route_s=off_route_s)
+        # A rib that earned nothing for the watchdog's window has failed, with a way back or
+        # without (V317). Its clock alone never ended it: a hive session is 15 minutes and the
+        # clock, kept in memory, starts again with each, so the rib's 900 s never came; and a
+        # rib with no way back had no end but a level. 123 of the hive's 312 bots spent 4 h
+        # with under a minute on any quest step (29 Sep, 05:30-09:30).
+        if node.kind is StepKind.GRIND and self.memory.expired:
+            return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to, failed=True,
+                           reason="the rib earned nothing; rejoin the spine",
+                           off_route_s=off_route_s)
         # A rib that has run its course rejoins even without having levelled. It is a
         # detour, not a destination, and the step that sent us here may well be passable
-        # now that the character is better fed and better geared.
-        if node.kind is StepKind.GRIND and age > node.timeout_s and self.memory.rejoin_to:
+        # now that the character is better fed and better geared. Not a wait for an accept's
+        # level (V308): the giver still refuses, and the rib was left only to be entered again.
+        if (node.kind is StepKind.GRIND and age > node.timeout_s and self.memory.rejoin_to
+                and not waits_for_level(state, self._node(self.memory.rejoin_to))):
             return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
                            reason="rib timed out; rejoin the spine", off_route_s=off_route_s)
         # Nor is a rib that keeps killing the character: ribs have no fail edges, their
@@ -253,7 +271,7 @@ class Tracker:
         # 20260924T035309-97796e).
         if (node.kind is StepKind.GRIND and self.memory.deaths >= RIB_DEATHS
                 and self.memory.rejoin_to):
-            return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to,
+            return Verdict(Event.ADVANCE, goto=self.memory.rejoin_to, failed=True,
                            reason=f"the rib killed the character {self.memory.deaths} times; "
                                   "rejoin the spine", off_route_s=off_route_s)
 
@@ -392,6 +410,7 @@ class Tracker:
         limit = max([node.timeout_s] + [e.value for e in node.on_fail
                                         if e.when is FailWhen.TIMEOUT and e.value])
         self.memory.working_s = max(self.memory.working_s, limit) + 1.0
+        self.memory.expired = True
         return True
 
     def is_blocked(self, state: State) -> bool:
@@ -415,6 +434,13 @@ def route_destination(state: State, node: Node) -> tuple[float, float] | None:
         selection = select_objective(node, state.quests)
         return selection.target.pos if selection.target is not None else None
     return node.pos
+
+
+def waits_for_level(state: State, node: Node | None) -> bool:
+    """Is `node` an accept whose quest asks a higher level than the character's (V308)? A
+    rib whose way back is one is a wait for that level, not a detour from a failed step."""
+    return (node is not None and node.kind is StepKind.QUEST_ACCEPT
+            and state.char.level is not None and state.char.level < node.level[0])
 
 
 def _quest_in_log(state: State, node: Node | None) -> bool:

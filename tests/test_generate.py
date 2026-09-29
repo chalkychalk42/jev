@@ -420,3 +420,29 @@ def test_an_elite_quest_taker_does_not_block_a_delivery(human):
     hogger = [ex.reason for ex in compile_route(human, available_skills=skills).excluded
               if ex.quest_id == 176]
     assert hogger and "elite" in hogger[0]
+
+
+def test_no_rib_stands_in_a_capital_and_none_on_a_creature_friendly_to_the_character():
+    """V317: the hive's routes had 62 ribs in the map boxes of Orgrimmar, the Undercity, Thunder
+    Bluff, Silvermoon and the Exodar in 32 of 52 (29 Sep), a second rib for a window beside the
+    surrounding zone's own for a leave to hop to. A capital's box has none; the zone around it
+    keeps its own."""
+    from jev.guide.coords import load_bounds
+    from jev.guide.generate import rib_windows
+
+    world = WorldDB(DB)
+    bounds = load_bounds(DB)
+    for city in (1497, 1519, 1537, 1637, 1638, 1657, 3487, 3557):
+        assert world.capital(city)
+        assert not any(world.grind_clusters(bounds[city], lo, hi, limit=3, faction="horde")
+                       for lo, hi in rib_windows(1, 20))
+    tirisfal = bounds[85]
+    assert not world.capital(85)
+    assert world.grind_clusters(tirisfal, 7, 9, limit=3, faction="horde")
+    # The friendly filter takes nothing hostile or neutral: Elwynn's ribs are as before.
+    elwynn = bounds[12]
+    for lo, hi in rib_windows(1, 12):
+        assert (world.grind_clusters(elwynn, lo, hi, limit=3, faction="alliance")
+                == world.grind_clusters(elwynn, lo, hi, limit=3))
+    friendly = world._friendly("horde")
+    assert 68 in friendly and 11 not in friendly          # Undercity Guardian, Stormwind's

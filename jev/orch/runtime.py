@@ -38,7 +38,7 @@ from jev.coach.verifier import verify
 from jev.guide.graph import Graph, rib_for
 from jev.guide.objectives import progress
 from jev.guide.route_memory import CAMP_YARDS
-from jev.guide.tracker import SHORT_RIB_S, Event, Tracker
+from jev.guide.tracker import SHORT_RIB_S, Event, Tracker, waits_for_level
 from jev.guide.tracker import Verdict as TrackVerdict
 from jev.learn.episode import (
     DecisionRow,
@@ -72,6 +72,15 @@ SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
 # and sat complete in the log after the walk was fixed (25 September). An entry without a
 # level, from before, counts as spent at the level first read.
 DETOUR = "detour:"
+# A grind rib that failed at a level - earned nothing for the watchdog's window, ran its grind
+# out of attempts, kept killing the character, or held the death camp it was left for - is
+# kept among the retried steps as `RIB_BAR` + its id + "@" + the level, and no failure or
+# leave goes to it again at that level while another rib is free (V317). The leave from a
+# death camp took the nearest rib out of the camp, and the next death there the nearest out of
+# that one: hive-531, a level 7 troll mage, went Durotar 5-7, 7-9, 5-7, 7-9 from 04:35 to 09:30
+# on 29 Sep, and 990 of the hive's 1,112 rib-to-rib moves in 8 h came within 10 minutes of a
+# death. Bars of a level below the character's are dropped as it rises.
+RIB_BAR = "rib-bar:"
 # How far an outgrown guide goes for a hand-in, in map fractions: a quarter of the zone's map,
 # 580 to 870 yards across Elwynn. A hand-in on the way out, not a trip back (V162).
 OUTGROWN_REACH = 0.25
@@ -196,6 +205,12 @@ class ClientRuntime:
     _retried: set[str] = field(default_factory=set, init=False)
     # The grind a leave from a death camp walks to, while services wait for it (V307).
     _leaving: str | None = field(default=None, init=False)
+    # The steps by id and the grind ribs, looked up on every tick by the walk along the spine.
+    _nodes: dict = field(default_factory=dict, init=False)
+    _ribs_all: tuple = field(default=(), init=False)
+    # The last walk along the spine past an accept above the character's level, by what it
+    # depends on (`_ahead`), so a character standing at the accept does not walk it each tick.
+    _ahead_seen: tuple = field(default=(), init=False)
 
     counters: Counters = field(default_factory=Counters)
     armed: Armed | None = None
@@ -224,6 +239,8 @@ class ClientRuntime:
 
     def __post_init__(self) -> None:
         self.tracker = Tracker(self.graph, self.graph.entry)
+        self._nodes = self.graph.by_id()
+        self._ribs_all = self.graph.ribs()
 
     # -- the tick ------------------------------------------------------------
 
@@ -276,7 +293,9 @@ class ClientRuntime:
         self._apply(verdict, state)
         if state.char.level is not None:
             unlevelled = {r for r in self._retried if r.startswith(DETOUR) and "@" not in r}
-            self._retried = ((self._retried - unlevelled)
+            outgrown = {r for r in self._retried if r.startswith(RIB_BAR)
+                        and not r.endswith(f"@{state.char.level}")}
+            self._retried = ((self._retried - unlevelled - outgrown)
                              | {f"{r}@{state.char.level}" for r in unlevelled})
         if (not self.finished and self.outgrown_at is not None
                 and state.char.level is not None and state.char.level >= self.outgrown_at
@@ -328,8 +347,7 @@ class ClientRuntime:
                 self._retried.add(f"{DETOUR}{detour}@{state.char.level}")
                 self.tracker.enter(detour, state, rejoin_to=before)
                 self._tracker_event = "rejoin_or_skip"
-            elif (grind := self._below_level(state)) is not None:
-                self.tracker.enter(grind, state, rejoin_to=self.tracker.step_id)
+            elif self._below_level(state):
                 self._tracker_event = "rejoin_or_skip"
         node = self.graph.get(self.tracker.step_id)
         state = self._with_guide(state, verdict)
@@ -414,6 +432,16 @@ class ClientRuntime:
         """
         node = self.graph.get(self.tracker.step_id)
         state = self.last_state
+        if (node is not None and state is not None and not self.finished
+                and node.kind is StepKind.GRIND and not node.on_fail
+                and skill in (node.skills or ())):
+            # A rib has no fail edge: its own failure takes it back to the spine (V317).
+            moved = self._leave_rib(state)
+            if moved:
+                self._tracker_event = "rejoin_or_skip"
+                if self.on_progress is not None:
+                    self._progress()
+            return moved
         if (node is None or state is None or not node.on_fail or self.finished
                 or skill not in (node.skills or ())):
             return False
@@ -468,20 +496,34 @@ class ClientRuntime:
                 or v.combat is True):
             return False
         context.death_camp = None
-        ribs = [r for r in self.graph.ribs() if r.world is not None and r.map_id == camp[0]
-                and math.dist(r.world[:2], camp[1:]) > CAMP_YARDS]
+
+        def out(r) -> bool:
+            return (r.world is not None and r.map_id == camp[0]
+                    and math.dist(r.world[:2], camp[1:]) > CAMP_YARDS)
+
+        node, memory = self._nodes.get(self.tracker.step_id), self.tracker.memory
+        level = state.char.level
+        on_rib = node is not None and node.kind is StepKind.GRIND
+        if on_rib and not out(node):
+            # The camp is on the rib it was working: barred at the level, or the next death at
+            # the rib it leaves for comes straight back here (`RIB_BAR`, V317).
+            self._bar(node.id, level)
+        ribs = [r for r in self._ribs(level) if out(r)]
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
-        rib = rib_for(ribs, state.char.level, near=here)
+        rib = rib_for(ribs, level, near=here)
         if rib is None:
             return False
         context.leaving_until, self._leaving = state.t + LEAVE_S, rib.id
         if rib.id == self.tracker.step_id:
             return False
-        node, memory = self.graph.get(self.tracker.step_id), self.tracker.memory
         back = (memory.rejoin_to if memory.rejoin_to or node is None or node.kind is StepKind.GRIND
                 else self.tracker.step_id)
+        target, until = memory.level_at_entry, memory.until
         self.tracker.enter(rib.id, state, rejoin_to=back)
+        if on_rib:
+            # A rib for a rib: the level it waits for and a short rib's end go with it (V317).
+            self.tracker.memory.level_at_entry, self.tracker.memory.until = target, until
         return True
 
     def _past_abandoned_quest(self, verdict) -> str | None:
@@ -660,25 +702,172 @@ class ClientRuntime:
             return node.id
         return min(hand_ins, key=lambda s: math.dist(s.pos, here)).id
 
-    def _below_level(self, state: State) -> str | None:
-        """For an accept whose quest asks a higher level than the character's, the grind of
-        its level to wait on (`rib_for`), its way back the accept; else `None` (V308). A
-        quest step's band starts at the quest's MinLevel (`max(1, MinLevel)`, as the generator
-        and the hive's route builder make every one), and the server gives no quest below it:
-        of 117 accepts failed over to a grind in the hive from 12:00 to 13:08 on 28 Sep, 56
-        were below it, each a walk to the giver, a refusal, a walk to a grind and back, and
-        another refusal. Hattheas, a level 2 blood elf, was refused Major Malfunction
-        (MinLevel 4) at 12:24 and again at 12:31, 1,073 yards to a grind and 1,061 back
-        between."""
-        node = self.graph.get(self.tracker.step_id)
+    def _below_level(self, state: State) -> bool:
+        """An accept whose quest asks a higher level than the character's (V308), reached or
+        waited on from a rib: the next step on the spine the character can work at its level
+        (`_ahead`), the accepts on the way passed over as a refused one is (V308's
+        `not_offered`); with none, the grind of its level to wait on (`rib_for`), its way back
+        the accept and its end the accept's level. `True` when the playhead moved.
+
+        A quest step's band starts at the quest's MinLevel (`max(1, MinLevel)`, as the
+        generator and the hive's route builder make every one), and the server gives no quest
+        below it: Hattheas, a level 2 blood elf, was refused Major Malfunction (MinLevel 4) at
+        12:24 and again at 12:31 on 28 Sep, 1,073 yards to a grind and 1,061 back between.
+
+        But a wait on a grind is hours where quests are minutes (V317): at 09:30 on 29 Sep, 100
+        of the 125 hive bots with under a minute on a quest step in 4 h stood on a rib waiting
+        for an accept 1 to 5 levels above them, and 96 of the 100 had an accept they could
+        take further along their spine. Cordianna, a level 9 undead warlock, waited from 06:21
+        on Supplying the Sepulcher (MinLevel 10) with 17 such accepts after it. And the wait
+        ended one level on, not at the accept's: an accept 2 levels up was two ribs."""
+        node = self._nodes.get(self.tracker.step_id)
         level = state.char.level
-        if (node is None or node.kind is not StepKind.QUEST_ACCEPT or node.quest_id is None
-                or node.quest_id in self.completed or level is None or level >= node.level[0]):
-            return None
+        on_rib = node is not None and node.kind is StepKind.GRIND
+        # Not on the way out of a death camp, which is no wait for the step (V307).
+        accept = (self._nodes.get(self.tracker.memory.rejoin_to or "")
+                  if on_rib and self._leaving != node.id else None if on_rib else node)
+        if (accept is None or accept.quest_id is None or accept.quest_id in self.completed
+                or not waits_for_level(state, accept)):
+            return False
+        ahead = self._ahead(state, accept)
+        if ahead is not None:
+            step, passed = ahead
+            if passed:
+                self._retried.update(passed)
+                self.tracker.enter(step, state)
+            else:
+                # A quest in the log behind the accept: done on the way, once a level, and
+                # back to the accept after, as a hand-in on the way is (`DETOUR`).
+                self._retried.add(f"{DETOUR}{step}@{level}")
+                self.tracker.enter(step, state, rejoin_to=accept.id)
+            return True
+        if on_rib:
+            return False                                  # nothing to do yet: it waits on
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
-        rib = self.graph.rib_for(level, near=here)
-        return rib.id if rib is not None else None
+        rib = rib_for(self._ribs(level), level, near=here)
+        if rib is None:
+            return False
+        self.tracker.enter(rib.id, state, rejoin_to=accept.id)
+        self.tracker.memory.level_at_entry = accept.level[0] - 1   # ends at the accept's level
+        return True
+
+    def _ahead(self, state: State, accept) -> tuple[str, tuple[str, ...]] | None:
+        """The first step past `accept` on the spine the character can work at its level now
+        (`_doable`), and the accepts on the way to it, `accept` first, to be passed over; with
+        none, the first step before it of a quest in the log (an objective not complete, a
+        hand-in complete) not yet tried on the way at the level, and nothing passed over;
+        `None` when there is neither or the quest log is unread. Hive-386, a level 6 orc
+        hunter, waited on Lost But Not Forgotten (MinLevel 8) with nothing to take before
+        level 7 ahead, and Sting of the Scorpid and Vile Familiars complete in its log, their
+        hand-ins behind it passed over (29 Sep)."""
+        if state.quests is None or state.char.level is None:
+            return None
+        level = state.char.level
+        held = {q.quest_id: q for q in state.quests}
+        key = (accept.id, level, frozenset(self._retried), frozenset(self.completed),
+               tuple(sorted((q, held[q].complete) for q in held)))
+        if self._ahead_seen and self._ahead_seen[0] == key:
+            return self._ahead_seen[1]
+        lost = self._lost_quests(state)
+        passed, seen, found = [accept.id], {accept.id}, None
+        cursor = accept.next[0] if accept.next else None
+        while cursor is not None and cursor not in seen:
+            seen.add(cursor)
+            node = self._nodes.get(cursor)
+            if node is None:
+                break
+            if self._doable(node, level, held, lost):
+                found = (node.id, tuple(passed))
+                break
+            if (node.kind is StepKind.QUEST_ACCEPT and node.quest_id not in held
+                    and node.quest_id not in self.completed and node.id not in self._retried):
+                passed.append(node.id)
+            cursor = node.next[0] if node.next else None
+        cursor, seen = self.graph.entry, set()
+        while found is None and cursor is not None and cursor != accept.id and cursor not in seen:
+            seen.add(cursor)
+            node = self._nodes.get(cursor)
+            if node is None:
+                break
+            quest = held.get(node.quest_id)
+            if (quest is not None and node.quest_id not in self.completed
+                    and not self._detour_spent(node.id, level)
+                    and ((node.kind is StepKind.QUEST_TURNIN and quest.complete is True)
+                         or self._doable(node, level, held, lost))):
+                # A hand-in passed over is tried again, once a level (`DETOUR`): Sting of the
+                # Scorpid and Vile Familiars sat complete in hive-386's log, their hand-ins
+                # passed over, while it waited.
+                found = (node.id, ())
+            cursor = node.next[0] if node.next else None
+        self._ahead_seen = (key, found)
+        return found
+
+    def _doable(self, node, level: int, held: dict, lost: set[int]) -> bool:
+        """Can the character work this step of the spine at its level now: an accept of a quest
+        not taken, done, lost or above it; an objective of a quest in the log not complete; a
+        hand-in of one complete. Level gates and the rest are passed by: a gate is a grind too."""
+        if node.quest_id is None or node.quest_id in self.completed or node.id in self._retried:
+            return False
+        quest = held.get(node.quest_id)
+        match node.kind:
+            case StepKind.QUEST_ACCEPT:
+                return (quest is None and node.quest_id not in lost and level >= node.level[0]
+                        and not (node.quest_prerequisites
+                                 and all(any(q in lost for q in group)
+                                         for group in node.quest_prerequisites)))
+            case StepKind.QUEST_OBJECTIVE:
+                return quest is not None and quest.complete is not True
+            case StepKind.QUEST_TURNIN:
+                return quest is not None and quest.complete is True
+        return False
+
+    def _ribs(self, level: int | None) -> tuple:
+        """The grind ribs not barred at `level` (`RIB_BAR`); every one when all are."""
+        if level is None:
+            return self._ribs_all
+        free = tuple(r for r in self._ribs_all if f"{RIB_BAR}{r.id}@{level}" not in self._retried)
+        return free or self._ribs_all
+
+    def _bar(self, rib_id: str, level: int | None) -> None:
+        if level is not None:
+            self._retried.add(f"{RIB_BAR}{rib_id}@{level}")
+
+    def _leave_rib(self, state: State) -> bool:
+        """A rib that failed (`Verdict.failed`, or its grind out of attempts) is barred at the
+        level and left for its way back: the step it waits to retry, or the accept it waits
+        on, which goes on to the next step doable at the level or waits on another rib
+        (`_below_level`). Without a way back, a guide's own grind past its end (V262) takes
+        another rib for the level, the level it grinds to kept; any other rib, the first step
+        not yet done. `True` when the playhead moved (V317).
+
+        A rib had no failure of its own: a grind out of attempts stopped the run and the next
+        session resumed the same rib ("walked the whole disk and found nothing to fight",
+        1,296 times in the hive's 8 h to 09:30 on 29 Sep), and the watchdog's "no quest or
+        experience progress; step failed over" (5,036 times, 479 h) ran a clock out that a
+        15-minute session never reached, so it failed over nothing."""
+        node = self._nodes.get(self.tracker.step_id)
+        if node is None or node.kind is not StepKind.GRIND:
+            return False
+        level = state.char.level
+        self._bar(node.id, level)
+        memory = self.tracker.memory
+        back = memory.rejoin_to if memory.rejoin_to in self._nodes else None
+        if back is not None:
+            self.tracker.enter(back, state)
+        elif self.start_grind_then_finish:
+            here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
+                    and state.pos.my is not None else None)
+            rib = rib_for(self._ribs(level), level, near=here)
+            if rib is None or rib.id == node.id:
+                memory.expired = False              # nowhere else: it grinds on where it is
+                return False
+            target = memory.level_at_entry
+            self.tracker.enter(rib.id, state)
+            self.tracker.memory.level_at_entry = target
+        else:
+            self.tracker = Tracker.resume(self.graph, state, completed=frozenset(self.completed))
+        return self.tracker.step_id != node.id
 
     def _beyond_abandoned(self) -> str | None:
         """The first step past the current quest's, for one of its objective or hand-in steps
@@ -718,7 +907,9 @@ class ClientRuntime:
                 if (verdict.completed and node is not None and node.kind.value == "quest_turnin"
                         and node.quest_id is not None):
                     self.completed.add(node.quest_id)
-                if verdict.goto:
+                if verdict.failed and node is not None and node.kind is StepKind.GRIND:
+                    self._leave_rib(state)
+                elif verdict.goto:
                     self.tracker.enter(verdict.goto, state)
                 elif (node is not None and node.kind is StepKind.GRIND
                       and self.start_grind_then_finish):
@@ -764,9 +955,9 @@ class ClientRuntime:
                         here = ((state.pos.mx, state.pos.my)
                                 if state.pos.mx is not None and state.pos.my is not None
                                 else None)
-                        goto = self.graph.rib_for(
-                            state.char.level, preferred=target, near=here,
-                            short="deaths" not in (verdict.reason or "")).id
+                        goto = rib_for(
+                            self._ribs(state.char.level), state.char.level, preferred=target,
+                            near=here, short="deaths" not in (verdict.reason or "")).id
                         if failed not in self._retried:
                             self._retried.add(failed)
                             rejoin = failed

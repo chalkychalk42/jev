@@ -984,7 +984,8 @@ def test_an_accept_below_its_quests_level_waits_on_the_grind_of_the_characters_l
     56 were below the quest's MinLevel, each walked to, refused, walked from to a grind and
     back, and refused again: Hattheas, a level 2 blood elf, at Major Malfunction (MinLevel 4),
     12:24 and 12:31. The accept reached at level 3 arms the grind for level 3, no walk to the
-    giver; a level later it waits on again, and at 5 the giver is walked to."""
+    giver, until the quest's level (V317: one level on, an accept two up was two ribs); at 4
+    it waits on, and at 5 the giver is walked to."""
     from jev.world.state_v1 import Char
 
     def at(t, level, *log):
@@ -998,7 +999,7 @@ def test_an_accept_below_its_quests_level_waits_on_the_grind_of_the_characters_l
     rt.tick()                                             # handed in: the accept is reached
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("low", "accept")
     assert rt.armed.decision.skill == "GRIND_UNTIL", "no walk to a giver who will refuse"
-    assert rt.armed.decision.params["until_level"] == 4
+    assert rt.armed.decision.params["until_level"] == 5, "the accept's level, not one on"
     assert rt.tracker.memory.until is None and "accept" not in rt._retried, "not a failure"
     rt.tick()
     rt.tick()                                             # level 4: still below
@@ -1104,3 +1105,203 @@ def test_a_service_barred_on_a_step_is_barred_there_alone(tmp_path):
     assert rt.tracker.step_id == "turnin"
     assert context.bags_unreachable_step is None and context.repair_unreachable_step is None
     assert context.can_make_space(0, "accept", 3), "back on the step later, asked again"
+
+
+def wait_graph(ahead: bool = True):
+    """V317: a spine whose next accept asks level 8 (Lost But Not Forgotten, MinLevel 8, in
+    Durotar), then one asking 9, then, when `ahead`, one a level 6 character can take; and
+    three ribs of level 6, `rib_a` where the character stands, `rib_b` 110 yards off, and
+    `rib_c` 1,200 yards off."""
+    base = dict(zone="zone", zone_id=1, map_id=0)
+    accept = ("TRAVEL_TO", "ACCEPT_QUEST")
+    return Graph(graph_id="g", faction="horde", entry="gated", nodes=(
+        Node(id="gated", kind=StepKind.QUEST_ACCEPT, quest_id=1, level=(8, 14),
+             next=("gated_do",), pos=(0.3, 0.3), world=(-500.0, 0.0, 0.0), skills=accept, **base),
+        Node(id="gated_do", kind=StepKind.QUEST_OBJECTIVE, quest_id=1, level=(8, 14),
+             next=("higher",), pos=(0.3, 0.3), skills=("TRAVEL_TO", "GRIND_UNTIL"), **base),
+        Node(id="higher", kind=StepKind.QUEST_ACCEPT, quest_id=2, level=(9, 14), next=("open",),
+             pos=(0.3, 0.3), skills=accept, **base),
+        Node(id="open", kind=StepKind.QUEST_ACCEPT, quest_id=3, level=(5 if ahead else 9, 12),
+             next=("open_in",), pos=(0.3, 0.3), skills=accept, **base),
+        Node(id="open_in", kind=StepKind.QUEST_TURNIN, quest_id=3, level=(5, 12),
+             pos=(0.3, 0.3), skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="rib_a", kind=StepKind.GRIND, level=(4, 6), pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("GRIND_UNTIL",), **base),
+        Node(id="rib_b", kind=StepKind.GRIND, level=(4, 6), pos=(0.53, 0.5),
+             world=(110.0, 0.0, 0.0), skills=("GRIND_UNTIL",), **base),
+        Node(id="rib_c", kind=StepKind.GRIND, level=(4, 6), pos=(0.8, 0.8),
+             world=(900.0, 800.0, 0.0), skills=("GRIND_UNTIL",), **base),
+    ))
+
+
+def level6(t, **kw):
+    from jev.world.state_v1 import Char
+
+    return seen(t, char=Char(level=kw.pop("level", 6)), **kw)
+
+
+def test_an_accept_above_the_level_goes_on_to_the_next_step_it_can_do(tmp_path):
+    """V317: at 09:30 on 29 Sep, 100 of the 125 hive bots with under a minute on a quest step
+    in 4 h stood on a rib waiting for an accept 1 to 5 levels above them, and 96 of them had
+    one they could take further along their spine: Wuhson, a level 7 troll mage, from 04:15
+    for Lost But Not Forgotten (MinLevel 8). The accept is passed over, as a refused one is,
+    with the accepts above the level on the way, and the next one it can take is walked to."""
+    rt = ClientRuntime("c", wait_graph(), ScriptedSource([level6(0), level6(1)]),
+                       Recorder(tmp_path), start_step="gated")
+    rt.tick()
+    assert rt.tracker.step_id == "open", "a grind of hours where a quest was minutes"
+    assert {"gated", "higher"} <= rt._retried
+    assert rt.armed.decision.skill == "TRAVEL_TO", "the walk to its giver, not a grind"
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "open"
+
+
+def test_a_rib_already_waiting_on_an_accept_goes_on_to_the_step_it_can_do(tmp_path):
+    """V317: the hive's 100 bots waiting on a rib resume there, their way back the accept and
+    the level they entered at kept (V308); the first tick takes them to the step they can do."""
+    saved = []
+    rt = ClientRuntime("c", wait_graph(), ScriptedSource([level6(0)]), Recorder(tmp_path),
+                       start_step="rib_a", start_rejoin="gated", start_entry_level=6,
+                       on_progress=lambda step, *a, **k: saved.append(step))
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "open" and saved[-1] == "open"
+
+
+def test_with_nothing_to_do_ahead_the_wait_lasts_until_the_accepts_level(tmp_path):
+    """V317: with no step ahead it can do, the character waits on a grind, to the quest's
+    level, not one past the level it came at, and not for the rib's own clock: the giver
+    still refuses, and the timed-out rib was entered again the same tick."""
+    states = [level6(0), level6(1), level6(2), level6(3, level=7), level6(4, level=8)]
+    rt = ClientRuntime("c", wait_graph(ahead=False), ScriptedSource(states), Recorder(tmp_path),
+                       start_step="gated")
+    rt.tick()
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib_a", "gated")
+    assert rt.armed.decision.params["until_level"] == 8
+    assert "gated" not in rt._retried, "a wait, not a failure"
+    rt.tracker.memory.working_s = 10_000.0                # past the rib's 900 s
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_a"
+    rt.tick(choose=False)
+    rt.tick(choose=False)                                 # level 7
+    assert rt.tracker.step_id == "rib_a"
+    rt.tick(choose=False)                                 # level 8: the giver
+    assert rt.tracker.step_id == "gated"
+
+
+def test_a_rib_that_earns_nothing_goes_back_to_the_spine_not_round_again(tmp_path):
+    """V317: in the hive's 8 h to 09:30 on 29 Sep a grind ended 5,036 times, 479 h, as "no
+    quest or experience progress; step failed over", and the rib went on: its clock, kept in
+    memory, began again with each 15-minute session and never reached its 900 s. Failed, it
+    is barred at the level and left for its way back: the accept, which goes on to a step
+    ahead the character can do or, with none, waits on another rib."""
+    rt = ClientRuntime("c", wait_graph(ahead=False), ScriptedSource([level6(t) for t in range(4)]),
+                       Recorder(tmp_path), start_step="rib_a", start_rejoin="gated",
+                       start_entry_level=7)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_a"
+    assert rt.expire_step()                               # the watchdog's window
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib_b", "gated")
+    assert rt.tracker.memory.level_at_entry == 7, "still the accept's level"
+    assert "rib-bar:rib_a@6" in rt._retried
+    assert rt.expire_step()
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_c", "never back to the rib that failed"
+
+    ahead = ClientRuntime("c", wait_graph(), ScriptedSource([level6(t) for t in range(3)]),
+                          Recorder(tmp_path), start_step="rib_a", start_rejoin="gated",
+                          start_entry_level=7, start_retried=frozenset({"open"}))
+    ahead.tick(choose=False)
+    assert ahead.tracker.step_id == "rib_a", "nothing ahead yet: the open accept was passed"
+    ahead._retried.discard("open")                        # say a level made it doable
+    ahead.expire_step()
+    ahead.tick(choose=False)
+    assert ahead.tracker.step_id == "open"
+
+
+def test_a_ribs_grind_out_of_attempts_rejoins_the_spine_rather_than_stopping_the_run(tmp_path):
+    """V317: "walked the whole disk and found nothing to fight" ended a rib's grind 1,296
+    times in the hive's 8 h to 09:30 on 29 Sep; a rib had no fail edge, the run stopped, and
+    the next session resumed the same rib. Cordianna's Undercity rib did it at 09:29:47."""
+    rt = ClientRuntime("c", rib_graph(), ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                       start_step="rib", start_rejoin="turnin")
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib"
+    assert rt.fail_over("GRIND_UNTIL", "walked the whole disk and found nothing to fight")
+    assert rt.tracker.step_id == "turnin" and "rib-bar:rib@3" in rt._retried
+
+
+def test_a_death_camp_on_a_rib_never_sends_the_next_death_back_to_it(tmp_path):
+    """V317: the leave from a death camp (V307) took the nearest rib out of it, and the next
+    death there the nearest out of that one: Wuhson went Durotar 5-7, 7-9, 5-7, 7-9 from
+    04:35 to 09:30 on 29 Sep, and 990 of the hive's 1,112 rib-to-rib moves in 8 h came within
+    10 minutes of a death. The rib holding the camp is barred at the level, and the level the
+    wait is for goes with the character."""
+    states = [level6(t) for t in range(3)]
+    rt = ClientRuntime("c", wait_graph(ahead=False), ScriptedSource(states), Recorder(tmp_path),
+                       start_step="rib_a", start_rejoin="gated", start_entry_level=7)
+    rt.policy_context.camp_left(0, 5.0, 0.0)              # died at rib_a
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib_b", "gated")
+    assert rt.tracker.memory.level_at_entry == 7
+    rt.tracker.memory.arrived = True                      # there: the leave is made
+    rt.tick(choose=False)
+    rt.policy_context.camp_left(0, 112.0, 0.0)            # and died at rib_b
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_c", "rib_a again: the ping-pong"
+    assert rt.tracker.memory.level_at_entry == 7
+
+
+def test_a_finished_guides_grind_that_earns_nothing_goes_to_another(tmp_path):
+    """V317: a guide run out below the next one's first level grinds its own until then (V262);
+    a rib of it that earns nothing had no end but that level, and 20 of the 125 bots stuck
+    in the hive on 29 Sep were on one. It goes to another rib for the level, the level kept."""
+    rt = ClientRuntime("c", wait_graph(), ScriptedSource([level6(t) for t in range(3)]),
+                       Recorder(tmp_path), start_step="rib_a", start_entry_level=9,
+                       start_grind_then_finish=True)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_a"
+    assert rt.expire_step()
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_b" and not rt.finished
+    assert rt.tracker.memory.level_at_entry == 9
+
+
+def test_a_ribs_bar_is_lifted_when_the_level_rises(tmp_path):
+    rt = ClientRuntime("c", wait_graph(ahead=False),
+                       ScriptedSource([level6(0), level6(1), level6(2, level=7)]),
+                       Recorder(tmp_path), start_step="rib_a", start_rejoin="gated",
+                       start_entry_level=7)
+    rt.tick(choose=False)
+    rt.expire_step()
+    rt.tick(choose=False)
+    assert "rib-bar:rib_a@6" in rt._retried
+    rt.tick(choose=False)
+    assert not any(r.startswith("rib-bar:") for r in rt._retried)
+
+
+def test_with_nothing_ahead_a_quest_in_the_log_behind_the_accept_is_done_first(tmp_path):
+    """V317: hive-386, a level 6 orc hunter, waited on Lost But Not Forgotten (MinLevel 8) with
+    nothing it could take before level 7 ahead, and Sting of the Scorpid and Vile Familiars
+    complete in its log, their hand-ins passed over behind it (29 Sep). A quest in the log
+    behind the accept is done on the way, once a level, and the accept waited on after."""
+    base = dict(zone="zone", zone_id=1, map_id=0, pos=(0.5, 0.5))
+    graph = Graph(graph_id="g", faction="horde", entry="old_in", nodes=(
+        Node(id="old_in", kind=StepKind.QUEST_TURNIN, quest_id=5, next=("gated",),
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="gated", kind=StepKind.QUEST_ACCEPT, quest_id=1, level=(8, 14),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(4, 6), world=(0.0, 0.0, 0.0),
+             skills=("GRIND_UNTIL",), **base),
+    ))
+    done = (Quest(quest_id=5, complete=True),)
+    states = [level6(0, quests=done), level6(1, quests=()), level6(2, quests=())]
+    rt = ClientRuntime("c", graph, ScriptedSource(states), Recorder(tmp_path),
+                       start_step="rib", start_rejoin="gated", start_entry_level=7,
+                       start_retried=frozenset({"old_in"}))
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("old_in", "gated")
+    rt.tick(choose=False)                                 # handed in
+    assert 5 in rt.completed
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "gated"), "then waits"

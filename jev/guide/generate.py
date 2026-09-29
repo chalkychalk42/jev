@@ -199,6 +199,18 @@ RIB_SPREAD_YARDS = 20.0
 RIB_NEIGHBOUR_YARDS = 90.0
 RIB_OUTCLASS_LEVELS = 2
 CREATURE_BEAST = 1                     # creature_template.CreatureType
+# No rib in a capital (`dbc_AreaTable.c4`, the area's flags): its map box is a city, and what
+# lies in the box around it is the surrounding zone's, with ribs of its own. The hive's routes
+# had 62 ribs in the boxes of Orgrimmar, the Undercity, Thunder Bluff, Silvermoon and the
+# Exodar in 32 of 52 (29 Sep): Silvermoon's Wretched Urchins in the city's streets, the rest
+# Tirisfal's, Durotar's, Mulgore's and Azuremyst's creatures under a city's name, a second rib
+# for the same window beside the zone's own for a leave to hop to. In the 8 h to 09:30, 96 h
+# of grinding on them walked the whole disk and found nothing 0.88 times an hour, 0.57 on
+# the 2,002 h of the rest (V317).
+AREA_FLAG_CAPITAL = 0x100
+# FactionTemplate's own and friendly group masks (`c3`, `c4`) for each player faction: a
+# creature friendly to the character is no grind, however many spawn together (V317).
+FACTION_GROUP = {"alliance": 0x2, "horde": 0x4}
 
 # Spawn points kept per cluster for a hunt to stand on: the nearest this many to its centre.
 HUNT_SPAWNS = 16
@@ -655,8 +667,28 @@ class WorldDB:
                 break
         return out
 
+    def capital(self, area_id: int) -> bool:
+        """Is this area a capital city (`AREA_FLAG_CAPITAL`)? `False` when unreadable."""
+        try:
+            row = self.con.execute("select c4 from dbc_AreaTable where id = ?",
+                                   (area_id,)).fetchone()
+        except sqlite3.OperationalError:
+            return False
+        return row is not None and bool((row[0] or 0) & AREA_FLAG_CAPITAL)
+
+    def _friendly(self, faction: str | None) -> set[int]:
+        """The faction templates friendly to a player of `faction`; none when unreadable."""
+        group = FACTION_GROUP.get(faction or "")
+        if group is None:
+            return set()
+        try:
+            return {row[0] for row in self.con.execute(
+                "select id from dbc_FactionTemplate where (c3 | c4) & ? != 0", (group,))}
+        except sqlite3.OperationalError:
+            return set()
+
     def grind_clusters(self, zone_bounds: ZoneBounds, level_min: int, level_max: int,
-                       limit: int = 2) -> list[tuple[Spawn, int]]:
+                       limit: int = 2, faction: str | None = None) -> list[tuple[Spawn, int]]:
         """Grind ribs: one creature's densest cluster, the safest kinds first.
 
         "Killable" is a heuristic and named as one: normal rank, in level band, carrying
@@ -674,11 +706,17 @@ class WorldDB:
         out (a median of `RIB_SPREAD_YARDS` to the nearest neighbour, not a camp that pulls
         in pairs), beasts (they neither flee for help nor carry weapons), the lower end of
         the band, then the biggest cluster.
+
+        None in a capital's box (`AREA_FLAG_CAPITAL`), and given the character's `faction`,
+        none of a creature friendly to it (V317).
         """
+        if self.capital(zone_bounds.area_id):
+            return []
+        friendly = self._friendly(faction)
         rows = self.con.execute(
             """
             select cast(c.position_x as real) x, cast(c.position_y as real) y,
-                   cast(c.position_z as real) z, c.map, c.id, t.Name, t.CreatureType
+                   cast(c.position_z as real) z, c.map, c.id, t.Name, t.CreatureType, t.Faction
             from world_creature c
             join world_creature_template t on t.Entry = c.id
             where c.map = ? and t.Rank = 0 and t.NpcFlags = 0
@@ -704,7 +742,8 @@ class WorldDB:
         by_creature: dict[int, list] = defaultdict(list)
         for r in rows:
             frac = world_to_map(r["x"], r["y"], zone_bounds)
-            if frac and on_map(*frac, slack=0.0) and not outclassed(r["x"], r["y"]):
+            if (frac and on_map(*frac, slack=0.0) and r["Faction"] not in friendly
+                    and not outclassed(r["x"], r["y"])):
                 by_creature[r["id"]].append(r)
 
         ranked = []
@@ -863,7 +902,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             continue
         taken: set[int] = set()
         for lo, hi in rib_windows(level_min, level_max):
-            for spawn, count in db.grind_clusters(b, lo, hi, limit=3):
+            for spawn, count in db.grind_clusters(b, lo, hi, limit=3, faction=faction):
                 if spawn.npc_id in taken:
                     continue
                 taken.add(spawn.npc_id)
