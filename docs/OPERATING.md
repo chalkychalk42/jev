@@ -132,8 +132,12 @@ ledger). Rerun the suite before calling a change broken.
 ### A change to what the strip paints
 
 A new schema changes the addon as well as the decoder: schema 18 (V237) paints the class
-trainer's list, which the trainer desk needs to buy by value, and schema 19 (V261), the current
-one, adds the talents and a thirteenth row. The client paints the schema
+trainer's list, which the trainer desk needs to buy by value, schema 19 (V261) adds the talents
+and a thirteenth row, and schema 20 (V320), the current one, which nameplates the client draws:
+from it a look shows friendly or enemy plates found hidden (a relaunched client drew no friendly
+plate on 27-29 Sep, and no merchant, smith, innkeeper or quest giver was found for 34 hours;
+under schema 19 or older, one press of SHIFT-V in the client shows them, and the client keeps
+the state at logout). The client paints the schema
 that is installed until the addon is installed again. So the two go live in this order, each
 at a session boundary with the loop held:
 1. **The decoder**, merged as above. It reads the installed schema 17 as it did, with the new
@@ -144,7 +148,7 @@ at a session boundary with the loop held:
    `tools/keep.sh client-restart`, at an idle desk. The addon loads at login, so nothing
    changes until the restart.
 3. Check the strip reads as the new schema: Windows Python `tools/observe.py` shows `schema`
-   18. Then release the hold.
+   20, and `ui.plates_friendly` and `ui.plates_enemy`. Then release the hold.
 
 The other order would leave every session in between blind: a decoder that does not know the
 new schema refuses the strip, as a checksum or schema fault. To go back, put the backup
