@@ -519,3 +519,49 @@ def test_a_service_barred_on_a_step_is_lifted_by_time_a_success_or_another_step(
     context.on_step("next")
     assert context.bags_unreachable_step is None and context.supplies_unreachable_step is None
     assert len(saves) == count + 1
+
+
+def test_a_service_failing_again_and_again_waits_twice_as_long_each_time():
+    """V322: with no friendly plate drawn (27 Sep 22:56 on) and the gear broken, a flat
+    minute armed VENDOR_REPAIR 57 times in sessions 387-426, none done, and the walks were
+    where 13 of the mage's 29 deaths began. Doubling each failure in a row, a success over."""
+    from jev.coach.policy import SERVICE_RETRY_MAX_S, SERVICE_RETRY_MIN_S, Context
+
+    saves = []
+    context = Context(saved=lambda: saves.append(1))
+    broken = _s(bags=Bags(free=10, durability_min=0.0, money_copper=10_000))
+    assert decide(broken, context=context).decision.skill == "VENDOR_REPAIR"
+    t = 1_790_000_000.0
+    waits = []
+    for _ in range(7):
+        context.service_failed("VENDOR_REPAIR", t)
+        waits.append(context.service_wait("VENDOR_REPAIR"))
+        assert context.failed_lately("VENDOR_REPAIR", t + waits[-1] - 1)
+        assert not context.failed_lately("VENDOR_REPAIR", t + waits[-1] + 1)
+        t += waits[-1] + 1
+    assert waits == [SERVICE_RETRY_MIN_S, 120, 240, 480, 960, SERVICE_RETRY_MAX_S,
+                     SERVICE_RETRY_MAX_S]
+    assert saves, "kept in the purse file"
+    held = broken.model_copy(update={"t": t - 2})
+    assert decide(held, context=context).decision.skill != "VENDOR_REPAIR"
+    # The next session knows.
+    restored = Context()
+    restored.restore_purse(context.purse())
+    assert restored.service_wait("VENDOR_REPAIR") == SERVICE_RETRY_MAX_S
+    assert restored.failed_lately("VENDOR_REPAIR", t - 2)
+    # Another skill's failures are its own; a success ends the run of them.
+    assert context.service_wait("BAG_MAKE_SPACE") == SERVICE_RETRY_MIN_S
+    context.served("VENDOR_REPAIR")
+    assert context.service_wait("VENDOR_REPAIR") == SERVICE_RETRY_MIN_S
+    assert not context.failed_lately("VENDOR_REPAIR", t - 2)
+    assert decide(held, context=context).decision.skill == "VENDOR_REPAIR"
+
+
+def test_a_purse_file_from_before_the_backoff_restores_none():
+    from jev.coach.policy import SERVICE_RETRY_MIN_S, Context
+
+    context = Context()
+    context.restore_purse({"repair_blocked": False, "service_failures": {"X": "3"},
+                           "service_failed_at": ["no"]})
+    assert context.service_failures == {} and context.service_failed_at == {}
+    assert context.service_wait("VENDOR_REPAIR") == SERVICE_RETRY_MIN_S

@@ -92,6 +92,13 @@ UNREACHABLE_KINDS = {"VENDOR_REPAIR": "repair", "BUY_AMMO_REAGENT_FOOD": "suppli
 # (V307), the skill aborted in 0.25 s, and its bar, set on a step no rule reads, let it be
 # armed again 0.5 s later. Not keyed by the step, which is what failed to agree.
 SERVICE_RETRY_MIN_S = 60.0
+# Each failure more in a row, since the skill last succeeded, doubles that wait, to at most
+# `SERVICE_RETRY_MAX_S` (V322). A flat minute let a service no walk could cure be armed for as
+# long as its need lasted: with no friendly plate drawn from 27 Sep 22:56 (V320) and the gear
+# broken throughout, VENDOR_REPAIR was armed 57 times in sessions 387-426, 66 minutes, BAG_MAKE_
+# SPACE 20 and BIND_HEARTH 21, none done; and the walks were where the mage died, 13 of its 29
+# deaths in fights begun on them. Kept in the purse file, as a 15-minute session would forget it.
+SERVICE_RETRY_MAX_S = 1800.0
 
 
 @dataclass(frozen=True)
@@ -117,17 +124,27 @@ class Context:
         self.repair_blocked, self.repair_money = True, money
         self._save()
 
-    # When each service last failed, by skill (`SERVICE_RETRY_MIN_S`, V315).
+    # When each service last failed, by skill (`SERVICE_RETRY_MIN_S`, V315), and how many
+    # times in a row since it last succeeded (V322).
     service_failed_at: dict[str, float] = field(default_factory=dict)
+    service_failures: dict[str, int] = field(default_factory=dict)
 
     def service_failed(self, skill: str, now: float) -> None:
         self.service_failed_at[skill] = now
+        self.service_failures[skill] = self.service_failures.get(skill, 0) + 1
+        self._save()
+
+    def service_wait(self, skill: str | None) -> float:
+        """How long after its last failure `skill` waits: `SERVICE_RETRY_MIN_S`, doubled for
+        each failure more in a row, at most `SERVICE_RETRY_MAX_S` (V322)."""
+        failures = self.service_failures.get(skill or "", 0)
+        return min(SERVICE_RETRY_MIN_S * 2 ** max(0, min(failures, 16) - 1), SERVICE_RETRY_MAX_S)
 
     def failed_lately(self, skill: str | None, now: float) -> bool:
-        """Did `skill` fail within `SERVICE_RETRY_MIN_S` of `now`? Either way round: a wall
+        """Did `skill` fail within its wait (`service_wait`) of `now`? Either way round: a wall
         clock set back (the WSL clock, 28 Sep) does not hold a service off for good."""
         at = self.service_failed_at.get(skill or "")
-        return at is not None and abs(now - at) < SERVICE_RETRY_MIN_S
+        return at is not None and abs(now - at) < self.service_wait(skill)
 
     fight_unengaged: int = 0
     fight_paused_until: float = 0.0
@@ -182,9 +199,14 @@ class Context:
         return True
 
     def served(self, skill: str) -> None:
-        """A service done: a bar on its kind is lifted, a merchant or a smith reached."""
+        """A service done: a bar on its kind is lifted, a merchant or a smith reached, and its
+        failures in a row are over (V322)."""
         kind = UNREACHABLE_KINDS.get(skill)
-        if kind is not None and self._clear_unreachable(kind):
+        cleared = kind is not None and self._clear_unreachable(kind)
+        if self.service_failures.pop(skill, None) is not None:
+            self.service_failed_at.pop(skill, None)
+            cleared = True
+        if cleared:
             self._save()
 
     def on_step(self, step_id: str | None) -> None:
@@ -235,15 +257,22 @@ class Context:
     PURSE = ("repair_blocked", "repair_money", "supplies_blocked", "supplies_money",
              "supplies_needed", "train_blocked_level", "train_blocked_until",
              "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step",
-             "repair_unreachable_until", "supplies_unreachable_until", "bags_unreachable_until")
+             "repair_unreachable_until", "supplies_unreachable_until", "bags_unreachable_until",
+             "service_failed_at", "service_failures")
 
     def purse(self) -> dict:
-        return {name: getattr(self, name) for name in self.PURSE}
+        return {name: (dict(value) if isinstance(value := getattr(self, name), dict) else value)
+                for name in self.PURSE}
 
     def restore_purse(self, raw: dict) -> None:
         for name in self.PURSE:
             value = raw.get(name)
-            if name.endswith("blocked"):
+            if name.startswith("service_"):
+                kept = value if isinstance(value, dict) else {}
+                number = int if name == "service_failures" else float
+                setattr(self, name, {str(k): number(v) for k, v in kept.items()
+                                     if isinstance(v, (int, float)) and not isinstance(v, bool)})
+            elif name.endswith("blocked"):
                 setattr(self, name, value is True)
             elif name.endswith("_step"):
                 setattr(self, name, value if isinstance(value, str) else None)
