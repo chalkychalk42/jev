@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import os
+import random
 import time
 import uuid
 from contextvars import ContextVar
@@ -66,6 +68,20 @@ def _activate(scope: _Scope | None):
         _current.reset(token)
 
 
+# The ids of evidence rows, a version 4 UUID's hex as before, drawn from Python's own
+# generator seeded from the system's random source, and seeded again in a forked child.
+# `uuid.uuid4` reads the system's source at each id, and each read gives up the interpreter
+# lock: in a farm process of 79 bots, each waiting to get it back, it was 4.3% of the
+# process's samples (py-spy, 29 Sep).
+_ids = random.Random()
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_ids.seed)
+
+
+def _new_id() -> str:
+    return uuid.UUID(int=_ids.getrandbits(128), version=4).hex
+
+
 def _write(scope: _Scope, *, operation_id: str, parent_operation_id: str | None,
            name: str, phase: str, code: str = "", detail: str = "",
            duration_s: float | None = None, data: dict[str, Any] | None = None):
@@ -74,7 +90,7 @@ def _write(scope: _Scope, *, operation_id: str, parent_operation_id: str | None,
         run_id=binding.recorder.run_id, client_id=binding.client_id,
         arm_id=binding.arm_id, decision_id=binding.decision_id,
         armed_by=binding.armed_by, step_id=binding.step_id,
-        situation_key=binding.situation_key, event_id=uuid.uuid4().hex,
+        situation_key=binding.situation_key, event_id=_new_id(),
         operation_id=operation_id, parent_operation_id=parent_operation_id,
         t=time.time(), tick_id=binding.recorder.tick_id, phase=phase,
         operation=name, code=code, detail=detail, duration_s=duration_s,
@@ -105,7 +121,7 @@ def operation(name: str, *, data: dict[str, Any] | None = None):
     if scope is None:
         yield span
         return
-    operation_id = uuid.uuid4().hex
+    operation_id = _new_id()
     started = time.monotonic()
     _write(scope, operation_id=operation_id, parent_operation_id=scope.operation_id,
            name=name, phase="begin", data=data)
@@ -131,7 +147,7 @@ def event(name: str, *, code: str = "", detail: str = "",
     """Record an observation within the current operation, without allocating a tick."""
     scope = _current.get()
     if scope is not None:
-        _write(scope, operation_id=uuid.uuid4().hex,
+        _write(scope, operation_id=_new_id(),
                parent_operation_id=scope.operation_id, name=name, phase="event",
                code=code, detail=detail, data=data)
 

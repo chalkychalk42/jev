@@ -24,6 +24,7 @@ data.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import time
@@ -100,6 +101,18 @@ CAMP_S = 3600.0
 CAMP_REFUSED = "no way that keeps out of a death camp"
 REFUSAL_S = 60.0
 REFUSAL_YARDS = 5.0
+# A death past `DANGER_S` and out of any camp is kept by no rule here: `dangers_on` passes it
+# over and `died` drops it. The hive's merge (`hive.shared.SharedRoutes`) took each back from
+# the file at every save, and at 14:05 on 29 Sep its memory held 8,678 deaths, 506 of them
+# still kept, every walk plan in each of four farm processes looking through all of them. A
+# memory drops such deaths when it loads and saves, as reckoned `COMPACT_SLACK_S` before the
+# latest death it holds or the clock, whichever is earlier: a death let go is one no later
+# look at it keeps, with the farm processes' clocks some seconds apart (WSL, 28 Sep).
+COMPACT_SLACK_S = 600.0
+# The places a route keeps clear of are looked up by `GRID_YARDS` squares (`_Near`): which of
+# them a route passes was each place's distance from each leg of the route, for each of the
+# map's places, at each candidate of a way round (py-spy of a farm process, 29 Sep).
+GRID_YARDS = 100.0
 
 
 @dataclass
@@ -195,7 +208,33 @@ class RouteMemory:
             document = json.loads(self.file.read_text(encoding="utf-8"))
             self.passages = [Passage(**row) for row in document.get("passages", ())]
             self.blocked = [Block(**row) for row in document.get("blocked", ())]
-            self.dangers = [Danger(**row) for row in document.get("dangers", ())]
+            self.dangers = _compact([Danger(**row) for row in document.get("dangers", ())])
+
+    # The deaths, as a list the hive's merge replaces whole (`hive.shared.SharedRoutes`): each
+    # replacement, and each death kept (`died`), is a new version of what `dangers_on` answers.
+    @property
+    def dangers(self) -> list[Danger]:
+        return self._dangers
+
+    @dangers.setter
+    def dangers(self, dangers: list[Danger]) -> None:
+        self._dangers = dangers
+        self._changed()
+
+    def _changed(self) -> None:
+        self._answers: tuple[tuple, dict] = ((), {})
+
+    def _answered(self) -> dict:
+        """What `dangers_on` answered of the deaths as they are, each map's deaths in order;
+        kept until they change (`dangers`, `died`)."""
+        signature = (id(self._dangers), len(self._dangers))
+        kept = self._answers
+        if kept[0] != signature:
+            by_map: dict = {}
+            for death in self._dangers:
+                by_map.setdefault(death.map_id, []).append(death)
+            kept = self._answers = (signature, {"on": by_map})
+        return kept[1]
 
     def died(self, map_id: int, spot: tuple[float, float], now: float | None = None,
              level: int | None = None, who: int | None = None) -> Danger:
@@ -223,6 +262,7 @@ class RouteMemory:
         if recent or held:
             for death in (*recent, *held, found):
                 death.camp_until = now + CAMP_S
+        self._changed()
         self._save()
         return found
 
@@ -231,8 +271,25 @@ class RouteMemory:
         """The places on a map the character died at within `DANGER_S`, and the death camps
         still held, that count at `level` (`counts_for`)."""
         now = time.time() if now is None else now
-        return [d for d in self.dangers if d.map_id == map_id
+        # Kept a plan's many asks: a death's keeping only ends as time goes on, so what was
+        # kept at `since` is kept up to `until`, the first moment one of them may end (less a
+        # millisecond for the sums' rounding); a death kept or the deaths replaced, a new
+        # version (`_answered`).
+        answered = self._answered()
+        try:
+            since, until, kept = answered.get((map_id, level)) or (math.inf, -math.inf, None)
+        except TypeError:                   # a level that is no key: looked through each time
+            since, until, kept = math.inf, -math.inf, None
+        if since <= now < until:
+            return list(kept)
+        kept = [d for d in answered["on"].get(map_id, ()) if d.map_id == map_id
                 and (now - d.at < DANGER_S or d.camp(now)) and counts_for(d.level, level)]
+        until = min((min(d.at + DANGER_S if now - d.at < DANGER_S else math.inf,
+                         d.camp_until if d.camp(now) else math.inf) for d in kept),
+                    default=math.inf) - 0.001
+        with contextlib.suppress(TypeError):
+            answered[(map_id, level)] = (now, until, kept)
+        return list(kept)
 
     def camp_at(self, map_id: int, point: tuple[float, float], now: float | None = None,
                 level: int | None = None) -> Danger | None:
@@ -273,9 +330,21 @@ class RouteMemory:
     def _save(self) -> None:
         if self.file is None:
             return
+        self.dangers = _compact(self.dangers)
         atomic_json(self.file, {"format": 1, "passages": [asdict(p) for p in self.passages],
                                 "blocked": [asdict(b) for b in self.blocked],
                                 "dangers": [asdict(d) for d in self.dangers]})
+
+
+def _compact(dangers: list[Danger]) -> list[Danger]:
+    """The deaths some later look may still keep (`COMPACT_SLACK_S`), in their order."""
+    if not dangers:
+        return dangers
+    try:
+        at = min(time.time(), max(d.at for d in dangers)) - COMPACT_SLACK_S
+        return [d for d in dangers if not (at - d.at >= DANGER_S and not d.camp(at))]
+    except (TypeError, ValueError):       # a death read with no time: all kept, as before
+        return dangers
 
 
 def passes(path: Path, block: Block) -> bool:
@@ -362,6 +431,82 @@ def _passes(points, x: float, y: float, reach: float) -> bool:
     return any(_segment_distance((x, y), a, b) < reach for a, b in pairwise(points))
 
 
+def _square(x: float, y: float) -> tuple[int, int]:
+    return math.floor(x / GRID_YARDS), math.floor(y / GRID_YARDS)
+
+
+class _Near:
+    """Places (x, y, reach, ...) by `GRID_YARDS` square, for which of them a route passes
+    within its reach (`_passes`). A place is measured only from the legs whose box, grown by
+    the largest reach, covers its square: a leg farther off cannot come within its reach.
+    The same answer as measuring every place from every leg, in the places' order."""
+
+    def __init__(self, spots):
+        self.spots = list(spots)
+        self.reach = max((s[2] for s in self.spots), default=0.0)
+        self.squares: dict[tuple[int, int], list[int]] = {}
+        self.square: list[tuple[int, int] | None] = []
+        for i, spot in enumerate(self.spots):
+            try:
+                square = _square(spot[0], spot[1])
+            except (ValueError, OverflowError, TypeError):
+                square = None                # measured from every leg, every time
+            self.square.append(square)
+            self.squares.setdefault(square, []).append(i)
+
+    def _passing(self, points):
+        """The indices of the places `points` passes, in order."""
+        if not self.spots or len(points) == 0:
+            return
+        try:
+            legs_of = self._legs(points)
+        except (ValueError, OverflowError, TypeError):
+            legs_of = None                   # no square for a point: every place measured
+        if legs_of is None:
+            yield from (i for i, (x, y, reach, *_) in enumerate(self.spots)
+                        if _passes(points, x, y, reach))
+            return
+        for i in sorted(i for square in legs_of for i in self.squares[square]):
+            x, y, reach, *_ = self.spots[i]
+            legs = legs_of[self.square[i]]
+            if (_passes(points, x, y, reach) if legs is True
+                    else any(_segment_distance((x, y), a, b) < reach for a, b in legs)):
+                yield i
+
+    def _legs(self, points) -> dict:
+        """The squares with places near the route, each with the legs near it (`True`: all
+        of them, for a route of one point and for places with no square)."""
+        pad = self.reach + 1.0               # a yard more, for the sums' rounding
+        xs, ys = [p[0] for p in points], [p[1] for p in points]
+        i0, j0 = _square(min(xs) - pad, min(ys) - pad)
+        i1, j1 = _square(max(xs) + pad, max(ys) + pad)
+        if (i1 - i0 + 1) * (j1 - j0 + 1) > len(self.squares):
+            near = [s for s in self.squares if s is not None
+                    and i0 <= s[0] <= i1 and j0 <= s[1] <= j1]
+        else:
+            near = [s for i in range(i0, i1 + 1) for j in range(j0, j1 + 1)
+                    if (s := (i, j)) in self.squares]
+        legs_of: dict = {None: True} if None in self.squares else {}
+        if len(points) == 1:
+            legs_of.update((s, True) for s in near)
+            return legs_of
+        for a, b in pairwise(points):
+            li0, lj0 = _square(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad)
+            li1, lj1 = _square(max(a[0], b[0]) + pad, max(a[1], b[1]) + pad)
+            for s in near:
+                if li0 <= s[0] <= li1 and lj0 <= s[1] <= lj1:
+                    legs_of.setdefault(s, []).append((a, b))
+        return legs_of
+
+    def passed(self, points) -> list:
+        """The places the polyline `points` comes within the reach of, in order."""
+        return [self.spots[i] for i in self._passing(points)]
+
+    def first(self, points):
+        """The first place `points` comes within the reach of, or `None`."""
+        return next((self.spots[i] for i in self._passing(points)), None)
+
+
 class DangerAvoidingQuery:
     """The planner, asked for routes that keep clear of where the character recently died
     (`RouteMemory.died`, `DANGER_YARDS`) and of where it keeps being attacked (`hot`, a
@@ -422,23 +567,24 @@ class DangerAvoidingQuery:
         clear of, as a set of their places: for the layers over it, whose ways round must not
         walk back through what this one went round (V307). Nothing, when anything goes wrong."""
         try:
-            spots = self._kept(map_id, start, end)
+            spots = _Near(self._kept(map_id, start, end))
         except Exception:
-            spots = []
+            spots = _Near([])
 
         def passed(points) -> frozenset:
-            return frozenset((x, y) for x, y, reach, *_ in spots if _passes(points, x, y, reach))
+            return frozenset((x, y) for x, y, *_ in spots.passed(points))
         return passed
 
     def _round(self, map_id: int, start: Point, end: Point, direct: Path) -> Path:
         if not direct.usable or start[:2] == end[:2]:
             return direct
         spots = self._kept(map_id, start, end)
-        hit = next((spot for spot in spots if near_route(direct, spot[0], spot[1], spot[2])), None)
+        passed = _Near(spots).passed(direct.points)
+        hit = passed[0] if passed else None
         if hit is None:
             return direct
         camps = [spot for spot in spots if spot[4]]
-        camp = next((spot for spot in camps if near_route(direct, *spot[:3])), None)
+        camp = next((spot for spot in passed if spot[4]), None)
         now = self.clock()
         if camp is not None and self._refused_before(map_id, start, end, camp, now):
             return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED)
@@ -468,9 +614,10 @@ class DangerAvoidingQuery:
         """The shortest way through a point on rings round `hit` that keeps clear of `spots`
         and is no longer than `limit`, or `None`."""
         z = (start[2] + end[2]) / 2
+        near = _Near(spots)
 
         def clear(route) -> bool:
-            return not any(near_route(route, x, y, reach) for x, y, reach, *_ in spots)
+            return near.first(route.points) is None
 
         for margin in DANGER_RINGS:
             radius = hit[2] + margin - DANGER_YARDS    # rings kept the death spots' spacing

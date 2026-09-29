@@ -263,25 +263,44 @@ class MmapQuery:
             proc.kill()
         proc.wait(timeout=5)
         reader = getattr(proc, "_jev_reader", None)
+        if close_stdout and reader is not None and reader is not threading.current_thread():
+            reader.join(timeout=1)          # it reads to the end the kill made
         close_stdout = close_stdout and (reader is None or not reader.is_alive())
         for stream in (proc.stdin, proc.stdout if close_stdout else None):
             if stream is not None:
                 stream.close()
 
+    @staticmethod
+    def _lines(proc: subprocess.Popen) -> queue.Queue:
+        """The sidecar's lines as it writes them, read by one thread for the life of the
+        process. A thread started for each reply, as before, was a thread started and joined
+        per planner query, and a farm process of 79 bots asks thousands a minute: its reads
+        were 9.4% of its samples (py-spy, 29 Sep). Ends at the end of the output, as a kill
+        makes; `""` is the end, an exception one the read raised."""
+        lines = getattr(proc, "_jev_lines", None)
+        if lines is None:
+            lines = queue.Queue()
+
+            def pump():
+                try:
+                    while True:
+                        line = proc.stdout.readline()
+                        lines.put(line)
+                        if not line:
+                            return
+                except Exception as exc:
+                    lines.put(exc)
+
+            reader = threading.Thread(target=pump, name="jevpath-read", daemon=True)
+            proc._jev_lines, proc._jev_reader = lines, reader
+            reader.start()
+        return lines
+
     def _readline(self, proc: subprocess.Popen) -> str:
         # Windows pipes cannot be passed to select(). A single bounded reader works on
         # both sides of the WSL boundary; cancellation kills the process to unblock it.
-        reply: queue.Queue = queue.Queue(maxsize=1)
-
-        def read():
-            try:
-                reply.put(proc.stdout.readline())
-            except Exception as exc:
-                reply.put(exc)
-
-        reader = threading.Thread(target=read, name="jevpath-read", daemon=True)
-        proc._jev_reader = reader
-        reader.start()
+        lines = self._lines(proc)
+        reader = proc._jev_reader
         deadline = time.monotonic() + self.timeout_s
         try:
             while True:
@@ -291,8 +310,10 @@ class MmapQuery:
                 if remaining <= 0:
                     raise TimeoutError(f"sidecar did not answer within {self.timeout_s:g}s")
                 try:
-                    value = reply.get(timeout=min(0.05, remaining))
+                    value = lines.get(timeout=min(0.05, remaining))
                 except queue.Empty:
+                    if not reader.is_alive() and lines.empty():
+                        return ""           # read to its end before: gone, as a read says
                     continue
                 if isinstance(value, Exception):
                     raise value
@@ -301,9 +322,10 @@ class MmapQuery:
             self._dispose(proc, close_stdout=False)
             raise
         finally:
-            reader.join(timeout=1)
-            if proc.poll() is not None and not reader.is_alive():
-                proc.stdout.close()
+            if proc.poll() is not None:
+                reader.join(timeout=1)
+                if not reader.is_alive():
+                    proc.stdout.close()
 
     def _proc(self, map_id: int) -> subprocess.Popen | None:
         with self._lock:

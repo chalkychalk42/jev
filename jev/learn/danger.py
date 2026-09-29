@@ -92,6 +92,15 @@ class DangerMap:
                                  for cell, levels in (document.get("cells") or {}).items()}
             except (OSError, ValueError, TypeError, AttributeError):
                 self.lent = {}
+        # What `hot` and `pooled` answered, and each map's cells, for the maps as they are
+        # (`_cache`). The planner asks `hot` at every plan and re-plan, each ranking of
+        # merchants and each start height (`jev.run.client`), and each answer summed every
+        # cell of the map three times over: in the hive's farm processes on 29 Sep, 9,208
+        # cells, `hot` and its sums were a third of a process's time (py-spy, 20 s). The
+        # cells change only through `add` (`count_runs`, at a session's start) and by being
+        # replaced whole, and either is a new answer.
+        self._version = 0
+        self._kept: tuple[tuple, dict] = ((), {})
 
     def add(self, cell: str, level: int, *, seconds: float = 0.0, attacks: int = 0,
             bad: int = 0) -> None:
@@ -100,6 +109,7 @@ class DangerMap:
             row[0] += seconds
             row[1] += attacks
             row[2] += bad
+            self._version += 1
 
     def _totals(self, cell: str, level: int) -> tuple[float, int, int]:
         seconds, attacks, bad = _band(self.cells.get(cell), level)
@@ -110,23 +120,59 @@ class DangerMap:
                                      bad + lent_b * share)
         return seconds, attacks, bad
 
+    def _cache(self) -> dict:
+        """What was worked out from the maps as they are now: kept until `add` or either map
+        is replaced (`self.cells`, `self.lent`), each a new one."""
+        signature = (self._version, id(self.cells), len(self.cells), id(self.lent),
+                     len(self.lent))
+        kept = self._kept
+        if kept[0] != signature:
+            by_map: dict[str, list[str]] = {}
+            for cell in (*self.cells, *(c for c in self.lent if c not in self.cells)):
+                by_map.setdefault(cell.partition(":")[0], []).append(cell)
+            kept = self._kept = (signature, {"cells": by_map})
+        return kept[1]
+
     def _cells(self, map_id: int) -> list[str]:
         """The cells of `map_id` either map knows, the character's own first."""
-        return [cell for cell in (*self.cells, *(c for c in self.lent if c not in self.cells))
-                if cell.startswith(f"{map_id}:")]
+        return list(self._cache()["cells"].get(f"{map_id}", ()))
 
     def rate(self, cell: str, level: int, pooled: float) -> float:
         """Attacks a minute in `cell` at about `level`, shrunk toward `pooled`."""
         seconds, attacks, _ = self._totals(cell, level)
         return (attacks + PRIOR_MINUTES * pooled) / (seconds / 60 + PRIOR_MINUTES)
 
+    def _worked(self, map_id: int, level: int) -> tuple[float, list[tuple[float, float, float]]]:
+        """`pooled` and `hot` of `map_id` at `level`, each cell's totals summed once, kept
+        until the maps change (`_cache`)."""
+        cache = self._cache()
+        key = (map_id, level)
+        try:
+            worked = cache.get(key)
+        except TypeError:                    # a level that is no key: worked out each time
+            key, worked = None, None
+        if worked is not None:
+            return worked
+        cells = self._cells(map_id)
+        totals = [self._totals(cell, level) for cell in cells]
+        seconds = attacks = 0
+        for s, a, _ in totals:
+            seconds, attacks = seconds + s, attacks + a
+        pooled = attacks / (seconds / 60) if seconds else 0.0
+        hot = []
+        for cell, (s, a, _) in zip(cells, totals, strict=True):
+            rate = (a + PRIOR_MINUTES * pooled) / (s / 60 + PRIOR_MINUTES)   # as `rate`
+            if a >= HOT_EVENTS and rate >= HOT_FACTOR * pooled:
+                _, x, y = centre_of(cell)
+                hot.append((x, y, rate))
+        worked = (pooled, hot)
+        if key is not None:
+            cache[key] = worked
+        return worked
+
     def pooled(self, map_id: int, level: int) -> float:
         """The map's own attacks a minute at about `level`."""
-        seconds = attacks = 0
-        for cell in self._cells(map_id):
-            s, a, _ = self._totals(cell, level)
-            seconds, attacks = seconds + s, attacks + a
-        return attacks / (seconds / 60) if seconds else 0.0
+        return self._worked(map_id, level)[0]
 
     def hot(self, map_id: int, level: int | None) -> list[tuple[float, float, float]]:
         """The cells of `map_id` a route should keep clear of at `level`: their centres and
@@ -134,15 +180,7 @@ class DangerMap:
         if level is None:
             return []
         with self._lock:
-            pooled = self.pooled(map_id, level)
-            result = []
-            for cell in self._cells(map_id):
-                _, attacks, _ = self._totals(cell, level)
-                rate = self.rate(cell, level, pooled)
-                if attacks >= HOT_EVENTS and rate >= HOT_FACTOR * pooled:
-                    _, x, y = centre_of(cell)
-                    result.append((x, y, rate))
-            return result
+            return list(self._worked(map_id, level)[1])
 
     def save(self) -> None:
         with self._lock:
