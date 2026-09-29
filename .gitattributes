@@ -1,0 +1,3 @@
+# Every branch appends its decision rows at the end: merged, both sides are kept (the
+# canary closed two fixes on 29 Sep for this alone, "base moved, conflict (DECISIONS.md)").
+DECISIONS.md merge=union
