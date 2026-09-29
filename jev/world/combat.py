@@ -121,6 +121,22 @@ def grey_level(level: int) -> int:
     return level - 9
 
 
+def kill_xp(level: int, target: int) -> float:
+    """The experience a kill of a normal creature of level `target` gives a character of
+    `level`, as the server reckons it (`MaNGOS::XP::BaseGain`): the base, 5 a level plus 45,
+    five in a hundred more a level above to four, less a share of it a level below, down to
+    nothing at the grey level."""
+    base = level * 5 + 45
+    if target >= level:
+        return base * (1 + 0.05 * min(target - level, 4))
+    if target <= grey_level(level):
+        return 0.0
+    zero = (5 if level < 8 else 6 if level < 10 else 7 if level < 12 else 8 if level < 16
+            else 9 if level < 20 else 11 if level < 30 else 12 if level < 40 else 13 if level < 45
+            else 14 if level < 50 else 15 if level < 55 else 16 if level < 60 else 17)
+    return base * (zero + target - level) / zero
+
+
 # Casting on oneself. With a hostile or dead unit selected, a helpful spell does not fall
 # back to the caster unless the client's auto-self-cast option is on; it waits for a target
 # click, and every click meant to select a unit then tries to cast it there. Measured 23

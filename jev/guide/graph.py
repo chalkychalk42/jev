@@ -26,7 +26,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from jev.world.combat import grey_level
+from jev.world.combat import grey_level, kill_xp
 from jev.world.state_v1 import StepKind
 
 GRAPH_SCHEMA = 3
@@ -116,6 +116,11 @@ class Node(BaseModel):
     # bot walked into the Main Hall, stood facing a wall, and correctly reported that it
     # could not see any kobolds. The mesh had told the truth the whole way.
     hunt_yards: float | None = None
+    # A grind rib's creatures' levels, lowest and highest, from the world database; its
+    # `level` is the window it was chosen in, and names it. Not the same thing: Westfall's
+    # Goretusks are 14-15 and their rib's window 14-16, and read as the creatures' levels a
+    # level 15 character was too low for them (V323). `None` where not known (`rib_levels`).
+    mob_levels: tuple[int, int] | None = None
 
     quest_id: int | None = None
     # Alternative prerequisite groups. Every quest in one group must be rewarded;
@@ -215,9 +220,13 @@ class Graph(BaseModel):
         return tuple(sorted({n.id for n in self.nodes} - reached))
 
     def save(self, path: str | pathlib.Path) -> None:
-        pathlib.Path(path).write_text(
-            json.dumps(self.model_dump(mode="json"), indent=2), encoding="utf-8"
-        )
+        data = self.model_dump(mode="json")
+        for node in data["nodes"]:
+            # Unknown creature levels are not written: a guide's bytes are the tutor's
+            # knowledge fingerprint, and the field is read when a guide is played (V323).
+            if node.get("mob_levels") is None:
+                node.pop("mob_levels", None)
+        pathlib.Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     @staticmethod
     def load(path: str | pathlib.Path) -> Graph:
@@ -237,24 +246,61 @@ class GraphStats(BaseModel):
     quests: int
 
 
-# How far below the character a rib's window may start and still be worth a detour.
-RIB_LEVELS_BELOW = 2
+# How far above the character a rib's creatures may be and still be a grind for it (V323). A kill
+# pays five in a hundred more a level above (`kill_xp`), and each is harder: the level 12 mage
+# died five times in its first 35 minutes among Westfall's 13-15 Riverpaws (V276), and a level 3
+# among level 5-6 boars (run 20260923T174132-d01302). One level is the next level's creatures,
+# which the character meets at every ding anyway.
+RIB_LEVELS_ABOVE = 1
+# The ribs paying within this share of the best a kill are as good, and the nearest of them is
+# taken: a level 5 character failed out of Echo Ridge Mine into the wolves 1,200 yards away,
+# the kobolds beside the mine passed by (run 20260924T015701-2417ae).
+RIB_XP_SHARE = 0.9
+
+
+def window_rib(ribs, level: int) -> Node | None:
+    """The rib whose window a step's level has reached: of the windows starting at or below it,
+    the highest; below every one, the lowest. For wiring a guide's fail edges, which name a rib
+    the runtime chooses again by the character's own level (`rib_for`)."""
+    ribs = tuple(ribs)
+    if not ribs:
+        return None
+    fitting = [r for r in ribs if r.level[0] <= level]
+    if not fitting:
+        return min(ribs, key=lambda r: r.level[0])
+    top = max(r.level[0] for r in fitting)
+    return next(r for r in fitting if r.level[0] == top)
+
+
+def rib_levels(rib: Node) -> tuple[int, int]:
+    """A rib's creatures' levels (`Node.mob_levels`); without them, its window, whose top no
+    creature of it is above (`WorldDB.grind_clusters`)."""
+    return rib.mob_levels or rib.level
+
+
+def rib_xp(rib: Node, level: int) -> float:
+    """What a kill on this rib pays a character of `level`, on average over its creatures'
+    levels (`kill_xp`)."""
+    low, high = rib_levels(rib)
+    return sum(kill_xp(level, m) for m in range(low, high + 1)) / (high - low + 1)
 
 
 def rib_for(ribs, level: int | None, preferred: Node | None = None,
             near: tuple[float, float] | None = None, short: bool = False) -> Node | None:
-    """The rib whose mobs suit a character of `level`: of the ribs whose level window
-    starts at or below it, the highest; below every window, the lowest. `preferred` wins
-    a tie, and is the answer when the level is unknown.
+    """The rib whose creatures pay a character of `level` the most a kill (`rib_xp`) of those
+    none above `RIB_LEVELS_ABOVE` over it and worth experience to it; of those paying within
+    `RIB_XP_SHARE` of the best, the nearest to where it is (`near`, the guide's map fractions),
+    else `preferred`, else the best. With none such, the one with the lowest creatures.
+    `preferred` is the answer when the level is unknown.
 
-    Given where the character is (`near`, the guide's map fractions), the nearest rib whose
-    window starts within `RIB_LEVELS_BELOW` of its level wins instead: a level 5 character
-    failed out of Echo Ridge Mine into the level 5-7 wolves 1,200 yards away and was failed
-    over again on the way, the level 3-5 kobolds beside the mine passed by (run
-    20260924T015701-2417ae).
+    By its creatures' levels (`rib_levels`), not its window's top (V323): the window was read
+    as the creatures' levels and "never above the character", and Westfall's 14-16 window,
+    Goretusks of 14-15 at about 105 experience a kill, was above a level 15 character, which
+    was given the 12-14 window's level 12-13 Kobold Diggers at about 54: the live mage ground
+    them 197 minutes at 15. Before, the nearest rib starting up to three levels below won.
 
     A short rib (`short`, `jev.guide.tracker.SHORT_RIB_S`) is a wait for a respawn, and its
-    minutes run from the failure: the nearest rib whose mobs are none above the character
+    minutes run from the failure: the nearest rib whose creatures are none above the character
     and all worth experience to it. At level 11 the only rib in the band above was 1,550
     yards from Goldshire, where the inn's steps failed: five minutes was four of walking
     there and four back (sessions 109 to 111)."""
@@ -265,25 +311,21 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
         return preferred or ribs[0]
     if near is not None and short:
         worth = [r for r in ribs if r.pos is not None
-                 and grey_level(level) < r.level[0] and r.level[1] <= level]
+                 and grey_level(level) < rib_levels(r)[0] and rib_levels(r)[1] <= level]
         if worth:
-            return min(worth, key=lambda r: (math.dist(r.pos, near), -r.level[0]))
-    if near is not None:
-        # Mobs never above the character first: a level 6 paladin failed into the level 5-7
-        # wolves and died there ten times in three sessions (runs 20260924T035309 to
-        # ...042040); the level 3-5 kobolds were beside the abbey it had left.
-        safe = [r for r in ribs if r.pos is not None and r.level[1] <= level
-                and r.level[0] >= level - RIB_LEVELS_BELOW - 1]
-        close = safe or [r for r in ribs if r.pos is not None
-                         and level - RIB_LEVELS_BELOW <= r.level[0] <= level]
-        if close:
-            return min(close, key=lambda r: (math.dist(r.pos, near), -r.level[0]))
-    fitting = [r for r in ribs if r.level[0] <= level]
-    if not fitting:
-        return min(ribs, key=lambda r: r.level[0])
-    top = max(r.level[0] for r in fitting)
-    best = [r for r in fitting if r.level[0] == top]
-    return preferred if preferred in best else best[0]
+            return min(worth, key=lambda r: (math.dist(r.pos, near), -rib_levels(r)[0]))
+    fit = {r.id: rib_xp(r, level) for r in ribs
+           if rib_levels(r)[1] <= level + RIB_LEVELS_ABOVE and rib_levels(r)[1] > grey_level(level)}
+    if not fit:
+        return min(ribs, key=lambda r: (rib_levels(r)[1], rib_levels(r)[0]))
+    best = max(fit.values())
+    good = [r for r in ribs if r.id in fit and fit[r.id] >= RIB_XP_SHARE * best]
+    placed = [r for r in good if r.pos is not None]
+    if near is not None and placed:
+        return min(placed, key=lambda r: (math.dist(r.pos, near), -fit[r.id]))
+    if preferred is not None and preferred in good:
+        return preferred
+    return max(good, key=lambda r: fit[r.id])
 
 
 def stats(g: Graph) -> GraphStats:

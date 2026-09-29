@@ -27,7 +27,7 @@ from collections import defaultdict
 from dataclasses import dataclass, replace
 
 from jev.guide.coords import ZoneBounds, _as_float, load_bounds, on_map, world_to_map
-from jev.guide.graph import FailEdge, FailWhen, Graph, Node, ObjectiveTarget, rib_for
+from jev.guide.graph import FailEdge, FailWhen, Graph, Node, ObjectiveTarget, window_rib
 from jev.world.state_v1 import StepKind
 
 # Race bitmasks are `1 << (ChrRaces.id - 1)`. RequiredRaces == 0 means every race.
@@ -771,6 +771,43 @@ class WorldDB:
 # --------------------------------------------------------------------------- generation
 
 
+def with_rib_levels(graph: Graph, world_db) -> Graph:
+    """`graph` with each grind rib's creatures' levels (`Node.mob_levels`) read from the world
+    database: the levels of the creature it hunts (`target_name`) that `grind_clusters` would
+    have chosen for its window, on its map. Read when a guide is played, not written into it:
+    a guide's bytes are the tutor's knowledge fingerprint, and the hive's routes are built
+    elsewhere. `graph` unchanged when the database cannot be read (V323)."""
+    ribs = [n for n in graph.nodes if n.kind is StepKind.GRIND and n.mob_levels is None
+            and n.target_name]
+    if not ribs or world_db is None:
+        return graph
+    try:
+        con = sqlite3.connect(f"file:{world_db}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return graph
+    levels: dict[str, tuple[int, int]] = {}
+    try:
+        for rib in ribs:
+            lo, hi = rib.level
+            row = con.execute(
+                "select min(t.MinLevel), max(t.MaxLevel) from world_creature_template t "
+                "where t.Name = ? and t.Rank = 0 and t.NpcFlags = 0 and t.MinLevel >= ? "
+                "and t.MaxLevel <= ? and (? is null or exists (select 1 from world_creature c "
+                "where c.id = t.Entry and c.map = ?))",
+                (rib.target_name, lo, hi, rib.map_id, rib.map_id)).fetchone()
+            if row is not None and row[0] is not None:
+                levels[rib.id] = (int(row[0]), int(row[1]))
+    except sqlite3.Error:
+        return graph
+    finally:
+        con.close()
+    if not levels:
+        return graph
+    return graph.model_copy(update={"nodes": tuple(
+        n.model_copy(update={"mob_levels": levels[n.id]}) if n.id in levels else n
+        for n in graph.nodes)})
+
+
 def rib_windows(level_min: int, level_max: int, width: int = 2) -> list[tuple[int, int]]:
     """Overlapping level windows for ribs: (1, 3), (3, 5), ... up to `level_max`."""
     return [(lo, min(level_max, lo + width)) for lo in range(level_min, level_max, width)]
@@ -1083,7 +1120,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             # one whose mobs suit the step's level, and the runtime picks again by the
             # character's own. The next node is always available, and skipping forward
             # beats standing still.
-            rib = rib_for(ribs, n.level[0])
+            rib = window_rib(ribs, n.level[0])
             escape = rib.id if rib else (nxt[0] if nxt else None)
             if escape:
                 # `QUEST_MISSING` means "the quest should be in the log and is not", so it

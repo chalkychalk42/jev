@@ -295,6 +295,8 @@ def test_prerequisite_metadata_keeps_milly_chain_connected(human):
 def test_ribs_cover_the_band_in_level_windows_and_steps_fail_into_their_own(human):
     """The one densest cluster for levels 1-12 was level 5-6 boars, and every Northshire
     step sent a level 3 character there to die (run 20260923T174132-d01302)."""
+    from jev.guide.graph import window_rib
+
     ribs = human.ribs()
     assert len({r.level for r in ribs}) >= 4, "one rib for the whole band again"
     assert min(r.level[0] for r in ribs) == 1, "nothing for a new character to grind"
@@ -303,62 +305,101 @@ def test_ribs_cover_the_band_in_level_windows_and_steps_fail_into_their_own(huma
         for edge in node.on_fail:
             rib = by_id.get(edge.goto)
             if rib is not None:
-                assert rib is human.rib_for(node.level[0]), (node.id, rib.id)
+                assert rib is window_rib(ribs, node.level[0]), (node.id, rib.id)
                 assert rib.level[0] <= max(node.level[0], min(r.level[0] for r in ribs))
 
 
-def test_the_rib_for_a_level_is_the_highest_window_it_has_reached():
-    from jev.guide.graph import Node, rib_for
+def test_the_rib_for_a_level_pays_the_most_a_kill_of_those_at_most_a_level_above():
+    """V323: the rib's window read as its creatures' levels put Westfall's Goretusks, 14-15 in
+    the 14-16 window, above a level 15 character, which was given the 12-14 window's level
+    12-13 Kobold Diggers, about 54 experience a kill for about 105: the live mage ground them
+    197 minutes at 15. By the creatures' levels, the best-paying kill none above one over."""
+    from jev.guide.graph import Node, rib_for, rib_xp
 
-    def rib(lo, hi):
-        return Node(id=f"r{lo}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi))
+    def rib(lo, hi, mobs, pos=None):
+        return Node(id=f"r{lo}_{hi}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi),
+                    mob_levels=mobs, pos=pos)
 
-    low, mid, high = rib(1, 3), rib(3, 5), rib(5, 7)
-    ribs = (high, low, mid)
-    assert rib_for(ribs, 1) is low and rib_for(ribs, 3) is mid and rib_for(ribs, 4) is mid
-    assert rib_for(ribs, 9) is high, "past every window: the highest"
-    assert rib_for((mid, high), 1) is mid, "below every window: the lowest"
-    assert rib_for(ribs, None, preferred=high) is high, "an unread level keeps the guide's"
+    kobolds, goretusks, murlocs, wolves = (rib(12, 14, (12, 13)), rib(14, 16, (14, 15)),
+                                           rib(16, 18, (17, 18)), rib(18, 20, (19, 20)))
+    ribs = (wolves, kobolds, murlocs, goretusks)
+    assert rib_for(ribs, 15) is goretusks
+    assert rib_xp(goretusks, 15) > 1.3 * rib_xp(kobolds, 15)
+    assert rib_for(ribs, 15, near=(0.1, 0.1)) is goretusks, "wherever it stands"
+    assert rib_for(ribs, 14) is goretusks, "one level above is the next level's"
+    assert rib_for(ribs, 13) is kobolds, "Goretusks of 15 are two above a 13"
+    assert rib_for(ribs, 17) is murlocs and rib_for(ribs, 19) is wolves
+    assert rib_for(ribs, 25) is wolves, "past every rib: the best still worth a kill"
+    assert rib_for((murlocs, wolves), 12) is murlocs, "below every rib: the lowest"
+    assert rib_for(ribs, None, preferred=kobolds) is kobolds, "an unread level keeps the guide's"
     assert rib_for((), 3) is None
+    # Without the creatures' levels, the window, whose top none of them is above.
+    bare = (rib(1, 3, None), rib(3, 5, None), rib(5, 7, None))
+    assert [rib_for(bare, level).id for level in (1, 3, 4, 6, 9)] == [
+        "r1_3", "r1_3", "r3_5", "r5_7", "r5_7"]
 
 
-def test_a_character_fails_into_the_nearest_rib_that_still_suits_it():
-    """A level 5 character failed out of Echo Ridge Mine into the level 5-7 wolves 1,200
-    yards away, the level 3-5 kobolds beside the mine passed by (run ...015701-2417ae)."""
+def test_ribs_paying_about_the_same_a_kill_are_chosen_by_distance():
+    """A level 5 character failed out of Echo Ridge Mine into the wolves 1,200 yards away, the
+    kobolds beside the mine passed by (run ...015701-2417ae). Of the ribs paying within
+    `RIB_XP_SHARE` of the best a kill, the nearest; one paying much less is not taken for
+    being near (V323)."""
     from jev.guide.graph import Node, rib_for
 
-    def rib(lo, hi, pos):
-        return Node(id=f"r{lo}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi),
-                    pos=pos)
+    def rib(name, mobs, pos):
+        return Node(id=name, kind=StepKind.GRIND, zone="z", zone_id=1, level=(mobs[0], mobs[0] + 2),
+                    mob_levels=mobs, pos=pos)
 
-    wolves, kobolds, boars = rib(1, 3, (0.48, 0.30)), rib(3, 5, (0.49, 0.33)), rib(5, 7, (0.42, 0.80))
-    ribs = (wolves, kobolds, boars)
+    kobolds, far_kobolds, wolves = (rib("kobolds", (5, 6), (0.49, 0.33)),
+                                    rib("far_kobolds", (5, 6), (0.42, 0.80)),
+                                    rib("wolves", (3, 3), (0.48, 0.30)))
     at_the_mine = (0.48, 0.32)
-    assert rib_for(ribs, 5) is boars
+    ribs = (far_kobolds, wolves, kobolds)
     assert rib_for(ribs, 5, near=at_the_mine) is kobolds
-    assert rib_for(ribs, 6, near=(0.42, 0.79)) is kobolds, "mobs never above the character"
-    assert rib_for(ribs, 7, near=at_the_mine) is boars, "at its level a window is safe again"
-    assert rib_for(ribs, 9, near=at_the_mine) is boars, "never far below the character"
-    assert rib_for(ribs, 2, near=(0.42, 0.79)) is wolves, "never a window above the level"
+    assert rib_for(ribs, 5, near=(0.42, 0.79)) is far_kobolds
+    assert rib_for(ribs, 6, near=at_the_mine) is kobolds, "level 3 wolves pay 40% at 6"
+    assert rib_for((wolves,), 2, near=at_the_mine) is wolves
+    assert rib_for((far_kobolds,), 2, near=at_the_mine) is far_kobolds, "nothing else: lowest"
 
 
 def test_a_short_rib_is_the_nearest_whose_mobs_all_give_experience():
     """At level 11 the rib in the band was 1,550 yards from Goldshire, where the inn's steps
-    failed: a five-minute wait was four minutes' walk each way (sessions 109 to 111)."""
+    failed: a five-minute wait was four minutes' walk each way (sessions 109 to 111). Elwynn's
+    ribs' creatures, 29 Sep."""
     from jev.guide.graph import Node, rib_for
 
-    def rib(lo, hi, pos):
+    def rib(lo, hi, mobs, pos):
         return Node(id=f"r{lo}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi),
-                    pos=pos)
+                    mob_levels=mobs, pos=pos)
 
-    ribs = (rib(1, 3, (0.432, 0.6)), rib(5, 7, (0.296, 0.725)), rib(7, 9, (0.606, 0.655)),
-            rib(9, 11, (0.739, 0.397)), rib(11, 12, (0.068, 0.965)))
+    ribs = (rib(1, 3, (1, 1), (0.432, 0.6)), rib(5, 7, (5, 6), (0.296, 0.725)),
+            rib(7, 9, (7, 8), (0.606, 0.655)), rib(9, 11, (9, 10), (0.739, 0.397)),
+            rib(11, 12, (11, 12), (0.068, 0.965)))
     goldshire = (0.43, 0.66)
-    assert rib_for(ribs, 11, near=goldshire).id == "r9", "a whole rib: the band's own"
+    assert rib_for(ribs, 11, near=goldshire).id == "r11", "a whole rib: the best a kill"
     assert rib_for(ribs, 11, near=goldshire, short=True).id == "r7", \
-        "the level 5-7 rib is nearer, but level 5 is grey at 11"
+        "the level 5-6 rib is nearer, but level 5 is grey at 11"
     assert rib_for(ribs, 12, near=(0.07, 0.95), short=True).id == "r11"
     assert rib_for(ribs, 3, near=goldshire, short=True).id == "r1", "nothing but grey: as before"
+
+
+def test_a_played_guides_ribs_carry_their_creatures_levels():
+    """V323: read from the world database when a guide is played, not written into it: the
+    committed guide's bytes stay the generator's."""
+    from jev.guide.generate import with_rib_levels
+    from jev.guide.graph import Graph, rib_for
+
+    source = Graph.load("content/tbc/ally_human_12_20.json")
+    graph = with_rib_levels(source, DB)
+    levels = {r.id.split("_grind_")[1]: r.mob_levels for r in graph.ribs()}
+    assert levels["westfall_12_14"] == (12, 13) and levels["westfall_14_16"] == (14, 15)
+    assert levels["redridge_14_16"] == (15, 16) and levels["westfall_16_18"] == (17, 18)
+    assert all(r.mob_levels is None for r in source.ribs())
+    westfall = graph.get("alli_human_12_20_grind_westfall_12_14").pos
+    assert rib_for(graph.ribs(), 15, near=westfall).id.endswith("westfall_14_16")
+    assert rib_for(graph.ribs(), 13, near=westfall).id.endswith("westfall_12_14")
+    assert rib_for(source.ribs(), 13, near=westfall).id.endswith("westfall_12_14")
+    assert with_rib_levels(source, None) is source
 
 
 def test_every_hunt_knows_where_its_target_spawns_without_touching_the_guide():

@@ -17,6 +17,7 @@ from jev.clients import operator, win32
 from jev.clients.interact import GOSSIP_YARDS
 from jev.guide import playhead, spawns
 from jev.guide.coords import bounds_by_radio_id, navigation_frame
+from jev.guide.generate import with_rib_levels
 from jev.guide.graph import Graph
 from jev.guide.path import MmapQuery
 from jev.guide.route import compile_route
@@ -327,6 +328,8 @@ def remembered(args, graph, key: int | None, level: int | None = None):
     else:
         path = playhead.for_character(key, ROOT / playhead.CHARACTERS)
     graph = _guide_on(args, graph, path)
+    # Its ribs' creatures' levels, which choose the grind for the level (V323).
+    graph = with_rib_levels(graph, getattr(args, "world_db", None))
     for _ in range(len(NEXT_GUIDE) + 1):
         memory = playhead.load(graph.graph_id, path)
         route = compile_route(graph, available_skills=LiveBody.available,
@@ -378,7 +381,7 @@ def remembered(args, graph, key: int | None, level: int | None = None):
         # This character finished the guide: the next one takes over, its quests carried.
         print(f"guide {graph.graph_id} finished; continuing with {following.name}")
         args.graph = following
-        graph = Graph.load(following)
+        graph = with_rib_levels(Graph.load(following), getattr(args, "world_db", None))
     return path, memory, route, used
 
 
