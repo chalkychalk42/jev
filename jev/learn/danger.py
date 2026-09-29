@@ -15,9 +15,9 @@ diluted by an older one's walks past it, unattacked, ten levels later. Cells who
 of (`hot`), unless the walk begins or ends at one.
 
 Counted from runs' own files (ticks and evidence), each run once, like the hunt stations
-(`jev.learn.choices.backfill_hunts`): a run is counted when a later session starts. Runs
-begun `SETTLE_S` or more before the newest seen are settled (`through`), and only newer ones
-are looked at (V326).
+(`jev.learn.choices.backfill_hunts`): a run is counted when a later session starts, once it
+is finished (`FRESH_S`). Runs begun `SETTLE_S` or more before the newest seen, and before any
+still being played, are settled (`through`), and only newer ones are looked at (V326).
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ import math
 import os
 import re
 import threading
+import time
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -67,6 +68,14 @@ PRIOR_CAP_S = 600.0
 # the map keeps no name of one (`DangerMap.through`). Two hours is more than a clock set
 # back an hour in autumn or WSL's 23 s steps (28 Sep) can put a new run's name behind.
 SETTLE_S = 2 * 3600.0
+# A run is still being played while any of its files was written this recently: it is left
+# uncounted, to be counted whole at a later start. A run writes no record of its end
+# (`Recorder.close` only closes its files), and a crashed one could not; the hive's
+# `calibrate.FRESH_S` waits as long for the same reason. The hive counted every run in
+# `var/runs` at each of its bots' starts, others' being played among them, and never again:
+# its map had 9,457 cells on 29 Sep, where 2,400 of its finished runs alone give 18,619.
+FRESH_S = 20 * 60.0
+RUN_FILES = ("ticks.jsonl", "executions.jsonl", "manifest.json")
 STAMP_FORMAT = "%Y%m%dT%H%M%S"
 _STAMP = re.compile(r"(?:19|20)\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])T"
                     r"(?:[01]\d|2[0-3])[0-5]\d[0-5]\d")
@@ -219,12 +228,16 @@ class DangerMap:
                 document["through"] = self.through
             atomic_json(self.file, document)
 
-    def settle(self, newest: str) -> None:
-        """Runs begun `SETTLE_S` before `newest` (a start, `STAMP_FORMAT`) are settled:
-        `through` moves up to then, and their names leave `counted`."""
+    def settle(self, newest: str, *, playing: str | None = None) -> None:
+        """Runs begun `SETTLE_S` before `newest` (a start, `STAMP_FORMAT`), and before
+        `playing`, the start of the oldest run still being played, are settled: `through`
+        moves up to then, and their names leave `counted`."""
         try:
             through = (datetime.strptime(newest, STAMP_FORMAT)
                        - timedelta(seconds=SETTLE_S)).strftime(STAMP_FORMAT)
+            if playing is not None:
+                through = min(through, (datetime.strptime(playing, STAMP_FORMAT)
+                                        - timedelta(seconds=1)).strftime(STAMP_FORMAT))
         except ValueError:                   # 30 February: a name, not a start
             return
         if through <= self.through:
@@ -262,13 +275,27 @@ def runs_in(directory: str | Path, danger: DangerMap, *, skip: str | None = None
     return found
 
 
+def _written(run: Path) -> float | None:
+    """When any of a run's files (`RUN_FILES`) was last written; None for none."""
+    latest = None
+    for name in RUN_FILES:
+        try:
+            written = (run / name).stat().st_mtime
+        except OSError:
+            continue
+        latest = written if latest is None else max(latest, written)
+    return latest
+
+
 def count_runs(runs: Iterable[Path], danger: DangerMap,
-               bounds_for: Callable[[int], object | None]) -> int:
-    """Count every run not yet counted; returns the attacks added. `bounds_for(area_id)`
+               bounds_for: Callable[[int], object | None], *, now: float | None = None) -> int:
+    """Count every finished run not yet counted; returns the attacks added. `bounds_for(area_id)`
     gives a zone's map box (`jev.guide.coords.ZoneBounds`), to put ticks in world yards.
     The map is saved when a run was counted. Runs are counted oldest first, as before V326;
-    only those not settled (`DangerMap.through`) are looked at, and sorted."""
-    added, newest, counted = 0, danger.through, False
+    only those not settled (`DangerMap.through`) are looked at, and sorted. One written to
+    within `FRESH_S` of `now` is being played: neither counted nor settled."""
+    now = time.time() if now is None else now
+    added, newest, counted, playing = 0, danger.through, False, None
     fresh = []
     for run in runs:
         run = Path(run)
@@ -280,6 +307,12 @@ def count_runs(runs: Iterable[Path], danger: DangerMap,
         if run.name not in danger.counted:
             fresh.append(run)
     for run in sorted(fresh):
+        written = _written(run)
+        if written is not None and now - written < FRESH_S:     # a clock set back, too
+            stamp = _stamp(run.name)
+            if stamp is not None and (playing is None or stamp < playing):
+                playing = stamp
+            continue
         ticks, evidence = run / "ticks.jsonl", run / "executions.jsonl"
         if not ticks.exists():
             continue
@@ -289,10 +322,22 @@ def count_runs(runs: Iterable[Path], danger: DangerMap,
     # Settled after the counting, so a run is never passed over before it is looked at. A
     # save only for something counted: every session start rewrote the whole map, the
     # hive's 2.5 MB at each of its bots' (about 300, 15 minutes each), new runs or none.
-    danger.settle(newest)
+    danger.settle(newest, playing=playing)
     if counted:
         danger.save()
     return added
+
+
+def rebuild(runs: Iterable[Path], bounds_for: Callable[[int], object | None],
+            file: str | Path | None = None, *, now: float | None = None) -> DangerMap:
+    """A danger map counted afresh from the finished `runs`, saved to `file` (replaced),
+    for a map counted from runs still being played (before V326, the hive's). Runs being
+    played are left for its next count, as ever. `tools/rebuild_danger.py`."""
+    danger = DangerMap()
+    danger.file = Path(file) if file is not None else None
+    count_runs(runs, danger, bounds_for, now=now)
+    danger.save()
+    return danger
 
 
 def count_run(ticks: Path, evidence: Path | None, danger: DangerMap,

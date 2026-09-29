@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import json
+import time
 
 from jev.guide.coords import ZoneBounds
 from jev.learn.danger import (
     CELL_YARDS,
+    FRESH_S,
     DangerMap,
     cell_of,
     centre_of,
     count_run,
     count_runs,
 )
+
+# Runs are counted once finished (V326): a count at this time sees every run written in the
+# test as finished.
+LATER = time.time() + 2 * FRESH_S
 
 # A 300-yard square zone on map 0: map fractions are world yards / 300.
 FIELD = ZoneBounds(area_id=12, map_id=0, left=300.0, right=0.0, top=300.0, bottom=0.0)
@@ -116,10 +122,10 @@ def test_each_run_is_counted_once(tmp_path):
         _write(runs / name / "executions.jsonl", _fight(11.0, 15.0, combat=True))
     (runs / "r3").mkdir()                                              # nothing recorded yet
     danger = DangerMap(tmp_path / "danger.json")
-    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get) == 2
+    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get, now=LATER) == 2
     assert danger.counted == {"r1", "r2"}, "a run with no ticks waits for them"
     again = DangerMap(tmp_path / "danger.json")
-    assert count_runs(runs.iterdir(), again, {12: FIELD}.get) == 0
+    assert count_runs(runs.iterdir(), again, {12: FIELD}.get, now=LATER) == 0
     assert again.cells[cell_of(0, 100, 100)] == {"12": [22.0, 2, 0]}
 
 
@@ -175,7 +181,7 @@ def test_runs_begun_two_hours_before_the_newest_are_settled_and_not_looked_at_ag
     _run(runs, "20260929T070000-eeeeee", ticks=False)       # a session that never played
     _run(runs, "20260929T115000-ffffff", ticks=False)       # one not playing yet
     danger = DangerMap(tmp_path / "danger.json")
-    assert count_runs(runs_in(runs, danger), danger, {12: FIELD}.get) == 5
+    assert count_runs(runs_in(runs, danger), danger, {12: FIELD}.get, now=LATER) == 5
     assert danger.through == "20260929T100000"
     assert danger.counted == {"20260929T100001-cccccc", "20260929T120000-dddddd", "r1"}
     again = DangerMap(tmp_path / "danger.json")
@@ -193,7 +199,7 @@ def test_runs_begun_two_hours_before_the_newest_are_settled_and_not_looked_at_ag
                         lambda ticks, *rest: opened.append(ticks.parent.name) or real(ticks, *rest))
     for name in ("20260929T070000-eeeeee", "20260929T115000-ffffff"):
         _write(runs / name / "ticks.jsonl", [_tick(t, 100, 100) for t in range(0, 12)])
-    assert count_runs(runs.iterdir(), again, {12: FIELD}.get) == 0
+    assert count_runs(runs.iterdir(), again, {12: FIELD}.get, now=LATER) == 0
     assert opened == ["20260929T115000-ffffff"]
     assert again.cells[cell_of(0, 100, 100)] == {"12": [66.0, 5, 0]}
 
@@ -203,12 +209,12 @@ def test_the_map_is_saved_only_when_a_run_was_counted(tmp_path):
     runs = tmp_path / "runs"
     _run(runs, "20260929T100000-aaaaaa")
     danger = DangerMap(tmp_path / "danger.json")
-    count_runs(runs.iterdir(), danger, {12: FIELD}.get)
+    count_runs(runs.iterdir(), danger, {12: FIELD}.get, now=LATER)
     (tmp_path / "danger.json").unlink()
-    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get) == 0
+    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get, now=LATER) == 0
     assert not (tmp_path / "danger.json").exists()
     _run(runs, "20260929T101500-bbbbbb")
-    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get) == 1
+    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get, now=LATER) == 1
     assert (tmp_path / "danger.json").exists()
 
 
@@ -223,8 +229,83 @@ def test_a_map_from_before_the_mark_is_read_by_its_names_and_then_settled(tmp_pa
          "counted": ["20260928T100000-aaaaaa", "20260929T100000-bbbbbb", "20260927T000000-gone00"]}))
     danger = DangerMap(tmp_path / "danger.json")
     assert danger.through == ""
-    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get) == 1
+    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get, now=LATER) == 1
     saved = json.loads((tmp_path / "danger.json").read_text())
     assert saved["format"] == 1 and saved["through"] == "20260929T090000"
     assert saved["counted"] == ["20260929T100000-bbbbbb", "20260929T110000-cccccc"]
     assert saved["cells"][cell_of(0, 100, 100)] == {"12": [33.0, 3, 0]}
+
+
+def _age(run, now, seconds):
+    """Every file of `run` last written `seconds` before `now`."""
+    import os
+    for path in run.iterdir():
+        os.utime(path, (now - seconds, now - seconds))
+
+
+def test_a_run_still_being_played_is_counted_whole_once_finished(tmp_path):
+    """V326: the hive counted others' runs while they were played, and never again, so its
+    map had 9,457 cells where 2,400 finished runs give 18,619. A run written to within
+    `FRESH_S` is left uncounted and unnamed, and the mark stays behind it however new the
+    newest run is; once finished it is counted whole."""
+    now = 1_790_700_000.0
+    runs = tmp_path / "runs"
+    _run(runs, "20260929T100000-aaaaaa")
+    _run(runs, "20260929T101500-bbbbbb")                  # a long session, still playing
+    _run(runs, "20260929T130000-cccccc")
+    _age(runs / "20260929T100000-aaaaaa", now, FRESH_S + 1)
+    _age(runs / "20260929T101500-bbbbbb", now, 60)
+    _age(runs / "20260929T130000-cccccc", now, FRESH_S + 1)
+    danger = DangerMap(tmp_path / "danger.json")
+    assert count_runs(runs.iterdir(), danger, {12: FIELD}.get, now=now) == 2
+    assert "20260929T101500-bbbbbb" not in danger.counted
+    assert danger.through == "20260929T101459", "behind the run being played, not 11:00"
+    assert danger.counted == {"20260929T130000-cccccc"}, "10:00 settled; 10:15 not counted"
+    # More ticks, then the session ends: counted with all of them, and the mark moves on.
+    _write(runs / "20260929T101500-bbbbbb" / "ticks.jsonl",
+           [_tick(t, 100, 100) for t in range(0, 23)])
+    _age(runs / "20260929T101500-bbbbbb", now, 0)
+    later = now + FRESH_S
+    again = DangerMap(tmp_path / "danger.json")
+    assert count_runs(runs.iterdir(), again, {12: FIELD}.get, now=later) == 1
+    assert again.cells[cell_of(0, 100, 100)] == {"12": [44.0, 3, 0]}
+    assert again.through == "20260929T110000"
+    assert count_runs(runs.iterdir(), again, {12: FIELD}.get, now=later) == 0
+
+
+def test_the_live_bots_crashed_session_is_counted_at_a_later_start(tmp_path):
+    """V326: a live session counts its earlier runs at its start, its own left out. One that
+    crashed wrote no end, as none does: it is counted at the first start 20 minutes on."""
+    from jev.learn.danger import runs_in
+
+    now = 1_790_700_000.0
+    runs = tmp_path / "runs"
+    _run(runs, "20260929T100000-aaaaaa")                  # crashed at its last tick
+    _run(runs, "20260929T100200-bbbbbb", ticks=False)     # this session's, starting
+    _age(runs / "20260929T100000-aaaaaa", now, 90)
+    danger = DangerMap(tmp_path / "danger.json")
+    assert count_runs(runs_in(runs, danger, skip="20260929T100200-bbbbbb"), danger,
+                      {12: FIELD}.get, now=now) == 0
+    assert danger.counted == set() and danger.through < "20260929T100000"
+    assert count_runs(runs_in(runs, danger, skip="20260929T120000-cccccc"), danger,
+                      {12: FIELD}.get, now=now + FRESH_S) == 1
+    assert danger.counted == {"20260929T100000-aaaaaa"}
+
+
+def test_a_map_is_rebuilt_from_the_finished_runs(tmp_path):
+    """V326: `rebuild` counts a map afresh, for one counted from runs being played."""
+    from jev.learn.danger import rebuild
+
+    now = 1_790_700_000.0
+    runs = tmp_path / "runs"
+    for name in ("20260929T100000-aaaaaa", "20260929T101000-bbbbbb", "20260929T102000-cccccc"):
+        _run(runs, name)
+        _age(runs / name, now, FRESH_S + 1)
+    _age(runs / "20260929T102000-cccccc", now, 5)
+    (tmp_path / "danger.json").write_text(json.dumps(
+        {"format": 1, "cells": {cell_of(0, 100, 100): {"12": [3.0, 0, 0]}},
+         "counted": ["20260929T100000-aaaaaa", "20260929T102000-cccccc"]}))
+    danger = rebuild(runs.iterdir(), {12: FIELD}.get, tmp_path / "danger.json", now=now)
+    saved = DangerMap(tmp_path / "danger.json")
+    assert saved.cells == danger.cells == {cell_of(0, 100, 100): {"12": [22.0, 2, 0]}}
+    assert saved.counted == {"20260929T100000-aaaaaa", "20260929T101000-bbbbbb"}
