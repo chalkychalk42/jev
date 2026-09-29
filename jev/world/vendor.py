@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import time
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
@@ -162,31 +163,77 @@ def merchants(map_id: int, *, items: frozenset[int] = frozenset()) -> tuple[Merc
 # walks her round, a trade supplier behind a wall and an armourer at the forge, and all
 # three failed a full-bag sale (session 65). Whether a merchant can be reached and clicked
 # is a fact about the world, not the character, so it is remembered for every character:
-# failures count against a merchant until one sale with it succeeds.
+# failures count against a merchant until one sale with it succeeds, or until they are
+# `FAILURE_KEEP_S` old (V321).
+#
+# A failure kept for good outlived its cause. For 34 hours from 22:56 on 27 Sep the client
+# drew no friendly nameplate (V320), and every visit failed: the file came to count 1-11
+# failures against 53 merchants, William MacGregor on Sentinel Hill 11 (2,750 yards), and
+# none cleared, as none sold. From Sentinel Hill the ranking then put first merchants 1,350-
+# 1,600 yards off that had never been tried, Darkshire's in Duskwood among them, past
+# MacGregor 162 yards off: the level 16 mage's bag and repair walks into Duskwood's level
+# 18-25 units ended in three deaths in session 419 alone. Shown the plates again, it would have
+# gone on so, as a sale far off undoes no failure near. A merchant that really cannot be
+# clicked fails again on its next visit: one walk in two hours.
+FAILURE_KEEP_S = 7200.0
+MEMORY_FORMAT = 2
 
 
-def load_merchant_failures(path: pathlib.Path | None) -> dict[int, int]:
+def _failure_times(raw: dict) -> dict[int, list[float]]:
+    """Each merchant's failures as wall times. Format 1 kept counts without times, and a
+    count whose age cannot be told is not counted: most of the one on the live bot's disk
+    was written while no friendly plate was drawn."""
+    if raw.get("format") != MEMORY_FORMAT:
+        return {}
+    kept: dict[int, list[float]] = {}
+    for key, times in (raw.get("failures") or {}).items():
+        if isinstance(times, list):
+            stamps = [float(t) for t in times
+                      if isinstance(t, (int, float)) and not isinstance(t, bool)]
+            if stamps:
+                with suppress(ValueError):
+                    kept[int(key)] = stamps
+    return kept
+
+
+def _read_memory(path: pathlib.Path | None) -> dict[int, list[float]]:
     if path is None:
         return {}
     try:
         raw = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return {int(k): int(v) for k, v in (raw.get("failures") or {}).items()
-            if isinstance(v, int) and v > 0}
+    return _failure_times(raw) if isinstance(raw, dict) else {}
 
 
-def note_merchant(path: pathlib.Path | None, entry: int, *, failed: bool) -> None:
-    """Count a failure against a merchant, or clear its count on a sale."""
+def _recent(times: list[float], now: float) -> list[float]:
+    """The failures within `FAILURE_KEEP_S` of `now`, either way round: a wall clock set back
+    (the WSL clock, 28 Sep) does not keep one for good."""
+    return [t for t in times if abs(now - t) < FAILURE_KEEP_S]
+
+
+def load_merchant_failures(path: pathlib.Path | None, now: float | None = None) -> dict[int, int]:
+    """Each merchant's failures since its last sale and within `FAILURE_KEEP_S` of `now`."""
+    now = time.time() if now is None else now
+    counts = {entry: len(_recent(times, now)) for entry, times in _read_memory(path).items()}
+    return {entry: count for entry, count in counts.items() if count > 0}
+
+
+def note_merchant(path: pathlib.Path | None, entry: int, *, failed: bool,
+                  now: float | None = None) -> None:
+    """Count a failure against a merchant, or clear its count on a sale. Failures past
+    `FAILURE_KEEP_S` are dropped as the file is written."""
     if path is None:
         return
     from jev.persist import atomic_json
 
-    failures = load_merchant_failures(path)
+    now = time.time() if now is None else now
+    failures = {key: kept for key, times in _read_memory(path).items()
+                if (kept := _recent(times, now))}
     if failed:
-        failures[entry] = failures.get(entry, 0) + 1
+        failures[entry] = [*failures.get(entry, []), now]
     else:
         failures.pop(entry, None)
     with suppress(OSError):
-        atomic_json(pathlib.Path(path), {"format": 1,
+        atomic_json(pathlib.Path(path), {"format": MEMORY_FORMAT,
                                          "failures": {str(k): v for k, v in sorted(failures.items())}})

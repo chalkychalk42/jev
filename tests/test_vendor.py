@@ -443,6 +443,43 @@ def test_a_merchant_that_failed_is_remembered_until_a_sale_with_it(tmp_path):
     assert load_merchant_failures(None) == {}
 
 
+def test_a_merchant_failure_is_forgotten_once_it_is_old(tmp_path):
+    """V321: for 34 hours no friendly plate was drawn, every visit failed, and failures kept
+    for good sent the level 16 mage past William MacGregor, 162 yards off with 11 counted,
+    to merchants 1,350-1,600 yards off in Duskwood, where it died."""
+    import json
+
+    from jev.world.vendor import FAILURE_KEEP_S, load_merchant_failures, note_merchant
+
+    memory = tmp_path / "merchant-memory.json"
+    t0 = 1_790_000_000.0
+    note_merchant(memory, 1668, failed=True, now=t0)
+    note_merchant(memory, 1668, failed=True, now=t0 + 600)
+    assert load_merchant_failures(memory, now=t0 + 700) == {1668: 2}
+    assert load_merchant_failures(memory, now=t0 + FAILURE_KEEP_S + 300) == {1668: 1}
+    assert load_merchant_failures(memory, now=t0 + FAILURE_KEEP_S + 900) == {}
+    # A clock set back does not keep one for good either.
+    assert load_merchant_failures(memory, now=t0 - FAILURE_KEEP_S - 1) == {}
+    # Old failures are dropped as the file is written.
+    note_merchant(memory, 66, failed=True, now=t0 + 2 * FAILURE_KEEP_S)
+    kept = json.loads(memory.read_text())
+    assert kept["format"] == 2 and list(kept["failures"]) == ["66"]
+
+
+def test_counts_kept_without_their_times_are_not_counted(tmp_path):
+    """Format 1's counts cannot be aged; most on the live disk were written while no plate
+    was drawn (27-29 Sep)."""
+    import json
+
+    from jev.world.vendor import load_merchant_failures, note_merchant
+
+    memory = tmp_path / "merchant-memory.json"
+    memory.write_text(json.dumps({"format": 1, "failures": {"1668": 11, "491": 9}}))
+    assert load_merchant_failures(memory) == {}
+    note_merchant(memory, 491, failed=True, now=1_790_000_000.0)
+    assert load_merchant_failures(memory, now=1_790_000_060.0) == {491: 1}
+
+
 class _Bags(Shop):
     """A census that paints one bag slot a look, round and round."""
 

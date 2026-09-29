@@ -101,7 +101,7 @@ These files are read at each session's start. Each prints a proof line in `live-
 | `var/danger.json` | Where a character keeps being attacked, by level. Walks bend round the hot cells. |
 | `var/route-memory.json` | Spots where walks got stuck outdoors. Plans keep clear of them. |
 | `var/choices.json` | Outcome-learned choices: which hunt stations pay, and when to heal. |
-| `var/merchant-memory.json` | Merchants that could not be reached or clicked. Each failure costs 250 yards in the ranking; a sale clears it. |
+| `var/merchant-memory.json` | Merchants that could not be reached or clicked, with when (format 2). Each failure costs 250 yards in the ranking; a sale clears it, and it is forgotten after two hours (V321). |
 | `var/radio-grid.json` | Where the strip was last read whole. |
 
 ## Making a change
