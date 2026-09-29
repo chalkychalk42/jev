@@ -15,7 +15,9 @@ diluted by an older one's walks past it, unattacked, ten levels later. Cells who
 of (`hot`), unless the walk begins or ends at one.
 
 Counted from runs' own files (ticks and evidence), each run once, like the hunt stations
-(`jev.learn.choices.backfill_hunts`): a run is counted when a later session starts.
+(`jev.learn.choices.backfill_hunts`): a run is counted when a later session starts, once it
+is finished (`FRESH_S`). Runs begun `SETTLE_S` or more before the newest seen, and before any
+still being played, are settled (`through`), and only newer ones are looked at (V326).
 """
 
 from __future__ import annotations
@@ -23,8 +25,12 @@ from __future__ import annotations
 import bisect
 import json
 import math
+import os
+import re
 import threading
+import time
 from collections.abc import Callable, Iterable
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from jev.persist import atomic_json
@@ -54,6 +60,30 @@ HOT_EVENTS = 3
 # minutes of the character's own outweigh it. Without the file, nothing changes.
 PRIOR_WEIGHT = 0.25
 PRIOR_CAP_S = 600.0
+# A run's name begins with its start, local time to the second (`jev.learn.episode.Recorder`:
+# 20260929T101904-abc123): every one of the hive's 31,770 and the live bot's 497 on 29 Sep.
+# Runs begun this long before the newest run seen are settled: counted, or never to be, as a
+# run's first tick is written minutes after its directory (8 of the live bot's runs have
+# none: sessions that stopped before playing, 24-26 Sep). They are not looked at again, and
+# the map keeps no name of one (`DangerMap.through`). Two hours is more than a clock set
+# back an hour in autumn or WSL's 23 s steps (28 Sep) can put a new run's name behind.
+SETTLE_S = 2 * 3600.0
+# A run is still being played while any of its files was written this recently: it is left
+# uncounted, to be counted whole at a later start. A run writes no record of its end
+# (`Recorder.close` only closes its files), and a crashed one could not; the hive's
+# `calibrate.FRESH_S` waits as long for the same reason. The hive counted every run in
+# `var/runs` at each of its bots' starts, others' being played among them, and never again:
+# its map had 9,457 cells on 29 Sep, where 2,400 of its finished runs alone give 18,619.
+FRESH_S = 20 * 60.0
+RUN_FILES = ("ticks.jsonl", "executions.jsonl", "manifest.json")
+STAMP_FORMAT = "%Y%m%dT%H%M%S"
+_STAMP = re.compile(r"(?:19|20)\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])T"
+                    r"(?:[01]\d|2[0-3])[0-5]\d[0-5]\d")
+
+
+def _stamp(name: str) -> str | None:
+    """The start a run's name begins with (`STAMP_FORMAT`), or None for one without."""
+    return name[:15] if _STAMP.match(name) else None
 
 
 def cell_of(map_id: int, x: float, y: float) -> str:
@@ -75,11 +105,18 @@ class DangerMap:
         # cell -> level -> [seconds, attacks, bad attacks]
         self.cells: dict[str, dict[str, list[float]]] = {}
         self.counted: set[str] = set()
+        # Every run begun at or before this (`STAMP_FORMAT`) is settled (`SETTLE_S`), and
+        # `counted` names only later ones and runs whose names carry no start. The hive's map
+        # named 34,182 runs on 29 Sep, a third of its 2.5 MB rewritten at every count. A file
+        # without it (V161-V325) settles none: its runs are looked up by name as before.
+        self.through = ""
         if self.file is not None and self.file.exists():
             document = json.loads(self.file.read_text(encoding="utf-8"))
             if document.get("format") == FORMAT:
                 self.cells = document.get("cells") or {}
                 self.counted = set(document.get("counted") or ())
+                through = document.get("through")
+                self.through = through if isinstance(through, str) else ""
         # The prior's cells (`PRIOR_WEIGHT`), in the same format; never saved. One that cannot
         # be read is no prior: it is another's file, and the session plays without it.
         self.lent: dict[str, dict[str, list[float]]] = {}
@@ -186,8 +223,28 @@ class DangerMap:
         with self._lock:
             if self.file is None:
                 return
-            atomic_json(self.file, {"format": FORMAT, "cells": self.cells,
-                                    "counted": sorted(self.counted)})
+            document = {"format": FORMAT, "cells": self.cells, "counted": sorted(self.counted)}
+            if self.through:
+                document["through"] = self.through
+            atomic_json(self.file, document)
+
+    def settle(self, newest: str, *, playing: str | None = None) -> None:
+        """Runs begun `SETTLE_S` before `newest` (a start, `STAMP_FORMAT`), and before
+        `playing`, the start of the oldest run still being played, are settled: `through`
+        moves up to then, and their names leave `counted`."""
+        try:
+            through = (datetime.strptime(newest, STAMP_FORMAT)
+                       - timedelta(seconds=SETTLE_S)).strftime(STAMP_FORMAT)
+            if playing is not None:
+                through = min(through, (datetime.strptime(playing, STAMP_FORMAT)
+                                        - timedelta(seconds=1)).strftime(STAMP_FORMAT))
+        except ValueError:                   # 30 February: a name, not a start
+            return
+        if through <= self.through:
+            return
+        self.through = through
+        self.counted = {name for name in self.counted
+                        if (stamp := _stamp(name)) is None or stamp > through}
 
 
 def _band(levels: dict[str, list[float]] | None, level: int) -> tuple[float, int, int]:
@@ -199,21 +256,88 @@ def _band(levels: dict[str, list[float]] | None, level: int) -> tuple[float, int
     return seconds, attacks, bad
 
 
+def runs_in(directory: str | Path, danger: DangerMap, *, skip: str | None = None) -> list[Path]:
+    """The run directories in `directory` begun after `danger.through`, or with no start in
+    their names, but `skip`: what `count_runs` would look at, read without a stat of each
+    run (`os.scandir`). Listing the hive's 31,770 runs a directory at a time took 130 ms
+    (29 Sep), at each of its sessions' starts."""
+    directory = Path(directory)
+    if not directory.is_dir():
+        return []
+    found = []
+    with os.scandir(directory) as entries:
+        for entry in entries:
+            if entry.name == skip:
+                continue
+            stamp = _stamp(entry.name)
+            if (stamp is None or stamp > danger.through) and entry.is_dir():
+                found.append(directory / entry.name)
+    return found
+
+
+def _written(run: Path) -> float | None:
+    """When any of a run's files (`RUN_FILES`) was last written; None for none."""
+    latest = None
+    for name in RUN_FILES:
+        try:
+            written = (run / name).stat().st_mtime
+        except OSError:
+            continue
+        latest = written if latest is None else max(latest, written)
+    return latest
+
+
 def count_runs(runs: Iterable[Path], danger: DangerMap,
-               bounds_for: Callable[[int], object | None]) -> int:
-    """Count every run not yet counted; returns the attacks added. `bounds_for(area_id)`
-    gives a zone's map box (`jev.guide.coords.ZoneBounds`), to put ticks in world yards."""
-    added = 0
-    for run in sorted(Path(r) for r in runs):
-        if run.name in danger.counted:
+               bounds_for: Callable[[int], object | None], *, now: float | None = None) -> int:
+    """Count every finished run not yet counted; returns the attacks added. `bounds_for(area_id)`
+    gives a zone's map box (`jev.guide.coords.ZoneBounds`), to put ticks in world yards.
+    The map is saved when a run was counted. Runs are counted oldest first, as before V326;
+    only those not settled (`DangerMap.through`) are looked at, and sorted. One written to
+    within `FRESH_S` of `now` is being played: neither counted nor settled."""
+    now = time.time() if now is None else now
+    added, newest, counted, playing = 0, danger.through, False, None
+    fresh = []
+    for run in runs:
+        run = Path(run)
+        stamp = _stamp(run.name)
+        if stamp is not None:
+            if stamp <= danger.through:
+                continue
+            newest = max(newest, stamp)
+        if run.name not in danger.counted:
+            fresh.append(run)
+    for run in sorted(fresh):
+        written = _written(run)
+        if written is not None and now - written < FRESH_S:     # a clock set back, too
+            stamp = _stamp(run.name)
+            if stamp is not None and (playing is None or stamp < playing):
+                playing = stamp
             continue
         ticks, evidence = run / "ticks.jsonl", run / "executions.jsonl"
         if not ticks.exists():
             continue
         added += count_run(ticks, evidence if evidence.exists() else None, danger, bounds_for)
         danger.counted.add(run.name)
-    danger.save()
+        counted = True
+    # Settled after the counting, so a run is never passed over before it is looked at. A
+    # save only for something counted: every session start rewrote the whole map, the
+    # hive's 2.5 MB at each of its bots' (about 300, 15 minutes each), new runs or none.
+    danger.settle(newest, playing=playing)
+    if counted:
+        danger.save()
     return added
+
+
+def rebuild(runs: Iterable[Path], bounds_for: Callable[[int], object | None],
+            file: str | Path | None = None, *, now: float | None = None) -> DangerMap:
+    """A danger map counted afresh from the finished `runs`, saved to `file` (replaced),
+    for a map counted from runs still being played (before V326, the hive's). Runs being
+    played are left for its next count, as ever. `tools/rebuild_danger.py`."""
+    danger = DangerMap()
+    danger.file = Path(file) if file is not None else None
+    count_runs(runs, danger, bounds_for, now=now)
+    danger.save()
+    return danger
 
 
 def count_run(ticks: Path, evidence: Path | None, danger: DangerMap,
