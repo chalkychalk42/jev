@@ -72,11 +72,12 @@ def test_appended_fields_fit_the_existing_grid():
     16's flight map census fits the row that left, and so do schema 17's range masks and
     attacker count. Schema 18's trainer census, 136 bits against the 23 left, adds one
     row more, deliberately (V237), and so does schema 19's talent census, 43 bits against
-    the 31 left (V261)."""
+    the 31 left (V261). Schema 20's nameplate states, 4 bits, fit the row that left (V320)."""
     lay = layout()
     assert (lay["cols"], lay["rows"]) == (12, 13)
-    assert lay["payload_bits"] == 1580
-    assert lay["field_count"] == 180
+    assert lay["payload_bits"] == 1584
+    assert lay["field_count"] == 182
+    assert sum(f.bits for f in SCHEMA_FIELDS[19]) == 1580, "schema 19 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[18]) == 1537, "schema 18 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[17]) == 1401, "schema 17 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[16]) == 1371, "schema 16 is a preserved prefix"
@@ -110,11 +111,11 @@ def test_every_field_round_trips_at_its_boundaries(field):
 
 def test_the_schema_names_itself_in_the_revision_byte():
     """The 4-bit header ran out at 14: from 15 it says EXTENDED and the number follows."""
-    bits = radio.pack_bits({"schema": 19, "seq": 7})
+    bits = radio.pack_bits({"schema": 20, "seq": 7})
     assert int(bits[:4], 2) == 0
-    assert int(bits[4:12], 2) == 19
+    assert int(bits[4:12], 2) == 20
     decoded = radio.unpack_bits(bits)
-    assert decoded["schema"] == 19 and decoded["schema_rev"] == 19 and decoded["seq"] == 7
+    assert decoded["schema"] == 20 and decoded["schema_rev"] == 20 and decoded["seq"] == 7
 
 
 def test_a_schema_15_strip_still_decodes_without_the_flight_map():
@@ -149,13 +150,32 @@ def test_a_schema_17_strip_still_decodes_without_the_trainer_list():
 
 
 def test_a_revision_this_decoder_does_not_know_is_a_schema_error():
-    fields = SCHEMA_FIELDS[19]
-    values = {"schema": 0, "schema_rev": 20, "seq": 1}
+    fields = SCHEMA_FIELDS[20]
+    values = {"schema": 0, "schema_rev": 21, "seq": 1}
     bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
                    for f in fields)
     with pytest.raises(radio.DecodeError) as err:
         radio.unpack_bits(bits + format(checksum(bits), "016b"))
     assert err.value.reason == "schema"
+
+
+def test_a_schema_19_strip_still_decodes_without_the_nameplate_states():
+    """V320: the installed addon paints schema 19 until an operator installs 20, and the
+    decoder goes live first. The nameplate states are unknown, not hidden: nothing is
+    pressed on them (`jev.clients.plates`)."""
+    fields = SCHEMA_FIELDS[19]
+    values = {"schema": 0, "schema_rev": 19, "seq": 9, "char.level": 16}
+    bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
+                   for f in fields)
+    decoded = radio.unpack_bits(bits + format(checksum(bits), "016b"))
+    assert decoded["schema"] == 19 and decoded["char.level"] == 16
+    assert decoded["ui.plates_enemy"] is None and decoded["ui.plates_friendly"] is None
+
+
+def test_a_schema_20_strip_paints_both_nameplate_states():
+    values = {"schema": 20, "seq": 3, "ui.plates_enemy": True, "ui.plates_friendly": False}
+    decoded = radio.unpack_bits(radio.pack_bits(values))
+    assert decoded["ui.plates_enemy"] is True and decoded["ui.plates_friendly"] is False
 
 
 def test_a_schema_14_strip_still_decodes_without_a_revision_byte():

@@ -35,7 +35,8 @@ SUMMARY = ("schema", "seq", "char.level", "char.xp_pct", "pos.zone_id", "pos.mx"
            "spells.revision", "spells.total",
            "spells.index", "spells.id", "spells.x", "spells.y", "spells.go_x", "spells.go_y",
            "bars.slot_x", "bars.slot_y", "ui.spellbook", "ui.trainer", "cursor.holding",
-           "ui.taxi", "taxi.total", "taxi.index", "taxi.name_id", "taxi.type", "taxi.x", "taxi.y")
+           "ui.taxi", "taxi.total", "taxi.index", "taxi.name_id", "taxi.type", "taxi.x", "taxi.y",
+           "ui.plates_enemy", "ui.plates_friendly")
 
 
 def held_inputs() -> dict:

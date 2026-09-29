@@ -14,6 +14,8 @@ from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 
 from jev.clients.hid import Hid
+from jev.clients.plates import Plates
+from jev.clients.plates import show as show_plates
 from jev.clients.targeting import ClickCode, PaintCode, Targeting
 from jev.clients.travel import TURN_RATE_SEED
 from jev.clients.windows import CloseCode, close_observed
@@ -126,6 +128,10 @@ class Interact:
             self.detail = "the planner could not stand us on the node"
             return Result.APPROACH_FAILED
 
+        # A friendly unit is found by its plate, which the client draws only while friendly
+        # plates are shown: from 27 Sep 22:56 they were not, and for 34 hours nothing was
+        # found (V320). Shown here from the state the strip paints; an older strip, unread.
+        show_plates(self.hid, self.read, Plates.FRIENDLY)
         wanted = name_id(name)
         for look in range(INTERACT_LOOKS):
             if look:

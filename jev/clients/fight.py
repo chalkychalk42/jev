@@ -64,6 +64,8 @@ from enum import StrEnum
 import numpy as np
 
 from jev.clients.hid import held, humaniser, pace
+from jev.clients.plates import Plates
+from jev.clients.plates import show as show_plates
 from jev.clients.targeting import (
     FACE_HINT_SEARCH_S,
     FACE_SEARCH_MAX_S,
@@ -681,6 +683,9 @@ class Fight:
         self._observe(v)
         if v is None:
             return Fought.BLIND
+        # Units to fight are found by their plates as friendly ones are, which a relaunched
+        # client may not draw (V320): shown from the state this reading paints.
+        show_plates(self.hid, self.read, Plates.ENEMY, values=v)
         self._error_count = v.get("ui.error_count")   # errors before the fight are not news
         self._swings = v.get("combat.swings")           # and neither are earlier swings
         self._reach_at = None

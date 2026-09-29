@@ -681,6 +681,8 @@ CLIENT_API = frozenset({
     "GetPlayerFacing", "GetPlayerMapPosition", "GetCorpseMapPosition", "GetMoney", "CheckInteractDistance",
     "LootFrame", "GossipFrame", "MerchantFrame", "QuestFrame", "ClassTrainerFrame",
     "MailFrame", "GetMouseFocus", "WorldFrame", "SpellIsTargeting", "GetCursorInfo",
+    # The stock nameplate bindings' state, globals FrameXML keeps (V320).
+    "NAMEPLATES_ON", "FRIENDNAMEPLATES_ON",
 })
 
 FORBIDDEN = (

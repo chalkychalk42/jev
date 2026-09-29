@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 19                                   # bump when the field table changes shape
+SCHEMA = 20                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -78,6 +78,7 @@ flown to, by name hash, and where each node's button is.
 and button, the scroll button toward a row out of view, and the row Train buys (V237).
 19: the talent points unspent, and the talents one per paint: tab, tier, column, rank, and
 the button that spends a point in it, or its tab's (V261).
+20: which nameplates the client draws, enemy and friendly (V320).
 Old schemas remain readable, with appended observations unknown: `SCHEMA_FIELDS`."""
 LAST_HEADER_SCHEMA = 14
 EXTENDED = 0
@@ -671,6 +672,21 @@ FIELDS: tuple[Field, ...] = (
     Field("talents.x", 11, Kind.FRAC, "return TALENT_CENSUS('x')",
           "fraction across the interface of its button, or of its tab's, while the frame is open"),
     Field("talents.y", 11, Kind.FRAC, "return TALENT_CENSUS('y')"),
+
+    # -- schema 20: which nameplates the client draws (V320) -----------------------------
+    #
+    # Every unit is found by its nameplate, and the client draws a friendly unit's only while
+    # its FRIENDNAMEPLATES binding has them shown: the stock binding keeps the state in
+    # `FRIENDNAMEPLATES_ON` (and the enemy's in `NAMEPLATES_ON`), saved with the account's
+    # variables and nil for hidden. The client the keeper relaunched at 22:56 on 27 Sep drew
+    # none: from then no green plate was seen in 36 hours, every merchant, smith, innkeeper
+    # and quest giver answered "no observed nameplate", and the gear stayed broken and the
+    # bags full. Reading a global the stock UI sets is all this does; the body presses the
+    # binding (`jev.clients.plates`).
+    _tri("ui.plates_enemy", "return tri(NAMEPLATES_ON)",
+         "the client draws hostile nameplates (the NAMEPLATES binding's state)"),
+    _tri("ui.plates_friendly", "return tri(FRIENDNAMEPLATES_ON)",
+         "the client draws friendly nameplates (the FRIENDNAMEPLATES binding's state)"),
 )
 
 # --------------------------------------------------------------------------- layout
@@ -683,7 +699,7 @@ _LEGACY = FIELDS[:1] + FIELDS[2:131]
 SCHEMA_FIELDS = {6: _LEGACY[:75], 7: _LEGACY[:112], 8: _LEGACY[:117], 9: _LEGACY[:121],
                  10: _LEGACY[:125], 11: _LEGACY[:126], 12: _LEGACY[:127], 13: _LEGACY[:128],
                  14: _LEGACY, 15: FIELDS[:147], 16: FIELDS[:154], 17: FIELDS[:157],
-                 18: FIELDS[:171], 19: FIELDS}
+                 18: FIELDS[:171], 19: FIELDS[:180], 20: FIELDS}
 # Schema 14 was the last the 4-bit header could name (15 is its not-available code), and
 # was redefined once, within the hour it was installed on one client, to add `target.guid`.
 # From 15 the header says EXTENDED and the number is in `schema_rev`; a new layout appends
@@ -708,6 +724,8 @@ assert sum(f.bits for f in SCHEMA_FIELDS[17]) == 1401
 assert SCHEMA_FIELDS[17][-1].name == "combat.attackers"
 assert sum(f.bits for f in SCHEMA_FIELDS[18]) == 1537
 assert SCHEMA_FIELDS[18][-1].name == "trainer.go_y"
+assert sum(f.bits for f in SCHEMA_FIELDS[19]) == 1580
+assert SCHEMA_FIELDS[19][-1].name == "talents.y"
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16
