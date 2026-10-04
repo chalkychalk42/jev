@@ -35,7 +35,7 @@ from jev.coach import policy as scripted
 from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
-from jev.guide.graph import Graph, rib_for
+from jev.guide.graph import Graph, frame_yards, rib_for
 from jev.guide.objectives import progress
 from jev.guide.route_memory import CAMP_YARDS
 from jev.guide.tracker import SHORT_RIB_S, Event, Tracker, waits_for_level
@@ -208,6 +208,8 @@ class ClientRuntime:
     # The steps by id and the grind ribs, looked up on every tick by the walk along the spine.
     _nodes: dict = field(default_factory=dict, init=False)
     _ribs_all: tuple = field(default=(), init=False)
+    # Yards a map fraction spans on the guide's frame, for the ribs' distances (`frame_yards`).
+    _frame: tuple | None = field(default=None, init=False)
     # The last walk along the spine past an accept above the character's level, by what it
     # depends on (`_ahead`), so a character standing at the accept does not walk it each tick.
     _ahead_seen: tuple = field(default=(), init=False)
@@ -241,6 +243,7 @@ class ClientRuntime:
         self.tracker = Tracker(self.graph, self.graph.entry)
         self._nodes = self.graph.by_id()
         self._ribs_all = self.graph.ribs()
+        self._frame = frame_yards(self.graph.nodes)
 
     # -- the tick ------------------------------------------------------------
 
@@ -831,7 +834,7 @@ class ClientRuntime:
         ribs = self._ribs_all if among is None else tuple(among)
         barred = (frozenset() if level is None else
                   frozenset(r.id for r in ribs if f"{RIB_BAR}{r.id}@{level}" in self._retried))
-        return rib_for(ribs, level, preferred, near, short, barred=barred)
+        return rib_for(ribs, level, preferred, near, short, barred=barred, scale=self._frame)
 
     def _bar(self, rib_id: str, level: int | None) -> None:
         if level is not None:

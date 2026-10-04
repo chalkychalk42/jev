@@ -363,25 +363,58 @@ def test_ribs_paying_about_the_same_a_kill_are_chosen_by_distance():
     assert rib_for((far_kobolds,), 4, near=at_the_mine) is far_kobolds, "one above: the next level's"
 
 
-def test_a_short_rib_is_the_nearest_whose_mobs_all_give_experience():
+def _elwynn(rid, window, mobs, pos):
+    """A rib on Elwynn's map, its world position from its map fraction (`coords.map_to_world`)."""
+    from jev.guide.coords import load_bounds, map_to_world
+    from jev.guide.graph import Node
+
+    x, y = map_to_world(*pos, load_bounds(DB)[12])
+    return Node(id=rid, kind=StepKind.GRIND, zone="Elwynn", zone_id=12, level=window,
+                mob_levels=mobs, pos=pos, world=(x, y, 0.0), map_id=0)
+
+
+def test_a_guides_frame_is_read_off_its_nodes():
+    """A node's map fraction is its world position in the guide's frame (`generate.place`), so
+    the frame's box, and yards between two fractions, come from the guide itself (V330)."""
+    from jev.guide.coords import load_bounds
+    from jev.guide.graph import Graph, frame_yards
+
+    elwynn = load_bounds(DB)[12]
+    across, down = frame_yards(Graph.load("content/tbc/ally_human_1_12.json").nodes)
+    assert across == pytest.approx(abs(elwynn.left - elwynn.right), abs=0.5)
+    assert down == pytest.approx(abs(elwynn.top - elwynn.bottom), abs=0.5)
+    assert frame_yards(Graph.load("content/tbc/ally_human_12_20.json").nodes) is not None
+    assert frame_yards(()) is None
+
+
+def test_a_short_rib_is_the_nearest_of_the_best_paying_and_never_a_long_walk():
     """At level 11 the rib in the band was 1,550 yards from Goldshire, where the inn's steps
-    failed: a five-minute wait was four minutes' walk each way (sessions 109 to 111). Elwynn's
-    ribs' creatures, 29 Sep."""
-    from jev.guide.graph import Node, rib_for
+    failed: a five-minute wait was four minutes' walk each way (sessions 109 to 111). From
+    11:00 to 15:20 on 29 Sep the hive's short ribs were a median 822 yards from where their step
+    failed, and 38% over 1,000. Of the ribs paying within `RIB_XP_SHARE` of the best a kill, the
+    nearest, and none further than `SHORT_RIB_YARDS`: without one, the step again (V330).
+    Elwynn's ribs' creatures, 29 Sep."""
+    from jev.guide.graph import SHORT_RIB_YARDS, frame_yards, rib_for
 
-    def rib(lo, hi, mobs, pos):
-        return Node(id=f"r{lo}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi),
-                    mob_levels=mobs, pos=pos)
-
-    ribs = (rib(1, 3, (1, 1), (0.432, 0.6)), rib(5, 7, (5, 6), (0.296, 0.725)),
-            rib(7, 9, (7, 8), (0.606, 0.655)), rib(9, 11, (9, 10), (0.739, 0.397)),
-            rib(11, 12, (11, 12), (0.068, 0.965)))
+    ribs = (_elwynn("r1", (1, 3), (1, 1), (0.432, 0.6)),
+            _elwynn("r5", (5, 7), (5, 6), (0.296, 0.725)),
+            _elwynn("r7", (7, 9), (7, 8), (0.606, 0.655)),
+            _elwynn("r9", (9, 11), (9, 10), (0.739, 0.397)),
+            _elwynn("r11", (11, 12), (11, 12), (0.068, 0.965)))
+    scale = frame_yards(ribs)
     goldshire = (0.43, 0.66)
     assert rib_for(ribs, 11, near=goldshire).id == "r11", "a whole rib: the best a kill"
-    assert rib_for(ribs, 11, near=goldshire, short=True).id == "r7", \
-        "the level 5-6 rib is nearer, but level 5 is grey at 11"
+    assert rib_for(ribs, 11, near=goldshire, short=True) is None, \
+        "the gnolls are 1,440 yards off, and the wolves of 5 to 8 pay half as much"
     assert rib_for(ribs, 12, near=(0.07, 0.95), short=True).id == "r11"
-    assert rib_for(ribs, 3, near=goldshire, short=True).id == "r1", "nothing but grey: as before"
+    assert rib_for(ribs, 8, near=(0.59, 0.64), short=True).id == "r7", "beside it, the best"
+    assert rib_for(ribs, 3, near=goldshire, short=True).id == "r1", "the wolves of 1, nearby"
+    sentinel = _elwynn("r11b", (11, 12), (11, 12), (0.17, 0.79))       # 950 yards west
+    assert rib_for((*ribs, sentinel), 11, near=goldshire, short=True) is None
+    near_enough = _elwynn("r11c", (11, 12), (11, 12), (0.33, 0.70))
+    assert (rib_for((*ribs, sentinel, near_enough), 11, near=goldshire, short=True).id
+            == "r11c"), f"within {SHORT_RIB_YARDS:.0f} yards"
+    assert scale is not None
 
 
 def test_a_barred_rib_that_suits_the_character_comes_before_one_above_it():

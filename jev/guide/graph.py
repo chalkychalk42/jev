@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import pathlib
+from collections import Counter
 from enum import StrEnum
 from typing import Literal
 
@@ -209,7 +210,8 @@ class Graph(BaseModel):
                 near: tuple[float, float] | None = None, short: bool = False, *,
                 barred: frozenset[str] = frozenset()) -> Node | None:
         """The rib whose mobs suit a character of `level`. See `rib_for`."""
-        return rib_for(self.ribs(), level, preferred, near, short, barred=barred)
+        return rib_for(self.ribs(), level, preferred, near, short, barred=barred,
+                       scale=frame_yards(self.nodes))
 
     def unreachable(self) -> tuple[str, ...]:
         """Nodes no edge leads to. Not an error — a rib is reached only on failure — but
@@ -257,6 +259,10 @@ RIB_LEVELS_ABOVE = 1
 # taken: a level 5 character failed out of Echo Ridge Mine into the wolves 1,200 yards away,
 # the kobolds beside the mine passed by (run 20260924T015701-2417ae).
 RIB_XP_SHARE = 0.9
+# The furthest a short rib is from where its step failed (V330): a minute and a quarter at a run
+# each way, most of its five minutes grinding. Its median was 822 yards in the hive's 95 short
+# ribs from 11:00 to 15:20 on 29 Sep, and 38% were over 1,000.
+SHORT_RIB_YARDS = 500.0
 
 
 def window_rib(ribs, level: int) -> Node | None:
@@ -300,7 +306,42 @@ def rib_within(rib: Node, level: int) -> bool:
     return grey_level(level) < top and low <= level + RIB_LEVELS_ABOVE
 
 
-def _best(fit: list[Node], level: int, preferred: Node | None, near) -> Node:
+def frame_yards(nodes) -> tuple[float, float] | None:
+    """Yards a whole map fraction spans along each of a guide's frame's axes
+    (`coords.to_yards`), from its nodes: a node's `pos` is its `world` in the guide's frame on
+    the frame's map (`generate._generate`'s `place`, `hive.convert`), so the box is read off them
+    as the line through them. `None` with too few placed nodes, or when they are not on one line
+    (no single frame), when the guide's map fractions stand for themselves."""
+    placed = [n for n in nodes if n.pos is not None and n.world is not None and n.map_id is not None]
+    if len(placed) < 2:
+        return None
+    frame_map = Counter(n.map_id for n in placed).most_common(1)[0][0]
+    points = [(n.pos, n.world) for n in placed if n.map_id == frame_map]
+
+    def span(fractions, yards) -> float | None:
+        mean_f, mean_y = sum(fractions) / len(fractions), sum(yards) / len(yards)
+        var = sum((f - mean_f) ** 2 for f in fractions)
+        if var < 1e-6:
+            return None
+        slope = sum((f - mean_f) * (y - mean_y) for f, y in zip(fractions, yards)) / var
+        off = max(abs(y - mean_y - slope * (f - mean_f)) for f, y in zip(fractions, yards))
+        return abs(slope) if off <= 1.0 else None     # a yard off is another frame
+
+    # The map's horizontal axis is world Y, its vertical world X (`coords.world_to_map`).
+    across = span([p[0] for p, _ in points], [w[1] for _, w in points])
+    down = span([p[1] for p, _ in points], [w[0] for _, w in points])
+    return None if across is None or down is None else (across, down)
+
+
+def _yards(a: tuple[float, float], b: tuple[float, float],
+           scale: tuple[float, float] | None) -> float:
+    """Between two of a guide's map positions, in yards; in map fractions without a frame."""
+    if scale is None:
+        return math.dist(a, b)
+    return math.hypot((a[0] - b[0]) * scale[0], (a[1] - b[1]) * scale[1])
+
+
+def _best(fit: list[Node], level: int, preferred: Node | None, near, scale) -> Node:
     """Of ribs that fit: those paying within `RIB_XP_SHARE` of the best a kill, the nearest;
     unplaced, `preferred`, else the best."""
     pay = {r.id: rib_xp(r, level) for r in fit}
@@ -308,21 +349,36 @@ def _best(fit: list[Node], level: int, preferred: Node | None, near) -> Node:
     good = [r for r in fit if pay[r.id] >= RIB_XP_SHARE * best]
     placed = [r for r in good if r.pos is not None]
     if near is not None and placed:
-        return min(placed, key=lambda r: (math.dist(r.pos, near), -pay[r.id]))
+        return min(placed, key=lambda r: (_yards(r.pos, near, scale), -pay[r.id]))
     if preferred is not None and preferred in good:
         return preferred
     return max(good, key=lambda r: pay[r.id])
 
 
+def _short(fit: list[Node], level: int, near, scale) -> Node | None:
+    """Of ribs that fit: the nearest of those paying within `RIB_XP_SHARE` of the best a kill and
+    no further than `SHORT_RIB_YARDS` (V330); `None` when none is that near."""
+    pay = {r.id: rib_xp(r, level) for r in fit}
+    best = max(pay.values())
+    close = [r for r in fit if r.pos is not None and pay[r.id] >= RIB_XP_SHARE * best
+             and (scale is None or _yards(r.pos, near, scale) <= SHORT_RIB_YARDS)]
+    if not close:
+        return None
+    return min(close, key=lambda r: (_yards(r.pos, near, scale), -pay[r.id]))
+
+
 def rib_for(ribs, level: int | None, preferred: Node | None = None,
             near: tuple[float, float] | None = None, short: bool = False, *,
-            barred: frozenset[str] = frozenset()) -> Node | None:
+            barred: frozenset[str] = frozenset(),
+            scale: tuple[float, float] | None = None) -> Node | None:
     """The grind for a character of `level`: of the ribs not `barred` at the level, those whose
     creatures suit it (`rib_fits`), else of those barred (V329); the one paying the most a kill
     (`rib_xp`), or of those within `RIB_XP_SHARE` of it the nearest to where it is (`near`, the
     guide's map fractions); unplaced, `preferred`, else the best. With none that suits it, the
     one of the lowest creatures within `rib_within`; with none of those, `None`: the character
-    goes on along the spine. `preferred` is the answer when the level is unknown.
+    goes on along the spine. `preferred` is the answer when the level is unknown. Distances are
+    in yards on the guide's frame (`scale`, `frame_yards`, read off `ribs` when not given), or
+    map fractions without one, when `SHORT_RIB_YARDS` does not apply.
 
     By its creatures' levels (`rib_levels`), not its window's top (V323): the window was read
     as the creatures' levels and "never above the character", and Westfall's 14-16 window,
@@ -338,8 +394,9 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
     each time with a rib that suited it barred.
 
     A short rib (`short`, `jev.guide.tracker.SHORT_RIB_S`) is a wait for a respawn, and its
-    minutes run from the failure: the nearest rib whose creatures are none above the character
-    and all worth experience to it, not barred, else barred. At level 11 the only rib in the
+    minutes run from the failure: of the ribs that suit the character, the nearest of those
+    paying within `RIB_XP_SHARE` of the best, and none further than `SHORT_RIB_YARDS`; `None`,
+    the step again at once, when there is none so near (V330). At level 11 the only rib in the
     band above was 1,550 yards from Goldshire, where the inn's steps failed: five minutes was
     four of walking there and four back (sessions 109 to 111)."""
     ribs = tuple(ribs)
@@ -347,17 +404,22 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
         return None
     if level is None:
         return preferred or ribs[0]
+    if scale is None:
+        scale = frame_yards(ribs)
     free = [r for r in ribs if r.id not in barred]
     held = [r for r in ribs if r.id in barred]
     for tier in (free, held):
-        if near is not None and short:
-            worth = [r for r in tier if r.pos is not None
-                     and grey_level(level) < rib_levels(r)[0] and rib_levels(r)[1] <= level]
-            if worth:
-                return min(worth, key=lambda r: (math.dist(r.pos, near), -rib_levels(r)[0]))
         fit = [r for r in tier if rib_fits(r, level)]
-        if fit:
-            return _best(fit, level, preferred, near)
+        if not fit:
+            continue
+        if short and near is not None:
+            rib = _short(fit, level, near, scale)
+            if rib is not None:
+                return rib
+            continue
+        return _best(fit, level, preferred, near, scale)
+    if short and near is not None:
+        return None
     within = [r for r in ribs if rib_within(r, level)]
     if not within:
         return None
