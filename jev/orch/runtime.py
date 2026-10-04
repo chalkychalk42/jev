@@ -198,6 +198,10 @@ class ClientRuntime:
     # The character whose playhead this run keeps (`char.key`). Another character's state
     # is not tracked, recorded or saved: it sets `foreign`, and the run stops.
     character_key: int | None = None
+    # Whether characters as good for a level spread over its ribs by their key (V332): where
+    # many play one world, as in the hive. Alone, the live bot takes the nearest rib paying near
+    # the best (V323): a spread there costs about 5% of a kill's experience and gains nothing.
+    spread_ribs: bool = False
     # The level this guide is outgrown at (`jev.run.cli.OUTGROWN_AT`): from it, between two
     # quests, the complete quests' hand-ins nearby are made and the guide is done (V162).
     outgrown_at: int | None = None
@@ -897,12 +901,13 @@ class ClientRuntime:
              short: bool = False, preferred=None, among=None):
         """The grind for the character at `level` (`rib_for`) of its ribs (`among`, else all):
         of those not barred at the level (`RIB_BAR`), else of those barred (V329), spread by the
-        character (`character_key`, V332); `None` when none suits it."""
+        character (`character_key`, when `spread_ribs`, V332); `None` when none suits it."""
         ribs = self._ribs_all if among is None else tuple(among)
         barred = (frozenset() if level is None else
                   frozenset(r.id for r in ribs if f"{RIB_BAR}{r.id}@{level}" in self._retried))
         return rib_for(ribs, level, preferred, near, short, barred=barred,
-                       key=self.character_key, scale=self._frame)
+                       key=self.character_key if self.spread_ribs else None,
+                       scale=self._frame)
 
     def _bar(self, rib_id: str, level: int | None) -> None:
         if level is not None:

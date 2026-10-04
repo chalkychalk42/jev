@@ -508,8 +508,9 @@ def test_a_rib_the_route_leaves_out_is_never_ground(tmp_path):
 
 
 def test_characters_failing_the_same_step_spread_over_its_ribs(tmp_path):
-    """V332: the character's key (`char.key`, `character_key`) spreads the ribs as good for its
-    level: the hive's 40 bots on one rib (29 Sep). The same character, the same rib."""
+    """V332: where the world is shared (`spread_ribs`, the hive), the character's key
+    (`char.key`, `character_key`) spreads the ribs as good for its level: the hive's 40 bots on
+    one rib (29 Sep). The same character, the same rib."""
     from jev.guide.graph import spread_rank
     from jev.guide.tracker import Event
     from jev.guide.tracker import Verdict as TrackVerdict
@@ -521,14 +522,20 @@ def test_characters_failing_the_same_step_spread_over_its_ribs(tmp_path):
     first = {k: max(("rib", "rib_two"), key=lambda r: spread_rank(k, r)) for k in range(20)}
     keys = (next(k for k, r in first.items() if r == "rib"),
             next(k for k, r in first.items() if r == "rib_two"))
-    went = []
-    for key in (*keys, keys[0]):
-        rt = ClientRuntime("c", graph, ScriptedSource([held(0, 3)]), Recorder(tmp_path),
-                           start_step="turnin", character_key=key)
-        rt.tick(choose=False)
-        rt._apply(TrackVerdict(Event.FAIL, goto="rib", reason="deaths_on_step=3.0"), held(1, 3))
-        went.append(rt.tracker.step_id)
-    assert went == ["rib", "rib_two", "rib"]
+    def went(spread: bool) -> list[str]:
+        steps = []
+        for key in (*keys, keys[0]):
+            rt = ClientRuntime("c", graph, ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                               start_step="turnin", character_key=key, spread_ribs=spread)
+            rt.tick(choose=False)
+            rt._apply(TrackVerdict(Event.FAIL, goto="rib", reason="deaths_on_step=3.0"),
+                      held(1, 3))
+            steps.append(rt.tracker.step_id)
+        return steps
+
+    assert went(True) == ["rib", "rib_two", "rib"]
+    # Alone in its world, as the live bot is, a character takes the rib V323 picks, whoever it is.
+    assert len(set(went(False))) == 1
 
 
 def test_a_short_ribs_end_outlives_the_session(tmp_path):
