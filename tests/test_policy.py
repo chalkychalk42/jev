@@ -621,3 +621,22 @@ def test_jev_is_not_offered_the_grind_of_a_step_that_waits():
     plans = candidates(state, node, context, floor)
     assert plans[0] is floor
     assert all(p.decision.skill not in ("GRIND_UNTIL", "TRAVEL_TO") for p in plans)
+
+
+def test_a_step_that_planned_no_route_waits_twice_as_long_each_time_in_a_row():
+    """V335: after V325 made refusals instant, bot 224's hunt that planned no route was armed
+    again a median 0.6 s after the last, 204 times in a row (29 Sep 15:10-15:15)."""
+    from jev.coach.policy import STEP_RETRY_MAX_S, STEP_RETRY_MIN_S, Context
+
+    context = Context()
+    waits = [context.step_stuck("rib", "no route", 1000.0 + 10_000.0 * n) for n in range(8)]
+    assert waits[:3] == [STEP_RETRY_MIN_S, 2 * STEP_RETRY_MIN_S, 4 * STEP_RETRY_MIN_S]
+    assert waits[-1] == STEP_RETRY_MAX_S
+    now = 1000.0 + 70_000.0
+    assert context.step_waiting("rib", now) == STEP_RETRY_MAX_S
+    restored = Context()
+    restored.restore_purse(context.purse())
+    assert restored.step_failures == {"rib": 8}, "kept across sessions"
+    context.step_moved("rib")
+    assert context.step_stuck("rib", "no route", now + 5_000.0) == STEP_RETRY_MIN_S, \
+        "a try that walked ends the run"

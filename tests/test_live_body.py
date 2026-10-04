@@ -2118,3 +2118,28 @@ def test_a_walk_refused_through_a_death_camp_says_when_the_camp_ends():
     assert b._walk_note(8) == (True, None)
     b.client.last_plan = None
     assert b._walk_note(8) == (False, None), "no plan asked for: the walk never began"
+
+
+def test_a_hunt_or_walk_that_planned_no_route_waits_before_its_step_is_armed_again():
+    """V335: a try that never moved the character waits a minute, then two, before the step
+    is armed again; one that walks ends the run of waits."""
+    import time as clock
+
+    from jev.coach.policy import STEP_RETRY_MIN_S
+    from jev.guide.path import Path, PathStatus
+    from jev.guide.route_memory import RouteMemory
+
+    b = _grind_body(RouteMemory())
+    b.client.state = lambda: seen()
+    b.client.approach = Mock(return_value=False)
+    b.client.last_plan = Path(PathStatus.NOPATH, (), "mmap", "no path")
+    assert b._hunt(seen()).code == "unreachable"
+    left = b.policy_context.step_waiting("rib", clock.time())
+    assert left is not None and abs(left - STEP_RETRY_MIN_S) < 2.0
+    b.policy_context.step_wait_until.clear()
+    assert b._travel(seen()).code == "unreachable"
+    left = b.policy_context.step_waiting("rib", clock.time())
+    assert left is not None and abs(left - 2 * STEP_RETRY_MIN_S) < 2.0, "twice as long"
+    b.client.approach = Mock(return_value=True)
+    b._travel(seen())
+    assert "rib" not in b.policy_context.step_failures, "a walk that arrived ends the run"

@@ -669,3 +669,19 @@ def test_a_hunt_whose_every_walk_is_refused_through_a_death_camp_waits_for_the_c
     h.walk_note = lambda: next(notes)
     assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
     assert h.until is None
+
+
+def test_a_hunt_that_could_plan_no_walk_is_stuck_and_one_that_walked_is_not():
+    """V335: a hunt that planned no route to any station never moved the character; it says
+    so, for its step to wait before it is armed again."""
+    h, _ = _hunt([Fought.NO_TARGET], [(0, 1)], approach=lambda p, **kw: False)
+    h.walk_note = lambda: (False, None)
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert h.stuck and "no route" in h.detail
+    notes = iter([(False, None), (True, None)])
+    h.walk_note = lambda: next(notes)
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert not h.stuck and "whole disk" in h.detail, "a walk that began is no stuck hunt"
+    h.walk_note = None
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert not h.stuck, "a body that does not say may have walked"

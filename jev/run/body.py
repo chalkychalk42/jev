@@ -681,6 +681,20 @@ class LiveBody:
         if node is None or node.world is None or node.map_id != self.client.bounds.map_id:
             return Result(SkillOutcome.ABORTED, "step has no supported map destination", "unsupported")
         ok = self._approach(node.world)
+        step = self.arm.step_id if self.arm is not None else None
+        level = (self._read() or {}).get("char.level") if not ok else None
+        note = self._walk_note(level if isinstance(level, int) else None) if not ok else None
+        if note is not None and note[1] is not None:
+            # Refused through a death camp: the step waits for the camp to end (V334).
+            self.policy_context.step_waits(step, note[1], "its walk is refused through a "
+                                           "death camp", time.time())
+        elif note is not None and note[0] is False:
+            # No route planned, not a yard walked: the step waits before it is armed again
+            # (V335). Bot 480's walks from Dolanaar, TRAVEL_TO among them, were refused for 20
+            # minutes on end (29 Sep 04:31-04:56).
+            self._stuck(step, "no route to the step could be planned")
+        elif ok or (note is not None and note[0]):
+            self.policy_context.step_moved(step)
         return Result(SkillOutcome.SUCCEEDED if ok else SkillOutcome.ABORTED,
                       "", "arrived" if ok else "unreachable")
 
@@ -810,7 +824,17 @@ class LiveBody:
             # after each hunt whose every walk the camp refused.
             self.policy_context.step_waits(step, hunt.until, "its stations lie in or behind "
                                            "a death camp", time.time())
+        elif outcome is Hunted.UNREACHABLE and hunt.stuck:
+            self._stuck(step, "no route to any station of its hunt could be planned")
+        elif hunt.arrived:
+            self.policy_context.step_moved(step)
         return self._result(outcome, hunt.detail)
+
+    def _stuck(self, step: str | None, why: str) -> None:
+        """A try at the step planned no route: it waits before it is armed again (V335)."""
+        wait = self.policy_context.step_stuck(step, why, time.time())
+        if wait:
+            self.say(f"  {why}: the step waits {wait:.0f}s")
 
     def _camp_end(self, world, level: int | None) -> float | None:
         """When the death camp the world point `world` lies in ends, as wall time: its nearest

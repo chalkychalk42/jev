@@ -107,6 +107,14 @@ SERVICE_RETRY_MAX_S = 1800.0
 # each one failed, 4,879 walks refused in one session (29 Sep 15:10-15:15). No wait is kept
 # longer than `STEP_WAIT_MAX_S` ahead, against a wall clock set back (the WSL clock, 28 Sep).
 STEP_WAIT_MAX_S = 7200.0
+# A guide step whose hunt or walk planned no route at all - the character never moved - waits
+# `STEP_RETRY_MIN_S` before it is armed again, twice as long for each such try in a row, to at
+# most `STEP_RETRY_MAX_S` (V335), as a failed service does (V322); a try that moves the
+# character ends the run. After V325 made refusals instant, bot 224's hunt that planned none
+# was armed again a median 0.6 s after the last ended, 204 times in a row, and bot 217's 124
+# (29 Sep 15:10-15:15).
+STEP_RETRY_MIN_S = 60.0
+STEP_RETRY_MAX_S = 1800.0
 
 
 @dataclass(frozen=True)
@@ -154,9 +162,27 @@ class Context:
         at = self.service_failed_at.get(skill or "")
         return at is not None and abs(now - at) < self.service_wait(skill)
 
-    # When each guide step may be armed again, as wall time (V334), and why it waits.
+    # When each guide step may be armed again, as wall time (V334), and why it waits; and how
+    # many tries at it in a row planned no route (V335).
     step_wait_until: dict[str, float] = field(default_factory=dict)
     step_wait_why: dict[str, str] = field(default_factory=dict)
+    step_failures: dict[str, int] = field(default_factory=dict)
+
+    def step_stuck(self, step_id: str | None, why: str, now: float) -> float:
+        """A try at `step_id` planned no route (V335): it waits `STEP_RETRY_MIN_S`, doubled for
+        each such try in a row, at most `STEP_RETRY_MAX_S`. The seconds it waits."""
+        if not step_id:
+            return 0.0
+        failures = self.step_failures[step_id] = self.step_failures.get(step_id, 0) + 1
+        wait = min(STEP_RETRY_MIN_S * 2 ** max(0, min(failures, 16) - 1), STEP_RETRY_MAX_S)
+        self.step_waits(step_id, now + wait, why, now)
+        self._save()
+        return wait
+
+    def step_moved(self, step_id: str | None) -> None:
+        """A try at `step_id` walked somewhere: its run of tries that could not ends (V335)."""
+        if step_id and self.step_failures.pop(step_id, None) is not None:
+            self._save()
 
     def step_waits(self, step_id: str | None, until: float, why: str, now: float) -> None:
         """Hold `step_id` until `until` (wall time), the later of this and any wait it has."""
@@ -293,7 +319,8 @@ class Context:
              "supplies_needed", "train_blocked_level", "train_blocked_until",
              "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step",
              "repair_unreachable_until", "supplies_unreachable_until", "bags_unreachable_until",
-             "service_failed_at", "service_failures", "step_wait_until", "step_wait_why")
+             "service_failed_at", "service_failures", "step_wait_until", "step_wait_why",
+             "step_failures")
 
     def purse(self) -> dict:
         return {name: (dict(value) if isinstance(value := getattr(self, name), dict) else value)
@@ -307,7 +334,7 @@ class Context:
                 self.step_wait_why = {str(k): v for k, v in kept.items() if isinstance(v, str)}
             elif name.startswith(("service_", "step_")):
                 kept = value if isinstance(value, dict) else {}
-                number = int if name == "service_failures" else float
+                number = int if name in ("service_failures", "step_failures") else float
                 setattr(self, name, {str(k): number(v) for k, v in kept.items()
                                      if isinstance(v, (int, float)) and not isinstance(v, bool)})
             elif name.endswith("blocked"):

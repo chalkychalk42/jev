@@ -220,6 +220,8 @@ class Hunt:
     detail: str = field(default="", init=False)
     # For `CAMP`, when the first camp in the way ends (wall time): the step waits for it (V334).
     until: float | None = field(default=None, init=False)
+    # `UNREACHABLE` with no route planned to any station: the character never moved (V335).
+    stuck: bool = field(default=False, init=False)
 
     @traced("hunt")
     def run(self, centre: tuple[float, float, float], radius_yards: float,
@@ -250,6 +252,7 @@ class Hunt:
         self._outdoors = None
         self.detail = ""
         self.until = None
+        self.stuck = False
         event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
                                     "wanted_name_id": name_id, "timeout_s": timeout_s,
                                     "spawns": len(spawns)})
@@ -274,7 +277,7 @@ class Hunt:
         # Stations whose walk failed, not walked to again this hunt (V334), and the ends of
         # the death camps such walks were refused through.
         failed: set[tuple] = set()
-        walks_failed = 0
+        walks_failed = planned = 0
         refused: list[float] = []
 
         while time.monotonic() < deadline:
@@ -324,7 +327,10 @@ class Hunt:
                         self.detail = (f"every walk to a station is refused through a death "
                                        f"camp, until {_clock(self.until)}")
                         return Hunted.CAMP
-                    self.detail = "walked the whole disk and found nothing to fight"
+                    # Not a yard walked: no route to any station could be planned (V335).
+                    self.stuck = not self.arrived and walks_failed > 0 and not planned
+                    self.detail = ("no route to any station could be planned" if self.stuck
+                                   else "walked the whole disk and found nothing to fight")
                     return Hunted.UNREACHABLE
                 target = posts[post]
                 post += 1
@@ -344,6 +350,7 @@ class Hunt:
                     note = self.walk_note() if self.walk_note is not None else None
                     if note is not None and note[1] is not None:
                         refused.append(note[1])
+                    planned += note is None or note[0] is True     # unknown: it may have walked
                     continue          # a station we cannot stand on is not a dead end
                 if self._wrong_side_of_a_door():
                     continue
