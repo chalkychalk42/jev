@@ -370,12 +370,7 @@ class Hunt:
             # meal or a service - goes on where it got to (V343): its lap, the stations it
             # failed to reach, what it fights, from the post nearest the character.
             posts, failed = place.posts, place.failed
-            here = None
-            if self.where is not None:
-                try:
-                    here = self.where()
-                except Exception:
-                    here = None
+            here = self.where() if self.where is not None else None
             post = place.resume(here, lambda p: p in clear and p not in failed)
             self.kills, self.arrived = place.kills, place.arrived
             if place.widened:
