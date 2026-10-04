@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import math
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -40,6 +41,7 @@ from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.path import PathStatus
+from jev.guide.route_memory import RECORD_FLUSH_S
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.choices import Choice, Stations, objective_key
@@ -282,6 +284,8 @@ CONJURE_EVERY_S = 90.0
 CASTER_STANDOFF_YARDS = 18.0
 
 class LiveBody:
+    # Purse saves, one at a time (V328); a body made without `__init__` shares this one.
+    _purse_lock = threading.Lock()
     # Every entry has an executor. The verifier receives exactly this capability set.
     HANDLERS: ClassVar[dict[str, str]] = {
         "TRAVEL_TO": "_travel", "ACCEPT_QUEST": "_quest", "TURNIN_QUEST": "_quest",
@@ -303,6 +307,7 @@ class LiveBody:
                  home_memory=None, taxi_memory=None, purse_memory=None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
+        self._purse_lock = threading.Lock()
         self.client, self.graph = client, graph
         self.travel_timeout, self.hunt_timeout, self.say = travel_timeout, hunt_timeout, say
         # Where each hunt's target spawns (`jev.guide.spawns`); empty walks rings.
@@ -372,6 +377,11 @@ class LiveBody:
         # Healer, for a session that begins as a ghost. Both in the purse file (V301).
         self._unreached: tuple[tuple[int, float, float], int] | None = None
         self._graveyard: tuple[int, float, float] | None = None
+        # Where the character fell, as (map, world x, world y), kept the moment a death is
+        # read (`observe`), in the purse file; and where it last stood alive, kept there as a
+        # session ends (V328). A ghost the game paints no body for walks to the first.
+        self._fell: tuple[int, float, float] | None = None
+        self._alive_at: tuple[int, float, float] | None = None
         self._hearth_ready_at: float | None = None      # wall time, in the purse file (V253)
         self._talents_failed: int | None = None           # the level a visit failed at (V261)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
@@ -1215,6 +1225,12 @@ class LiveBody:
                 graveyard = _numbers(raw.get("graveyard") if isinstance(raw, dict) else None, 3)
                 if graveyard is not None:
                     self._graveyard = (int(graveyard[0]), graveyard[1], graveyard[2])
+                # Where it fell and where it last stood alive, for a session begun dead or a
+                # ghost (V328).
+                for name, attr in (("fell", "_fell"), ("alive_at", "_alive_at")):
+                    kept = _numbers(raw.get(name) if isinstance(raw, dict) else None, 3)
+                    if kept is not None:
+                        setattr(self, attr, (int(kept[0]), kept[1], kept[2]))
             context.saved = self._save_purse
         context.trainable = self.trainable
         context.reserve = self.training_reserve
@@ -1284,16 +1300,21 @@ class LiveBody:
             return
         from jev.persist import atomic_json
 
-        with contextlib.suppress(OSError):
+        # One save at a time, the latest last: the supervisor's thread keeps where the character
+        # fell (`observe`) while the worker keeps the rest (V328).
+        with self._purse_lock, contextlib.suppress(OSError):
             unreached = (None if self._unreached is None
                          else [*self._unreached[0], self._unreached[1]])
+            fell, alive = getattr(self, "_fell", None), getattr(self, "_alive_at", None)
             atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse(),
                                                   "conjured": sorted(self._conjured_last),
                                                   "revived_at": self._revived_at,
                                                   "hearth_ready_at": self._hearth_ready_at,
                                                   "unreached_body": unreached,
                                                   "graveyard": (list(self._graveyard)
-                                                                if self._graveyard else None)})
+                                                                if self._graveyard else None),
+                                                  "fell": list(fell) if fell else None,
+                                                  "alive_at": list(alive) if alive else None})
 
     def _go_home(self):
         """Home by hearthstone; where it sets the character down is home from then on. Not
@@ -1966,14 +1987,17 @@ class LiveBody:
         return (*(spawn_around(self.hunt_spawns, node.id) if node is not None else ()),
                 *self._hostiles(body))
 
-    def _body_room(self, state) -> float | None:
+    def _body_room(self, state, point=None) -> float | None:
         """The most room from hostile spawns a ghost could get up with: at the graveyard's
         side of the body, where it stands inside the body's reach, or `_reclaim_yards` round
-        the body (`_short_of_body`). `None` with no body read or nothing hostile near it."""
+        the body (`_short_of_body`). The body is the map point `point`, else the one painted.
+        `None` with no body known or nothing hostile near it."""
         pos = getattr(state, "pos", None)
-        if pos is None or pos.corpse_mx is None or pos.corpse_my is None:
+        if point is None or None in point:
+            point = (None, None) if pos is None else (pos.corpse_mx, pos.corpse_my)
+        if None in point or pos is None:
             return None
-        body = map_to_world(pos.corpse_mx, pos.corpse_my, self.client.bounds)
+        body = map_to_world(*point, self.client.bounds)
         spawns = self._camp_spawns(body)
         if not spawns:
             return None
@@ -2074,9 +2098,13 @@ class LiveBody:
         # A body with no spot in reach clear of the units that attack on sight lies in a
         # camp: 15 of the mage's 22 get-ups at the body died again, a median of 39 s later,
         # and 2 of its 12 at the Spirit Healer (sessions 195-219, V247).
-        room = self._body_room(state)
-        camp = room is not None and room < CAMP_ROOM_YARDS
+        # Where the body lies: painted by the game, else what this process saw of it, the
+        # server's in the hive, or where the character was seen to fall (V328).
         corpse = (state.pos.corpse_mx, state.pos.corpse_my) if getattr(state, "pos", None) else None
+        if corpse is None or None in corpse:
+            corpse = self.recover.corpse or self._known_body() or corpse
+        room = self._body_room(state, corpse)
+        camp = room is not None and room < CAMP_ROOM_YARDS
         # A body where the character has died twice in ten minutes lies in a death camp (V307),
         # whatever room the spawns leave round it: of 143 get-ups within 35 yards of the body's
         # spot in the hive's runs begun 11:50-13:08 on 28 Sep, 80 died again before the next.
@@ -2145,10 +2173,24 @@ class LiveBody:
         walk, reach = self.recover.walk_to, getattr(self.recover, "reach", None)
         self.recover.walk_to, self.recover.reach = self._short_of_body, self._in_reclaim_reach
         try:
-            outcome = self.recover.run(self.recover.corpse)
+            outcome = self.recover.run(self.recover.corpse or self._known_body())
         finally:
             self.recover.walk_to, self.recover.reach = walk, reach
         self._keep_graveyard()                      # a body not yet released releases here
+        if outcome is Recovered.NO_CORPSE:
+            # Nothing knows where the body lies: up at the Spirit Healer, sickness and all,
+            # rather than a corpse run aborted at once at every look (V328). 35 ghosts the
+            # server had released to a capital's graveyard, their bodies off its map, aborted
+            # 858,365 corpse runs on 29 Sep, hive-240 for 27 hours.
+            detail = self.recover.detail
+            up = self._spirit_healer()
+            if up is Recovered.ALIVE:
+                self._revived(None)
+                self.say("  up at the Spirit Healer: nothing knows where the body lies")
+                self._wait_out_sickness()
+                return self._result(up, "up at the Spirit Healer; where the body lies is unknown")
+            return self._result(outcome, f"{detail}; the Spirit Healer did not raise it "
+                                         f"({up.value}: {self.recover.detail})")
         if outcome is Recovered.ALIVE:
             self._revived(time.time())
             self._reclaim_yards = TRAP_RECLAIM_YARDS
@@ -2256,7 +2298,7 @@ class LiveBody:
         for the next session's recovery. Any get-up leaves no body unreached and no graveyard
         to keep (V301)."""
         self._revived_at = at
-        self._unreached = self._graveyard = None
+        self._unreached = self._graveyard = self._fell = None
         self._save_purse()
 
     def _killed_by_stronger(self, state) -> bool:
@@ -2285,26 +2327,98 @@ class LiveBody:
         # Released where it died: walks keep clear of the spot for a while
         # (`route_memory.DangerAvoidingQuery`), at about the level it died at; a second death
         # near it within ten minutes, or one in a camp still held, makes the place a death
-        # camp, left once up (V307).
+        # camp, left once up (V307). The death is read before the release and kept after it,
+        # in memory at once and saved by the memory's one writer (V327): kept first, the
+        # release waited on the hive's shared save, and the server released the character
+        # itself six minutes after it died.
         memory, here = getattr(self.client, "route_memory", None), self._position()
         values = self._read() or {}
+        record = None
         if (memory is not None and here is not None and values.get("vitals.dead") is True
                 and values.get("vitals.ghost") is not True):
-            level = values.get("char.level")
-            level = level if isinstance(level, int) else None
-            who = values.get("char.key")
-            at = map_to_world(*here, self.client.bounds)
-            death = memory.died(self.client.bounds.map_id, at, level=level,
-                                who=who if isinstance(who, int) else None)
-            # A camp is made of one character's deaths; one another made, that counts at this
-            # level, is left as well (review of 28 Sep).
-            if death.camp(time.time()) or memory.camp_at(self.client.bounds.map_id, at,
-                                                         time.time(), level) is not None:
-                self.policy_context.camp_left(self.client.bounds.map_id, at[0], at[1])
-                self.say("  died in a death camp: left once up")
+            level, who = values.get("char.level"), values.get("char.key")
+            record = (self.client.bounds.map_id, map_to_world(*here, self.client.bounds),
+                      level if isinstance(level, int) else None,
+                      who if isinstance(who, int) else None)
         released = self.recover.run(release_only=True)
         self._keep_graveyard()
+        fell = self._on_map(here) if values.get("vitals.dead") is True else None
+        if fell is not None and fell != self._fell:
+            self._fell = fell                     # as `observe` keeps it, should it have missed it
+            self._save_purse()
+        if record is not None:
+            self._keep_death(memory, *record)
         return self._result(released, self.recover.detail)
+
+    def _keep_death(self, memory, map_id: int, at, level: int | None, who: int | None) -> None:
+        """Keep a death in the route memory: in memory at once, so a death camp it makes or
+        falls in is known now, and saved by the memory's writer (`save_soon`, V327). A camp is
+        made of one character's deaths; one another made, that counts at this level, is left
+        as well (review of 28 Sep). A memory with no writer saves as it keeps."""
+        soon = getattr(memory, "save_soon", None)
+        try:
+            death = (memory.died(map_id, at, level=level, who=who, save=False)
+                     if soon is not None else memory.died(map_id, at, level=level, who=who))
+            if soon is not None:
+                soon()
+            if (death.camp(time.time())
+                    or memory.camp_at(map_id, at, time.time(), level) is not None):
+                self.policy_context.camp_left(map_id, at[0], at[1])
+                self.say("  died in a death camp: left once up")
+        except Exception as exc:                # the release is made: a record never undoes it
+            self.say(f"  the death was not kept: {type(exc).__name__}: {exc}")
+
+    def end_session(self, timeout: float = RECORD_FLUSH_S) -> None:
+        """What a session's end keeps: the deaths still being saved, waited for at most
+        `timeout` (V327); the process's writer goes on with any left, and its exit waits for
+        them again (`route_memory.EXIT_FLUSH_S`). And where the character last stood alive,
+        for a next session begun as a ghost the game paints no body for (V328)."""
+        self._save_purse()
+        flush = getattr(getattr(self.client, "route_memory", None), "flush", None)
+        if flush is not None and flush(timeout) is False:
+            self.say(f"  deaths still being saved after {timeout:.0f} s: the writer goes on")
+
+    def observe(self, state) -> None:
+        """Each state the supervisor reads (V328): where the character stands while alive,
+        and where it fell the moment a death is read, kept in the purse file at once, whatever
+        the worker is doing and whoever releases the spirit. A ghost first read with no fall
+        kept fell where it last stood alive. Up again, nothing is kept of the body."""
+        vitals, pos = getattr(state, "vitals", None), getattr(state, "pos", None)
+        if vitals is None or pos is None:
+            return
+        here = self._on_map((pos.mx, pos.my))
+        if vitals.dead is False and vitals.ghost is False:
+            if here is not None:
+                self._alive_at = here
+            self.recover.corpse = None
+            if self._fell is not None:
+                self._fell = None
+                self._save_purse()
+        elif vitals.dead is True and vitals.ghost is not True:
+            fell = here or self._alive_at              # the body lies where the character does
+            if fell is not None and fell != self._fell:
+                self._fell = fell
+                self._save_purse()
+        elif vitals.ghost is True and self._fell is None and self._alive_at is not None:
+            self._fell = self._alive_at
+            self._save_purse()
+
+    def _known_body(self) -> tuple[float, float] | None:
+        """Where the body lies when the game paints none, as a map point (V328): the server's
+        word where the client has one (the hive's `corpse_world`, never the live client's),
+        else where the character was seen to fall (`observe`), on this map."""
+        bounds = self.client.bounds
+        if bounds is None:
+            return None
+        server = getattr(self.client, "corpse_world", None)
+        found = None
+        if callable(server):
+            with contextlib.suppress(Exception):
+                found = server()
+        for kept in (found, self._fell):
+            if kept is not None and kept[0] == bounds.map_id:
+                return world_to_map(kept[1], kept[2], bounds)
+        return None
 
     def _wait(self, state) -> Result:
         return Result(SkillOutcome.SUCCEEDED)

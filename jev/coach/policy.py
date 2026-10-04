@@ -99,6 +99,15 @@ SERVICE_RETRY_MIN_S = 60.0
 # SPACE 20 and BIND_HEARTH 21, none done; and the walks were where the mage died, 13 of its 29
 # deaths in fights begun on them. Kept in the purse file, as a 15-minute session would forget it.
 SERVICE_RETRY_MAX_S = 1800.0
+# A death skill that failed - aborted or timed out - is armed again at once the first time,
+# then `DEATH_RETRY_MIN_S` after each failure more in a row, doubled each time, to at most
+# `DEATH_RETRY_MAX_S`; the character up again, or the skill done, it starts afresh (V328).
+# Nothing between the arms changes what a ghost knows: a ghost with no body known aborted
+# CORPSE_RUN 858,365 times on 29 Sep, 35 characters, each about 1,797 times in a 15-minute
+# session, hive-240 for 27 hours. A death waits on its own skill's bar alone.
+DEATH_RETRY_MIN_S = 15.0
+DEATH_RETRY_MAX_S = 300.0
+DEATH_SKILLS = ("RELEASE_SPIRIT", "CORPSE_RUN")
 
 
 @dataclass(frozen=True)
@@ -145,6 +154,36 @@ class Context:
         clock set back (the WSL clock, 28 Sep) does not hold a service off for good."""
         at = self.service_failed_at.get(skill or "")
         return at is not None and abs(now - at) < self.service_wait(skill)
+
+    # When each death skill last failed, and how many times in a row (V328).
+    death_failed_at: dict[str, float] = field(default_factory=dict)
+    death_failures: dict[str, int] = field(default_factory=dict)
+
+    def death_failed(self, skill: str, now: float) -> None:
+        self.death_failed_at[skill] = now
+        self.death_failures[skill] = self.death_failures.get(skill, 0) + 1
+
+    def death_done(self, skill: str | None = None) -> None:
+        """A death skill done, or (no skill) the character up again: it starts afresh."""
+        for kept in (self.death_failed_at, self.death_failures):
+            if skill is None:
+                kept.clear()
+            else:
+                kept.pop(skill, None)
+
+    def death_wait(self, skill: str) -> float:
+        """How long after its last failure a death skill waits (V328): none after the first
+        in a row, then `DEATH_RETRY_MIN_S` doubled for each more, at most `DEATH_RETRY_MAX_S`."""
+        failures = self.death_failures.get(skill, 0)
+        if failures < 2:
+            return 0.0
+        return min(DEATH_RETRY_MIN_S * 2 ** min(failures - 2, 16), DEATH_RETRY_MAX_S)
+
+    def death_waiting(self, skill: str, now: float) -> bool:
+        """Is `skill` within its wait of its last failure? Either way round, as a service is
+        (`failed_lately`): a wall clock set back holds no ghost for good."""
+        at = self.death_failed_at.get(skill)
+        return at is not None and abs(now - at) < self.death_wait(skill)
 
     fight_unengaged: int = 0
     fight_paused_until: float = 0.0
@@ -451,20 +490,27 @@ def _d(intent: Intent, skill: str | None, why: str, confidence: float,
 # --------------------------------------------------------------------------- preempts
 
 
-def preempt(state: State) -> Plan | None:
+def preempt(state: State, context: Context | None = None) -> Plan | None:
     """Safety. Ordered by how quickly ignoring it ends the run.
 
     Every test here is `is True`, never truthiness: unknown is not an emergency, and
     treating a blank reading as "dead" would have the character releasing its spirit every
-    time a loading screen blanked the radio.
+    time a loading screen blanked the radio. A death skill that failed again waits its
+    turn (`Context.death_waiting`, V328), the character standing still meanwhile.
     """
     v, f = state.vitals, state.flags
 
     if v.ghost is True:
+        if context is not None and context.death_waiting("CORPSE_RUN", state.t):
+            return Plan(_d(Intent.WAIT, "IDLE", "ghost; the corpse run failed again: waiting "
+                           "before the next", 0.95, ("alive",)), True, "preempt.ghost.wait")
         return Plan(_d(Intent.SERVICE, "CORPSE_RUN", "ghost; walk back to the body", 0.95,
                        ("alive",)), True, "preempt.ghost")
 
     if v.dead is True:
+        if context is not None and context.death_waiting("RELEASE_SPIRIT", state.t):
+            return Plan(_d(Intent.WAIT, "IDLE", "dead; the release failed again: waiting "
+                           "before the next", 0.95, ("ghost",)), True, "preempt.dead.wait")
         return Plan(_d(Intent.SERVICE, "RELEASE_SPIRIT", "dead; release", 0.95,
                        ("ghost",)), True, "preempt.dead")
 
@@ -720,7 +766,7 @@ def decide(state: State, node: Node | None = None, *, context: Context | None = 
     """
     # Safety first, and safety is not derated: a preempt fires on a positive observation
     # (`is True`), so if one matched, something was read.
-    for plan in (preempt(state), _fight(state, context), service(state, context=context),
+    for plan in (preempt(state, context), _fight(state, context), service(state, context=context),
                  _recover(state, context)):
         if plan is not None:
             return plan

@@ -101,6 +101,36 @@ def test_a_ghost_walks_back_before_anything_else():
     assert plan.decision.skill == "CORPSE_RUN"
 
 
+def test_a_death_skill_that_fails_again_waits_longer_each_time_and_up_starts_afresh():
+    """V328: a ghost with no body known aborted CORPSE_RUN at once and was armed again half a
+    second later, about 1,797 times in each 15-minute session (hive-240, 29 Sep). After the
+    first failure it is armed at once, then 15 s after the second, doubled to five minutes;
+    meanwhile the character stands still, and nothing else is armed."""
+    from jev.coach.policy import DEATH_RETRY_MAX_S, DEATH_RETRY_MIN_S, Context
+
+    context = Context()
+
+    def ghost(t):
+        return _s(vitals=Vitals(ghost=True), bags=Bags(free=0, durability_min=0.0)).model_copy(
+            update={"t": t})
+
+    assert decide(ghost(0.0), context=context).rule == "preempt.ghost"
+    context.death_failed("CORPSE_RUN", 0.0)
+    assert decide(ghost(0.5), context=context).rule == "preempt.ghost", "once again at once"
+    context.death_failed("CORPSE_RUN", 0.5)
+    waiting = decide(ghost(1.0), context=context)
+    assert (waiting.rule, waiting.decision.skill) == ("preempt.ghost.wait", "IDLE")
+    assert decide(ghost(0.5 + DEATH_RETRY_MIN_S), context=context).rule == "preempt.ghost"
+    for _ in range(10):
+        context.death_failed("CORPSE_RUN", 100.0)
+    assert context.death_wait("CORPSE_RUN") == DEATH_RETRY_MAX_S
+    assert decide(ghost(100.0 + DEATH_RETRY_MAX_S - 1), context=context).decision.skill == "IDLE"
+    dead = _s(vitals=Vitals(dead=True, ghost=False)).model_copy(update={"t": 101.0})
+    assert decide(dead, context=context).rule == "preempt.dead", "the release has its own bar"
+    context.death_done()
+    assert decide(ghost(101.0), context=context).rule == "preempt.ghost"
+
+
 def test_a_covering_dialog_stops_movement():
     """Moving while a dialog covers the world is how a character walks into a lake."""
     assert decide(_s(ui=Ui(modal=True))).decision.skill == "ABORT_WAIT"

@@ -24,10 +24,13 @@ data.
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import json
 import math
+import threading
 import time
+import weakref
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from itertools import pairwise
@@ -113,6 +116,18 @@ COMPACT_SLACK_S = 600.0
 # them a route passes was each place's distance from each leg of the route, for each of the
 # map's places, at each candidate of a way round (py-spy of a farm process, 29 Sep).
 GRID_YARDS = 100.0
+# A death is kept in memory at once and saved by the memory's one writer (`save_soon`, V327):
+# kept first, it held the release behind the save, and the hive's saves wait on one lock every
+# bot of every farm process shares. In 12:00-14:00 on 29 Sep they were done one at a time, never
+# two within 3 s, 336 an hour for 370 deaths, and up to 274 dead characters stood waiting at
+# once, a median of 2,061 s from the worker's start to the release's press in the hour from
+# 12:00. A save writes every death the memory holds, so one writer's next save keeps each
+# death asked for before it began. A session's end waits `RECORD_FLUSH_S` for them, and the
+# process's exit `EXIT_FLUSH_S` for every memory's; a writer idle `WRITER_IDLE_S` ends, and the
+# next save starts another.
+RECORD_FLUSH_S = 10.0
+EXIT_FLUSH_S = 30.0
+WRITER_IDLE_S = 60.0
 
 
 @dataclass
@@ -201,6 +216,14 @@ class RouteMemory:
 
     def __init__(self, file: str | FilePath | None = None):
         self.file = FilePath(file) if file is not None else None
+        # The lists, in this process: a death kept on one thread while another saves, as every
+        # bot of a hive process shares one memory, is in the save or after it, never written
+        # over (V327). Held for a change or a write, never while a save waits for its file.
+        self._lock = threading.RLock()
+        # The one writer (`save_soon`): saves asked for, and done or failed.
+        self._saving = threading.Condition()
+        self._wanted = self._written = 0
+        self._writer: threading.Thread | None = None
         self.passages: list[Passage] = []
         self.blocked: list[Block] = []
         self.dangers: list[Danger] = []
@@ -237,34 +260,79 @@ class RouteMemory:
         return kept[1]
 
     def died(self, map_id: int, spot: tuple[float, float], now: float | None = None,
-             level: int | None = None, who: int | None = None) -> Danger:
+             level: int | None = None, who: int | None = None, *, save: bool = True) -> Danger:
         """Remember where the character died, at what level, for walks to keep clear of
         (`DANGER_S`); a death near another at about its level within `CAMP_WINDOW_S` makes
         both a death camp (V307), and one near a camp still held is a death of that camp,
         which it holds for `CAMP_S` more; each only among the deaths of the character `who`.
-        The death kept, a camp's when it made or fell in one."""
+        The death kept, a camp's when it made or fell in one. Kept in memory at once, so
+        `camp_at` knows it; saved now, or with `save` false by `save_soon` (V327)."""
         now = time.time() if now is None else now
-        self.dangers = [d for d in self.dangers if now - d.at < DANGER_S or d.camp(now)]
-        near = [d for d in self.dangers if d.map_id == map_id and counts_for(d.level, level)
-                and d.who == who and math.dist((d.x, d.y), spot[:2]) <= CAMP_YARDS]
-        recent = [d for d in near if now - d.at <= CAMP_WINDOW_S]
-        # A camp's deaths may all be older than `CAMP_WINDOW_S` while it holds: a death there
-        # is one of the camp's, or the character was never led out and walked back in
-        # (review of 28 Sep).
-        held = [d for d in near if d.camp(now)]
-        found = next((d for d in near if math.dist((d.x, d.y), spot[:2]) <= DANGER_MERGE_YARDS),
-                     None)
-        if found is None:
-            found = Danger(map_id, spot[0], spot[1], now, level, who=who)
-            self.dangers.append(found)
-        else:
-            found.at, found.level = now, level if level is not None else found.level
-        if recent or held:
-            for death in (*recent, *held, found):
-                death.camp_until = now + CAMP_S
-        self._changed()
-        self._save()
+        with self._lock:
+            self.dangers = [d for d in self.dangers if now - d.at < DANGER_S or d.camp(now)]
+            near = [d for d in self.dangers if d.map_id == map_id and counts_for(d.level, level)
+                    and d.who == who and math.dist((d.x, d.y), spot[:2]) <= CAMP_YARDS]
+            recent = [d for d in near if now - d.at <= CAMP_WINDOW_S]
+            # A camp's deaths may all be older than `CAMP_WINDOW_S` while it holds: a death
+            # there is one of the camp's, or the character was never led out and walked back
+            # in (review of 28 Sep).
+            held = [d for d in near if d.camp(now)]
+            found = next((d for d in near
+                          if math.dist((d.x, d.y), spot[:2]) <= DANGER_MERGE_YARDS), None)
+            if found is None:
+                found = Danger(map_id, spot[0], spot[1], now, level, who=who)
+                self.dangers.append(found)
+            else:
+                found.at, found.level = now, level if level is not None else found.level
+            if recent or held:
+                for death in (*recent, *held, found):
+                    death.camp_until = now + CAMP_S
+            self._changed()
+        if save:
+            self._save()
         return found
+
+    def save_soon(self) -> None:
+        """Save on the memory's one writer thread, which this starts when none runs (V327): a
+        save asked for while one is being made is the next one's, and one save writes every
+        death asked for before it. Nothing to save without a file."""
+        if self.file is None:
+            return
+        with self._saving:
+            self._wanted += 1
+            if self._writer is None:
+                self._writer = threading.Thread(target=self._write, name="route-memory-writer",
+                                                daemon=True)
+                _WRITING.add(self)
+                self._writer.start()
+            self._saving.notify_all()
+
+    def flush(self, timeout: float = RECORD_FLUSH_S) -> bool:
+        """Wait, at most `timeout` seconds, for every save `save_soon` was asked for: whether
+        all were made (or failed) by then."""
+        deadline = time.monotonic() + max(0.0, timeout)
+        with self._saving:
+            while self._written < self._wanted:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return False
+                self._saving.wait(left)
+            return True
+
+    def _write(self) -> None:
+        while True:
+            with self._saving:
+                while self._written >= self._wanted:
+                    if not self._saving.wait(WRITER_IDLE_S) and self._written >= self._wanted:
+                        self._writer = None
+                        return
+                asked = self._wanted
+            # A failed save is a later one's to make: the deaths stay in memory.
+            with contextlib.suppress(Exception):
+                self._save()
+            with self._saving:
+                self._written = max(self._written, asked)
+                self._saving.notify_all()
 
     def dangers_on(self, map_id: int, now: float | None = None,
                    level: int | None = None) -> list[Danger]:
@@ -309,17 +377,18 @@ class RouteMemory:
         dx = dy = None
         if heading is not None and math.hypot(*heading) > 0:
             dx, dy = (v / math.hypot(*heading) for v in heading)
-        for known in self.blocked:
-            if known.map_id == map_id and math.dist((known.x, known.y), spot[:2]) <= BLOCK_MERGE_YARDS:
-                known.hits += 1
-                known.updated = now
-                self._save()
-                return known
-        found = Block(map_id, spot[0], spot[1], z, updated=now, dx=dx, dy=dy)
-        self.blocked.append(found)
-        same_map = [b for b in self.blocked if b.map_id == map_id]
-        if len(same_map) > MAX_PER_MAP:
-            self.blocked.remove(min(same_map, key=lambda b: b.updated))
+        with self._lock:
+            found = next((known for known in self.blocked if known.map_id == map_id and math.dist(
+                (known.x, known.y), spot[:2]) <= BLOCK_MERGE_YARDS), None)
+            if found is not None:
+                found.hits += 1
+                found.updated = now
+            else:
+                found = Block(map_id, spot[0], spot[1], z, updated=now, dx=dx, dy=dy)
+                self.blocked.append(found)
+                same_map = [b for b in self.blocked if b.map_id == map_id]
+                if len(same_map) > MAX_PER_MAP:
+                    self.blocked.remove(min(same_map, key=lambda b: b.updated))
         self._save()
         return found
 
@@ -330,10 +399,24 @@ class RouteMemory:
     def _save(self) -> None:
         if self.file is None:
             return
-        self.dangers = _compact(self.dangers)
-        atomic_json(self.file, {"format": 1, "passages": [asdict(p) for p in self.passages],
-                                "blocked": [asdict(b) for b in self.blocked],
-                                "dangers": [asdict(d) for d in self.dangers]})
+        with self._lock:
+            self.dangers = _compact(self.dangers)
+            atomic_json(self.file, {"format": 1, "passages": [asdict(p) for p in self.passages],
+                                    "blocked": [asdict(b) for b in self.blocked],
+                                    "dangers": [asdict(d) for d in self.dangers]})
+
+
+# The memories with a writer started, each waited for at the process's exit (`EXIT_FLUSH_S` for
+# them all): the writer is a daemon, and the interpreter stops those after its exit handlers.
+_WRITING: weakref.WeakSet = weakref.WeakSet()
+
+
+@atexit.register
+def _flush_at_exit() -> None:
+    deadline = time.monotonic() + EXIT_FLUSH_S
+    for memory in list(_WRITING):
+        with contextlib.suppress(Exception):
+            memory.flush(deadline - time.monotonic())
 
 
 def _compact(dangers: list[Danger]) -> list[Danger]:

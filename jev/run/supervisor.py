@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from jev.coach.policy import Context, own_rule, reflex, service
+from jev.coach.policy import DEATH_SKILLS, Context, own_rule, reflex, service
 from jev.learn.episode import Recorder, SkillOutcome
 from jev.orch.runtime import Armed, ClientRuntime
 from jev.run.evidence import bind, operation
@@ -249,6 +249,15 @@ class Supervisor:
     def step(self, now: float | None = None) -> State:
         now = time.monotonic() if now is None else now
         state = self.runtime.source.read()
+        # The body sees each state too: where the character fell is kept the moment a death
+        # is read, whatever the worker is doing (V328).
+        observe = getattr(self.body, "observe", None)
+        if observe is not None:
+            with contextlib.suppress(Exception):
+                observe(state)
+        if (state.vitals.dead is False and state.vitals.ghost is False
+                and self.runtime.policy_context.death_failures):
+            self.runtime.policy_context.death_done()       # up: a death's bars start afresh
         if state.flags.falling is True:
             if self._falling_since is None:
                 self._falling_since = now
@@ -297,6 +306,14 @@ class Supervisor:
                 if result.code == "no_junk":
                     self.runtime.policy_context.bags_failed(
                         state.bags.free if state is not None else None)
+                if worker.arm.decision.skill in DEATH_SKILLS:
+                    # A death skill that failed waits longer each time in a row (V328).
+                    if result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT):
+                        self.runtime.policy_context.death_failed(
+                            worker.arm.decision.skill,
+                            state.t if state is not None else time.time())
+                    elif result.outcome is SkillOutcome.SUCCEEDED:
+                        self.runtime.policy_context.death_done(worker.arm.decision.skill)
                 if (worker.arm.decision.skill == "BIND_HEARTH"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
                     # An inn out of reach is not walked to again on this step: the step it was
@@ -584,5 +601,10 @@ class Supervisor:
         if settle is not None:
             with contextlib.suppress(Exception):
                 settle()
+        # And what it keeps for the next: the deaths still being saved (V327), bounded.
+        end = getattr(self.body, "end_session", None)
+        if end is not None:
+            with contextlib.suppress(Exception):
+                end()
         self.body.release()
         self.runtime.finish(SkillOutcome.UNKNOWN, "run ended")
