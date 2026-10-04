@@ -35,7 +35,7 @@ from jev.coach import policy as scripted
 from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
-from jev.guide.graph import Graph, frame_yards, rib_for
+from jev.guide.graph import Graph, frame_yards, rib_fits, rib_for
 from jev.guide.objectives import progress
 from jev.guide.route_memory import CAMP_YARDS
 from jev.guide.tracker import SHORT_RIB_S, Event, Tracker, waits_for_level
@@ -87,6 +87,17 @@ OUTGROWN_REACH = 0.25
 # The longest a leave from a death camp holds services back (V307): the walk to the grind of
 # the character's level, some 4,000 yards at a run.
 LEAVE_S = 600.0
+# A guide step that waits (`Context.step_waits`: its stations in or behind a death camp, V334,
+# or no route to them, V335) this long or more is not stood out: the character grinds the
+# nearest rib fit for its level that does not wait itself and has a station out of every camp,
+# rejoining the step when its wait ends (`_wait_elsewhere`, V334). Shorter waits are stood: a
+# detour shorter than a short rib's five minutes (`SHORT_RIB_S`) is mostly its walk. Replayed
+# on the hive's 03:00-09:30 of 29 Sep, the recorded playheads came back to a step its camp still
+# held 7,067 times, 413 h before the camps ended, and the live mage's 48 hours 138 times, 4.8 h.
+WAIT_ELSEWHERE_S = SHORT_RIB_S
+# With no such rib, the ribs are looked through again no sooner than this: a wait ends when a
+# camp does, and a look is every rib's stations against every camp.
+WAIT_LOOK_S = 30.0
 
 
 @dataclass
@@ -205,6 +216,8 @@ class ClientRuntime:
     _retried: set[str] = field(default_factory=set, init=False)
     # The grind a leave from a death camp walks to, while services wait for it (V307).
     _leaving: str | None = field(default=None, init=False)
+    # The step a look for a rib to wait on found none for, and when (`_wait_elsewhere`).
+    _elsewhere_looked: tuple = field(default=(None, -math.inf), init=False)
     # The steps by id and the grind ribs, looked up on every tick by the walk along the spine.
     _nodes: dict = field(default_factory=dict, init=False)
     _ribs_all: tuple = field(default=(), init=False)
@@ -324,6 +337,8 @@ class ClientRuntime:
                 self.tracker.enter(beyond, state)
                 self._tracker_event = "rejoin_or_skip"
         if self._leave_camp(state):
+            self._tracker_event = "rejoin_or_skip"
+        if self._wait_elsewhere(state):
             self._tracker_event = "rejoin_or_skip"
         # Every tick that stays on the step, arriving included: standing at the quest giver
         # re-reports ARRIVED, never NONE; and the tick a step is reached.
@@ -533,6 +548,53 @@ class ClientRuntime:
         if on_rib:
             # A rib for a rib: the level it waits for and a short rib's end go with it (V317).
             self.tracker.memory.level_at_entry, self.tracker.memory.until = target, until
+        return True
+
+    def _wait_elsewhere(self, state: State) -> bool:
+        """A step that waits `WAIT_ELSEWHERE_S` or more is waited out on another rib (V334):
+        the grind of the character's level (`_rib`: of the ribs not barred, then barred, spread
+        by the character, V329-V332) among those that suit it (`rib_fits`: none above
+        `RIB_LEVELS_ABOVE` over it, some worth experience, a rib the route leaves out none,
+        V331), do not wait themselves, and `Context.camped` does not put wholly in a death
+        camp. A quest step is rejoined
+        when its wait ends, as a short rib rejoins; a rib that waits hands its way back, its
+        level and its end to the rib that replaces it, as a leave from a camp does. With no
+        such rib the step is stood out where it is, the body having walked clear of the camp.
+        It cannot loop: each rib the character is sent to and finds camped or out of reach
+        waits in its turn, and no rib that waits is chosen, so the detours are fewer than the
+        ribs until a wait ends. `True` when the playhead moved."""
+        context = self.policy_context
+        step = self.tracker.step_id
+        left = context.step_waiting(step, state.t)
+        v = state.vitals
+        if (left is None or left < WAIT_ELSEWHERE_S or self.finished or v.dead is not False
+                or v.ghost is not False or v.combat is True):
+            return False
+        if (self.armed is not None
+                and not scripted.own_rule(self.armed.rule).startswith("wait.step")):
+            return False                    # a meal or a service under way finishes first
+        level = state.char.level
+        if level is None or (self._elsewhere_looked[0] == step
+                             and 0.0 <= state.t - self._elsewhere_looked[1] < WAIT_LOOK_S):
+            return False
+        camped = getattr(context, "camped", None)
+        free = [r for r in self._ribs_all if r.id != step and rib_fits(r, level)
+                and context.step_waiting(r.id, state.t) is None
+                and not (camped is not None and camped(r, level))]
+        here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
+                and state.pos.my is not None else None)
+        rib = self._rib(level, here, among=free) if free else None
+        if rib is None:
+            self._elsewhere_looked = (step, state.t)
+            return False
+        node, memory = self._nodes.get(step), self.tracker.memory
+        if node is not None and node.kind is StepKind.GRIND:
+            back, until, target = memory.rejoin_to, memory.until, memory.level_at_entry
+            self.tracker.enter(rib.id, state, rejoin_to=back)
+            self.tracker.memory.level_at_entry, self.tracker.memory.until = target, until
+        else:
+            self.tracker.enter(rib.id, state, rejoin_to=step)
+            self.tracker.memory.until = state.t + left
         return True
 
     def _past_abandoned_quest(self, verdict) -> str | None:

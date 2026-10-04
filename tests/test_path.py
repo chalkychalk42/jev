@@ -238,3 +238,43 @@ def test_a_route_stops_short_along_itself():
     assert across.points == ((0.0, 0.0, 0.0), (20.0, 0.0, 0.0)), "back past a corner"
     assert stop_short_of(route, 80.0) is None, "already within reach"
     assert stop_short_of(route, 0.0) is route
+
+
+ECHO_SIDECAR = """import sys, time, json
+print('{"ready":true}', flush=True)
+for line in sys.stdin:
+    time.sleep(DELAY)
+    sx, sy, sz, ex, ey, ez = (float(v) for v in line.split())
+    print(json.dumps({"status": "complete", "points": [[sx, sy, sz], [ex, ey, ez]],
+                      "detail": "map " + sys.argv[-1]}), flush=True)
+"""
+
+
+def test_each_maps_sidecar_answers_while_another_maps_is_asked(tmp_path):
+    """V338: one lock for every map's sidecar queued each plan of a farm process's ~80 bots
+    behind every other map's. Each map's own: two maps asked at once answer at once, and
+    each ask its own answer."""
+    script = tmp_path / "sidecar.py"
+    script.write_text(ECHO_SIDECAR.replace("DELAY", "0.3"))
+    q = MmapQuery(script, tmp_path, launcher=(sys.executable,), timeout_s=10)
+    try:
+        for m in (0, 1):
+            assert q.path(m, (0.0, 0.0, 0.0), (1.0, 0.0, 0.0)).usable   # started
+        answers = {}
+
+        def ask(map_id, x):
+            answers[(map_id, x)] = q.path(map_id, (x, 0.0, 0.0), (x, 5.0, 0.0))
+
+        threads = [threading.Thread(target=ask, args=(m, float(x)))
+                   for m in (0, 1) for x in range(2)]
+        started = time.monotonic()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        took = time.monotonic() - started
+        assert took < 0.3 * 3.5, f"{took:.2f}s: the maps waited on each other"
+        for (m, x), path in answers.items():
+            assert path.points == ((x, 0.0, 0.0), (x, 5.0, 0.0)) and path.detail == f"map {m}"
+    finally:
+        q.close()

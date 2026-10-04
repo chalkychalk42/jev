@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 
 from jev.guide.path import Path, PathStatus
 from jev.guide.route_memory import MAX_PER_MAP, RouteMemory, nearest_height
@@ -458,3 +459,203 @@ def test_a_death_camp_is_made_of_one_characters_own_deaths(tmp_path):
     assert memory.camp_at(0, (0.0, 0.0), 1200.0, level=8) is not None, "held for all"
     kept = RouteMemory(file)
     assert sorted(d.who or 0 for d in kept.dangers) == [0, 11, 11, 22], "the key kept on disk"
+
+
+def test_a_walk_refused_through_a_death_camp_names_the_camp():
+    """V334: the hunt waits for the camp that refused its walks; the refusal says which."""
+    from jev.guide.path import PathStatus
+    from jev.guide.route_memory import CAMP_REFUSED, DangerAvoidingQuery
+
+    camp = RouteMemory()
+    camp.died(0, (100.0, 0.0), now=1000.0, level=8)
+    camp.died(0, (100.0, 4.0), now=1100.0, level=8)
+    query = DangerAvoidingQuery(_Corridor(), camp, clock=lambda: 1200.0, level=lambda: 8)
+    for _ in range(2):                                # searched, then remembered
+        refused = query.path(0, (-200.0, 0.0, 61.0), (400.0, 0.0, 60.0))
+        assert refused.status is PathStatus.NOPATH and refused.detail == CAMP_REFUSED
+        assert refused.camp == (100.0, 0.0), "the camp death, the second merged into it"
+
+
+class _Slow:
+    """A planner each of whose answers takes `seconds` of a shared clock, as a farm process
+    saturated on Python's lock answered (100-140 ms an ask, 29 Sep)."""
+
+    def __init__(self, inner, clock, seconds):
+        self.inner, self.clock, self.seconds = inner, clock, seconds
+        self.asked = 0
+
+    def path(self, map_id, start, end):
+        self.asked += 1
+        self.clock[0] += self.seconds
+        return self.inner.path(map_id, start, end)
+
+
+def _camp_memory():
+    camp = RouteMemory()
+    camp.died(0, (100.0, 0.0), now=1000.0, level=8)
+    camp.died(0, (100.0, 4.0), now=1100.0, level=8)
+    return camp
+
+
+def test_the_search_round_a_camp_stops_after_its_budget_and_its_refusal_is_kept():
+    """V336: a camp refusal's two ring searches, up to 144 asks, took a median of 17.7 s in
+    the hive's farm processes at 100-140 ms an ask (29 Sep 03:00-09:30). The search stops at
+    `ROUND_BUDGET_S`; with no way found the walk is refused, and kept refused."""
+    from jev.guide.path import PathStatus
+    from jev.guide.route_memory import CAMP_REFUSED, ROUND_BUDGET_S, DangerAvoidingQuery
+
+    start, end = (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0)
+    timer = [0.0]
+    slow = _Slow(_Corridor(), timer, 0.12)
+    query = DangerAvoidingQuery(slow, _camp_memory(), clock=lambda: 1200.0, level=lambda: 8,
+                                timer=lambda: timer[0])
+    refused = query.path(0, start, end)
+    assert refused.status is PathStatus.NOPATH and refused.detail == CAMP_REFUSED
+    assert timer[0] <= ROUND_BUDGET_S + 0.12 * 3, f"{timer[0]:.2f}s searching"
+    asked = slow.asked
+    assert query.path(0, start, end).detail == CAMP_REFUSED and slow.asked - asked == 1
+
+
+def test_a_quick_planner_finds_the_same_way_round_a_camp_as_with_no_budget(monkeypatch):
+    """V336: the budget is the whole search's asks, so a quick planner answers as before."""
+    from jev.guide import route_memory
+    from jev.guide.route_memory import DangerAvoidingQuery
+
+    start, end = (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0)
+    budgeted = DangerAvoidingQuery(_FarRound(), _camp_memory(), clock=lambda: 1200.0,
+                                   level=lambda: 8).path(0, start, end)
+    monkeypatch.setattr(route_memory, "ROUND_BUDGET_S", float("inf"))
+    monkeypatch.setattr(route_memory, "ROUND_QUERIES", float("inf"))
+    unbudgeted = DangerAvoidingQuery(_FarRound(), _camp_memory(), clock=lambda: 1200.0,
+                                     level=lambda: 8).path(0, start, end)
+    assert budgeted == unbudgeted and budgeted.detail == "round a death camp"
+
+
+def test_a_walk_round_a_death_spot_out_of_budget_goes_as_it_would_with_no_way_round():
+    """V336: an ordinary death spot's way round not found in time is the way through, as a
+    way round too long always was (`DANGER_DETOUR`)."""
+    from jev.guide.route_memory import DangerAvoidingQuery
+
+    spot = RouteMemory()
+    spot.died(0, (100.0, 0.0), now=1000.0, level=8)
+    timer = [0.0]
+    slow = _Slow(_OpenGround(), timer, 2.0)
+    query = DangerAvoidingQuery(slow, spot, clock=lambda: 1200.0, level=lambda: 8,
+                                timer=lambda: timer[0])
+    route = query.path(0, (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0))
+    assert route.usable and len(route.points) == 2 and slow.asked <= 3
+
+
+def test_every_walk_from_one_spot_through_one_camp_is_refused_by_the_first_refusal():
+    """V336: a hunt's stations are as many ends; matched within 5 yards of the refused end,
+    each of a hunt's 12 to 24 walks behind a camp searched again. Kept by its start and its
+    camp, the next station's walk is refused at once; a walk from elsewhere is searched."""
+    from jev.guide.route_memory import CAMP_REFUSED, DangerAvoidingQuery
+
+    corridor = _Corridor()
+    query = DangerAvoidingQuery(corridor, _camp_memory(), clock=lambda: 1200.0,
+                                level=lambda: 8)
+    assert query.path(0, (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0)).detail == CAMP_REFUSED
+    asked = corridor.asked
+    station = query.path(0, (-198.0, 0.0, 60.0), (330.0, 0.0, 60.0))
+    assert station.detail == CAMP_REFUSED and corridor.asked - asked == 1, "the next station"
+    asked = corridor.asked
+    assert query.path(0, (-150.0, 0.0, 60.0), (330.0, 0.0, 60.0)).detail == CAMP_REFUSED
+    assert corridor.asked - asked > 1, "from 50 yards on, searched again"
+def test_deaths_saved_on_the_writer_are_one_save_at_a_time_and_none_is_lost(tmp_path):
+    """V327: every bot of a hive farm process shares one route memory, and each death's save
+    was its own, made on the dead character's worker: up to 274 dead characters stood waiting
+    on their saves at once (29 Sep 13:30). Kept in memory at once, the deaths are saved by the
+    memory's one writer, one save at a time, each writing every death asked for before it."""
+    import time
+
+    from jev.guide.route_memory import RouteMemory as Base
+
+    running, most, saves, by = [0], [0], [0], set()
+    guard = threading.Lock()
+
+    class Slow(Base):
+        def _save(self):
+            with guard:
+                by.add(threading.get_ident())
+                running[0] += 1
+                most[0] = max(most[0], running[0])
+                saves[0] += 1
+            time.sleep(0.05)
+            super()._save()
+            with guard:
+                running[0] -= 1
+
+    memory = Slow(tmp_path / "route-memory.json")
+
+    def die(i):
+        memory.died(0, (200.0 * i, 0.0), level=5, who=i, save=False)
+        memory.save_soon()
+
+    threads = [threading.Thread(target=die, args=(i,)) for i in range(40)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(memory.dangers) == 40, "every death in memory at once"
+    assert memory.flush(5.0) is True
+    assert most[0] == 1 and saves[0] < 40, "one writer, the deaths of a save's wait in one"
+    assert sorted(d.who for d in Base(tmp_path / "route-memory.json").dangers) == list(range(40))
+    assert len(by) == 1 and threading.get_ident() not in by, "saved on the one writer"
+
+
+def test_a_flush_is_bounded_and_a_memory_with_no_file_has_nothing_to_wait_for(tmp_path):
+    """V327: a session's end waits for its deaths' saves, but no longer than it is given: in
+    the hive's hour from 13:00 on 29 Sep a save waited a median of 2,526 s for its lock."""
+    import time
+
+    from jev.guide.route_memory import RouteMemory as Base
+
+    freed = threading.Event()
+
+    class Held(Base):
+        def _save(self):                    # the hive's lock, held by another farm process
+            freed.wait(5.0)
+            super()._save()
+
+    memory = Held(tmp_path / "route-memory.json")
+    memory.died(0, (0.0, 0.0), save=False)
+    memory.save_soon()
+    started = time.monotonic()
+    assert memory.flush(0.2) is False
+    assert time.monotonic() - started < 1.0
+    freed.set()
+    assert memory.flush(5.0) is True
+    assert len(Base(tmp_path / "route-memory.json").dangers) == 1
+    nothing = Base()
+    nothing.died(0, (0.0, 0.0), save=False)
+    nothing.save_soon()
+    assert nothing.flush(0.0) is True
+
+
+def test_a_death_still_being_saved_when_the_process_exits_is_saved(tmp_path):
+    """V327 (the review of 29 Sep 14:51 of the autofixer's V326): a record on a daemon thread
+    of its own was killed with the process at its exit, and the next session did not know
+    the character died there. The writer is waited for at the exit, `EXIT_FLUSH_S` at most."""
+    import subprocess
+    import sys
+    from pathlib import Path as FilePath
+
+    root = FilePath(__file__).resolve().parents[1]
+    file = tmp_path / "route-memory.json"
+    script = (
+        "import sys, time\n"
+        f"sys.path.insert(0, {str(root)!r})\n"
+        "from jev.guide.route_memory import RouteMemory\n"
+        "class Slow(RouteMemory):\n"
+        "    def _save(self):\n"
+        "        time.sleep(0.5)\n"
+        "        super()._save()\n"
+        f"memory = Slow({str(file)!r})\n"
+        "memory.died(0, (10.0, 20.0), level=7, who=576, save=False)\n"
+        "memory.save_soon()\n"
+    )
+    done = subprocess.run([sys.executable, "-c", script], timeout=60)
+    assert done.returncode == 0
+    kept = RouteMemory(file).dangers
+    assert [(d.x, d.y, d.who) for d in kept] == [(10.0, 20.0, 576)]

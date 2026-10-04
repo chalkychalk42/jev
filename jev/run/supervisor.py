@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from jev.coach.policy import Context, own_rule, reflex, service
+from jev.coach.policy import DEATH_SKILLS, Context, own_rule, reflex, service
 from jev.learn.episode import Recorder, SkillOutcome
 from jev.orch.runtime import Armed, ClientRuntime
 from jev.run.evidence import bind, operation
@@ -249,6 +249,15 @@ class Supervisor:
     def step(self, now: float | None = None) -> State:
         now = time.monotonic() if now is None else now
         state = self.runtime.source.read()
+        # The body sees each state too: where the character fell is kept the moment a death
+        # is read, whatever the worker is doing (V328).
+        observe = getattr(self.body, "observe", None)
+        if observe is not None:
+            with contextlib.suppress(Exception):
+                observe(state)
+        if (state.vitals.dead is False and state.vitals.ghost is False
+                and self.runtime.policy_context.death_failures):
+            self.runtime.policy_context.death_done()       # up: a death's bars start afresh
         if state.flags.falling is True:
             if self._falling_since is None:
                 self._falling_since = now
@@ -264,6 +273,7 @@ class Supervisor:
         routine_age = (None if clock is None else 0.0 if clock == math.inf
                        else max(0.0, now - clock))
         exhausted = None
+        camped = False                  # the exhausted step waits on a death camp (V334)
         # A step failed over this look arms nothing more in it: what the tick armed was armed
         # on the step it left, and would start only to be cancelled, "playhead changed" (V286).
         failed_over = False
@@ -297,6 +307,14 @@ class Supervisor:
                 if result.code == "no_junk":
                     self.runtime.policy_context.bags_failed(
                         state.bags.free if state is not None else None)
+                if worker.arm.decision.skill in DEATH_SKILLS:
+                    # A death skill that failed waits longer each time in a row (V328).
+                    if result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT):
+                        self.runtime.policy_context.death_failed(
+                            worker.arm.decision.skill,
+                            state.t if state is not None else time.time())
+                    elif result.outcome is SkillOutcome.SUCCEEDED:
+                        self.runtime.policy_context.death_done(worker.arm.decision.skill)
                 if (worker.arm.decision.skill == "BIND_HEARTH"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
                     # An inn out of reach is not walked to again on this step: the step it was
@@ -377,6 +395,11 @@ class Supervisor:
                                                             "VENDOR_REPAIR", "BAG_MAKE_SPACE")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
+                    if result.code == "camp":
+                        # Every station in or behind a death camp: no attempt is left until the
+                        # camp ends, and the step waits for it (`Context.step_waits`, V334).
+                        self.failures[key] = max(self.failures[key], self.max_failures)
+                        camped = True
                     # A body that can rescue the objective takes one more attempt at it before
                     # the step fails over: the tutor's, or the routine's again, as its learned
                     # recovery choice picks (V286). With one attempt a session the step failed
@@ -385,7 +408,7 @@ class Supervisor:
                     # T-0, and the choice never learned (sessions 134-289).
                     rescue = getattr(self.body, "rescue", None)
                     if (self.failures[key] >= self.max_failures and rescue is not None
-                            and rescue(worker.arm, result)):
+                            and not camped and rescue(worker.arm, result)):
                         self.failures[key] -= 1
                     elif self.failures[key] >= self.max_failures:
                         exhausted = key, result.detail
@@ -452,6 +475,9 @@ class Supervisor:
                 failed_over = True
                 self.say(f"{exhausted[0][1]} out of attempts on {exhausted[0][0]}; "
                          f"failed over to {self.runtime.tracker.step_id}")
+                self.failures.pop(exhausted[0], None)
+            elif camped:
+                # Nowhere else to go: the step waits for its camp, the run goes on (V334).
                 self.failures.pop(exhausted[0], None)
             else:
                 self.failure = f"{exhausted[0]}: {self.max_failures} failed attempts; {exhausted[1]}"
@@ -584,5 +610,10 @@ class Supervisor:
         if settle is not None:
             with contextlib.suppress(Exception):
                 settle()
+        # And what it keeps for the next: the deaths still being saved (V327), bounded.
+        end = getattr(self.body, "end_session", None)
+        if end is not None:
+            with contextlib.suppress(Exception):
+                end()
         self.body.release()
         self.runtime.finish(SkillOutcome.UNKNOWN, "run ended")

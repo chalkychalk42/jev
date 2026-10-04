@@ -199,8 +199,13 @@ class Client:
     query: PathQuery | None = field(default=None, init=False)
     # Spots where walking got stuck and the way round that worked (`RouteMemory`).
     route_memory: object | None = field(default=None, init=False)
+    # The last `read`'s reading, as (monotonic, wall time, reading) (`recent_state`, V338).
+    _last_reading: tuple | None = field(default=None, init=False, repr=False)
     # How the last `approach` walk ended, for a caller that needs more than arrived or not.
     last_travel: object | None = field(default=None, init=False)
+    # And the plan it walked, or would have: `None` when none was asked for (V334). A walk
+    # with no usable plan never moved; one refused through a death camp names the camp.
+    last_plan: Route | None = field(default=None, init=False)
     # Yards the last walk brought the character nearer its destination, in a straight line,
     # and how far from it the walk began.
     last_headway: float | None = field(default=None, init=False)
@@ -288,7 +293,18 @@ class Client:
 
     def read(self) -> dict | None:
         r = self.reading()
+        if r is not None:
+            self._last_reading = (time.monotonic(), time.time(), r)
         return None if r is None else self._navigation_values(r.values)
+
+    def recent_state(self, max_age_s: float):
+        """The `State` of the last `read`, if it was taken within `max_age_s`, else `None`
+        (V338): a caller deciding on what was just read builds no second capture."""
+        kept = getattr(self, "_last_reading", None)
+        if kept is None or time.monotonic() - kept[0] > max_age_s:
+            return None
+        with self._capturing:
+            return self.state_from(kept[2], captured_at=kept[1])
 
     def _navigation_values(self, raw: dict) -> dict:
         """One transform for every body reader, state row, and corpse recovery.
@@ -602,6 +618,7 @@ class Client:
         walked, `TELEPORTS_MAX` teleports at most. A teleport that does not move it ends the
         walk short of the destination, said so.
         """
+        self.last_plan = None
         if self.travel is None or self.query is None or self.bounds is None:
             return False
         here = self.travel.position()
@@ -610,7 +627,7 @@ class Client:
             return False
         hw = began = map_to_world(here[0], here[1], self.bounds)
         destination = world
-        path = self._plan(hw, destination)
+        path = self.last_plan = self._plan(hw, destination)
         teleports = 0
         while True:
             teleport = path.teleport if path.usable else None
@@ -732,7 +749,7 @@ class Client:
                 self.last_distance = math.dist(began[:2], destination[:2])
                 self.last_headway = self.last_distance - math.dist(hw, destination[:2])
                 return True
-            path = self._plan(hw, destination)
+            path = self.last_plan = self._plan(hw, destination)
         ended = self.travel.position()
         self._following = ()
         arrived = result.outcome.value == "arrived" and teleport is None
@@ -994,8 +1011,11 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     # it keeps being attacked at its level (`danger`, a `jev.learn.danger.DangerMap`).
     hot = None
     if danger is not None:
+        # The level from the facts kept for `HOSTILE_FACTS_S` (V338): read afresh, it was a
+        # capture at every place a plan looked for hot cells, two a plan at the least, each
+        # about a second in the hive's saturated farm processes (29 Sep).
         def hot(map_id):
-            return danger.hot(map_id, (client.read() or {}).get("char.level"))
+            return danger.hot(map_id, values().get("char.level"))
     deaths = None
     if route_memory is not None:
         deaths = DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory, hot=hot,

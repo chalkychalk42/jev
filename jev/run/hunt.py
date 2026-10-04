@@ -67,6 +67,7 @@ class Hunted(StrEnum):
     DIED = "died"
     NO_FOOD = "no_food"          # too hurt to continue and nothing to eat
     UNREACHABLE = "unreachable"  # could not stand anywhere on the disk
+    CAMP = "camp"                # every station in or behind a death camp (V334)
     TIMEOUT = "timeout"
     BLIND = "blind"
     REFUSED = "refused"
@@ -169,6 +170,11 @@ def spawn_tour(spawns, others=()) -> list[tuple[float, float, float]]:
     return tour
 
 
+def _clock(wall: float) -> str:
+    """A wall time as the logs read it."""
+    return time.strftime("%H:%M:%S", time.localtime(wall))
+
+
 def _passes(a, b, c, reach: float) -> bool:
     """Does the straight walk from `a` to `b` come within `reach` of `c`?"""
     (ax, ay), (bx, by), (cx, cy) = a[:2], b[:2], c[:2]
@@ -199,12 +205,30 @@ class Hunt:
     # hunt drinks before most pulls, and a stock made only after the policy's rests ran
     # out mid-hunt (review, 25 September).
     conjure: Callable[[], None] | None = None
+    # When the death camp a station lies in ends, as wall time, `None` for one in none
+    # (`RouteMemory.camp_at`, V307): such a station is not walked to (V334).
+    camp_until: Callable[[tuple], float | None] | None = None
+    # How the last walk that did not arrive went: whether a route was planned for it, and the
+    # end of the death camp it was refused through, if it was (V334); `None`, not known.
+    walk_note: Callable[[], tuple[bool, float | None]] | None = None
+    # A grind rib's wider prey (`jev.clients.fight.Kinds`, V337): what its hunt fights after
+    # its laps went by with nothing killed, for as many laps more; `None`, nothing wider.
+    widen: Callable[[], object | None] | None = None
+    # The objective's (have, need, complete) from a reading the hunt has just taken (V338);
+    # `None` asks `progress` and `is_complete`, each of which reads again.
+    observe: Callable[[dict | None], tuple[int | None, int | None, bool | None]] | None = None
     _found: bool = field(default=False, init=False)
 
     kills: int = field(default=0, init=False)
     _outdoors: bool | None = field(default=None, init=False)
     moves: int = field(default=0, init=False)
+    arrived: int = field(default=0, init=False)          # stations stood at
     detail: str = field(default="", init=False)
+    # For `CAMP`, when the first camp in the way ends (wall time): the step waits for it (V334).
+    until: float | None = field(default=None, init=False)
+    # `UNREACHABLE` with no route planned to any station: the character never moved (V335).
+    stuck: bool = field(default=False, init=False)
+    widened: bool = field(default=False, init=False)     # fought wider after dry laps (V337)
 
     @traced("hunt")
     def run(self, centre: tuple[float, float, float], radius_yards: float,
@@ -231,9 +255,11 @@ class Hunt:
         return values.get("vitals.dead") is True or values.get("vitals.ghost") is True
 
     def _hunt(self, centre, radius_yards, name_id, *, timeout_s, spawns, others=()) -> Hunted:
-        self.kills = self.moves = 0
+        self.kills = self.moves = self.arrived = 0
         self._outdoors = None
         self.detail = ""
+        self.until = None
+        self.stuck = self.widened = False
         event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
                                     "wanted_name_id": name_id, "timeout_s": timeout_s,
                                     "spawns": len(spawns)})
@@ -242,6 +268,14 @@ class Hunt:
         # Each lap's order is learned, when there is a choice to learn (`stations`).
         tour, laps = ((spawn_tour(spawns, others), SPAWN_LAPS) if spawns
                       else (stations(centre, radius_yards), 1))
+        tour, camps = self._out_of_camps(tour)
+        if not tour:
+            # "Deaths" in its detail: a quest step failed over for it grinds a level, as one
+            # whose deaths failed it does, not the short rib it would retry from (V334).
+            self.until = min(camps)
+            self.detail = (f"every station lies in a death camp, held by deaths at its level "
+                           f"until {_clock(self.until)}")
+            return Hunted.CAMP
         lone = len({tuple(p) for p in spawns}) == 1
         chooser = self.stations if len({tuple(p) for p in tour}) > 1 else None
         posts = ([p for _ in range(laps) for p in chooser.order(tour)] if chooser is not None
@@ -250,6 +284,11 @@ class Hunt:
         dry = 0
         stood = False
         close = False                # a lone spawn looked for from its own spot (V221)
+        # Stations whose walk failed, not walked to again this hunt (V334), and the ends of
+        # the death camps such walks were refused through.
+        failed: set[tuple] = set()
+        walks_failed = planned = 0
+        refused: list[float] = []
 
         while time.monotonic() < deadline:
             # A ghost cannot fight, heal or eat, and every skill below reports something
@@ -263,11 +302,18 @@ class Hunt:
                 self.detail = "dead; nothing here can be done until that is fixed"
                 return Hunted.DIED
 
-            have, need = self.progress()
-            complete = (self.is_complete() if self.is_complete is not None else
-                        need is not None and have is not None and have >= need)
+            # One reading a pass (V338): the grind's level and the quest's counter are in the
+            # one just taken, where its readers each read again - three readings between a
+            # fight's end and the next look, 1.86 s at the median in the hive (29 Sep).
+            if self.observe is not None:
+                have, need, complete = self.observe(v)
+            else:
+                have, need = self.progress()
+                complete = (self.is_complete() if self.is_complete is not None else
+                            need is not None and have is not None and have >= need)
             event("objective.observed", data={"have": have, "need": need,
                                                "complete": complete})
+            walked = not stood
             if complete is True:
                 self.say(f"  objective complete: {have}/{need}")
                 return Hunted.DONE
@@ -286,8 +332,30 @@ class Hunt:
                 return Hunted.BAGS_FULL
 
             if not stood:
+                # A station whose walk failed is passed on the next lap (V334): bot 224 asked
+                # for the same 12 refused walks lap after lap, 4,879 in one session.
+                while post < len(posts) and tuple(posts[post]) in failed:
+                    post += 1
                 if post >= len(posts):
-                    self.detail = "walked the whole disk and found nothing to fight"
+                    if not self.arrived and refused and len(refused) == walks_failed:
+                        # Every walk refused through a death camp (V307): the step waits for
+                        # the first of them to end, not walked again at once (V334).
+                        self.until = min((*refused, *camps))
+                        self.detail = (f"every walk to a station is refused through a death "
+                                       f"camp, held by deaths at its level until "
+                                       f"{_clock(self.until)}")
+                        return Hunted.CAMP
+                    wider = self._wider(laps)
+                    if wider is not None:
+                        # Its laps with nothing killed: another as many, fighting wider (V337).
+                        name_id = wider
+                        posts += ([p for _ in range(laps) for p in chooser.order(tour)]
+                                  if chooser is not None else tour * laps)
+                        continue
+                    # Not a yard walked: no route to any station could be planned (V335).
+                    self.stuck = not self.arrived and walks_failed > 0 and not planned
+                    self.detail = ("no route to any station could be planned" if self.stuck
+                                   else "walked the whole disk and found nothing to fight")
                     return Hunted.UNREACHABLE
                 target = posts[post]
                 post += 1
@@ -302,6 +370,12 @@ class Hunt:
                                if standoff else self.approach(target))
                     span.finish(code="true" if arrived else "false")
                 if not arrived:
+                    failed.add(tuple(target))
+                    walks_failed += 1
+                    note = self.walk_note() if self.walk_note is not None else None
+                    if note is not None and note[1] is not None:
+                        refused.append(note[1])
+                    planned += note is None or note[0] is True     # unknown: it may have walked
                     continue          # a station we cannot stand on is not a dead end
                 if self._wrong_side_of_a_door():
                     continue
@@ -311,13 +385,15 @@ class Hunt:
                     # were scored lost in sessions 205-217, most of them never arrived (V252).
                     chooser.arrive(target)
                 stood = True
+                self.arrived += 1
                 dry = 0
 
             # Before the next plate, not after selected outcomes. Topping up only after
             # a kill or a break-off meant a `timeout` fell through the dry-look branch
             # and the next mob was pulled at whatever health the last fight left - which
             # is how a run reported `top up 0` and died without killing anything.
-            if not self._ready_to_pull():
+            # The pass's reading, when it walked nowhere since (V338).
+            if not self._ready_to_pull(None if walked else v):
                 self.detail = "too hurt to pull, and nothing left to fix it with"
                 return Hunted.NO_FOOD
 
@@ -371,6 +447,45 @@ class Hunt:
         self.detail = f"{timeout_s:.0f}s and the counter is {have}/{need}"
         return Hunted.TIMEOUT
 
+    def _wider(self, laps: int):
+        """What a dry rib fights from now on (`widen`, V337), once a hunt, after its laps stood
+        at a station and killed nothing; `None` for nothing wider. Grind ribs hunt one kind
+        and fight anything else only when it attacks first (`Fight._acceptable`), and in the
+        hive's crowded ribs logs show 14-station tours of "no nameplate and no Tab target
+        worth fighting" (`184.log`, `192.log`; 38-40 bots on one rib at the peak, 29 Sep)."""
+        if self.widen is None or self.widened or self.kills or not self.arrived:
+            return None
+        wider = self.widen()
+        if not wider:
+            return None
+        self.widened = True
+        names = sorted(getattr(wider, "names", ()))
+        event("hunt.widened", data={"laps": laps, "names": names,
+                                    "levels": [getattr(wider, "low", None),
+                                               getattr(wider, "high", None)]})
+        self.say(f"    {laps} lap(s) and nothing worth fighting: any of {len(names)} more kinds "
+                 f"at levels {getattr(wider, 'low', '?')}-{getattr(wider, 'high', '?')}")
+        return wider
+
+    def _out_of_camps(self, tour) -> tuple[list, list[float]]:
+        """The tour without its stations in a death camp, and when each such camp ends (V334).
+        A camp is where the character died twice in ten minutes at its level, and of the
+        hive's walks that arrived at a station inside one, 6.1% ended in a death near it
+        within three minutes, 1.0% elsewhere (03:00-09:30 on 29 Sep)."""
+        if self.camp_until is None:
+            return list(tour), []
+        kept, camps = [], []
+        for point in tour:
+            until = self.camp_until(tuple(point))
+            if until is None:
+                kept.append(point)
+            else:
+                camps.append(until)
+        if camps:
+            event("hunt.camped", data={"stations": len(camps), "kept": len(kept),
+                                       "until": min(camps)})
+        return kept, camps
+
     def _loot(self) -> Hunted | None:
         """Take what the corpse is holding, straight after the kill.
 
@@ -418,15 +533,16 @@ class Hunt:
             return True
         return False
 
-    def _ready_to_pull(self) -> bool:
+    def _ready_to_pull(self, values: dict | None = None) -> bool:
         """Heal, then eat, until fit to take the next pull. `False` means do not pull.
 
         The whole between-engagements contract in one place: in combat there is nothing
         to decide, and out of combat the order is heal (mana and seconds), then food
         (twenty seconds), then refuse. Pulling below the line with neither available is
-        how a character arrives at a kobold already half dead.
+        how a character arrives at a kobold already half dead. `values`, a reading just
+        taken, is looked at instead of another (V338).
         """
-        v = self.read()
+        v = values if values is not None else self.read()
         if v is None:
             return True                      # unreadable is not a reason to stand still
         if v.get("vitals.combat") is True:

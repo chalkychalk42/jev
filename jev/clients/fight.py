@@ -418,6 +418,56 @@ class Fought(StrEnum):
         return self is Fought.KILLED
 
 
+# The classification a widened fight takes (`Kinds`, V337): `UnitClassification`'s "normal",
+# as the addon paints it (no elite, rare, rare elite or boss). Reactions 1-3 are hostile.
+NORMAL_RANK = 1
+HOSTILE_REACTIONS = (1, 2, 3)
+
+
+@dataclass(frozen=True)
+class Kinds:
+    """What a grind rib found dry fights (V337): its own kind as ever, and any of `names`, the
+    kinds of normal rank that spawn round it and attack the character on sight, when the unit
+    selected is hostile, of normal rank and of a level within `low`-`high` - the rib's levels,
+    none grey to the character and none more than a level above it."""
+
+    own: int | None
+    names: frozenset[int]
+    low: int
+    high: int
+
+    def named(self, name: int | None) -> bool:
+        """Is `name` one of these kinds, by name alone (a hover's)?"""
+        return name is not None and (name == self.own or name in self.names)
+
+    def takes(self, values: dict) -> bool:
+        """Is the selected unit one to fight: its own kind, or one of the others that is
+        hostile, of normal rank and of a level within `low`-`high`?"""
+        name = values.get("target.name_id")
+        if name is not None and name == self.own:
+            return True
+        level = values.get("target.level")
+        return (name in self.names and isinstance(level, int) and self.low <= level <= self.high
+                and values.get("target.reaction") in HOSTILE_REACTIONS
+                and values.get("target.classification") == NORMAL_RANK)
+
+
+def _named(wanted, name: int | None) -> bool:
+    """Is `name` the unit `wanted` (a name id, or `Kinds`), by name alone?"""
+    return wanted.named(name) if isinstance(wanted, Kinds) else name == wanted
+
+
+def _takes(wanted, values: dict) -> bool:
+    """Is the selected unit the one `wanted` (a name id, or `Kinds`)?"""
+    return (wanted.takes(values) if isinstance(wanted, Kinds)
+            else values.get("target.name_id") == wanted)
+
+
+def _logged(wanted):
+    """`wanted` as the evidence keeps it."""
+    return sorted({wanted.own, *wanted.names} - {None}) if isinstance(wanted, Kinds) else wanted
+
+
 def _jev_name(ability: Ability) -> str:
     """An attack as Jev names it: its spell's name, or its slot."""
     return ability.name or f"slot {ability.slot}"
@@ -675,7 +725,7 @@ class Fight:
         self.detail = ""
         self._last_use = {}
         self._saved_at = None
-        event("fight.request", data={"wanted_name_id": name_id, "timeout_s": timeout_s})
+        event("fight.request", data={"wanted_name_id": _logged(name_id), "timeout_s": timeout_s})
 
         v = self.read()
         if self._targeting().cancel_pending_spell(v):
@@ -739,7 +789,7 @@ class Fight:
         # selected it - the tutor, a previous look - re-acquiring could only swap it for
         # another of the same name, or for something else entirely.
         chosen = (not engaged and name_id is not None and v.get("target.has") is True
-                  and v.get("target.name_id") == name_id
+                  and _takes(name_id, v)
                   and isinstance(v.get("target.hp"), (int, float)) and v["target.hp"] > DEAD_HP
                   and not (in_combat and bystander) and not friendly)
         if chosen:
@@ -1061,7 +1111,7 @@ class Fight:
                     # the character: out of a hidden caster's sight, or into its partner's.
                     last = self._pick_plate(name_id, defend, any_plate=True)
                     if last is False:
-                        event("acquire.anything", data={"wanted_name_id": name_id})
+                        event("acquire.anything", data={"wanted_name_id": _logged(name_id)})
                         last = self.select(None)
                     return last
                 turned_round = True
@@ -1118,16 +1168,17 @@ class Fight:
                 if name_id is not None and not defend:
                     hover = self._targeting().probe(point, require_target=False)
                     event("selection.hover", code=hover.code.value,
-                          data={"point": list(point), "wanted_name_id": name_id,
+                          data={"point": list(point), "wanted_name_id": _logged(name_id),
                                 "name_id": (hover.after or {}).get("cursor.name_id")})
                     if hover.code in (HoverCode.REFUSED, HoverCode.BLIND):
                         self.detail = hover.detail
                         return Fought.REFUSED if hover.code is HoverCode.REFUSED else Fought.BLIND
                     after = hover.after or {}
                     if (after.get("cursor.has") is not True or after.get("cursor.dead") is True
-                            or after.get("cursor.name_id") != name_id):
+                            or not _named(name_id, after.get("cursor.name_id"))):
                         continue
-                event("selection.request", data={"method": "plate", "wanted_name_id": name_id,
+                event("selection.request", data={"method": "plate",
+                                                 "wanted_name_id": _logged(name_id),
                       "point": list(point), "attackers_only": attackers_only})
                 if not self.hid.click(*point):
                     self.detail = "selection input refused"
@@ -1174,7 +1225,7 @@ class Fight:
         """Is what we just selected worth fighting? `None` if nothing is readable."""
         v = values if values is not None else self.read()
         self._observe(v)
-        event("selection.expected", data={"wanted_name_id": name_id, "defend": defend,
+        event("selection.expected", data={"wanted_name_id": _logged(name_id), "defend": defend,
                                           "attackers_only": attackers_only})
         if v is None:
             return None
@@ -1197,7 +1248,7 @@ class Fight:
             # attacking: a level 7 mage defending against a Young Forest Bear took an idle
             # Rockhide Boar, twice, and died both times (sessions 207-208, V249).
             return False
-        if (name_id is None or v.get("target.name_id") == name_id
+        if (name_id is None or _takes(name_id, v)
                 or (defend and v.get("target.attacking_me") is True)):
             self._selected_name_id = v.get("target.name_id")
             self._selected_guid = v.get("target.guid")
@@ -1215,7 +1266,7 @@ class Fight:
         """
         h = humaniser(self.hid)
         for _ in range(MAX_SELECTS if h is None else h.rng.randint(*SELECTS_DRAWN)):
-            event("selection.request", data={"method": "tab", "wanted_name_id": name_id,
+            event("selection.request", data={"method": "tab", "wanted_name_id": _logged(name_id),
                                              "defend": defend})
             before = self.read_frame()
             if not self.hid.tap("tab"):
@@ -1233,7 +1284,7 @@ class Fight:
                 continue
             if v.get("target.hp") is not None and v["target.hp"] <= DEAD_HP:
                 continue                       # a corpse is selectable and not a fight
-            if (name_id is not None and v.get("target.name_id") != name_id
+            if (name_id is not None and not _takes(name_id, v)
                     and not (defend and v.get("target.attacking_me") is True)):
                 continue
             if defend and v.get("target.attacking_me") is not True:

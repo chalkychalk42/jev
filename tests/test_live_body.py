@@ -1891,6 +1891,68 @@ def test_a_death_is_kept_as_the_characters_and_a_camp_another_made_is_left_too()
     assert b.policy_context.death_camp is not None, "a camp another made, left as well"
 
 
+def test_the_release_is_pressed_before_the_death_is_saved_and_never_waits_for_the_save(tmp_path):
+    """V327: in the hive's hour from 12:00 on 29 Sep a median of 2,061 s passed between a
+    dead character's release being armed and its press. The death was kept first, and its
+    save waited for the route memory's lock, which every bot of the four farm processes
+    shares (`hive.shared`): hive-576 died at 12:07:41, the server released it itself at
+    12:13:41, and its record was done at 12:27:38, when its release was cancelled, timed out.
+    Now the release comes first and the death is in memory at once, a second one there a
+    death camp as before (V307), and the save waits for the lock on the memory's writer; the
+    session's end waits for it, and no longer than it is given."""
+    import time
+
+    from jev.coach.policy import Context
+    from jev.guide.route_memory import RouteMemory
+    from jev.persist import file_lock
+
+    class Shared(RouteMemory):              # the hive's: a lock every farm process shares
+        def _save(self):
+            with file_lock(self.file.with_suffix(".lock")):
+                order.append("saved")
+                super()._save()
+
+    order = []
+    file = tmp_path / "route-memory.json"
+    holding, freed = threading.Event(), threading.Event()
+
+    def other_process():
+        with file_lock(file.with_suffix(".lock")):
+            holding.set()
+            freed.wait(10.0)
+
+    other = threading.Thread(target=other_process)
+    other.start()
+    holding.wait(5.0)
+    b = body()
+    b.client.route_memory = Shared(file)
+    b.policy_context = Context()
+    b._read = lambda: {"vitals.dead": True, "vitals.ghost": False, "char.level": 7,
+                       "char.key": 576}
+    b._position = lambda: (0.5, 0.5)
+    b.recover = SimpleNamespace(run=lambda release_only: order.append("released")
+                                or Recovered.RELEASED, detail="", graveyard=None)
+    try:
+        started = time.monotonic()
+        assert b._release(None).outcome is SkillOutcome.SUCCEEDED
+        b._position = lambda: (0.5, 0.52)          # two yards on: a death camp
+        assert b._release(None).outcome is SkillOutcome.SUCCEEDED
+        assert time.monotonic() - started < 2.0, "no release waited on the lock"
+        assert order == ["released", "released"], "pressed before any save"
+        assert b.policy_context.death_camp == (0, 48.0, 50.0), "the camp known at once"
+        said = []
+        b.say = said.append
+        started = time.monotonic()
+        b.end_session(timeout=0.3)
+        assert time.monotonic() - started < 2.0 and any("still being saved" in s for s in said)
+    finally:
+        freed.set()
+        other.join()
+    b.end_session(timeout=5.0)
+    assert "saved" in order
+    assert [d.who for d in RouteMemory(file).dangers] == [576]
+
+
 @pytest.mark.parametrize(("deaths", "graveyard_off", "expected"), [
     (1, 300.0, ["corpse"]),            # one death: a death spot, up by the body as before
     (2, 300.0, ["healer"]),            # a death camp: up at the Spirit Healer
@@ -2064,3 +2126,272 @@ def test_a_merchant_in_the_zone_the_character_stands_in_counts_too():
     assert b._in_zone([stover, macgregor]) == [stover], "in Elwynn: Elwynn's box"
     b.client.read = lambda: {"pos.zone_id": 40}
     assert b._in_zone([stover, macgregor]) == [stover, macgregor], "in Westfall: its box too"
+
+
+def _grind_body(memory):
+    node = Node(id="rib", kind=StepKind.GRIND, zone="zone", zone_id=1, pos=(0.5, 0.5),
+                world=(50.0, 50.0, 0.0), map_id=0, level=(1, 3), target_name="Wolf",
+                target_kind="creature", skills=("GRIND_UNTIL",))
+    b = body()
+    b.graph = Graph(graph_id="g", faction="alliance", entry=node.id, nodes=(node,))
+    b.client.route_memory = memory
+    d = Decision(goal="g", intent=Intent.ADVANCE, skill="GRIND_UNTIL", abort_if=["dead"],
+                 confidence=1, why="fixture", params={"until_level": 3})
+    b.arm = Armed(d, ArmedBy.POLICY, 0, "guide", "d", node.id)
+    return b
+
+
+def test_a_grind_whose_stations_lie_in_a_death_camp_waits_for_the_camp():
+    """V334: no station of the rib is walked to, and its step waits until the camp ends."""
+    import time as clock
+
+    from jev.guide.route_memory import CAMP_S, RouteMemory
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=None)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=None)
+    b = _grind_body(memory)
+    result = b._hunt(seen())
+    assert result.code == "camp" and result.outcome is SkillOutcome.ABORTED, result
+    (walk,), _ = b.client.approach.call_args
+    assert b.client.approach.call_count == 1, "no station walked to"
+    assert memory.camp_at(0, walk[:2], now, None) is None, "only out of the camp's reach"
+    left = b.policy_context.step_waiting("rib", clock.time())
+    assert left is not None and abs(left - (CAMP_S - 30.0)) < 5.0
+
+
+def test_a_walk_refused_through_a_death_camp_says_when_the_camp_ends():
+    """V334: the hunt waits for the camp that refused its walk (`Path.camp`)."""
+    import time as clock
+
+    from jev.guide.path import Path, PathStatus
+    from jev.guide.route_memory import CAMP_REFUSED, RouteMemory
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=8)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=8)
+    b = _grind_body(memory)
+    b.client.last_plan = Path(PathStatus.NOPATH, (), "mmap", CAMP_REFUSED, camp=(50.0, 50.0))
+    planned, until = b._walk_note(8)
+    assert planned is False and until == memory.camp_at(0, (50.0, 50.0), now, 8).camp_until
+    b.client.last_plan = Path(PathStatus.NOPATH, (), "mmap", "no route")
+    assert b._walk_note(8) == (False, None)
+    b.client.last_plan = Path(PathStatus.COMPLETE, ((0, 0, 0), (1, 1, 0)), "mmap")
+    assert b._walk_note(8) == (True, None)
+    b.client.last_plan = None
+    assert b._walk_note(8) == (False, None), "no plan asked for: the walk never began"
+
+
+def test_a_hunt_or_walk_that_planned_no_route_waits_before_its_step_is_armed_again():
+    """V335: a try that never moved the character waits a minute, then two, before the step
+    is armed again; one that walks ends the run of waits."""
+    import time as clock
+
+    from jev.coach.policy import STEP_RETRY_MIN_S
+    from jev.guide.path import Path, PathStatus
+    from jev.guide.route_memory import RouteMemory
+
+    b = _grind_body(RouteMemory())
+    b.client.state = lambda: seen()
+    b.client.approach = Mock(return_value=False)
+    b.client.last_plan = Path(PathStatus.NOPATH, (), "mmap", "no path")
+    assert b._hunt(seen()).code == "unreachable"
+    left = b.policy_context.step_waiting("rib", clock.time())
+    assert left is not None and abs(left - STEP_RETRY_MIN_S) < 2.0
+    b.policy_context.step_wait_until.clear()
+    assert b._travel(seen()).code == "unreachable"
+    left = b.policy_context.step_waiting("rib", clock.time())
+    assert left is not None and abs(left - 2 * STEP_RETRY_MIN_S) < 2.0, "twice as long"
+    b.client.approach = Mock(return_value=True)
+    b._travel(seen())
+    assert "rib" not in b.policy_context.step_failures, "a walk that arrived ends the run"
+
+
+def test_a_dry_ribs_wider_kinds_are_its_levels_none_grey_and_one_above_at_most(monkeypatch):
+    """V337: the level 8 mage on Elwynn's 7-9 rib takes its kinds at 7 to 9; at level 7, 7 to
+    8; a level 15 on a 1-3 rib, nothing (all grey)."""
+    from jev.clients.fight import Kinds
+    from jev.guide.route_memory import RouteMemory
+    from jev.world import hostiles
+
+    asked = []
+    monkeypatch.setattr(hostiles, "kinds", lambda *a, **kw: asked.append(kw) or frozenset({7, 8}))
+    b = _grind_body(RouteMemory())
+    b._side = "alliance"
+    node = Node(id="rib", kind=StepKind.GRIND, zone="zone", zone_id=1, pos=(0.5, 0.5),
+                world=(50.0, 50.0, 0.0), map_id=0, level=(7, 9))
+    wider = b._rib_kinds(node, node.world, 30.0, 7, 8)
+    assert wider == Kinds(own=7, names=frozenset({8}), low=7, high=9)
+    assert asked[-1]["low"] == 7 and asked[-1]["high"] == 9 and asked[-1]["side"] == "alliance"
+    assert b._rib_kinds(node, node.world, 30.0, 7, 7).high == 8
+    low = node.model_copy(update={"level": (1, 3)})
+    assert b._rib_kinds(low, node.world, 30.0, 7, 15) is None, "all grey"
+    assert b._rib_kinds(node, node.world, 30.0, 7, None) is None
+
+
+def test_a_service_check_builds_on_the_reading_just_taken():
+    """V338: the hunt asks whether a service is due after each pass's reading; the state is
+    that reading's, not a capture of its own."""
+    from jev.world.state_v1 import Bags
+
+    b = body()
+    worn = seen(bags=Bags(free=20, durability_min=0.2, money_copper=5000))
+    b.client.state = lambda: pytest.fail("captured again")
+    b.client.recent_state = lambda max_age_s: worn
+    assert b._service_needed() == "durability is low"
+    b.client.recent_state = lambda max_age_s: None
+    b.client.state = lambda: worn
+    assert b._service_needed() == "durability is low", "none recent: one of its own"
+# hive-240, 28 Sep (V328): its last death in Tirisfal Glades at 12:12:34, as its session ended;
+# 6 s later the next session began as a ghost at the graveyard by the Ruins of Lordaeron, in
+# the server's zone Undercity, whose map does not hold the body, and no body was ever painted.
+TIRISFAL_FELL = (0.6500566155033448, 0.5450090807148609)
+TIRISFAL_ALIVE = (0.5623907763439764, 0.4942173763828313)
+RUINS_GHOST = (0.6237705843644803, 0.6688431131379939)
+
+
+def _tirisfal_body(tmp_path=None):
+    from jev.coach.policy import Context
+    from jev.guide.coords import bounds_by_radio_id
+
+    b = body()
+    b.client.bounds = bounds_by_radio_id("data/zones-tbc-243.json")[4049]   # the guide's frame
+    if tmp_path is not None:
+        b.purse_memory = tmp_path / "character-0b15a092.purse.json"
+    b.policy_context = Context()
+    b._wait_out_sickness = lambda: 0.0
+    return b
+
+
+def _undercity_ghost():
+    from jev.world.state_v1 import Char, Pos, Vitals
+
+    return seen(char=Char(level=2, faction="horde"), vitals=Vitals(hp=0.0, dead=False, ghost=True),
+                pos=Pos(mx=RUINS_GHOST[0], my=RUINS_GHOST[1], zone="Undercity"))
+
+
+def test_where_the_character_fell_is_kept_the_moment_its_death_is_read(tmp_path):
+    """V328: hive-240's session ended at its death; the next began as a ghost the server had
+    released beside a capital's Spirit Healer, with no body painted, and aborted its corpse
+    run about 1,797 times a session for 27 hours. The death read, where it fell is in the
+    purse file, and the next session's ghost walks there."""
+    from jev.world.state_v1 import Pos, Vitals
+
+    b = _tirisfal_body(tmp_path)
+    b.observe(seen(pos=Pos(mx=TIRISFAL_ALIVE[0], my=TIRISFAL_ALIVE[1], zone="Tirisfal")))
+    b.observe(seen(pos=Pos(mx=TIRISFAL_FELL[0], my=TIRISFAL_FELL[1], zone="Tirisfal"),
+                   vitals=Vitals(hp=0.0, dead=True, ghost=False)))
+    later = _tirisfal_body(tmp_path)                 # the next session, begun as a ghost
+    later.recover.read = lambda: {"vitals.dead": False, "vitals.ghost": True,
+                                  "pos.mx": RUINS_GHOST[0], "pos.my": RUINS_GHOST[1]}
+    walked = []
+    later._short_of_body = lambda point: walked.append(point) or True
+    later.recover.reach = None
+    later._in_reclaim_reach = lambda ghost, corpse: None
+    later.recover.run_spirit_healer = lambda: pytest.fail("the body is known")
+    import jev.clients.recover
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(jev.clients.recover.time, "sleep", lambda seconds: None)
+        result = later._recover(_undercity_ghost())
+    assert walked and walked[0] == pytest.approx(TIRISFAL_FELL)
+    assert result.code == "still_ghost", "walked there; the popup is the next look's"
+
+
+def test_a_ghost_nothing_knows_the_body_of_gets_up_at_the_spirit_healer(tmp_path):
+    """V328: with no body painted, none kept and none told, the corpse run aborted at once,
+    'a ghost with no corpse position', and was armed again half a second later: 858,365
+    times on 29 Sep. Now it takes the Spirit Healer beside it, sickness and all; and one the
+    healer does not raise either is an abort the policy waits on (`Context.death_waiting`)."""
+    b = _tirisfal_body(tmp_path)
+    b.recover.read = lambda: {"vitals.dead": False, "vitals.ghost": True,
+                              "pos.mx": RUINS_GHOST[0], "pos.my": RUINS_GHOST[1]}
+    b.recover.walk_to = lambda point: pytest.fail("no body to walk to")
+    raised = []
+    b.recover.run_spirit_healer = lambda: raised.append(b.recover.graveyard) or Recovered.ALIVE
+    result = b._recover(_undercity_ghost())
+    assert (result.outcome, result.code) == (SkillOutcome.SUCCEEDED, "alive")
+    assert "where the body lies is unknown" in result.detail and len(raised) == 1
+    b.recover.run_spirit_healer = lambda: Recovered.STILL_GHOST
+    result = b._recover(_undercity_ghost())
+    assert (result.outcome, result.code) == (SkillOutcome.ABORTED, "no_corpse")
+    assert "Spirit Healer did not raise it" in result.detail
+
+
+def test_the_servers_word_on_the_body_is_taken_where_the_client_has_it(tmp_path):
+    """V328: the hive's bridge reports every dead or ghost bot's corpse (`hive.client`'s
+    `corpse_world`); the live client has none, and walks by where it saw itself fall."""
+    from jev.guide.coords import map_to_world
+
+    b = _tirisfal_body(tmp_path)
+    corpse = map_to_world(*TIRISFAL_FELL, b.client.bounds)
+    b.client.corpse_world = lambda: (0, corpse[0], corpse[1])
+    passed = []
+    b.recover.run = lambda corpse_point: passed.append(corpse_point) or Recovered.ALIVE
+    assert b._recover(_undercity_ghost()).code == "alive"
+    assert passed[0] == pytest.approx(TIRISFAL_FELL)
+    b.client.corpse_world = lambda: (1, corpse[0], corpse[1])          # another continent's
+    assert b._known_body() is None
+
+
+def test_a_ghost_read_with_no_death_seen_fell_where_it_last_stood_alive(tmp_path):
+    """V328: a session that never read its character dead (released by the server or across
+    a session's end) keeps where it last stood alive, which the session's end keeps too; up
+    again, nothing is kept of the body."""
+    from jev.world.state_v1 import Pos
+
+    b = _tirisfal_body(tmp_path)
+    b.observe(seen(pos=Pos(mx=TIRISFAL_ALIVE[0], my=TIRISFAL_ALIVE[1], zone="Tirisfal")))
+    b.end_session(timeout=0.0)
+    later = _tirisfal_body(tmp_path)
+    later.observe(_undercity_ghost())
+    assert later._known_body() == pytest.approx(TIRISFAL_ALIVE)
+    later.recover.corpse = (0.1, 0.1)
+    later.observe(seen(pos=Pos(mx=0.6, my=0.6, zone="Tirisfal")))
+    assert later._fell is None and later.recover.corpse is None
+    assert _tirisfal_body(tmp_path)._fell is None, "and the purse file forgets it"
+
+
+def test_a_rib_wholly_in_a_death_camp_is_named_and_one_with_a_station_out_is_not():
+    """V334: the runtime waits a step out on no rib whose every station lies in a camp."""
+    import time as clock
+
+    from jev.guide.route_memory import RouteMemory
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=5)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=5)
+    b = _grind_body(memory)
+    rib = b.graph.nodes[0].model_copy(update={"hunt_yards": 30.0})
+    assert b.rib_camped(rib, 5), "rings of 30 yards round a camp's death"
+    assert not b.rib_camped(rib, 9), "a camp of level 5 deaths holds no level 9"
+    wide = rib.model_copy(update={"hunt_yards": 300.0})
+    assert not b.rib_camped(wide, 5), "its outer ring is out of the camp"
+    assert b.policy_context.camped == b.rib_camped
+
+
+def test_a_step_waiting_on_a_camp_with_nowhere_else_is_waited_out_of_its_reach(monkeypatch):
+    """V334: standing in the camp the character died in twice is where it dies a third time;
+    the wait is stood out of its reach, at the nearest point clear of every camp."""
+    import math as m
+    import time as clock
+
+    from jev.guide.route_memory import CAMP_YARDS, RouteMemory
+    from jev.run.body import CAMP_CLEAR_YARDS
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=5)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=5)
+    b = _grind_body(memory)
+    walked = []
+    b._approach = lambda world, stop_short=0.0: walked.append(world) or True
+    b._position = lambda: (0.6, 0.5)                    # world (40, 60): in the camp
+    assert b._out_of_camp(5) is True and len(walked) == 1
+    spot = walked[0][:2]
+    assert m.dist(spot, (50.0, 50.0)) >= CAMP_YARDS + CAMP_CLEAR_YARDS - 1e-6
+    assert memory.camp_at(0, spot, now, 5) is None
+    walked.clear()
+    assert b._out_of_camp(9) is False and walked == [], "no camp at its level: stays"

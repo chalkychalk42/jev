@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import json
 import math
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -17,7 +18,7 @@ from typing import ClassVar
 from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
-from jev.clients.fight import HEAL_POINT, Fight
+from jev.clients.fight import HEAL_POINT, Fight, Kinds
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth, Hearthed
 from jev.clients.interact import Interact
@@ -40,6 +41,7 @@ from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.path import PathStatus
+from jev.guide.route_memory import CAMP_REFUSED, CAMP_YARDS, RECORD_FLUSH_S
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.choices import Choice, Stations, objective_key
@@ -48,10 +50,19 @@ from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
-from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt
+from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, spawn_tour
+from jev.run.hunt import stations as hunt_stations
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import graveyards, hostiles
-from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
+from jev.world.combat import (
+    HEAL_OUT_OF_COMBAT,
+    Role,
+    drink_to,
+    for_class,
+    grey_level,
+    is_caster,
+    rest_mana,
+)
 from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import keep as gear_keep
 from jev.world.gear import load_worn, save_worn
@@ -257,6 +268,14 @@ CLASS_IDS = {name: class_id for class_id, name in CLASS_BY_ID.items()}
 RACE_IDS = {name: race_id for race_id, name in RACE_BY_ID.items()}
 
 
+def _counted(value) -> tuple[int | None, int | None, bool | None]:
+    """An objective's progress as a hunt counts it: (have, need, complete), a positive
+    complete flag with no counter (1, 1)."""
+    if value.complete is True and value.have is None:
+        return 1, 1, True  # a positive complete flag, including objectives with no counter
+    return value.have, value.need, value.complete
+
+
 def _tour(points, start) -> list[tuple[float, float, float]]:
     """Every point, from the one nearest `start`, always on to the nearest one left."""
     left, tour = [tuple(p) for p in points], []
@@ -280,8 +299,20 @@ CONJURE_EVERY_S = 90.0
 # A caster's hunt stands this far short of each station: inside Fireball's 35 yards and
 # Frostbolt's 30, outside most mobs' notice (V167).
 CASTER_STANDOFF_YARDS = 18.0
+# A reading this recent stands for the state a service check needs (V338): the hunt's own,
+# taken a moment before it asks.
+RECENT_READ_S = 0.5
+# Where a step that waits on a death camp is waited out with no rib to go to (V334): this far
+# beyond the camp's reach, on the nearest of these bearings round it that lies in no camp.
+CAMP_CLEAR_YARDS = 20.0
+CAMP_CLEAR_BEARINGS = 16
+# A dry rib's wider prey is at most this many levels above the character (V337), as a rib's
+# creatures are (`graph.RIB_LEVELS_ABOVE`, V323).
+WIDEN_LEVELS_ABOVE = 1
 
 class LiveBody:
+    # Purse saves, one at a time (V328); a body made without `__init__` shares this one.
+    _purse_lock = threading.Lock()
     # Every entry has an executor. The verifier receives exactly this capability set.
     HANDLERS: ClassVar[dict[str, str]] = {
         "TRAVEL_TO": "_travel", "ACCEPT_QUEST": "_quest", "TURNIN_QUEST": "_quest",
@@ -303,6 +334,7 @@ class LiveBody:
                  home_memory=None, taxi_memory=None, purse_memory=None):
         if client.bounds is None or client.travel is None:
             raise ValueError("body needs the composed planner and follower")
+        self._purse_lock = threading.Lock()
         self.client, self.graph = client, graph
         self.travel_timeout, self.hunt_timeout, self.say = travel_timeout, hunt_timeout, say
         # Where each hunt's target spawns (`jev.guide.spawns`); empty walks rings.
@@ -372,6 +404,11 @@ class LiveBody:
         # Healer, for a session that begins as a ghost. Both in the purse file (V301).
         self._unreached: tuple[tuple[int, float, float], int] | None = None
         self._graveyard: tuple[int, float, float] | None = None
+        # Where the character fell, as (map, world x, world y), kept the moment a death is
+        # read (`observe`), in the purse file; and where it last stood alive, kept there as a
+        # session ends (V328). A ghost the game paints no body for walks to the first.
+        self._fell: tuple[int, float, float] | None = None
+        self._alive_at: tuple[int, float, float] | None = None
         self._hearth_ready_at: float | None = None      # wall time, in the purse file (V253)
         self._talents_failed: int | None = None           # the level a visit failed at (V261)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
@@ -680,6 +717,20 @@ class LiveBody:
         if node is None or node.world is None or node.map_id != self.client.bounds.map_id:
             return Result(SkillOutcome.ABORTED, "step has no supported map destination", "unsupported")
         ok = self._approach(node.world)
+        step = self.arm.step_id if self.arm is not None else None
+        level = (self._read() or {}).get("char.level") if not ok else None
+        note = self._walk_note(level if isinstance(level, int) else None) if not ok else None
+        if note is not None and note[1] is not None:
+            # Refused through a death camp: the step waits for the camp to end (V334).
+            self.policy_context.step_waits(step, note[1], "its walk is refused through a "
+                                           "death camp", time.time())
+        elif note is not None and note[0] is False:
+            # No route planned, not a yard walked: the step waits before it is armed again
+            # (V335). Bot 480's walks from Dolanaar, TRAVEL_TO among them, were refused for 20
+            # minutes on end (29 Sep 04:31-04:56).
+            self._stuck(step, "no route to the step could be planned")
+        elif ok or (note is not None and note[0]):
+            self.policy_context.step_moved(step)
         return Result(SkillOutcome.SUCCEEDED if ok else SkillOutcome.ABORTED,
                       "", "arrived" if ok else "unreachable")
 
@@ -727,10 +778,19 @@ class LiveBody:
         return value
 
     def _progress(self):
-        value = self._quest_progress()
-        if value.complete is True and value.have is None:
-            return 1, 1  # a positive complete flag, including objectives with no counter
-        return value.have, value.need
+        return _counted(self._quest_progress())[:2]
+
+    def _log_progress(self):
+        """`_quest_progress` from the log as the last reading left it, without reading again
+        (V338)."""
+        node = self._node()
+        with self.client._capturing:
+            log = self.client.log.complete
+        value = progress(log, node.quest_id if node else None)
+        if (node and not node.objective_targets and value.first_incomplete is not None
+                and value.first_incomplete > 0):
+            raise Unsupported("next objective needs its own generated target; this graph places only the first")
+        return value
 
     def _hunt(self, state) -> Result:
         node = self._node()
@@ -742,6 +802,9 @@ class LiveBody:
         progress_reader = self._progress
         def complete_reader():
             return self._quest_progress().complete
+        # The counter in the log the hunt's own reading fed, read no more (V338).
+        def observe(values):
+            return _counted(self._log_progress())
         if node.kind is StepKind.QUEST_OBJECTIVE and node.objective_targets:
             self._quest_ids()
             with self.client._capturing:
@@ -767,6 +830,10 @@ class LiveBody:
                 return (1, 1) if value.complete is True and value.have is None else (value.have, value.need)
             def complete_reader():
                 return selected_progress().complete
+            def observe(values):
+                with self.client._capturing:
+                    return _counted(target_progress(self.client.log.complete, node.quest_id,
+                                                    destination))
         if isinstance(destination, ObjectiveTarget) and destination.kind == "explore":
             return self._explore(destination, complete_reader)
         if (isinstance(destination, ObjectiveTarget) and destination.kind == "loot"
@@ -785,22 +852,133 @@ class LiveBody:
             def complete_reader():
                 level, needed = progress_reader()
                 return None if level is None else level >= needed
+            def observe(values):
+                level = (values or {}).get("char.level")
+                return level, target, None if level is None else level >= target
         wanted = name_id(destination.target_name)
         values = self._read() or {}
         caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
+        level = values.get("char.level") if isinstance(values.get("char.level"), int) else None
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
                     is_complete=complete_reader, service_needed=self._service_needed,
                     stations=self._stations("hunt.station", objective_key(wanted, node.id)),
                     standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0,
-                    conjure=self._conjure)
+                    conjure=self._conjure,
+                    camp_until=lambda station: self._camp_end(station, level),
+                    walk_note=lambda: self._walk_note(level), observe=observe)
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
+        if node.kind is StepKind.GRIND:
+            # A rib found dry fights any kind round it worth fighting (V337).
+            hunt.widen = lambda: self._rib_kinds(node, destination.world, yards, wanted, level)
         spawns = spawn_points(self.hunt_spawns, node.id, getattr(destination, "target_id", None))
         outcome = hunt.run(destination.world, yards, wanted, timeout_s=self.hunt_timeout,
                            spawns=spawns,
                            others=self._hostiles(destination.world, yards + PACK_YARDS)
                            if spawns else ())
+        step = self.arm.step_id if self.arm is not None else None
+        if outcome is Hunted.CAMP and getattr(hunt, "until", None) is not None:
+            # Not armed again until the camp ends (V334): bot 224's grind was armed again 0.5 s
+            # after each hunt whose every walk the camp refused. Waited out on another rib
+            # (`ClientRuntime._wait_elsewhere`), or, with none, out of the camp's reach.
+            self.policy_context.step_waits(step, hunt.until, "its stations lie in or behind "
+                                           "a death camp", time.time())
+            self._out_of_camp(level)
+        elif outcome is Hunted.UNREACHABLE and getattr(hunt, "stuck", False):
+            self._stuck(step, "no route to any station of its hunt could be planned")
+        elif getattr(hunt, "arrived", 0):
+            self.policy_context.step_moved(step)
         return self._result(outcome, hunt.detail)
+
+    def rib_camped(self, node, level: int | None) -> bool:
+        """Does every station a hunt of the rib `node` would stand at lie in a death camp
+        counting at `level` (`Hunt._out_of_camps`, V334)? No, with none known."""
+        if node is None or node.world is None or self.client.bounds is None \
+                or node.map_id != self.client.bounds.map_id:
+            return False
+        spawns = spawn_points(self.hunt_spawns, node.id, None)
+        tour = (spawn_tour(spawns) if spawns
+                else hunt_stations(node.world, node.hunt_yards or DEFAULT_HUNT_YARDS))
+        return bool(tour) and all(self._camp_end(p, level) is not None for p in tour)
+
+    def _out_of_camp(self, level: int | None) -> bool:
+        """Walk clear of the death camp the character stands in, if it stands in one: to the
+        nearest point `CAMP_CLEAR_YARDS` beyond its reach that lies in no camp, where a step
+        that waits on it is waited out with nothing else to do (V334). `True` when it walked
+        there."""
+        memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
+        here = self._position()
+        if memory is None or bounds is None or here is None:
+            return False
+        at = map_to_world(*here, bounds)
+        camp = memory.camp_at(bounds.map_id, at[:2], time.time(), level) if at else None
+        if camp is None:
+            return False
+        reach = CAMP_YARDS + CAMP_CLEAR_YARDS
+        ring = [(camp.x + reach * math.cos(a), camp.y + reach * math.sin(a))
+                for a in (2 * math.pi * k / CAMP_CLEAR_BEARINGS for k in range(CAMP_CLEAR_BEARINGS))]
+        clear = [p for p in ring if self._camp_end(p, level) is None]
+        if not clear:
+            return False
+        spot = min(clear, key=lambda p: math.dist(p, at[:2]))
+        self.say(f"  out of the death camp's reach to wait, {math.dist(spot, at[:2]):.0f} yards")
+        return self._approach((spot[0], spot[1], self._height_at(at)))
+
+    def _height_at(self, at) -> float:
+        """The height tracked where the character stands, else 0 (the planner looks 200 yards
+        up and down for a floor, `jevpath_lazy`)."""
+        ground = getattr(self.client, "_ground", None)
+        if ground is not None and math.dist(ground[:2], at[:2]) <= 15.0:
+            return ground[2]
+        return 0.0
+
+    def _stuck(self, step: str | None, why: str) -> None:
+        """A try at the step planned no route: it waits before it is armed again (V335)."""
+        wait = self.policy_context.step_stuck(step, why, time.time())
+        if wait:
+            self.say(f"  {why}: the step waits {wait:.0f}s")
+
+    def _rib_kinds(self, node, world, yards: float, own: int | None,
+                   level: int | None) -> Kinds | None:
+        """What a dry grind rib fights (`Hunt.widen`, V337): its own kind, and any kind of
+        normal rank spawned within its disk and a pack's reach that attacks this character on
+        sight and whose levels lie within the rib's (`jev.world.hostiles.kinds`), the unit
+        taken at a level none grey to the character and at most `WIDEN_LEVELS_ABOVE` above
+        it. `None` with the level, the side or the rib's levels unknown, or nothing more."""
+        band = getattr(node, "level", None)
+        if not isinstance(level, int) or not band or world is None or self.client.bounds is None:
+            return None
+        low, high = max(band[0], grey_level(level) + 1), min(band[1], level + WIDEN_LEVELS_ABOVE)
+        names = hostiles.kinds(self.client.bounds.map_id, world[0], world[1], yards + PACK_YARDS,
+                               side=self._side, low=band[0], high=band[1]) - {own}
+        if low > high or not names:
+            return None
+        return Kinds(own=own, names=names, low=low, high=high)
+
+    def _camp_end(self, world, level: int | None) -> float | None:
+        """When the death camp the world point `world` lies in ends, as wall time: its nearest
+        camp death counting at `level` (`RouteMemory.camp_at`, V307); `None` for none, or with
+        no route memory (V334)."""
+        memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
+        if memory is None or bounds is None or world is None:
+            return None
+        camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level)
+        return camp.camp_until if camp is not None else None
+
+    def _walk_note(self, level: int | None) -> tuple[bool, float | None] | None:
+        """How the last walk that did not arrive went (`Hunt.walk_note`, V334): whether its
+        route was planned, and when the death camp it was refused through ends; `None` from
+        a client that does not say."""
+        if not hasattr(self.client, "last_plan"):
+            return None
+        plan = self.client.last_plan
+        if plan is None:
+            return False, None
+        if plan.status is PathStatus.NOPATH and plan.detail == CAMP_REFUSED:
+            camp = getattr(plan, "camp", None)
+            end = self._camp_end(camp, level) if camp is not None else None
+            return False, end
+        return plan.usable, None
 
     def _explore(self, target: ObjectiveTarget, complete: Callable[[], bool | None]) -> Result:
         """Walk to an exploration trigger's point and wait for the quest's own credit.
@@ -892,7 +1070,12 @@ class LiveBody:
 
     def _service_needed(self) -> str | None:
         self.checkpoint()
-        state = self.client.state()
+        # The state of the reading the hunt has just taken, not another (V338): a state
+        # built afresh at each look was a capture more between a fight and the next pull.
+        recent = getattr(self.client, "recent_state", None)
+        state = recent(RECENT_READ_S) if callable(recent) else None
+        if state is None:
+            state = self.client.state()
         if state is None:
             return None
         # On the armed step, as the policy sees it: a merchant or repairer found out of
@@ -1215,8 +1398,15 @@ class LiveBody:
                 graveyard = _numbers(raw.get("graveyard") if isinstance(raw, dict) else None, 3)
                 if graveyard is not None:
                     self._graveyard = (int(graveyard[0]), graveyard[1], graveyard[2])
+                # Where it fell and where it last stood alive, for a session begun dead or a
+                # ghost (V328).
+                for name, attr in (("fell", "_fell"), ("alive_at", "_alive_at")):
+                    kept = _numbers(raw.get(name) if isinstance(raw, dict) else None, 3)
+                    if kept is not None:
+                        setattr(self, attr, (int(kept[0]), kept[1], kept[2]))
             context.saved = self._save_purse
         context.trainable = self.trainable
+        context.camped = self.rib_camped
         context.reserve = self.training_reserve
         context.bindable = self.bindable
         context.discoverable = self.discoverable
@@ -1284,16 +1474,21 @@ class LiveBody:
             return
         from jev.persist import atomic_json
 
-        with contextlib.suppress(OSError):
+        # One save at a time, the latest last: the supervisor's thread keeps where the character
+        # fell (`observe`) while the worker keeps the rest (V328).
+        with self._purse_lock, contextlib.suppress(OSError):
             unreached = (None if self._unreached is None
                          else [*self._unreached[0], self._unreached[1]])
+            fell, alive = getattr(self, "_fell", None), getattr(self, "_alive_at", None)
             atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse(),
                                                   "conjured": sorted(self._conjured_last),
                                                   "revived_at": self._revived_at,
                                                   "hearth_ready_at": self._hearth_ready_at,
                                                   "unreached_body": unreached,
                                                   "graveyard": (list(self._graveyard)
-                                                                if self._graveyard else None)})
+                                                                if self._graveyard else None),
+                                                  "fell": list(fell) if fell else None,
+                                                  "alive_at": list(alive) if alive else None})
 
     def _go_home(self):
         """Home by hearthstone; where it sets the character down is home from then on. Not
@@ -1966,14 +2161,17 @@ class LiveBody:
         return (*(spawn_around(self.hunt_spawns, node.id) if node is not None else ()),
                 *self._hostiles(body))
 
-    def _body_room(self, state) -> float | None:
+    def _body_room(self, state, point=None) -> float | None:
         """The most room from hostile spawns a ghost could get up with: at the graveyard's
         side of the body, where it stands inside the body's reach, or `_reclaim_yards` round
-        the body (`_short_of_body`). `None` with no body read or nothing hostile near it."""
+        the body (`_short_of_body`). The body is the map point `point`, else the one painted.
+        `None` with no body known or nothing hostile near it."""
         pos = getattr(state, "pos", None)
-        if pos is None or pos.corpse_mx is None or pos.corpse_my is None:
+        if point is None or None in point:
+            point = (None, None) if pos is None else (pos.corpse_mx, pos.corpse_my)
+        if None in point or pos is None:
             return None
-        body = map_to_world(pos.corpse_mx, pos.corpse_my, self.client.bounds)
+        body = map_to_world(*point, self.client.bounds)
         spawns = self._camp_spawns(body)
         if not spawns:
             return None
@@ -2074,9 +2272,13 @@ class LiveBody:
         # A body with no spot in reach clear of the units that attack on sight lies in a
         # camp: 15 of the mage's 22 get-ups at the body died again, a median of 39 s later,
         # and 2 of its 12 at the Spirit Healer (sessions 195-219, V247).
-        room = self._body_room(state)
-        camp = room is not None and room < CAMP_ROOM_YARDS
+        # Where the body lies: painted by the game, else what this process saw of it, the
+        # server's in the hive, or where the character was seen to fall (V328).
         corpse = (state.pos.corpse_mx, state.pos.corpse_my) if getattr(state, "pos", None) else None
+        if corpse is None or None in corpse:
+            corpse = self.recover.corpse or self._known_body() or corpse
+        room = self._body_room(state, corpse)
+        camp = room is not None and room < CAMP_ROOM_YARDS
         # A body where the character has died twice in ten minutes lies in a death camp (V307),
         # whatever room the spawns leave round it: of 143 get-ups within 35 yards of the body's
         # spot in the hive's runs begun 11:50-13:08 on 28 Sep, 80 died again before the next.
@@ -2145,10 +2347,24 @@ class LiveBody:
         walk, reach = self.recover.walk_to, getattr(self.recover, "reach", None)
         self.recover.walk_to, self.recover.reach = self._short_of_body, self._in_reclaim_reach
         try:
-            outcome = self.recover.run(self.recover.corpse)
+            outcome = self.recover.run(self.recover.corpse or self._known_body())
         finally:
             self.recover.walk_to, self.recover.reach = walk, reach
         self._keep_graveyard()                      # a body not yet released releases here
+        if outcome is Recovered.NO_CORPSE:
+            # Nothing knows where the body lies: up at the Spirit Healer, sickness and all,
+            # rather than a corpse run aborted at once at every look (V328). 35 ghosts the
+            # server had released to a capital's graveyard, their bodies off its map, aborted
+            # 858,365 corpse runs on 29 Sep, hive-240 for 27 hours.
+            detail = self.recover.detail
+            up = self._spirit_healer()
+            if up is Recovered.ALIVE:
+                self._revived(None)
+                self.say("  up at the Spirit Healer: nothing knows where the body lies")
+                self._wait_out_sickness()
+                return self._result(up, "up at the Spirit Healer; where the body lies is unknown")
+            return self._result(outcome, f"{detail}; the Spirit Healer did not raise it "
+                                         f"({up.value}: {self.recover.detail})")
         if outcome is Recovered.ALIVE:
             self._revived(time.time())
             self._reclaim_yards = TRAP_RECLAIM_YARDS
@@ -2256,7 +2472,7 @@ class LiveBody:
         for the next session's recovery. Any get-up leaves no body unreached and no graveyard
         to keep (V301)."""
         self._revived_at = at
-        self._unreached = self._graveyard = None
+        self._unreached = self._graveyard = self._fell = None
         self._save_purse()
 
     def _killed_by_stronger(self, state) -> bool:
@@ -2285,26 +2501,98 @@ class LiveBody:
         # Released where it died: walks keep clear of the spot for a while
         # (`route_memory.DangerAvoidingQuery`), at about the level it died at; a second death
         # near it within ten minutes, or one in a camp still held, makes the place a death
-        # camp, left once up (V307).
+        # camp, left once up (V307). The death is read before the release and kept after it,
+        # in memory at once and saved by the memory's one writer (V327): kept first, the
+        # release waited on the hive's shared save, and the server released the character
+        # itself six minutes after it died.
         memory, here = getattr(self.client, "route_memory", None), self._position()
         values = self._read() or {}
+        record = None
         if (memory is not None and here is not None and values.get("vitals.dead") is True
                 and values.get("vitals.ghost") is not True):
-            level = values.get("char.level")
-            level = level if isinstance(level, int) else None
-            who = values.get("char.key")
-            at = map_to_world(*here, self.client.bounds)
-            death = memory.died(self.client.bounds.map_id, at, level=level,
-                                who=who if isinstance(who, int) else None)
-            # A camp is made of one character's deaths; one another made, that counts at this
-            # level, is left as well (review of 28 Sep).
-            if death.camp(time.time()) or memory.camp_at(self.client.bounds.map_id, at,
-                                                         time.time(), level) is not None:
-                self.policy_context.camp_left(self.client.bounds.map_id, at[0], at[1])
-                self.say("  died in a death camp: left once up")
+            level, who = values.get("char.level"), values.get("char.key")
+            record = (self.client.bounds.map_id, map_to_world(*here, self.client.bounds),
+                      level if isinstance(level, int) else None,
+                      who if isinstance(who, int) else None)
         released = self.recover.run(release_only=True)
         self._keep_graveyard()
+        fell = self._on_map(here) if values.get("vitals.dead") is True else None
+        if fell is not None and fell != self._fell:
+            self._fell = fell                     # as `observe` keeps it, should it have missed it
+            self._save_purse()
+        if record is not None:
+            self._keep_death(memory, *record)
         return self._result(released, self.recover.detail)
+
+    def _keep_death(self, memory, map_id: int, at, level: int | None, who: int | None) -> None:
+        """Keep a death in the route memory: in memory at once, so a death camp it makes or
+        falls in is known now, and saved by the memory's writer (`save_soon`, V327). A camp is
+        made of one character's deaths; one another made, that counts at this level, is left
+        as well (review of 28 Sep). A memory with no writer saves as it keeps."""
+        soon = getattr(memory, "save_soon", None)
+        try:
+            death = (memory.died(map_id, at, level=level, who=who, save=False)
+                     if soon is not None else memory.died(map_id, at, level=level, who=who))
+            if soon is not None:
+                soon()
+            if (death.camp(time.time())
+                    or memory.camp_at(map_id, at, time.time(), level) is not None):
+                self.policy_context.camp_left(map_id, at[0], at[1])
+                self.say("  died in a death camp: left once up")
+        except Exception as exc:                # the release is made: a record never undoes it
+            self.say(f"  the death was not kept: {type(exc).__name__}: {exc}")
+
+    def end_session(self, timeout: float = RECORD_FLUSH_S) -> None:
+        """What a session's end keeps: the deaths still being saved, waited for at most
+        `timeout` (V327); the process's writer goes on with any left, and its exit waits for
+        them again (`route_memory.EXIT_FLUSH_S`). And where the character last stood alive,
+        for a next session begun as a ghost the game paints no body for (V328)."""
+        self._save_purse()
+        flush = getattr(getattr(self.client, "route_memory", None), "flush", None)
+        if flush is not None and flush(timeout) is False:
+            self.say(f"  deaths still being saved after {timeout:.0f} s: the writer goes on")
+
+    def observe(self, state) -> None:
+        """Each state the supervisor reads (V328): where the character stands while alive,
+        and where it fell the moment a death is read, kept in the purse file at once, whatever
+        the worker is doing and whoever releases the spirit. A ghost first read with no fall
+        kept fell where it last stood alive. Up again, nothing is kept of the body."""
+        vitals, pos = getattr(state, "vitals", None), getattr(state, "pos", None)
+        if vitals is None or pos is None:
+            return
+        here = self._on_map((pos.mx, pos.my))
+        if vitals.dead is False and vitals.ghost is False:
+            if here is not None:
+                self._alive_at = here
+            self.recover.corpse = None
+            if self._fell is not None:
+                self._fell = None
+                self._save_purse()
+        elif vitals.dead is True and vitals.ghost is not True:
+            fell = here or self._alive_at              # the body lies where the character does
+            if fell is not None and fell != self._fell:
+                self._fell = fell
+                self._save_purse()
+        elif vitals.ghost is True and self._fell is None and self._alive_at is not None:
+            self._fell = self._alive_at
+            self._save_purse()
+
+    def _known_body(self) -> tuple[float, float] | None:
+        """Where the body lies when the game paints none, as a map point (V328): the server's
+        word where the client has one (the hive's `corpse_world`, never the live client's),
+        else where the character was seen to fall (`observe`), on this map."""
+        bounds = self.client.bounds
+        if bounds is None:
+            return None
+        server = getattr(self.client, "corpse_world", None)
+        found = None
+        if callable(server):
+            with contextlib.suppress(Exception):
+                found = server()
+        for kept in (found, self._fell):
+            if kept is not None and kept[0] == bounds.map_id:
+                return world_to_map(kept[1], kept[2], bounds)
+        return None
 
     def _wait(self, state) -> Result:
         return Result(SkillOutcome.SUCCEEDED)

@@ -335,7 +335,8 @@ def frame_yards(nodes) -> tuple[float, float] | None:
             return None
         slope = sum((f - mean_f) * (y - mean_y) for f, y in zip(fractions, yards)) / var
         off = max(abs(y - mean_y - slope * (f - mean_f)) for f, y in zip(fractions, yards))
-        return abs(slope) if off <= 1.0 else None     # a yard off is another frame
+        # A yard off is another frame; a map spans thousands of yards, not none.
+        return abs(slope) if off <= 1.0 and abs(slope) >= 1.0 else None
 
     # The map's horizontal axis is world Y, its vertical world X (`coords.world_to_map`).
     across = span([p[0] for p, _ in points], [w[1] for _, w in points])

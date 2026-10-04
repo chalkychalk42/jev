@@ -14,7 +14,9 @@ otherwise its template's, a player faction among its enemies, a template that ha
 its friends, or its hostile mask against the player's own. A side is read by one race of it
 (`SIDE_RACES`). Rows are `[x, y, z, min level, max level, sides, wander]`, sides a mask
 (1 hostile to the Alliance, 2 to the Horde), wander the yards a random mover strays from
-its point (a patrol's route is not known: `PATROL_WANDER`).
+its point (a patrol's route is not known: `PATROL_WANDER`), and then the kinds of unit the
+spawn may be, `[name id, min level, max level, rank]` each (V337): the name's code as the
+addon paints it (`jev.perceive.radio_frame.name_id`), the rank the template's (0 normal).
 """
 
 from __future__ import annotations
@@ -23,8 +25,14 @@ import argparse
 import json
 import pathlib
 import sqlite3
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from jev.perceive.radio_frame import name_id  # noqa: E402
+
 MAPS = (0, 1, 530)
 MAX_LEVEL = 40
 # Faction template masks, as in tools/gen_vendor_catalog.py.
@@ -103,8 +111,10 @@ def generate(db: sqlite3.Connection, maps=MAPS, max_level: int = MAX_LEVEL) -> d
         "from dbc_FactionTemplate")}
     factions = {row[0]: row[1:] for row in db.execute(
         "select id, " + ", ".join(f"c{i}" for i in range(1, 18)) + " from dbc_Faction")}
-    creatures = {entry: (low, high, faction, flags) for entry, low, high, faction, flags in db.execute(
-        "select Entry, MinLevel, MaxLevel, Faction, UnitFlags from world_creature_template")}
+    creatures = {entry: (low, high, faction, flags, name, rank)
+                 for entry, low, high, faction, flags, name, rank in db.execute(
+                     "select Entry, MinLevel, MaxLevel, Faction, UnitFlags, Name, Rank "
+                     "from world_creature_template")}
     drawn: dict[int, list[int]] = {}
     for guid, entry in db.execute(RANDOM_CREATURES):
         drawn.setdefault(guid, []).append(entry)
@@ -114,12 +124,12 @@ def generate(db: sqlite3.Connection, maps=MAPS, max_level: int = MAX_LEVEL) -> d
         "c.MovementType from world_creature c "
         f"where c.map in ({','.join('?' * len(maps))}) order by c.map, c.guid", maps)
     for guid, entry, map_id, x, y, z, spawndist, movement in rows:
-        sides, levels = 0, []
+        sides, levels, kinds = 0, [], set()
         for kind in ([entry] if entry else drawn.get(guid, [])):
             facts = creatures.get(kind)
             if facts is None:
                 continue
-            low, high, faction, flags = facts
+            low, high, faction, flags, name, rank = facts
             if high > max_level or (flags or 0) & (UNIT_FLAG_NON_ATTACKABLE
                                                    | UNIT_FLAG_NOT_SELECTABLE):
                 continue
@@ -127,12 +137,14 @@ def generate(db: sqlite3.Connection, maps=MAPS, max_level: int = MAX_LEVEL) -> d
             if hostile:
                 sides |= hostile
                 levels += [int(low), int(high)]
+                kinds.add((name_id(name or ""), int(low), int(high), int(rank or 0)))
         if not sides:
             continue
         wander = (float(spawndist or 0.0) if movement == MOVE_RANDOM
                   else PATROL_WANDER if movement == MOVE_WAYPOINT else 0.0)
         out[str(map_id)].append([round(float(x), 1), round(float(y), 1), round(float(z), 1),
-                                 min(levels), max(levels), sides, round(wander, 1)])
+                                 min(levels), max(levels), sides, round(wander, 1),
+                                 [list(k) for k in sorted(kinds)]])
     return {"format": 1, "max_level": max_level, "maps": out}
 
 

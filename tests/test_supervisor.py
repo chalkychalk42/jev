@@ -1158,3 +1158,133 @@ def test_a_service_that_failed_is_not_armed_again_within_the_minimum_whatever_th
         assert rt.armed.decision.skill == "BIND_HEARTH", "the minimum passed: asked again"
     finally:
         supervisor.close()
+
+
+def test_a_step_whose_stations_lie_in_a_death_camp_fails_over_at_once_and_never_stops_the_run(
+        tmp_path):
+    """V334: a hunt with every station in or behind a death camp has no attempt left until
+    the camp ends, so its step takes its fail edge at the first such hunt; with no edge to
+    take, the step waits for the camp (`Context.step_waits`) and the run goes on - the
+    third failure of an autofix's `empty` hunt stopped the run (`auto/20260929-1038`)."""
+    from jev.guide.graph import FailEdge, FailWhen
+    from jev.guide.tracker import Tracker
+
+    camped = Result(SkillOutcome.ABORTED, "every station lies in a death camp", "camp")
+    rt = runtime(tmp_path, [seen(t / 2) for t in range(40)])
+    body = Body(result=camped)
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=3)
+    try:
+        for t in range(16):
+            supervisor.step(t / 2)
+            if supervisor.worker is not None:
+                assert supervisor.worker.done.wait(1)
+        assert body.calls >= 4, "armed again with no wait kept: the real body keeps one"
+        assert not supervisor.stopped.is_set(), supervisor.failure
+    finally:
+        supervisor.close()
+    rt = runtime(tmp_path, [seen(t / 2) for t in range(8)])
+    first, second = rt.graph.nodes
+    first = first.model_copy(update={"on_fail": (FailEdge(when=FailWhen.TIMEOUT, value=600,
+                                                          goto=second.id),)})
+    rt.graph = rt.graph.model_copy(update={"nodes": (first, second)})
+    rt.tracker = Tracker(rt.graph, first.id)
+    body = Body(result=camped)
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=3)
+    try:
+        supervisor.step(0)
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(0.5)
+        assert rt.tracker.step_id == second.id, "failed over at the first camp, not the third"
+    finally:
+        supervisor.close()
+
+
+@pytest.mark.parametrize(("code", "short"), [("camp", False), ("unreachable", True)])
+def test_a_quest_step_in_a_death_camp_grinds_a_level_before_it_is_tried_again(tmp_path, code,
+                                                                              short):
+    """V334: a quest step whose stations lie in a death camp fails over as a step that kills
+    the character does, to a level's grind: a short rib's five minutes came back to it while
+    the camp's hour held, and its retry was passed over."""
+    from jev.clients.source import ScriptedSource
+    from jev.guide.graph import FailEdge, FailWhen, Graph, Node
+    from jev.learn.episode import Recorder
+    from jev.orch.runtime import ClientRuntime
+    from jev.run.hunt import Hunt, Hunted
+    from jev.world.state_v1 import StepKind
+
+    hunt = Hunt(fight=None, rest=None, read=lambda: {}, approach=lambda p, **kw: True,
+                progress=lambda: (0, 1), camp_until=lambda p: 5000.0)
+    assert hunt.run((0.0, 0.0, 0.0), 30.0) is Hunted.CAMP
+    detail = hunt.detail if code == "camp" else "walked the whole disk and found nothing to fight"
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    g = Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), timeout_s=600.0,
+             on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=600, goto="rib"),), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1,
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(1, 10), **base),
+    ))
+    rt = ClientRuntime("c", g, ScriptedSource([seen(t / 2) for t in range(8)]),
+                       Recorder(tmp_path))
+    body = Body(result=Result(SkillOutcome.ABORTED, detail, code))
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(0.5)
+        assert rt.tracker.step_id == "rib"
+        assert (rt.tracker.memory.until is not None) is short
+    finally:
+        supervisor.close()
+
+
+def test_a_session_end_lets_the_body_keep_what_it_is_still_saving(tmp_path):
+    """V327: the deaths a session's body is still saving are waited for as it ends, bounded
+    (`LiveBody.end_session`), after the worker has given its input back."""
+    rt = runtime(tmp_path, [seen()])
+    body = Body()
+    ended = []
+    body.end_session = lambda: ended.append(body.active)
+    Supervisor(rt, body, say=lambda _: None).close()
+    assert ended == [0]
+
+
+def test_a_ghost_whose_corpse_run_aborts_at_once_is_not_armed_again_every_tick(tmp_path):
+    """V328: hive-240, a ghost with no body known, aborted CORPSE_RUN 1,797 times in its
+    15-minute session from 15:06 on 29 Sep, every arm about 0.3 s. Played again, the same
+    abort is armed 8 times in the 15 minutes; and once up, a death starts afresh."""
+    from jev.learn.episode import SkillOutcome
+
+    rt = runtime(tmp_path, [seen()])
+    life = {"t": 0.0, "ghost": True}
+    rt.source.read = lambda: seen(life["t"], vitals=Vitals(hp=0.0, combat=False, dead=False,
+                                                           ghost=life["ghost"]))
+    body = Body()
+    body.available = body.available | {"RELEASE_SPIRIT", "CORPSE_RUN"}
+    arms = []
+
+    def execute(arm, state, checkpoint):
+        arms.append(state.t)
+        return Result(SkillOutcome.ABORTED, "a ghost with no corpse position; it auto-released "
+                      "before anything recorded where it fell", "no_corpse")
+
+    body.execute = execute
+    supervisor = Supervisor(rt, body, say=lambda _: None)
+    try:
+        for i in range(1800):                       # 900 s, a tick each half second
+            life["t"] = i * 0.5
+            supervisor.step(i * 0.5)
+            if supervisor.worker is not None:
+                assert supervisor.worker.done.wait(1)
+        assert 6 <= len(arms) <= 10, arms
+        assert not supervisor.failure
+        assert rt.policy_context.death_failures["CORPSE_RUN"] == len(arms)
+        life["ghost"] = False
+        supervisor.step(900.0)
+        assert not rt.policy_context.death_failures, "up: a death starts afresh"
+    finally:
+        supervisor.close()
