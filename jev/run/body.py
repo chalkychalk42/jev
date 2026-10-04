@@ -266,6 +266,14 @@ CLASS_IDS = {name: class_id for class_id, name in CLASS_BY_ID.items()}
 RACE_IDS = {name: race_id for race_id, name in RACE_BY_ID.items()}
 
 
+def _counted(value) -> tuple[int | None, int | None, bool | None]:
+    """An objective's progress as a hunt counts it: (have, need, complete), a positive
+    complete flag with no counter (1, 1)."""
+    if value.complete is True and value.have is None:
+        return 1, 1, True  # a positive complete flag, including objectives with no counter
+    return value.have, value.need, value.complete
+
+
 def _tour(points, start) -> list[tuple[float, float, float]]:
     """Every point, from the one nearest `start`, always on to the nearest one left."""
     left, tour = [tuple(p) for p in points], []
@@ -289,6 +297,9 @@ CONJURE_EVERY_S = 90.0
 # A caster's hunt stands this far short of each station: inside Fireball's 35 yards and
 # Frostbolt's 30, outside most mobs' notice (V167).
 CASTER_STANDOFF_YARDS = 18.0
+# A reading this recent stands for the state a service check needs (V338): the hunt's own,
+# taken a moment before it asks.
+RECENT_READ_S = 0.5
 # A dry rib's wider prey is at most this many levels above the character (V337), as a rib's
 # creatures are (`graph.RIB_LEVELS_ABOVE`, V323).
 WIDEN_LEVELS_ABOVE = 1
@@ -753,10 +764,19 @@ class LiveBody:
         return value
 
     def _progress(self):
-        value = self._quest_progress()
-        if value.complete is True and value.have is None:
-            return 1, 1  # a positive complete flag, including objectives with no counter
-        return value.have, value.need
+        return _counted(self._quest_progress())[:2]
+
+    def _log_progress(self):
+        """`_quest_progress` from the log as the last reading left it, without reading again
+        (V338)."""
+        node = self._node()
+        with self.client._capturing:
+            log = self.client.log.complete
+        value = progress(log, node.quest_id if node else None)
+        if (node and not node.objective_targets and value.first_incomplete is not None
+                and value.first_incomplete > 0):
+            raise Unsupported("next objective needs its own generated target; this graph places only the first")
+        return value
 
     def _hunt(self, state) -> Result:
         node = self._node()
@@ -768,6 +788,9 @@ class LiveBody:
         progress_reader = self._progress
         def complete_reader():
             return self._quest_progress().complete
+        # The counter in the log the hunt's own reading fed, read no more (V338).
+        def observe(values):
+            return _counted(self._log_progress())
         if node.kind is StepKind.QUEST_OBJECTIVE and node.objective_targets:
             self._quest_ids()
             with self.client._capturing:
@@ -793,6 +816,10 @@ class LiveBody:
                 return (1, 1) if value.complete is True and value.have is None else (value.have, value.need)
             def complete_reader():
                 return selected_progress().complete
+            def observe(values):
+                with self.client._capturing:
+                    return _counted(target_progress(self.client.log.complete, node.quest_id,
+                                                    destination))
         if isinstance(destination, ObjectiveTarget) and destination.kind == "explore":
             return self._explore(destination, complete_reader)
         if (isinstance(destination, ObjectiveTarget) and destination.kind == "loot"
@@ -811,6 +838,9 @@ class LiveBody:
             def complete_reader():
                 level, needed = progress_reader()
                 return None if level is None else level >= needed
+            def observe(values):
+                level = (values or {}).get("char.level")
+                return level, target, None if level is None else level >= target
         wanted = name_id(destination.target_name)
         values = self._read() or {}
         caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
@@ -822,7 +852,7 @@ class LiveBody:
                     standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0,
                     conjure=self._conjure,
                     camp_until=lambda station: self._camp_end(station, level),
-                    walk_note=lambda: self._walk_note(level))
+                    walk_note=lambda: self._walk_note(level), observe=observe)
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
         if node.kind is StepKind.GRIND:
             # A rib found dry fights any kind round it worth fighting (V337).
@@ -833,14 +863,14 @@ class LiveBody:
                            others=self._hostiles(destination.world, yards + PACK_YARDS)
                            if spawns else ())
         step = self.arm.step_id if self.arm is not None else None
-        if outcome is Hunted.CAMP and hunt.until is not None:
+        if outcome is Hunted.CAMP and getattr(hunt, "until", None) is not None:
             # Not armed again until the camp ends (V334): bot 224's grind was armed again 0.5 s
             # after each hunt whose every walk the camp refused.
             self.policy_context.step_waits(step, hunt.until, "its stations lie in or behind "
                                            "a death camp", time.time())
-        elif outcome is Hunted.UNREACHABLE and hunt.stuck:
+        elif outcome is Hunted.UNREACHABLE and getattr(hunt, "stuck", False):
             self._stuck(step, "no route to any station of its hunt could be planned")
-        elif hunt.arrived:
+        elif getattr(hunt, "arrived", 0):
             self.policy_context.step_moved(step)
         return self._result(outcome, hunt.detail)
 
@@ -982,7 +1012,12 @@ class LiveBody:
 
     def _service_needed(self) -> str | None:
         self.checkpoint()
-        state = self.client.state()
+        # The state of the reading the hunt has just taken, not another (V338): a state
+        # built afresh at each look was a capture more between a fight and the next pull.
+        recent = getattr(self.client, "recent_state", None)
+        state = recent(RECENT_READ_S) if callable(recent) else None
+        if state is None:
+            state = self.client.state()
         if state is None:
             return None
         # On the armed step, as the policy sees it: a merchant or repairer found out of

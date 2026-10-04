@@ -2165,3 +2165,18 @@ def test_a_dry_ribs_wider_kinds_are_its_levels_none_grey_and_one_above_at_most(m
     low = node.model_copy(update={"level": (1, 3)})
     assert b._rib_kinds(low, node.world, 30.0, 7, 15) is None, "all grey"
     assert b._rib_kinds(node, node.world, 30.0, 7, None) is None
+
+
+def test_a_service_check_builds_on_the_reading_just_taken():
+    """V338: the hunt asks whether a service is due after each pass's reading; the state is
+    that reading's, not a capture of its own."""
+    from jev.world.state_v1 import Bags
+
+    b = body()
+    worn = seen(bags=Bags(free=20, durability_min=0.2, money_copper=5000))
+    b.client.state = lambda: pytest.fail("captured again")
+    b.client.recent_state = lambda max_age_s: worn
+    assert b._service_needed() == "durability is low"
+    b.client.recent_state = lambda max_age_s: None
+    b.client.state = lambda: worn
+    assert b._service_needed() == "durability is low", "none recent: one of its own"

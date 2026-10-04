@@ -32,6 +32,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from jev.perceive.radio_frame import name_id  # noqa: E402
+
 MAPS = (0, 1, 530)
 MAX_LEVEL = 40
 # Faction template masks, as in tools/gen_vendor_catalog.py.

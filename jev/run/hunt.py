@@ -214,6 +214,9 @@ class Hunt:
     # A grind rib's wider prey (`jev.clients.fight.Kinds`, V337): what its hunt fights after
     # its laps went by with nothing killed, for as many laps more; `None`, nothing wider.
     widen: Callable[[], object | None] | None = None
+    # The objective's (have, need, complete) from a reading the hunt has just taken (V338);
+    # `None` asks `progress` and `is_complete`, each of which reads again.
+    observe: Callable[[dict | None], tuple[int | None, int | None, bool | None]] | None = None
     _found: bool = field(default=False, init=False)
 
     kills: int = field(default=0, init=False)
@@ -296,11 +299,18 @@ class Hunt:
                 self.detail = "dead; nothing here can be done until that is fixed"
                 return Hunted.DIED
 
-            have, need = self.progress()
-            complete = (self.is_complete() if self.is_complete is not None else
-                        need is not None and have is not None and have >= need)
+            # One reading a pass (V338): the grind's level and the quest's counter are in the
+            # one just taken, where its readers each read again - three readings between a
+            # fight's end and the next look, 1.86 s at the median in the hive (29 Sep).
+            if self.observe is not None:
+                have, need, complete = self.observe(v)
+            else:
+                have, need = self.progress()
+                complete = (self.is_complete() if self.is_complete is not None else
+                            need is not None and have is not None and have >= need)
             event("objective.observed", data={"have": have, "need": need,
                                                "complete": complete})
+            walked = not stood
             if complete is True:
                 self.say(f"  objective complete: {have}/{need}")
                 return Hunted.DONE
@@ -378,7 +388,8 @@ class Hunt:
             # a kill or a break-off meant a `timeout` fell through the dry-look branch
             # and the next mob was pulled at whatever health the last fight left - which
             # is how a run reported `top up 0` and died without killing anything.
-            if not self._ready_to_pull():
+            # The pass's reading, when it walked nowhere since (V338).
+            if not self._ready_to_pull(None if walked else v):
                 self.detail = "too hurt to pull, and nothing left to fix it with"
                 return Hunted.NO_FOOD
 
@@ -518,15 +529,16 @@ class Hunt:
             return True
         return False
 
-    def _ready_to_pull(self) -> bool:
+    def _ready_to_pull(self, values: dict | None = None) -> bool:
         """Heal, then eat, until fit to take the next pull. `False` means do not pull.
 
         The whole between-engagements contract in one place: in combat there is nothing
         to decide, and out of combat the order is heal (mana and seconds), then food
         (twenty seconds), then refuse. Pulling below the line with neither available is
-        how a character arrives at a kobold already half dead.
+        how a character arrives at a kobold already half dead. `values`, a reading just
+        taken, is looked at instead of another (V338).
         """
-        v = self.read()
+        v = values if values is not None else self.read()
         if v is None:
             return True                      # unreadable is not a reason to stand still
         if v.get("vitals.combat") is True:

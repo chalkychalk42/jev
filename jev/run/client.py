@@ -199,6 +199,8 @@ class Client:
     query: PathQuery | None = field(default=None, init=False)
     # Spots where walking got stuck and the way round that worked (`RouteMemory`).
     route_memory: object | None = field(default=None, init=False)
+    # The last `read`'s reading, as (monotonic, wall time, reading) (`recent_state`, V338).
+    _last_reading: tuple | None = field(default=None, init=False, repr=False)
     # How the last `approach` walk ended, for a caller that needs more than arrived or not.
     last_travel: object | None = field(default=None, init=False)
     # And the plan it walked, or would have: `None` when none was asked for (V334). A walk
@@ -291,7 +293,18 @@ class Client:
 
     def read(self) -> dict | None:
         r = self.reading()
+        if r is not None:
+            self._last_reading = (time.monotonic(), time.time(), r)
         return None if r is None else self._navigation_values(r.values)
+
+    def recent_state(self, max_age_s: float):
+        """The `State` of the last `read`, if it was taken within `max_age_s`, else `None`
+        (V338): a caller deciding on what was just read builds no second capture."""
+        kept = getattr(self, "_last_reading", None)
+        if kept is None or time.monotonic() - kept[0] > max_age_s:
+            return None
+        with self._capturing:
+            return self.state_from(kept[2], captured_at=kept[1])
 
     def _navigation_values(self, raw: dict) -> dict:
         """One transform for every body reader, state row, and corpse recovery.

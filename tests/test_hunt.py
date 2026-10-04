@@ -714,3 +714,27 @@ def test_a_dry_rib_fights_wider_for_another_round_of_laps_once():
     h.widen = lambda: None
     h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR))
     assert not h.widened and len(walked) == 2 * SPAWN_LAPS, "nothing wider: as before"
+
+
+def test_a_hunt_pass_reads_once_between_fights():
+    """V338: after each fight the loop read the state, then the grind's progress and complete
+    readers each read it again, 1.86 s at the median in the hive (bot 201, 29 Sep). With an
+    `observe`, the pass's one reading serves the objective and the next pull's health."""
+    reads, at_fight = [], []
+
+    class Counting(_Fight):
+        def run(self, name_id=None, **_):
+            at_fight.append(len(reads))
+            return super().run(name_id)
+
+    h, _ = _hunt([], [(0, 1)])
+    h.fight = Counting([Fought.NO_TARGET, Fought.KILLED, Fought.NO_TARGET])
+    h.read = lambda: reads.append(1) or {"char.level": 5 + h.kills}
+    h.progress = lambda: pytest.fail("read again for the counter")
+    h.observe = lambda v: (v.get("char.level"), 6, v.get("char.level", 0) >= 6)
+    h.sleep = lambda seconds: None
+    assert h.run(NEAR, 30.0, timeout_s=5, spawns=(NEAR,)) is Hunted.DONE
+    from itertools import pairwise
+
+    gaps = [b - a for a, b in pairwise(at_fight)]
+    assert gaps and all(g == 1 for g in gaps), gaps
