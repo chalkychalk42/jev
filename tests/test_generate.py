@@ -461,6 +461,47 @@ def test_a_played_guides_ribs_carry_their_creatures_levels():
     assert with_rib_levels(source, None) is source
 
 
+def test_a_rib_in_a_capital_or_of_a_friendly_creature_is_no_grind_where_a_guide_is_played():
+    """V331: V317 leaves a capital's box and a creature friendly to the faction out of the ribs
+    it makes, but the hive's `.v2` routes, made before it, held 56 ribs in the boxes of
+    Orgrimmar, the Undercity, Silvermoon, the Exodar and Thunder Bluff, played by 22 characters
+    (29 Sep). Marked where a guide is played (`with_rib_levels`), from what the generator knows,
+    they are left out of its route, and no rib choice takes one."""
+    from jev.guide.generate import with_rib_levels
+    from jev.guide.graph import FailEdge, FailWhen, Graph, Node, rib_for
+    from jev.guide.route import compile_route
+
+    def rib(rid, zone_id, name, window):
+        return Node(id=rid, kind=StepKind.GRIND, zone="z", zone_id=zone_id, level=window,
+                    target_name=name, target_kind="creature", pos=(0.5, 0.5),
+                    world=(0.0, 0.0, 0.0), map_id=0, skills=("GRIND_UNTIL",))
+
+    wolves = rib("wolves", 12, "Mangy Wolf", (5, 7))
+    city = rib("city", 1519, "Mangy Wolf", (5, 7))              # Stormwind City's box
+    lumberjacks = rib("lumberjacks", 12, "Lumberjack", (5, 7))   # Stormwind's own
+    accept = Node(id="accept", kind=StepKind.QUEST_ACCEPT, zone="z", zone_id=12, quest_id=1,
+                  level=(5, 8), pos=(0.5, 0.5), world=(0.0, 0.0, 0.0), map_id=0,
+                  target_name="Marshal", target_kind="creature",
+                  skills=("TRAVEL_TO", "ACCEPT_QUEST"),
+                  on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=240, goto="city"),))
+    source = Graph(graph_id="g", faction="alliance", entry="accept",
+                   nodes=(accept, city, lumberjacks, wolves))
+    graph = with_rib_levels(source, DB)
+    by = graph.by_id()
+    assert "capital" in by["city"].route_blocked_reason
+    assert "friendly" in by["lumberjacks"].route_blocked_reason
+    assert by["wolves"].route_blocked_reason is None and by["wolves"].mob_levels == (5, 6)
+    assert all(r.route_blocked_reason is None for r in source.ribs()), "the guide's bytes stay"
+    assert rib_for((by["city"], by["lumberjacks"]), 5) is None
+    assert rib_for(graph.ribs(), 5) is by["wolves"]
+    assert graph.rib_for(5) is by["wolves"]
+    plan = compile_route(graph, available_skills=frozenset({"TRAVEL_TO", "ACCEPT_QUEST",
+                                                            "GRIND_UNTIL"}))
+    assert {n.id for n in plan.graph.ribs()} == {"wolves"}
+    assert [e.goto for e in plan.graph.get("accept").on_fail] == ["wolves"], \
+        "an edge into a rib left out leads to one kept"
+
+
 def test_every_hunt_knows_where_its_target_spawns_without_touching_the_guide():
     """Rings round a cluster's centre stood where Northshire's wolves were not: they spawn
     24 to 170 yards from it, and the rings looked 38 times and found nothing (run

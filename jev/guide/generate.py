@@ -776,36 +776,56 @@ def with_rib_levels(graph: Graph, world_db) -> Graph:
     database: the levels of the creature it hunts (`target_name`) that `grind_clusters` would
     have chosen for its window, on its map. Read when a guide is played, not written into it:
     a guide's bytes are the tutor's knowledge fingerprint, and the hive's routes are built
-    elsewhere. `graph` unchanged when the database cannot be read (V323)."""
-    ribs = [n for n in graph.nodes if n.kind is StepKind.GRIND and n.mob_levels is None
-            and n.target_name]
+    elsewhere. `graph` unchanged when the database cannot be read (V323).
+
+    And a rib that is no grind for the guide's faction left out of its route, as
+    `grind_clusters` leaves it out since V317 (`route_blocked_reason`, V331): one made for a
+    capital's map box (`WorldDB.capital`), or one whose creature is friendly to the faction
+    (`WorldDB._friendly`, every template of the name). The hive's `.v2` routes, made before
+    V317 and not since, held 56 ribs in the boxes of Orgrimmar, the Undercity, Silvermoon, the
+    Exodar and Thunder Bluff, and 22 living characters played them (29 Sep)."""
+    ribs = [n for n in graph.nodes if n.kind is StepKind.GRIND and n.target_name]
     if not ribs or world_db is None:
         return graph
     try:
-        con = sqlite3.connect(f"file:{world_db}?mode=ro", uri=True)
+        db = WorldDB(str(world_db))
     except sqlite3.Error:
         return graph
-    levels: dict[str, tuple[int, int]] = {}
+    updates: dict[str, dict] = {}
     try:
+        friendly = db._friendly(graph.faction)
         for rib in ribs:
             lo, hi = rib.level
-            row = con.execute(
-                "select min(t.MinLevel), max(t.MaxLevel) from world_creature_template t "
-                "where t.Name = ? and t.Rank = 0 and t.NpcFlags = 0 and t.MinLevel >= ? "
-                "and t.MaxLevel <= ? and (? is null or exists (select 1 from world_creature c "
-                "where c.id = t.Entry and c.map = ?))",
-                (rib.target_name, lo, hi, rib.map_id, rib.map_id)).fetchone()
-            if row is not None and row[0] is not None:
-                levels[rib.id] = (int(row[0]), int(row[1]))
+            kind = ("from world_creature_template t "
+                    "where t.Name = ? and t.Rank = 0 and t.NpcFlags = 0 and t.MinLevel >= ? "
+                    "and t.MaxLevel <= ? and (? is null or exists (select 1 from world_creature c "
+                    "where c.id = t.Entry and c.map = ?))")
+            facts = (rib.target_name, lo, hi, rib.map_id, rib.map_id)
+            change: dict = {}
+            if rib.mob_levels is None:
+                row = db.con.execute(f"select min(t.MinLevel), max(t.MaxLevel) {kind}",
+                                     facts).fetchone()
+                if row is not None and row[0] is not None:
+                    change["mob_levels"] = (int(row[0]), int(row[1]))
+            if not rib.route_blocked_reason:
+                if db.capital(rib.zone_id):
+                    change["route_blocked_reason"] = "a grind in a capital's map box"
+                elif friendly:
+                    factions = {row[0] for row in db.con.execute(
+                        f"select distinct t.Faction {kind}", facts)}
+                    if factions and factions <= friendly:
+                        change["route_blocked_reason"] = (
+                            f"a grind of a creature friendly to the {graph.faction}")
+            if change:
+                updates[rib.id] = change
     except sqlite3.Error:
         return graph
     finally:
-        con.close()
-    if not levels:
+        db.close()
+    if not updates:
         return graph
     return graph.model_copy(update={"nodes": tuple(
-        n.model_copy(update={"mob_levels": levels[n.id]}) if n.id in levels else n
-        for n in graph.nodes)})
+        n.model_copy(update=updates[n.id]) if n.id in updates else n for n in graph.nodes)})
 
 
 def rib_windows(level_min: int, level_max: int, width: int = 2) -> list[tuple[int, int]]:

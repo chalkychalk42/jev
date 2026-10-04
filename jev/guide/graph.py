@@ -376,9 +376,10 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
     (`rib_xp`), or of those within `RIB_XP_SHARE` of it the nearest to where it is (`near`, the
     guide's map fractions); unplaced, `preferred`, else the best. With none that suits it, the
     one of the lowest creatures within `rib_within`; with none of those, `None`: the character
-    goes on along the spine. `preferred` is the answer when the level is unknown. Distances are
-    in yards on the guide's frame (`scale`, `frame_yards`, read off `ribs` when not given), or
-    map fractions without one, when `SHORT_RIB_YARDS` does not apply.
+    goes on along the spine. A rib the route leaves out (`route_blocked_reason`, V331) is none.
+    `preferred` is the answer when the level is unknown. Distances are in yards on the guide's
+    frame (`scale`, `frame_yards`, read off `ribs` when not given), or map fractions without
+    one, when `SHORT_RIB_YARDS` does not apply.
 
     By its creatures' levels (`rib_levels`), not its window's top (V323): the window was read
     as the creatures' levels and "never above the character", and Westfall's 14-16 window,
@@ -399,11 +400,11 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
     the step again at once, when there is none so near (V330). At level 11 the only rib in the
     band above was 1,550 yards from Goldshire, where the inn's steps failed: five minutes was
     four of walking there and four back (sessions 109 to 111)."""
-    ribs = tuple(ribs)
+    ribs = tuple(r for r in ribs if not r.route_blocked_reason)
     if not ribs:
         return None
     if level is None:
-        return preferred or ribs[0]
+        return preferred if preferred is not None and not preferred.route_blocked_reason else ribs[0]
     if scale is None:
         scale = frame_yards(ribs)
     free = [r for r in ribs if r.id not in barred]

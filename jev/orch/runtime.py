@@ -242,7 +242,9 @@ class ClientRuntime:
     def __post_init__(self) -> None:
         self.tracker = Tracker(self.graph, self.graph.entry)
         self._nodes = self.graph.by_id()
-        self._ribs_all = self.graph.ribs()
+        # A rib the route leaves out is no grind (V331): in a capital's box, or of a creature
+        # friendly to the character (`generate.with_rib_levels`).
+        self._ribs_all = tuple(r for r in self.graph.ribs() if not r.route_blocked_reason)
         self._frame = frame_yards(self.graph.nodes)
 
     # -- the tick ------------------------------------------------------------
@@ -268,6 +270,9 @@ class ClientRuntime:
             self.counters.blind_ticks += 1
         if not self._entered:
             start = self.start_step if self.graph.get(self.start_step or "") is not None else None
+            if start is not None and (self._nodes[start].kind is StepKind.GRIND
+                                      and self._nodes[start] not in self._ribs_all):
+                start = None                     # a rib that is no grind (V331): from the entry
             self.tracker = Tracker.resume(self.graph, state, start=start,
                                           completed=frozenset(self.completed),
                                           rejoin_to=self.start_rejoin,

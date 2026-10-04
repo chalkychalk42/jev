@@ -364,7 +364,8 @@ def remembered(args, graph, key: int | None, level: int | None = None):
             # apart, where every pull is two or three.
             kept = used.get(memory.step_id) if memory.step_id else None
             first = entry - ENTRY_LEVELS_ABOVE          # the next guide's lowest grind's level
-            if (kept is not None and kept.kind is StepKind.GRIND and kept.level[0] <= level
+            if (kept is not None and kept.kind is StepKind.GRIND and not kept.route_blocked_reason
+                    and kept.level[0] <= level
                     and (level <= kept.level[1]
                          # the guide's last grinds wait with the next guide (V276, V280)
                          or (kept.level[1] >= first - 1

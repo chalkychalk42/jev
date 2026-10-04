@@ -488,6 +488,25 @@ def test_a_barred_rib_that_suits_comes_before_an_unbarred_one_above(tmp_path):
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "turnin")
 
 
+def test_a_rib_the_route_leaves_out_is_never_ground(tmp_path):
+    """V331: a rib in a capital's box, marked where the guide is played, is no grind: no failure
+    goes to it, and a playhead on it starts from the guide's entry."""
+    g = rib_graph()
+    nodes = (*g.nodes, Node(id="city", kind=StepKind.GRIND, zone="zone", zone_id=1, level=(1, 10),
+                            mob_levels=(3, 4), pos=(0.5, 0.5), skills=("GRIND_UNTIL",),
+                            route_blocked_reason="a grind in a capital's map box"))
+    blocked = g.model_copy(update={"nodes": (nodes[-1], *nodes[:-1])})
+    rt = ClientRuntime("c", blocked, ScriptedSource([held(0, 3), held(12, 3)]), Recorder(tmp_path))
+    assert [r.id for r in rt._ribs_all] == ["rib"]
+    rt.tick(choose=False)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib"
+    on = ClientRuntime("c", blocked, ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                       start_step="city", start_rejoin="turnin")
+    on.tick(choose=False)
+    assert on.tracker.step_id == "turnin", "from the entry: the accept is done, the hand-in next"
+
+
 def test_a_short_ribs_end_outlives_the_session(tmp_path):
     from jev.guide import playhead
 
