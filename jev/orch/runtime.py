@@ -35,7 +35,7 @@ from jev.coach import policy as scripted
 from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
-from jev.guide.graph import RIB_LEVELS_ABOVE, Graph, rib_for, rib_levels
+from jev.guide.graph import Graph, frame_yards, rib_fits, rib_for
 from jev.guide.objectives import progress
 from jev.guide.route_memory import CAMP_YARDS
 from jev.guide.tracker import SHORT_RIB_S, Event, Tracker, waits_for_level
@@ -49,7 +49,6 @@ from jev.learn.episode import (
 )
 from jev.skills.catalog import NAMES, judges_itself
 from jev.skills.catalog import get as get_skill
-from jev.world.combat import grey_level
 from jev.world.state_v1 import ArmedBy, State, StepKind
 
 # Skills that serve the character rather than its step: while one runs, the step's clock
@@ -199,6 +198,10 @@ class ClientRuntime:
     # The character whose playhead this run keeps (`char.key`). Another character's state
     # is not tracked, recorded or saved: it sets `foreign`, and the run stops.
     character_key: int | None = None
+    # Whether characters as good for a level spread over its ribs by their key (V332): where
+    # many play one world, as in the hive. Alone, the live bot takes the nearest rib paying near
+    # the best (V323): a spread there costs about 5% of a kill's experience and gains nothing.
+    spread_ribs: bool = False
     # The level this guide is outgrown at (`jev.run.cli.OUTGROWN_AT`): from it, between two
     # quests, the complete quests' hand-ins nearby are made and the guide is done (V162).
     outgrown_at: int | None = None
@@ -222,6 +225,8 @@ class ClientRuntime:
     # The steps by id and the grind ribs, looked up on every tick by the walk along the spine.
     _nodes: dict = field(default_factory=dict, init=False)
     _ribs_all: tuple = field(default=(), init=False)
+    # Yards a map fraction spans on the guide's frame, for the ribs' distances (`frame_yards`).
+    _frame: tuple | None = field(default=None, init=False)
     # The last walk along the spine past an accept above the character's level, by what it
     # depends on (`_ahead`), so a character standing at the accept does not walk it each tick.
     _ahead_seen: tuple = field(default=(), init=False)
@@ -254,7 +259,10 @@ class ClientRuntime:
     def __post_init__(self) -> None:
         self.tracker = Tracker(self.graph, self.graph.entry)
         self._nodes = self.graph.by_id()
-        self._ribs_all = self.graph.ribs()
+        # A rib the route leaves out is no grind (V331): in a capital's box, or of a creature
+        # friendly to the character (`generate.with_rib_levels`).
+        self._ribs_all = tuple(r for r in self.graph.ribs() if not r.route_blocked_reason)
+        self._frame = frame_yards(self.graph.nodes)
 
     # -- the tick ------------------------------------------------------------
 
@@ -279,6 +287,9 @@ class ClientRuntime:
             self.counters.blind_ticks += 1
         if not self._entered:
             start = self.start_step if self.graph.get(self.start_step or "") is not None else None
+            if start is not None and (self._nodes[start].kind is StepKind.GRIND
+                                      and self._nodes[start] not in self._ribs_all):
+                start = None                     # a rib that is no grind (V331): from the entry
             self.tracker = Tracker.resume(self.graph, state, start=start,
                                           completed=frozenset(self.completed),
                                           rejoin_to=self.start_rejoin,
@@ -461,12 +472,14 @@ class ClientRuntime:
         if (node is None or state is None or not node.on_fail or self.finished
                 or skill not in (node.skills or ())):
             return False
-        before = self.tracker.step_id
+        before, memory = self.tracker.step_id, self.tracker.memory
         self._apply(TrackVerdict(Event.FAIL, goto=node.on_fail[0].goto,
                                  reason=f"{skill} out of attempts: {reason}"), state)
         if self.on_progress is not None:
             self._progress()
-        return self.tracker.step_id != before
+        # Entered again counts: with no grind for the level, the step is tried again (V329).
+        return (self.tracker.step_id != before or self.tracker.memory is not memory
+                or self.finished)
 
     def not_offered(self, step_id: str | None) -> bool:
         """The giver answered the accept at `step_id` that it will not give the quest: the
@@ -524,10 +537,9 @@ class ClientRuntime:
             # The camp is on the rib it was working: barred at the level, or the next death at
             # the rib it leaves for comes straight back here (`RIB_BAR`, V317).
             self._bar(node.id, level)
-        ribs = [r for r in self._ribs(level) if out(r)]
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
-        rib = rib_for(ribs, level, near=here)
+        rib = self._rib(level, here, among=[r for r in self._ribs_all if out(r)])
         if rib is None:
             return False
         context.leaving_until, self._leaving = state.t + LEAVE_S, rib.id
@@ -544,9 +556,11 @@ class ClientRuntime:
 
     def _wait_elsewhere(self, state: State) -> bool:
         """A step that waits `WAIT_ELSEWHERE_S` or more is waited out on another rib (V334):
-        the nearest fit for the character's level (`rib_for` among those none above
-        `RIB_LEVELS_ABOVE` over it and worth experience to it) that does not wait itself and
-        that `Context.camped` does not put wholly in a death camp. A quest step is rejoined
+        the grind of the character's level (`_rib`: of the ribs not barred, then barred, spread
+        by the character, V329-V332) among those that suit it (`rib_fits`: none above
+        `RIB_LEVELS_ABOVE` over it, some worth experience, a rib the route leaves out none,
+        V331), do not wait themselves, and `Context.camped` does not put wholly in a death
+        camp. A quest step is rejoined
         when its wait ends, as a short rib rejoins; a rib that waits hands its way back, its
         level and its end to the rib that replaces it, as a leave from a camp does. With no
         such rib the step is stood out where it is, the body having walked clear of the camp.
@@ -568,14 +582,12 @@ class ClientRuntime:
                              and 0.0 <= state.t - self._elsewhere_looked[1] < WAIT_LOOK_S):
             return False
         camped = getattr(context, "camped", None)
-        free = [r for r in self._ribs(level) if r.id != step
+        free = [r for r in self._ribs_all if r.id != step and rib_fits(r, level)
                 and context.step_waiting(r.id, state.t) is None
-                and rib_levels(r)[1] <= level + RIB_LEVELS_ABOVE
-                and rib_levels(r)[1] > grey_level(level)
                 and not (camped is not None and camped(r, level))]
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
-        rib = rib_for(free, level, near=here)
+        rib = self._rib(level, here, among=free) if free else None
         if rib is None:
             self._elsewhere_looked = (step, state.t)
             return False
@@ -808,7 +820,7 @@ class ClientRuntime:
             return False                                  # nothing to do yet: it waits on
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
-        rib = rib_for(self._ribs(level), level, near=here)
+        rib = self._rib(level, here)
         if rib is None:
             return False
         self.tracker.enter(rib.id, state, rejoin_to=accept.id)
@@ -885,12 +897,17 @@ class ClientRuntime:
                 return quest is not None and quest.complete is True
         return False
 
-    def _ribs(self, level: int | None) -> tuple:
-        """The grind ribs not barred at `level` (`RIB_BAR`); every one when all are."""
-        if level is None:
-            return self._ribs_all
-        free = tuple(r for r in self._ribs_all if f"{RIB_BAR}{r.id}@{level}" not in self._retried)
-        return free or self._ribs_all
+    def _rib(self, level: int | None, near: tuple[float, float] | None = None, *,
+             short: bool = False, preferred=None, among=None):
+        """The grind for the character at `level` (`rib_for`) of its ribs (`among`, else all):
+        of those not barred at the level (`RIB_BAR`), else of those barred (V329), spread by the
+        character (`character_key`, when `spread_ribs`, V332); `None` when none suits it."""
+        ribs = self._ribs_all if among is None else tuple(among)
+        barred = (frozenset() if level is None else
+                  frozenset(r.id for r in ribs if f"{RIB_BAR}{r.id}@{level}" in self._retried))
+        return rib_for(ribs, level, preferred, near, short, barred=barred,
+                       key=self.character_key if self.spread_ribs else None,
+                       scale=self._frame)
 
     def _bar(self, rib_id: str, level: int | None) -> None:
         if level is not None:
@@ -921,7 +938,7 @@ class ClientRuntime:
         elif self.start_grind_then_finish:
             here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                     and state.pos.my is not None else None)
-            rib = rib_for(self._ribs(level), level, near=here)
+            rib = self._rib(level, here)
             if rib is None or rib.id == node.id:
                 memory.expired = False              # nowhere else: it grinds on where it is
                 return False
@@ -1011,6 +1028,8 @@ class ClientRuntime:
                     target = self.graph.get(verdict.goto)
                     rejoin = node.next[0] if node and node.next else None
                     goto = verdict.goto
+                    short = "deaths" not in (verdict.reason or "")
+                    rib = None
                     if target is not None and target.kind is StepKind.GRIND:
                         # The rib whose mobs suit the character as it is, not as the guide
                         # expected: a level 3 character failed into level 5-6 boars and
@@ -1018,15 +1037,21 @@ class ClientRuntime:
                         here = ((state.pos.mx, state.pos.my)
                                 if state.pos.mx is not None and state.pos.my is not None
                                 else None)
-                        goto = rib_for(
-                            self._ribs(state.char.level), state.char.level, preferred=target,
-                            near=here, short="deaths" not in (verdict.reason or "")).id
+                        rib = self._rib(state.char.level, here, short=short, preferred=target)
+                        if rib is not None:
+                            goto = rib.id
                         if failed not in self._retried:
                             self._retried.add(failed)
-                            rejoin = failed
-                    self.tracker.enter(goto, state, rejoin_to=rejoin)
-                    if (target is not None and target.kind is StepKind.GRIND
-                            and "deaths" not in (verdict.reason or "")):
+                            # Retried once after its rib; with none, at once, unless it killed
+                            # the character, which a level it has no grind for would cure (V329).
+                            rejoin = failed if rib is not None or short else rejoin
+                        if rib is None:
+                            goto, rejoin = rejoin, None
+                    if goto is None:
+                        self.finished = True             # nothing after it, and no grind
+                    else:
+                        self.tracker.enter(goto, state, rejoin_to=rejoin)
+                    if rib is not None and short:
                         # A level cures a step that kills the character, not one that
                         # could not find its NPC or its mob (`SHORT_RIB_S`).
                         self.tracker.memory.until = state.t + SHORT_RIB_S

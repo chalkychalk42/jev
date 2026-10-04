@@ -330,7 +330,7 @@ def test_the_rib_for_a_level_pays_the_most_a_kill_of_those_at_most_a_level_above
     assert rib_for(ribs, 13) is kobolds, "Goretusks of 15 are two above a 13"
     assert rib_for(ribs, 17) is murlocs and rib_for(ribs, 19) is wolves
     assert rib_for(ribs, 25) is wolves, "past every rib: the best still worth a kill"
-    assert rib_for((murlocs, wolves), 12) is murlocs, "below every rib: the lowest"
+    assert rib_for((murlocs, wolves), 12) is None, "below every rib: none, the spine (V329)"
     assert rib_for(ribs, None, preferred=kobolds) is kobolds, "an unread level keeps the guide's"
     assert rib_for((), 3) is None
     # Without the creatures' levels, the window, whose top none of them is above.
@@ -359,28 +359,87 @@ def test_ribs_paying_about_the_same_a_kill_are_chosen_by_distance():
     assert rib_for(ribs, 5, near=(0.42, 0.79)) is far_kobolds
     assert rib_for(ribs, 6, near=at_the_mine) is kobolds, "level 3 wolves pay 40% at 6"
     assert rib_for((wolves,), 2, near=at_the_mine) is wolves
-    assert rib_for((far_kobolds,), 2, near=at_the_mine) is far_kobolds, "nothing else: lowest"
+    assert rib_for((far_kobolds,), 2, near=at_the_mine) is None, "level 5-6 are three above a 2"
+    assert rib_for((far_kobolds,), 4, near=at_the_mine) is far_kobolds, "one above: the next level's"
 
 
-def test_a_short_rib_is_the_nearest_whose_mobs_all_give_experience():
+def _elwynn(rid, window, mobs, pos):
+    """A rib on Elwynn's map, its world position from its map fraction (`coords.map_to_world`)."""
+    from jev.guide.coords import load_bounds, map_to_world
+    from jev.guide.graph import Node
+
+    x, y = map_to_world(*pos, load_bounds(DB)[12])
+    return Node(id=rid, kind=StepKind.GRIND, zone="Elwynn", zone_id=12, level=window,
+                mob_levels=mobs, pos=pos, world=(x, y, 0.0), map_id=0)
+
+
+def test_a_guides_frame_is_read_off_its_nodes():
+    """A node's map fraction is its world position in the guide's frame (`generate.place`), so
+    the frame's box, and yards between two fractions, come from the guide itself (V330)."""
+    from jev.guide.coords import load_bounds
+    from jev.guide.graph import Graph, frame_yards
+
+    elwynn = load_bounds(DB)[12]
+    across, down = frame_yards(Graph.load("content/tbc/ally_human_1_12.json").nodes)
+    assert across == pytest.approx(abs(elwynn.left - elwynn.right), abs=0.5)
+    assert down == pytest.approx(abs(elwynn.top - elwynn.bottom), abs=0.5)
+    assert frame_yards(Graph.load("content/tbc/ally_human_12_20.json").nodes) is not None
+    assert frame_yards(()) is None
+
+
+def test_a_short_rib_is_the_nearest_of_the_best_paying_and_never_a_long_walk():
     """At level 11 the rib in the band was 1,550 yards from Goldshire, where the inn's steps
-    failed: a five-minute wait was four minutes' walk each way (sessions 109 to 111). Elwynn's
-    ribs' creatures, 29 Sep."""
-    from jev.guide.graph import Node, rib_for
+    failed: a five-minute wait was four minutes' walk each way (sessions 109 to 111). From
+    11:00 to 15:20 on 29 Sep the hive's short ribs were a median 822 yards from where their step
+    failed, and 38% over 1,000. Of the ribs paying within `RIB_XP_SHARE` of the best a kill, the
+    nearest, and none further than `SHORT_RIB_YARDS`: without one, the step again (V330).
+    Elwynn's ribs' creatures, 29 Sep."""
+    from jev.guide.graph import SHORT_RIB_YARDS, frame_yards, rib_for
 
-    def rib(lo, hi, mobs, pos):
-        return Node(id=f"r{lo}", kind=StepKind.GRIND, zone="z", zone_id=1, level=(lo, hi),
-                    mob_levels=mobs, pos=pos)
-
-    ribs = (rib(1, 3, (1, 1), (0.432, 0.6)), rib(5, 7, (5, 6), (0.296, 0.725)),
-            rib(7, 9, (7, 8), (0.606, 0.655)), rib(9, 11, (9, 10), (0.739, 0.397)),
-            rib(11, 12, (11, 12), (0.068, 0.965)))
+    ribs = (_elwynn("r1", (1, 3), (1, 1), (0.432, 0.6)),
+            _elwynn("r5", (5, 7), (5, 6), (0.296, 0.725)),
+            _elwynn("r7", (7, 9), (7, 8), (0.606, 0.655)),
+            _elwynn("r9", (9, 11), (9, 10), (0.739, 0.397)),
+            _elwynn("r11", (11, 12), (11, 12), (0.068, 0.965)))
+    scale = frame_yards(ribs)
     goldshire = (0.43, 0.66)
     assert rib_for(ribs, 11, near=goldshire).id == "r11", "a whole rib: the best a kill"
-    assert rib_for(ribs, 11, near=goldshire, short=True).id == "r7", \
-        "the level 5-6 rib is nearer, but level 5 is grey at 11"
+    assert rib_for(ribs, 11, near=goldshire, short=True) is None, \
+        "the gnolls are 1,440 yards off, and the wolves of 5 to 8 pay half as much"
     assert rib_for(ribs, 12, near=(0.07, 0.95), short=True).id == "r11"
-    assert rib_for(ribs, 3, near=goldshire, short=True).id == "r1", "nothing but grey: as before"
+    assert rib_for(ribs, 8, near=(0.59, 0.64), short=True).id == "r7", "beside it, the best"
+    assert rib_for(ribs, 3, near=goldshire, short=True).id == "r1", "the wolves of 1, nearby"
+    sentinel = _elwynn("r11b", (11, 12), (11, 12), (0.17, 0.79))       # 950 yards west
+    assert rib_for((*ribs, sentinel), 11, near=goldshire, short=True) is None
+    near_enough = _elwynn("r11c", (11, 12), (11, 12), (0.33, 0.70))
+    assert (rib_for((*ribs, sentinel, near_enough), 11, near=goldshire, short=True).id
+            == "r11c"), f"within {SHORT_RIB_YARDS:.0f} yards"
+    assert scale is not None
+
+
+def test_a_barred_rib_that_suits_the_character_comes_before_one_above_it():
+    """hive-200, a level 8 dwarf hunter, went from Dun Morogh's 1-3 rib, grey to it, up the
+    9-11, 11-13 and 13-15 ribs of Dun Morogh and Loch Modan to Loch Modan's 17-19 and Dun
+    Morogh's 19-20, dying on most, 11:42 to 15:02 on 29 Sep: every rib that suited it was
+    barred, and the lowest of the rest was taken (V329). Its ribs' creatures."""
+    from jev.guide.graph import Node, rib_for
+
+    def rib(name, window, mobs):
+        return Node(id=name, kind=StepKind.GRIND, zone="z", zone_id=1, level=window,
+                    mob_levels=mobs, pos=(0.5, 0.5))
+
+    ribs = (rib("dun_morogh_1_3", (1, 3), (1, 1)), rib("dun_morogh_3_5", (3, 5), (3, 4)),
+            rib("dun_morogh_7_9", (7, 9), (7, 8)), rib("dun_morogh_9_11", (9, 11), (10, 11)),
+            rib("loch_modan_11_13", (11, 13), (11, 12)), rib("loch_modan_17_19", (17, 19), (17, 18)))
+    assert rib_for(ribs, 8).id == "dun_morogh_7_9"
+    barred = frozenset({"dun_morogh_7_9", "dun_morogh_3_5"})
+    assert rib_for(ribs, 8, barred=barred).id == "dun_morogh_7_9", "barred, but it suits a level 8"
+    assert rib_for(ribs, 8, near=(0.5, 0.5), barred=barred).id == "dun_morogh_7_9"
+    above = tuple(r for r in ribs if r.id not in barred)
+    assert rib_for(above, 8) is None, "the 1-3 is grey, the 10-11 two above: the spine"
+    assert rib_for(above, 9).id == "dun_morogh_9_11", "its lowest one above: the next level's"
+    assert rib_for(above, 9, barred=frozenset({"dun_morogh_9_11"})).id == "dun_morogh_9_11"
+    assert rib_for((ribs[0],), 9) is None and rib_for((ribs[-1],), 9) is None
 
 
 def test_a_played_guides_ribs_carry_their_creatures_levels():
@@ -400,6 +459,106 @@ def test_a_played_guides_ribs_carry_their_creatures_levels():
     assert rib_for(graph.ribs(), 13, near=westfall).id.endswith("westfall_12_14")
     assert rib_for(source.ribs(), 13, near=westfall).id.endswith("westfall_12_14")
     assert with_rib_levels(source, None) is source
+
+
+def test_a_window_has_a_rib_for_each_of_its_creatures_and_steps_fail_into_its_first(human):
+    """V332: one rib a window put every character of a race at a level on one creature: up to
+    38 of the hive's bots on Durotar's Scorpid Workers and 36 on Dun Morogh's Juvenile Snow
+    Leopards at once (29 Sep, 03:00-09:30). A window has up to `RIB_CREATURES` ribs in a zone,
+    each a creature of its own; the first is the one it always had, its id unchanged, and it is
+    the one steps fail into."""
+    from collections import defaultdict
+
+    from jev.guide.generate import RIB_CREATURES, rib_id
+    from jev.guide.graph import window_rib
+
+    ribs = human.ribs()
+    windows = defaultdict(list)
+    for r in ribs:
+        windows[(r.zone_id, r.level)].append(r)
+    assert any(len(w) > 1 for w in windows.values()), "one creature a window again"
+    for (zone, (lo, hi)), group in windows.items():
+        assert len(group) <= RIB_CREATURES
+        assert len({r.target_name for r in group}) == len(group), "each rib its own creature"
+        assert group[0].id == rib_id("t", group[0].zone, lo, hi), "the first's id is the window's"
+    firsts = [w[0] for w in windows.values()]
+    by_id = {r.id: r for r in ribs}
+    for node in human.nodes:
+        for edge in node.on_fail:
+            if edge.goto in by_id:
+                assert by_id[edge.goto] is window_rib(firsts, node.level[0]), node.id
+
+
+def test_characters_spread_over_the_ribs_as_good_for_their_level_and_each_keeps_its_own():
+    """V332: of the ribs paying within `RIB_SPREAD_SHARE` of the best a kill and no more than
+    `RIB_SPREAD_YARDS` further than the nearest, each character takes the one its own hash puts
+    first (`spread_rank`): replayed on the hive's rib time of 29 Sep 03:00-09:30 with each
+    window's three creatures, no rib held more than 14 characters at once, where 38 stood on
+    Durotar's Scorpid Workers. The same character always takes the same rib, and keeps it as
+    others come and go; without a character, the nearest (V323)."""
+    from collections import Counter
+
+    from jev.guide.graph import RIB_SPREAD_YARDS, rib_for
+
+    ribs = (_elwynn("wolves", (5, 7), (5, 6), (0.30, 0.72)),
+            _elwynn("boars", (5, 7), (5, 6), (0.40, 0.88)),
+            _elwynn("cutpurses", (5, 7), (5, 6), (0.42, 0.53)),
+            _elwynn("kobolds", (3, 5), (3, 3), (0.49, 0.35)),
+            _elwynn("far", (5, 7), (5, 6), (0.95, 0.20)))
+    here = (0.40, 0.66)
+    assert rib_for(ribs, 6, near=here).id == "cutpurses", "no character: the nearest"
+    picks = Counter(rib_for(ribs, 6, near=here, key=key).id for key in range(300))
+    assert set(picks) == {"wolves", "boars", "cutpurses"}, "not the far one, nor the kobolds"
+    assert min(picks.values()) > 60, picks
+    for key in range(40):
+        chosen = rib_for(ribs, 6, near=here, key=key)
+        assert chosen is rib_for(ribs, 6, near=here, key=key), "deterministic"
+        for gone in ("wolves", "boars", "cutpurses"):
+            if gone != chosen.id:
+                rest = tuple(r for r in ribs if r.id != gone)
+                assert rib_for(rest, 6, near=here, key=key) is chosen, "kept as others go"
+    assert RIB_SPREAD_YARDS < 2000
+
+
+def test_a_rib_in_a_capital_or_of_a_friendly_creature_is_no_grind_where_a_guide_is_played():
+    """V331: V317 leaves a capital's box and a creature friendly to the faction out of the ribs
+    it makes, but the hive's `.v2` routes, made before it, held 56 ribs in the boxes of
+    Orgrimmar, the Undercity, Silvermoon, the Exodar and Thunder Bluff, played by 22 characters
+    (29 Sep). Marked where a guide is played (`with_rib_levels`), from what the generator knows,
+    they are left out of its route, and no rib choice takes one."""
+    from jev.guide.generate import with_rib_levels
+    from jev.guide.graph import FailEdge, FailWhen, Graph, Node, rib_for
+    from jev.guide.route import compile_route
+
+    def rib(rid, zone_id, name, window):
+        return Node(id=rid, kind=StepKind.GRIND, zone="z", zone_id=zone_id, level=window,
+                    target_name=name, target_kind="creature", pos=(0.5, 0.5),
+                    world=(0.0, 0.0, 0.0), map_id=0, skills=("GRIND_UNTIL",))
+
+    wolves = rib("wolves", 12, "Mangy Wolf", (5, 7))
+    city = rib("city", 1519, "Mangy Wolf", (5, 7))              # Stormwind City's box
+    lumberjacks = rib("lumberjacks", 12, "Lumberjack", (5, 7))   # Stormwind's own
+    accept = Node(id="accept", kind=StepKind.QUEST_ACCEPT, zone="z", zone_id=12, quest_id=1,
+                  level=(5, 8), pos=(0.5, 0.5), world=(0.0, 0.0, 0.0), map_id=0,
+                  target_name="Marshal", target_kind="creature",
+                  skills=("TRAVEL_TO", "ACCEPT_QUEST"),
+                  on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=240, goto="city"),))
+    source = Graph(graph_id="g", faction="alliance", entry="accept",
+                   nodes=(accept, city, lumberjacks, wolves))
+    graph = with_rib_levels(source, DB)
+    by = graph.by_id()
+    assert "capital" in by["city"].route_blocked_reason
+    assert "friendly" in by["lumberjacks"].route_blocked_reason
+    assert by["wolves"].route_blocked_reason is None and by["wolves"].mob_levels == (5, 6)
+    assert all(r.route_blocked_reason is None for r in source.ribs()), "the guide's bytes stay"
+    assert rib_for((by["city"], by["lumberjacks"]), 5) is None
+    assert rib_for(graph.ribs(), 5) is by["wolves"]
+    assert graph.rib_for(5) is by["wolves"]
+    plan = compile_route(graph, available_skills=frozenset({"TRAVEL_TO", "ACCEPT_QUEST",
+                                                            "GRIND_UNTIL"}))
+    assert {n.id for n in plan.graph.ribs()} == {"wolves"}
+    assert [e.goto for e in plan.graph.get("accept").on_fail] == ["wolves"], \
+        "an edge into a rib left out leads to one kept"
 
 
 def test_every_hunt_knows_where_its_target_spawns_without_touching_the_guide():

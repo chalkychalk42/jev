@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
-from jev.guide.graph import Graph, Node
+from jev.guide.graph import FailEdge, Graph, Node, window_rib
 from jev.world.state_v1 import StepKind
 
 
@@ -149,6 +149,17 @@ def compile_route(graph: Graph, *, available_skills: frozenset[str],
     if not spine:
         raise ValueError("no executable quest spine remains after capability checks")
     positions = {node_id: i for i, node_id in enumerate(spine)}
+    ribs = [n for n in retained if n.kind is StepKind.GRIND]
+
+    def kept(edge: FailEdge, node: Node) -> FailEdge | None:
+        """An edge into a rib left out leads to a rib kept: the runtime chooses the rib again by
+        the character's level, and any rib is the way to it (V331)."""
+        if edge.goto in retained_ids:
+            return edge
+        if source[edge.goto].kind is not StepKind.GRIND or not ribs:
+            return None
+        return edge.model_copy(update={"goto": window_rib(ribs, node.level[0]).id})
+
     wired = []
     for node in retained:
         if any(ref not in retained_ids for ref in node.requires):
@@ -158,7 +169,7 @@ def compile_route(graph: Graph, *, available_skills: frozenset[str],
             nxt = tuple(spine[i + 1:i + 2])
         else:
             nxt = tuple(ref for ref in node.next if ref in retained_ids)
-        fails = tuple(edge for edge in node.on_fail if edge.goto in retained_ids)
+        fails = tuple(edge for edge in (kept(e, node) for e in node.on_fail) if edge is not None)
         wired.append(node.model_copy(update={"next": nxt, "on_fail": fails}))
     compiled = Graph(graph_id=f"{graph.graph_id}.supported", schema_version=graph.schema_version,
                      faction=graph.faction, nodes=tuple(wired), entry=spine[0],

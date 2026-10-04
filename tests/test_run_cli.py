@@ -708,24 +708,48 @@ def test_a_grind_still_suited_to_the_level_is_kept(tmp_path):
     assert memory.step_id != "alli_human_1_12_grind_elwynn_7_9", "outgrown: one for the level"
 
 
-def test_the_next_guide_waits_a_level_past_its_first_grind_and_the_grind_with_it(tmp_path):
+def test_the_next_guide_waits_a_level_past_its_first_grind_on_the_guides_westfall_ribs(tmp_path):
     """V276: the level 12 mage died five times in its first 35 minutes of the 12-20 guide's
-    Westfall, where at 11 it had made 3,900 XP an hour on Elwynn's Prowlers."""
+    Westfall, where at 11 it had made 3,900 XP an hour on Elwynn's Prowlers; the 12-20 guide
+    still takes a character at 14 (V280). V333: the 1-12 guide's own Westfall ribs for 12 to 14
+    hold it until then, not the Prowlers kept two levels past their window: the hive's humans
+    ground those 9-10s for 60 of their 64 hours at 12 and 13 (29 Sep, 03:00-09:30)."""
     from jev.guide import playhead
+    from jev.guide.graph import rib_fits
 
     assert cli.entry_level(cli.NEXT_GUIDE["alli_human_1_12"]) == 14
     path = tmp_path / "character.json"
     playhead.save("alli_human_1_12.supported", "alli_human_1_12_grind_elwynn_9_11", {54}, path,
                   finished=True, entry_level=12)
     args = SimpleNamespace(playhead=path, route_mode="supported",
+                           world_db=cli.ROOT / "data/knowledge/tbc-243.sqlite",
                            graph=cli.ROOT / "content/tbc/ally_human_1_12.json")
     for level in (12, 13):
-        _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, level)
+        _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), 7, level)
         assert graph.graph_id == "alli_human_1_12.supported"
-        assert memory.step_id == "alli_human_1_12_grind_elwynn_9_11", "the Prowlers, not gnolls"
+        rib = graph.get(memory.step_id)
+        assert rib.kind is StepKind.GRIND and rib_fits(rib, level), memory.step_id
+        assert memory.step_id != "alli_human_1_12_grind_elwynn_9_11", "not the Prowlers"
         assert memory.entry_level == 13, "the grind runs on to 14"
-    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), None, 14)
+    _, memory, _, graph = cli.remembered(args, Graph.load(args.graph), 7, 14)
     assert graph.graph_id == "alli_human_12_20.supported"
+
+
+def test_a_guide_with_one_after_it_has_ribs_where_its_character_waits_for_it():
+    """V333: the band after the 1-12 guide's starts in Westfall, and its guide takes a character
+    at 14 (`ENTRY_LEVELS_ABOVE`); the 1-12 guide has Westfall's 12-14 ribs, which no step fails
+    into, and a guide with none after it, or another race's, none."""
+    from jev.guide import cli as guide_cli
+    from jev.guide.graph import Graph as G
+
+    assert guide_cli.wait_ribs("human", 1, 12) == {"wait_zones": {40: "Westfall"}, "wait_to": 14}
+    assert guide_cli.wait_ribs("human", 12, 20) == {} and guide_cli.wait_ribs("orc", 1, 12) == {}
+    guide = G.load(cli.ROOT / "content/tbc/ally_human_1_12.json")
+    westfall = [r for r in guide.ribs() if r.zone_id == 40]
+    assert westfall and all(r.level == (12, 14) for r in westfall)
+    assert "alli_human_1_12_grind_westfall_12_14" in {r.id for r in westfall}
+    gotos = {e.goto for n in guide.nodes for e in n.on_fail}
+    assert not gotos & {r.id for r in westfall}
 
 
 def test_a_guide_is_not_outgrown_before_the_next_one_takes_over():

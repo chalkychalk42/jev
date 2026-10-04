@@ -272,8 +272,10 @@ def rib_graph():
              on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=10, goto="rib"),), **base),
         Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=2,
              skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        # Its creatures suit levels 3 to 5 (`rib_fits`): a rib above the character is none
+        # to fail into (V329).
         Node(id="rib", kind=StepKind.GRIND, level=(1, 10), skills=("TRAVEL_TO", "GRIND_UNTIL"),
-             **base),
+             mob_levels=(3, 4), **base),
     ))
 
 
@@ -414,6 +416,126 @@ def test_only_a_step_that_killed_the_character_earns_a_whole_rib(tmp_path):
     rt2.tick(choose=False)
     rt2._apply(TrackVerdict(Event.FAIL, goto="rib", reason="deaths_on_step=3.0"), held(1, 3))
     assert rt2.tracker.step_id == "rib" and rt2.tracker.memory.until is None
+
+
+def above_graph():
+    """`rib_graph` with its one rib's creatures three levels above a level 3 (V329)."""
+    g = rib_graph()
+    return g.model_copy(update={"nodes": tuple(
+        n.model_copy(update={"mob_levels": (6, 7)}) if n.id == "rib" else n for n in g.nodes)})
+
+
+def test_with_no_grind_for_the_level_a_failed_step_is_tried_again_at_once(tmp_path):
+    """V329: with every rib that suited it barred, the lowest of the rest was taken, and
+    hive-200, a level 8 dwarf hunter, climbed Dun Morogh's and Loch Modan's ribs to their 17-19
+    and 19-20, dying on most (29 Sep, 11:42 to 15:02). A rib above the character or grey to it is
+    none: a step that failed without dying is tried again at once, then passed over, as after a
+    rib, and the run goes on."""
+    saved = []
+    states = [held(0, 3), held(12, 3), held(13, 3), held(25, 3)]
+    rt = ClientRuntime("c", above_graph(), ScriptedSource(states), Recorder(tmp_path),
+                       on_progress=lambda step, done, rejoin, deaths, retried=frozenset(),
+                       until=None, **_: saved.append((step, rejoin, retried)))
+    rt.tick(choose=False)
+    rt.tick(choose=False)                            # the hand-in times out
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("turnin", None)
+    assert rt.tracker.memory.until is None and "turnin" in rt._retried
+    assert saved[-1] == ("turnin", None, frozenset({"turnin"}))
+    rt.tick(choose=False)
+    rt.tick(choose=False)                            # and again: passed over
+    assert rt.tracker.step_id == "after" and not rt.finished
+
+    out = ClientRuntime("c", above_graph(), ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                        start_step="turnin")
+    out.tick(choose=False)
+    assert out.fail_over("TURNIN_QUEST", "no observed nameplate") is True, "the run goes on"
+    assert out.tracker.step_id == "turnin" and out.tracker.memory.attempts == 0
+
+
+def test_with_no_grind_for_the_level_a_step_that_kills_is_passed_over(tmp_path):
+    """V329: a level cures a step that kills the character; with no grind for its level, the
+    step is passed over, and the last step failing ends the guide."""
+    from jev.guide.tracker import Event
+    from jev.guide.tracker import Verdict as TrackVerdict
+
+    rt = ClientRuntime("c", above_graph(), ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                       start_step="turnin")
+    rt.tick(choose=False)
+    rt._apply(TrackVerdict(Event.FAIL, goto="rib", reason="deaths_on_step=3.0"), held(1, 3))
+    assert rt.tracker.step_id == "after" and "turnin" in rt._retried
+
+    g = above_graph()
+    last = g.model_copy(update={"nodes": tuple(
+        n.model_copy(update={"next": ()}) if n.id == "turnin" else n for n in g.nodes)})
+    end = ClientRuntime("c", last, ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                        start_step="turnin")
+    end.tick(choose=False)
+    end._apply(TrackVerdict(Event.FAIL, goto="rib", reason="deaths_on_step=3.0"), held(1, 3))
+    assert end.finished, "nothing after it and no grind: the guide is done"
+
+
+def test_a_barred_rib_that_suits_comes_before_an_unbarred_one_above(tmp_path):
+    """V329: the bar keeps a failure off a rib while another suits the character; with none, the
+    barred one again, never one above."""
+    g = rib_graph()
+    nodes = (*g.nodes, Node(id="high", kind=StepKind.GRIND, zone="zone", zone_id=1, level=(7, 9),
+                            mob_levels=(7, 8), pos=(0.5, 0.5), skills=("GRIND_UNTIL",)))
+    rt = ClientRuntime("c", g.model_copy(update={"nodes": nodes}),
+                       ScriptedSource([held(0, 3), held(12, 3)]), Recorder(tmp_path),
+                       start_retried=frozenset({"rib-bar:rib@3"}))
+    rt.tick(choose=False)
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "turnin")
+
+
+def test_a_rib_the_route_leaves_out_is_never_ground(tmp_path):
+    """V331: a rib in a capital's box, marked where the guide is played, is no grind: no failure
+    goes to it, and a playhead on it starts from the guide's entry."""
+    g = rib_graph()
+    nodes = (*g.nodes, Node(id="city", kind=StepKind.GRIND, zone="zone", zone_id=1, level=(1, 10),
+                            mob_levels=(3, 4), pos=(0.5, 0.5), skills=("GRIND_UNTIL",),
+                            route_blocked_reason="a grind in a capital's map box"))
+    blocked = g.model_copy(update={"nodes": (nodes[-1], *nodes[:-1])})
+    rt = ClientRuntime("c", blocked, ScriptedSource([held(0, 3), held(12, 3)]), Recorder(tmp_path))
+    assert [r.id for r in rt._ribs_all] == ["rib"]
+    rt.tick(choose=False)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib"
+    on = ClientRuntime("c", blocked, ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                       start_step="city", start_rejoin="turnin")
+    on.tick(choose=False)
+    assert on.tracker.step_id == "turnin", "from the entry: the accept is done, the hand-in next"
+
+
+def test_characters_failing_the_same_step_spread_over_its_ribs(tmp_path):
+    """V332: where the world is shared (`spread_ribs`, the hive), the character's key
+    (`char.key`, `character_key`) spreads the ribs as good for its level: the hive's 40 bots on
+    one rib (29 Sep). The same character, the same rib."""
+    from jev.guide.graph import spread_rank
+    from jev.guide.tracker import Event
+    from jev.guide.tracker import Verdict as TrackVerdict
+
+    g = rib_graph()
+    twin = Node(id="rib_two", kind=StepKind.GRIND, zone="zone", zone_id=1, level=(1, 10),
+                mob_levels=(3, 4), pos=(0.5, 0.5), skills=("GRIND_UNTIL",))
+    graph = g.model_copy(update={"nodes": (*g.nodes, twin)})
+    first = {k: max(("rib", "rib_two"), key=lambda r: spread_rank(k, r)) for k in range(20)}
+    keys = (next(k for k, r in first.items() if r == "rib"),
+            next(k for k, r in first.items() if r == "rib_two"))
+    def went(spread: bool) -> list[str]:
+        steps = []
+        for key in (*keys, keys[0]):
+            rt = ClientRuntime("c", graph, ScriptedSource([held(0, 3)]), Recorder(tmp_path),
+                               start_step="turnin", character_key=key, spread_ribs=spread)
+            rt.tick(choose=False)
+            rt._apply(TrackVerdict(Event.FAIL, goto="rib", reason="deaths_on_step=3.0"),
+                      held(1, 3))
+            steps.append(rt.tracker.step_id)
+        return steps
+
+    assert went(True) == ["rib", "rib_two", "rib"]
+    # Alone in its world, as the live bot is, a character takes the rib V323 picks, whoever it is.
+    assert len(set(went(False))) == 1
 
 
 def test_a_short_ribs_end_outlives_the_session(tmp_path):
@@ -1372,6 +1494,27 @@ def test_a_rib_that_waits_hands_its_way_back_to_the_rib_that_replaces_it(tmp_pat
     memory = rt.tracker.memory
     assert (rt.tracker.step_id, memory.rejoin_to) == ("rib_mid", "kill")
     assert (memory.level_at_entry, memory.until) == (5, 1500.0)
+
+
+def test_a_wait_elsewhere_takes_its_rib_as_every_other_rib_choice_does(tmp_path):
+    """Merged with V329-V332: a step's wait out of a death camp (V334) chooses through the
+    runtime's one rib choice, of the ribs that suit the level (`rib_fits`): a rib the route
+    leaves out (V331) is none, and a barred rib comes after the others."""
+    g = elsewhere_graph()
+    blocked = g.model_copy(update={"nodes": tuple(
+        n.model_copy(update={"route_blocked_reason": "a grind in a capital's map box"})
+        if n.id == "rib_near" else n for n in g.nodes)})
+    from jev.world.state_v1 import Char
+
+    states = [seen(1000.0 + t, char=Char(level=5)) for t in range(3)]
+    rt = ClientRuntime("c", blocked, ScriptedSource(states), Recorder(tmp_path), start_step="kill")
+    rt.policy_context.step_waits("kill", 4000.0, "camp", 1000.0)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_mid"
+    barred = _elsewhere(tmp_path, start_retried=frozenset({"rib-bar:rib_near@5"}))
+    barred.policy_context.step_waits("kill", 4000.0, "camp", 1000.0)
+    barred.tick(choose=False)
+    assert barred.tracker.step_id == "rib_mid", "the barred rib after the others"
 
 
 def test_waiting_elsewhere_cannot_loop_and_stands_when_every_rib_waits(tmp_path):

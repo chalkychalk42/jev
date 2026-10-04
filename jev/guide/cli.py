@@ -41,6 +41,23 @@ BANDS: dict[tuple[str, int, int], dict[int, str]] = {
 }
 
 
+def wait_ribs(race: str, level_min: int, level_max: int) -> dict:
+    """Where a character finished with this band's guide grinds until the next band's guide
+    takes it (V333): the next band's first zone, to the level its guide is entered at (its
+    lowest window, the band's start, and `jev.run.cli.ENTRY_LEVELS_ABOVE`). Nothing for a band
+    with none after it. Humans finished with the 1-12 guide waited on Elwynn's level 9-10
+    Prowlers and 11-12 Gnolls for 14: 64 of the hive's 133 human hours from 03:00 to 09:30 on
+    29 Sep were at 12 and 13, at about 860 experience an hour."""
+    from jev.run.cli import ENTRY_LEVELS_ABOVE
+
+    after = next((zones for (r, lo, _), zones in BANDS.items()
+                  if r == race and lo == level_max and lo > level_min), None)
+    if not after:
+        return {}
+    first = next(iter(after))
+    return {"wait_zones": {first: after[first]}, "wait_to": level_max + ENTRY_LEVELS_ABOVE}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("race", choices=sorted(SPINES))
@@ -60,7 +77,7 @@ def main() -> int:
         args.db, graph_id=graph_id, faction=faction,
         zone_ids=tuple(zones), zone_names=zones,
         level_min=args.min, level_max=args.max, max_quests=args.max_quests,
-        spawns=table,
+        spawns=table, **wait_ribs(args.race, args.min, args.max),
     )
     s = stats(g)
 

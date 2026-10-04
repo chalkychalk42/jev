@@ -275,6 +275,636 @@
       "source": "generated"
     },
     {
+      "id": "alli_human_1_12_grind_elwynn_1_3_timber_wolf",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        3
+      ],
+      "pos": [
+        0.4805788710797275,
+        0.3621739305833825
+      ],
+      "world": [
+        -8777.864633413461,
+        -132.59249995304987,
+        86.85853987473708
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 68.22224221813653,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Timber Wolf",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Timber Wolf"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "12 spawns of Timber Wolf clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_1_3_kobold_vermin",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        1,
+        3
+      ],
+      "pos": [
+        0.4924505997076012,
+        0.3626581837526662
+      ],
+      "world": [
+        -8778.985477570564,
+        -173.7972904328377,
+        83.54340387159779
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 49.136004290527495,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Kobold Vermin",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Kobold Vermin"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "31 spawns of Kobold Vermin clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_3_5_defias_thug",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        3,
+        5
+      ],
+      "pos": [
+        0.5385476622072417,
+        0.48645871016743103
+      ],
+      "world": [
+        -9065.532072368422,
+        -333.79250777395146,
+        73.36943388821786
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 62.63456419125976,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Defias Thug",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Defias Thug"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "62 spawns of Defias Thug clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_3_5_kobold_laborer",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        3,
+        5
+      ],
+      "pos": [
+        0.48866704412039136,
+        0.28343445705367565
+      ],
+      "world": [
+        -8595.6155859375,
+        -160.6651998901367,
+        87.28341583251954
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 45.717913670459396,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Kobold Laborer",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Kobold Laborer"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "25 spawns of Kobold Laborer clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_5_7_stonetusk_boar",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        5,
+        7
+      ],
+      "pos": [
+        0.40531853843916393,
+        0.8812370143664634
+      ],
+      "world": [
+        -9979.279227120536,
+        128.62356512887138,
+        31.86655671255929
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 69.24548231869004,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Stonetusk Boar",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Stonetusk Boar"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "17 spawns of Stonetusk Boar clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_5_7_defias_cutpurse",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        5,
+        7
+      ],
+      "pos": [
+        0.41741398142582037,
+        0.5348300777495044
+      ],
+      "world": [
+        -9177.491617838541,
+        86.64229941368103,
+        76.81524149576823
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 37.95285241109035,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Defias Cutpurse",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Defias Cutpurse"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "12 spawns of Defias Cutpurse clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_7_9_rockhide_boar",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        7,
+        9
+      ],
+      "pos": [
+        0.5905059571896561,
+        0.7618645240583546
+      ],
+      "world": [
+        -9702.981689453125,
+        -514.1310857137045,
+        48.40559593836466
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 89.93820045528506,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Rockhide Boar",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Rockhide Boar"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "24 spawns of Rockhide Boar clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_7_9_young_forest_bea",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        7,
+        9
+      ],
+      "pos": [
+        0.620243029717583,
+        0.7834811379783329
+      ],
+      "world": [
+        -9753.01513671875,
+        -617.343505859375,
+        40.59776655832926
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 73.10680274041836,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Young Forest Bear",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Young Forest Bear"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "6 spawns of Young Forest Bear clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_9_11_longsnout",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        9,
+        11
+      ],
+      "pos": [
+        0.2504475989719544,
+        0.840816293619153
+      ],
+      "world": [
+        -9885.722113715277,
+        666.154771592882,
+        35.191722022162544
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 45.23186416236976,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Longsnout",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Longsnout"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "9 spawns of Longsnout clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_9_11_coyote",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        9,
+        11
+      ],
+      "pos": [
+        0.1679588652169977,
+        0.7715459005887013
+      ],
+      "world": [
+        -9725.3900390625,
+        952.4594116210938,
+        32.31212043762207
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 45.07211665688178,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Coyote",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Coyote"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "6 spawns of Coyote clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_elwynn_11_12_murloc_raider",
+      "kind": "grind",
+      "zone": "Elwynn",
+      "zone_id": 12,
+      "level": [
+        11,
+        12
+      ],
+      "pos": [
+        0.1202661119979112,
+        0.7267123406154846
+      ],
+      "world": [
+        -9621.61904296875,
+        1117.9930053710937,
+        4.1470014452934265
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 55.22713210695811,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Murloc Raider",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Murloc Raider"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "10 spawns of Murloc Raider clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_westfall_12_14",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        12,
+        14
+      ],
+      "pos": [
+        0.03080670817092557,
+        0.8278850455508894
+      ],
+      "world": [
+        -9855.791666666666,
+        1428.491678873698,
+        40.13298416137695
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 28.596744940327458,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Kobold Digger",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Kobold Digger"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "6 spawns of Kobold Digger clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_westfall_12_14_sand_crawler",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        12,
+        14
+      ],
+      "pos": [
+        -0.020262886879663277,
+        0.7520397740187093
+      ],
+      "world": [
+        -9680.241489955357,
+        1605.7457275390625,
+        10.745295592716761
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 24.41902017623904,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Sand Crawler",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Sand Crawler"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "7 spawns of Sand Crawler clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_westfall_12_14_murloc_coastrunn",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        12,
+        14
+      ],
+      "pos": [
+        0.012323714931059493,
+        0.7277666566520824
+      ],
+      "world": [
+        -9624.059344951924,
+        1492.64306640625,
+        5.546664289557016
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 55.23860231281759,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Murloc Coastrunner",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Murloc Coastrunner"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "15 spawns of Murloc Coastrunner clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
       "id": "alli_human_1_12_vendor_elwynn_0",
       "kind": "vendor",
       "zone": "Elwynn",

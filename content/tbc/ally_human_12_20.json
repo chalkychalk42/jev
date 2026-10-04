@@ -320,6 +320,591 @@
       "source": "generated"
     },
     {
+      "id": "alli_human_12_20_grind_westfall_12_14_sand_crawler",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        12,
+        14
+      ],
+      "pos": [
+        0.40312024290877385,
+        0.12010351245066529
+      ],
+      "world": [
+        -9680.241489955357,
+        1605.7457275390625,
+        10.745295592716761
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 24.41902017623904,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Sand Crawler",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Sand Crawler"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "7 spawns of Sand Crawler clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_westfall_12_14_murloc_coastrunn",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        12,
+        14
+      ],
+      "pos": [
+        0.4354352906373094,
+        0.0960254469472317
+      ],
+      "world": [
+        -9624.059344951924,
+        1492.64306640625,
+        5.546664289557016
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 55.23860231281759,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Murloc Coastrunner",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Murloc Coastrunner"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "15 spawns of Murloc Coastrunner clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_westfall_14_16_riverpaw_herbali",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        14,
+        16
+      ],
+      "pos": [
+        0.30241615787612436,
+        0.532178645672244
+      ],
+      "world": [
+        -10641.75,
+        1958.2100067138672,
+        37.28614950180054
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 60.757587128313645,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Riverpaw Herbalist",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Riverpaw Herbalist"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "8 spawns of Riverpaw Herbalist clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_westfall_14_16_riverpaw_miner",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        14,
+        16
+      ],
+      "pos": [
+        0.2989679963486725,
+        0.48385598586957773
+      ],
+      "world": [
+        -10528.997142857144,
+        1970.2785714285715,
+        0.03244285714285722
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 52.881960698775146,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Riverpaw Miner",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Riverpaw Miner"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "7 spawns of Riverpaw Miner clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_westfall_16_18_shore_crawler",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        16,
+        18
+      ],
+      "pos": [
+        0.25673586722599745,
+        0.6553887214548999
+      ],
+      "world": [
+        -10929.24013671875,
+        2118.091015625,
+        1.6672778144478797
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 28.767231941820405,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Shore Crawler",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Shore Crawler"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "10 spawns of Shore Crawler clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_westfall_16_18_defias_worker",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        16,
+        18
+      ],
+      "pos": [
+        0.41099147408826175,
+        0.7875368654886409
+      ],
+      "world": [
+        -11237.585763113839,
+        1578.1964198521205,
+        30.716296468462264
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 65.76760297025734,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Defias Worker",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Defias Worker"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "28 spawns of Defias Worker clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_westfall_18_20_murloc_tidehunte",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        18,
+        20
+      ],
+      "pos": [
+        0.3479482996275966,
+        0.8505912528726636
+      ],
+      "world": [
+        -11384.712646484375,
+        1798.8475189208984,
+        6.811046257615089
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 19.6290415999327,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Murloc Tidehunter",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Murloc Tidehunter"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "8 spawns of Murloc Tidehunter clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_redridge_14_16_redridge_mongrel",
+      "kind": "grind",
+      "zone": "Redridge",
+      "zone_id": 44,
+      "level": [
+        14,
+        16
+      ],
+      "pos": [
+        1.4071580064431155,
+        0.03696967940425215
+      ],
+      "world": [
+        -9486.262573242188,
+        -1908.3862609863281,
+        80.14806270599365
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 30.273442002342257,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Redridge Mongrel",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Redridge Mongrel"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "8 spawns of Redridge Mongrel clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_redridge_14_16_redridge_thrashe",
+      "kind": "grind",
+      "zone": "Redridge",
+      "zone_id": 44,
+      "level": [
+        14,
+        16
+      ],
+      "pos": [
+        1.407041643783568,
+        0.047506730957970436
+      ],
+      "world": [
+        -9510.8490234375,
+        -1907.9789916992188,
+        76.73772964477538
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 41.65811487042996,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Redridge Thrasher",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Redridge Thrasher"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "10 spawns of Redridge Thrasher clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_redridge_16_18_murloc_shorestri",
+      "kind": "grind",
+      "zone": "Redridge",
+      "zone_id": 44,
+      "level": [
+        16,
+        18
+      ],
+      "pos": [
+        1.6133619550641212,
+        0.07587817278806346
+      ],
+      "world": [
+        -9577.049045138889,
+        -2630.100043402778,
+        55.94729995727539
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 46.806701250326334,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Murloc Shorestriker",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Murloc Shorestriker"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "9 spawns of Murloc Shorestriker clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_redridge_16_18_black_dragon_whe",
+      "kind": "grind",
+      "zone": "Redridge",
+      "zone_id": 44,
+      "level": [
+        16,
+        18
+      ],
+      "pos": [
+        1.681135760383079,
+        0.12154926360899299
+      ],
+      "world": [
+        -9683.614908854166,
+        -2867.308349609375,
+        51.88730112711588
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 46.31040836724146,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Black Dragon Whelp",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Black Dragon Whelp"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "8 spawns of Black Dragon Whelp clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_redridge_18_20_redridge_mystic",
+      "kind": "grind",
+      "zone": "Redridge",
+      "zone_id": 44,
+      "level": [
+        18,
+        20
+      ],
+      "pos": [
+        1.487699928473666,
+        -0.18166571271268622
+      ],
+      "world": [
+        -8976.113396139706,
+        -2190.2829733455883,
+        135.1583512250115
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 104.41820582691709,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Redridge Mystic",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Redridge Mystic"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "17 spawns of Redridge Mystic clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_12_20_grind_redridge_18_20_redridge_basher",
+      "kind": "grind",
+      "zone": "Redridge",
+      "zone_id": 44,
+      "level": [
+        18,
+        20
+      ],
+      "pos": [
+        1.4874185633827308,
+        -0.18454153599275683
+      ],
+      "world": [
+        -8969.403142755682,
+        -2189.298195578835,
+        135.53104747425425
+      ],
+      "map_id": 0,
+      "coord_zone_id": 40,
+      "r": 0.06,
+      "hunt_yards": 88.18430141049168,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Redridge Basher",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Redridge Basher"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "24 spawns of Redridge Basher clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
       "id": "alli_human_12_20_vendor_westfall_0",
       "kind": "vendor",
       "zone": "Westfall",
