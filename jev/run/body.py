@@ -18,7 +18,7 @@ from typing import ClassVar
 from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
-from jev.clients.fight import HEAL_POINT, Fight, Kinds
+from jev.clients.fight import HEAL_POINT, Fight, Kinds, Paying
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth, Hearthed
 from jev.clients.interact import Interact
@@ -50,7 +50,7 @@ from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
-from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, spawn_tour
+from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, Place, spawn_tour
 from jev.run.hunt import stations as hunt_stations
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import graveyards, hostiles
@@ -866,13 +866,21 @@ class LiveBody:
                     standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0,
                     conjure=self._conjure,
                     camp_until=lambda station: self._camp_end(station, level),
-                    walk_note=lambda: self._walk_note(level), observe=observe)
+                    walk_note=lambda: self._walk_note(level), observe=observe,
+                    place=self._hunt_place((self.arm.step_id if self.arm is not None else None,
+                                            objective_key(wanted, node.id))),
+                    where=self._world_position)
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
         if node.kind is StepKind.GRIND:
             # A rib found dry fights any kind round it worth fighting (V337).
-            hunt.widen = lambda: self._rib_kinds(node, destination.world, yards, wanted, level)
+            def wider():
+                kinds = self._rib_kinds(node, destination.world, yards, wanted, level)
+                return Paying(kinds) if kinds is not None else None
+            hunt.widen = wider
         spawns = spawn_points(self.hunt_spawns, node.id, getattr(destination, "target_id", None))
-        outcome = hunt.run(destination.world, yards, wanted, timeout_s=self.hunt_timeout,
+        # A grind's pulls are for experience: none of a level grey to the character (V344).
+        pull = Paying(wanted) if node.kind in (StepKind.GRIND, StepKind.DING_GATE) else wanted
+        outcome = hunt.run(destination.world, yards, pull, timeout_s=self.hunt_timeout,
                            spawns=spawns,
                            others=self._hostiles(destination.world, yards + PACK_YARDS)
                            if spawns else ())
@@ -889,6 +897,22 @@ class LiveBody:
         elif getattr(hunt, "arrived", 0):
             self.policy_context.step_moved(step)
         return self._result(outcome, hunt.detail)
+
+    def _hunt_place(self, key) -> Place:
+        """Where the last hunt of this step and objective got to (`Place`, V343), kept while
+        the same one is armed again; another step's hunt, or the first after a death, begins
+        with a new one."""
+        kept = getattr(self, "_place", None)
+        if kept is None or kept[0] != key:
+            kept = self._place = (key, Place())
+        return kept[1]
+
+    def _world_position(self) -> tuple[float, float] | None:
+        """Where the character stands, in world yards on the guide's map; `None` unread."""
+        here, bounds = self._position(), self.client.bounds
+        if here is None or bounds is None or None in here:
+            return None
+        return map_to_world(*here, bounds)
 
     def rib_camped(self, node, level: int | None) -> bool:
         """Does every station a hunt of the rib `node` would stand at lie in a death camp
@@ -1089,8 +1113,9 @@ class LiveBody:
         plan = service(state, context=self.policy_context)
         return plan.decision.why if plan else None
 
-    def _objective_name(self) -> int | None:
-        """The creature the armed guide step wants, when it names one; else None."""
+    def _objective_name(self) -> int | Paying | None:
+        """The creature the armed guide step wants, when it names one, as a pull for experience
+        on a grind (`Paying`); else None."""
         node = self._node()
         if node is None:
             return None
@@ -1103,7 +1128,9 @@ class LiveBody:
             target = selection.target
         if target is None or target.target_kind != "creature" or not target.target_name:
             return None
-        return name_id(target.target_name)
+        wanted = name_id(target.target_name)
+        # A grind's are for experience (V344); a quest's count at any level.
+        return Paying(wanted) if node.kind in (StepKind.GRIND, StepKind.DING_GATE) else wanted
 
     def _fight(self, state) -> Result:
         # Inside an objective the fight is for its creature, not the nearest plate: the
@@ -2561,6 +2588,8 @@ class LiveBody:
         if vitals is None or pos is None:
             return
         here = self._on_map((pos.mx, pos.my))
+        if vitals.dead is True or vitals.ghost is True:
+            self._place = None                         # a death begins the hunt afresh (V343)
         if vitals.dead is False and vitals.ghost is False:
             if here is not None:
                 self._alive_at = here

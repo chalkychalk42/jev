@@ -2395,3 +2395,72 @@ def test_a_step_waiting_on_a_camp_with_nowhere_else_is_waited_out_of_its_reach(m
     assert memory.camp_at(0, spot, now, 5) is None
     walked.clear()
     assert b._out_of_camp(9) is False and walked == [], "no camp at its level: stays"
+
+
+def test_a_grinds_hunt_armed_again_after_a_fight_goes_on_from_its_place():
+    """V343: every arm of GRIND_UNTIL built a new hunt, its tour from the head; 5,495 hunts
+    the hive began again after a combat-cut walk (4 Oct 16:26-18:30) re-walked 5,917 stations
+    already stood at, 25 hours. The body keeps the hunt's place for its step and objective,
+    and a death, or another step's hunt, begins afresh."""
+    from jev.guide.route_memory import RouteMemory
+    from jev.run.hunt import Place
+
+    b = _grind_body(RouteMemory())
+    spawns = ((50.0, 50.0, 0.0), (90.0, 50.0, 0.0), (130.0, 50.0, 0.0))
+    b.hunt_spawns = {"rib": spawns}
+    b._hostiles = lambda *a, **k: ()
+    b._stations = lambda *a, **k: None
+    b.fight = SimpleNamespace(run=lambda *a, **k: Fought.NO_TARGET, pressed=[], closed=0,
+                              heals_landed=0, heals_ignored=0, detail="", broken=False,
+                              top_up=lambda *a, **k: True, top_ups=0, top_ups_landed=0)
+    b._read = lambda: {"vitals.hp": 1.0, "char.level": 2}
+    b._service_needed = lambda: None
+    walked = []
+
+    def cut(p, **kw):
+        walked.append(tuple(p))
+        if len(walked) == 2:
+            raise Cancelled("combat interrupted the leg or service")
+        return True
+    b._approach = cut
+    with pytest.raises(Cancelled):
+        b._hunt(seen())
+    place = b._place[1]
+    assert isinstance(place, Place) and place.post == 1 and place.arrived == 1
+    assert b._hunt_place(("rib", b._place[0][1])) is place, "the same step's hunt: kept"
+    b._approach = lambda p, **kw: walked.append(tuple(p)) or True
+    b._world_position = lambda: (88.0, 50.0)
+    del walked[:]
+    b._hunt(seen())
+    assert walked[0] == spawns[1], "on from the walk cut short, not the tour's head"
+    b._hunt_place(("rib", "kept"))
+    from jev.world.state_v1 import Vitals
+
+    b.observe(seen(vitals=Vitals(hp=0.0, dead=True, ghost=False)))
+    assert b._place is None, "a death begins the hunt afresh"
+    assert b._hunt_place(("other", "x")) is not place
+
+
+def test_a_grinds_pulls_are_for_experience_and_a_quests_are_not():
+    """V344: a grind's hunt and its defence ask the fight for a pull that pays (`Paying`);
+    a quest objective's kind counts toward the quest at any level."""
+    from jev.clients.fight import Paying
+    from jev.guide.route_memory import RouteMemory
+
+    b = _grind_body(RouteMemory())
+    b.hunt_spawns = {"rib": ((50.0, 50.0, 0.0),)}
+    b._hostiles = lambda *a, **k: ()
+    b._stations = lambda *a, **k: None
+    b._service_needed = lambda: None
+    asked = []
+    b.fight = SimpleNamespace(run=lambda name_id=None, **k: asked.append(name_id) or Fought.DIED,
+                              pressed=[], closed=0, heals_landed=0, heals_ignored=0, detail="",
+                              broken=False, top_up=lambda *a, **k: True, top_ups=0,
+                              top_ups_landed=0)
+    b._read = lambda: {"vitals.hp": 1.0, "char.level": 2}
+    b._approach = lambda p, **kw: True
+    b._hunt(seen())
+    assert asked == [Paying(name_id("Wolf"))]
+    assert b._objective_name() == Paying(name_id("Wolf"))
+    quest = body(StepKind.QUEST_OBJECTIVE)
+    assert quest._objective_name() == name_id("NPC"), "a quest's kind, at any level"
