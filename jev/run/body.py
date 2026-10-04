@@ -339,6 +339,9 @@ class LiveBody:
         self.travel_timeout, self.hunt_timeout, self.say = travel_timeout, hunt_timeout, say
         # Where each hunt's target spawns (`jev.guide.spawns`); empty walks rings.
         self.hunt_spawns = hunt_spawns or {}
+        # The character's key (`char.key`) as last read: a death camp bars the character whose
+        # deaths made it (V339). `None` until read, when every camp bars, as before.
+        self._key: int | None = None
         # What each choice has paid off before, and this run's log of them
         # (`jev.learn.choices`); without a memory, tours keep their own order.
         self.choice_memory = None
@@ -718,7 +721,9 @@ class LiveBody:
             return Result(SkillOutcome.ABORTED, "step has no supported map destination", "unsupported")
         ok = self._approach(node.world)
         step = self.arm.step_id if self.arm is not None else None
-        level = (self._read() or {}).get("char.level") if not ok else None
+        values = (self._read() or {}) if not ok else {}
+        self._note_key(values)
+        level = values.get("char.level") if not ok else None
         note = self._walk_note(level if isinstance(level, int) else None) if not ok else None
         if note is not None and note[1] is not None:
             # Refused through a death camp: the step waits for the camp to end (V334).
@@ -857,6 +862,7 @@ class LiveBody:
                 return level, target, None if level is None else level >= target
         wanted = name_id(destination.target_name)
         values = self._read() or {}
+        self._note_key(values)
         caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
         level = values.get("char.level") if isinstance(values.get("char.level"), int) else None
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
@@ -866,6 +872,7 @@ class LiveBody:
                     standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0,
                     conjure=self._conjure,
                     camp_until=lambda station: self._camp_end(station, level),
+                    others_camp=lambda station: self._others_camp(station, level),
                     walk_note=lambda: self._walk_note(level), observe=observe,
                     place=self._hunt_place((self.arm.step_id if self.arm is not None else None,
                                             objective_key(wanted, node.id))),
@@ -935,7 +942,7 @@ class LiveBody:
         if memory is None or bounds is None or here is None:
             return False
         at = map_to_world(*here, bounds)
-        camp = memory.camp_at(bounds.map_id, at[:2], time.time(), level) if at else None
+        camp = memory.camp_at(bounds.map_id, at[:2], time.time(), level, self._key) if at else None
         if camp is None:
             return False
         reach = CAMP_YARDS + CAMP_CLEAR_YARDS
@@ -981,13 +988,30 @@ class LiveBody:
 
     def _camp_end(self, world, level: int | None) -> float | None:
         """When the death camp the world point `world` lies in ends, as wall time: its nearest
-        camp death counting at `level` (`RouteMemory.camp_at`, V307); `None` for none, or with
-        no route memory (V334)."""
+        camp death counting at `level` (`RouteMemory.camp_at`, V307) of a camp that bars this
+        character, one its own deaths made (V339); `None` for none, or with no route memory
+        (V334)."""
         memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
         if memory is None or bounds is None or world is None:
             return None
-        camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level)
+        camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level, self._key)
         return camp.camp_until if camp is not None else None
+
+    def _others_camp(self, world, level: int | None) -> bool:
+        """Whether the world point `world` lies in a death camp counting at `level`, whoever's
+        deaths made it: asked of a station out of the character's own camps (`_camp_end`), one
+        in another's (V339), which a hunt leaves out while it has one out of every camp
+        (`Hunt.others_camp`). No, with the character's key unread, when every camp bars it."""
+        memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
+        if memory is None or bounds is None or world is None or self._key is None:
+            return False
+        return memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level) is not None
+
+    def _note_key(self, values: dict | None) -> None:
+        """Keep the character's key from a reading (V339)."""
+        key = (values or {}).get("char.key")
+        if isinstance(key, int):
+            self._key = key
 
     def _walk_note(self, level: int | None) -> tuple[bool, float | None] | None:
         """How the last walk that did not arrive went (`Hunt.walk_note`, V334): whether its
@@ -2538,6 +2562,7 @@ class LiveBody:
         if (memory is not None and here is not None and values.get("vitals.dead") is True
                 and values.get("vitals.ghost") is not True):
             level, who = values.get("char.level"), values.get("char.key")
+            self._note_key(values)
             record = (self.client.bounds.map_id, map_to_world(*here, self.client.bounds),
                       level if isinstance(level, int) else None,
                       who if isinstance(who, int) else None)
@@ -2584,6 +2609,9 @@ class LiveBody:
         and where it fell the moment a death is read, kept in the purse file at once, whatever
         the worker is doing and whoever releases the spirit. A ghost first read with no fall
         kept fell where it last stood alive. Up again, nothing is kept of the body."""
+        key = getattr(getattr(state, "char", None), "key", None)
+        if isinstance(key, int):
+            self._key = key                     # whose death camps bar it (V339)
         vitals, pos = getattr(state, "vitals", None), getattr(state, "pos", None)
         if vitals is None or pos is None:
             return

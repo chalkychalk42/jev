@@ -2161,6 +2161,35 @@ def test_a_grind_whose_stations_lie_in_a_death_camp_waits_for_the_camp():
     assert left is not None and abs(left - (CAMP_S - 30.0)) < 5.0
 
 
+def test_a_grind_in_a_camp_another_made_is_hunted_and_its_own_camp_waits():
+    """V339: a camp bars only the character whose deaths made it; another's is hunted through,
+    and the step waits on nothing. With the character's key unread, every camp bars."""
+    import time as clock
+
+    from jev.guide.route_memory import RouteMemory
+    from jev.world.state_v1 import Char
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=None, who=11)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=None, who=11)
+    b = _grind_body(memory)
+    b.client.state = lambda: seen()
+    b.client.approach = Mock(return_value=False)
+    b.observe(seen(char=Char(key=22)))
+    assert b._camp_end((50.0, 50.0, 0.0), None) is None and b._others_camp((50.0, 50.0), None)
+    result = b._hunt(seen())
+    assert result.code != "camp" and b.client.approach.call_count > 1, "its stations walked"
+    assert b.policy_context.step_waiting("rib", clock.time()) is None, "nothing to wait on"
+    own = _grind_body(memory)
+    own.observe(seen(char=Char(key=11)))
+    assert own._hunt(seen()).code == "camp", "its own camp"
+    assert own.policy_context.step_waiting("rib", clock.time()) is not None
+    unread = _grind_body(memory)
+    assert unread._camp_end((50.0, 50.0, 0.0), None) is not None, "unread: as before"
+    assert not unread._others_camp((50.0, 50.0), None)
+
+
 def test_a_walk_refused_through_a_death_camp_says_when_the_camp_ends():
     """V334: the hunt waits for the camp that refused its walk (`Path.camp`)."""
     import time as clock

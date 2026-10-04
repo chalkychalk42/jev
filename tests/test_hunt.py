@@ -644,6 +644,29 @@ def test_stations_in_a_death_camp_are_not_walked_and_a_hunt_all_in_one_waits_for
     assert walked == [FAR], "the station out of the camp, and only it"
 
 
+def test_stations_in_anothers_camp_are_left_out_while_others_remain_and_never_wait():
+    """V339: a camp another character's deaths made bars nothing: hive-209 stood its whole
+    session on hive-414's (4 Oct 16:42). Its stations are left out while the tour has one out
+    of every camp, and walked when it has none; only the character's own camp ends `CAMP`.
+    Inside another's camp once it no longer barred, the hive died 8.0 times an alive hour."""
+    others = {NEAR}
+    walked = []
+    h, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)],
+                 approach=lambda p, **kw: walked.append(tuple(p)) or True)
+    h.camp_until = lambda p: None
+    h.others_camp = lambda p: tuple(p) in others
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.DONE
+    assert walked == [FAR], "the station out of the other's camp first, and only it"
+    others.add(FAR)
+    walked.clear()
+    h, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)],
+                 approach=lambda p, **kw: walked.append(tuple(p)) or True)
+    h.camp_until = lambda p: None
+    h.others_camp = lambda p: tuple(p) in others
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.DONE
+    assert len(walked) == 1 and h.until is None, "all in another's camp: hunted, no wait"
+
+
 def test_a_station_whose_walk_failed_is_not_walked_again_on_the_next_lap():
     """V334: bot 224 asked for the same refused walks lap after lap and hunt after hunt,
     4,879 in one session (29 Sep 15:10)."""

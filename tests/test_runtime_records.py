@@ -1598,3 +1598,59 @@ def test_a_ding_waits_for_the_hunt_under_way_to_end(tmp_path):
     rt.finish(SkillOutcome.PREEMPTED, "combat interrupted the leg or service")
     rt.tick()
     assert rt.tracker.step_id == "rib_up" and rt.armed.step_id == "rib_up"
+
+def test_a_wait_of_a_minute_or_more_is_waited_out_on_a_free_rib(tmp_path):
+    """V340: waits under five minutes were stood (V334), 17 of the 75.7 h the hive stood on
+    waiting steps on 4 Oct 16:26-19:00. A wait of a minute or more takes a free rib at once,
+    and comes back when it ends; one under a minute is stood."""
+    from jev.orch.runtime import STAND_S
+
+    rt = _elsewhere(tmp_path)
+    rt.policy_context.step_waits("kill", 1000.0 + 120.0, "camp", 1000.0)
+    rt.tick()
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib_near", "kill")
+    assert rt.tracker.memory.until == 1120.0, "back when the wait ends"
+    rt = _elsewhere(tmp_path)
+    rt.policy_context.step_waits("kill", 1000.0 + STAND_S - 10.0, "camp", 1000.0)
+    rt.tick()
+    assert rt.tracker.step_id == "kill" and rt.armed.rule == "wait.step", "under a minute"
+
+
+def test_a_wait_with_no_free_rib_is_stood_a_minute_then_cut_short_and_cannot_spin(tmp_path):
+    """V340: Fidelio (hive-181) stood all of two sessions from 16:27 on 4 Oct on ribs waiting
+    2,201 s and 1,750 s, each stopped by the watchdog: no rib was free. With none free the wait
+    is stood a minute, then cut short and the step armed again; one whose stations still lie in
+    the character's own camp waits again, and is armed again a minute later, never sooner."""
+    from jev.orch.runtime import STAND_S
+
+    rt = _elsewhere(tmp_path, n=200)
+    rt.policy_context.camped = lambda rib, level: True        # every rib in its own camps
+    rt.policy_context.step_waits("kill", 1000.0 + 3000.0, "camp", 1000.0)
+    armed = []
+    for _ in range(190):
+        rt.tick()
+        t = rt.last_state.t
+        assert rt.tracker.step_id == "kill", "no rib to go to"
+        if rt.armed is not None and rt.armed.decision.skill == "GRIND_UNTIL":
+            armed.append(t)
+            # Its hunt ends `camp` again: the step waits on its camp once more.
+            rt.policy_context.step_waits("kill", t + 3000.0, "camp", t)
+            rt.armed = None
+    assert armed, "the wait cut short: the step armed again"
+    assert STAND_S <= armed[0] - 1000.0 <= STAND_S + 2.0, armed
+    gaps = [b - a for a, b in zip(armed, armed[1:])]
+    assert gaps and all(STAND_S <= g <= STAND_S + 2.0 for g in gaps), gaps
+    # A wait that ends on its own part way through a stand: the next one stands afresh.
+    rt = _elsewhere(tmp_path, n=200)
+    rt.policy_context.camped = lambda rib, level: True
+    rt.policy_context.step_waits("kill", 1000.0 + 90.0, "camp", 1000.0)
+    armed = []
+    for _ in range(190):
+        rt.tick()
+        if rt.armed is not None and rt.armed.decision.skill == "GRIND_UNTIL":
+            t = rt.last_state.t
+            armed.append(t)
+            rt.policy_context.step_waits("kill", t + 3000.0, "camp", t)
+            rt.armed = None
+    assert 1089.0 <= armed[0] <= 1092.0, "its own end: under a minute left is stood out"
+    assert STAND_S <= armed[1] - armed[0] <= STAND_S + 2.0, "then a minute's stand, afresh"
