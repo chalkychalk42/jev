@@ -2143,3 +2143,25 @@ def test_a_hunt_or_walk_that_planned_no_route_waits_before_its_step_is_armed_aga
     b.client.approach = Mock(return_value=True)
     b._travel(seen())
     assert "rib" not in b.policy_context.step_failures, "a walk that arrived ends the run"
+
+
+def test_a_dry_ribs_wider_kinds_are_its_levels_none_grey_and_one_above_at_most(monkeypatch):
+    """V337: the level 8 mage on Elwynn's 7-9 rib takes its kinds at 7 to 9; at level 7, 7 to
+    8; a level 15 on a 1-3 rib, nothing (all grey)."""
+    from jev.clients.fight import Kinds
+    from jev.guide.route_memory import RouteMemory
+    from jev.world import hostiles
+
+    asked = []
+    monkeypatch.setattr(hostiles, "kinds", lambda *a, **kw: asked.append(kw) or frozenset({7, 8}))
+    b = _grind_body(RouteMemory())
+    b._side = "alliance"
+    node = Node(id="rib", kind=StepKind.GRIND, zone="zone", zone_id=1, pos=(0.5, 0.5),
+                world=(50.0, 50.0, 0.0), map_id=0, level=(7, 9))
+    wider = b._rib_kinds(node, node.world, 30.0, 7, 8)
+    assert wider == Kinds(own=7, names=frozenset({8}), low=7, high=9)
+    assert asked[-1]["low"] == 7 and asked[-1]["high"] == 9 and asked[-1]["side"] == "alliance"
+    assert b._rib_kinds(node, node.world, 30.0, 7, 7).high == 8
+    low = node.model_copy(update={"level": (1, 3)})
+    assert b._rib_kinds(low, node.world, 30.0, 7, 15) is None, "all grey"
+    assert b._rib_kinds(node, node.world, 30.0, 7, None) is None

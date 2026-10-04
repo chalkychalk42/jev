@@ -211,6 +211,9 @@ class Hunt:
     # How the last walk that did not arrive went: whether a route was planned for it, and the
     # end of the death camp it was refused through, if it was (V334); `None`, not known.
     walk_note: Callable[[], tuple[bool, float | None]] | None = None
+    # A grind rib's wider prey (`jev.clients.fight.Kinds`, V337): what its hunt fights after
+    # its laps went by with nothing killed, for as many laps more; `None`, nothing wider.
+    widen: Callable[[], object | None] | None = None
     _found: bool = field(default=False, init=False)
 
     kills: int = field(default=0, init=False)
@@ -222,6 +225,7 @@ class Hunt:
     until: float | None = field(default=None, init=False)
     # `UNREACHABLE` with no route planned to any station: the character never moved (V335).
     stuck: bool = field(default=False, init=False)
+    widened: bool = field(default=False, init=False)     # fought wider after dry laps (V337)
 
     @traced("hunt")
     def run(self, centre: tuple[float, float, float], radius_yards: float,
@@ -252,7 +256,7 @@ class Hunt:
         self._outdoors = None
         self.detail = ""
         self.until = None
-        self.stuck = False
+        self.stuck = self.widened = False
         event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
                                     "wanted_name_id": name_id, "timeout_s": timeout_s,
                                     "spawns": len(spawns)})
@@ -327,6 +331,13 @@ class Hunt:
                         self.detail = (f"every walk to a station is refused through a death "
                                        f"camp, until {_clock(self.until)}")
                         return Hunted.CAMP
+                    wider = self._wider(laps)
+                    if wider is not None:
+                        # Its laps with nothing killed: another as many, fighting wider (V337).
+                        name_id = wider
+                        posts += ([p for _ in range(laps) for p in chooser.order(tour)]
+                                  if chooser is not None else tour * laps)
+                        continue
                     # Not a yard walked: no route to any station could be planned (V335).
                     self.stuck = not self.arrived and walks_failed > 0 and not planned
                     self.detail = ("no route to any station could be planned" if self.stuck
@@ -420,6 +431,26 @@ class Hunt:
         have, need = self.progress()
         self.detail = f"{timeout_s:.0f}s and the counter is {have}/{need}"
         return Hunted.TIMEOUT
+
+    def _wider(self, laps: int):
+        """What a dry rib fights from now on (`widen`, V337), once a hunt, after its laps stood
+        at a station and killed nothing; `None` for nothing wider. Grind ribs hunt one kind
+        and fight anything else only when it attacks first (`Fight._acceptable`), and in the
+        hive's crowded ribs logs show 14-station tours of "no nameplate and no Tab target
+        worth fighting" (`184.log`, `192.log`; 38-40 bots on one rib at the peak, 29 Sep)."""
+        if self.widen is None or self.widened or self.kills or not self.arrived:
+            return None
+        wider = self.widen()
+        if not wider:
+            return None
+        self.widened = True
+        names = sorted(getattr(wider, "names", ()))
+        event("hunt.widened", data={"laps": laps, "names": names,
+                                    "levels": [getattr(wider, "low", None),
+                                               getattr(wider, "high", None)]})
+        self.say(f"    {laps} lap(s) and nothing worth fighting: any of {len(names)} more kinds "
+                 f"at levels {getattr(wider, 'low', '?')}-{getattr(wider, 'high', '?')}")
+        return wider
 
     def _out_of_camps(self, tour) -> tuple[list, list[float]]:
         """The tour without its stations in a death camp, and when each such camp ends (V334).

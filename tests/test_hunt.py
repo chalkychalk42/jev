@@ -685,3 +685,32 @@ def test_a_hunt_that_could_plan_no_walk_is_stuck_and_one_that_walked_is_not():
     h.walk_note = None
     assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
     assert not h.stuck, "a body that does not say may have walked"
+
+
+def test_a_dry_rib_fights_wider_for_another_round_of_laps_once():
+    """V337: a grind rib hunts one kind, and in the hive's crowded ribs logs show 14-station
+    tours of "no nameplate and no Tab target worth fighting" (`184.log`, `192.log`). After its
+    laps stood at stations and killed nothing, it fights wider for as many laps more, once."""
+    from jev.run.hunt import SPAWN_LAPS
+
+    wider = object()
+    asked = []
+    h, walked = _hunt([Fought.NO_TARGET], [(0, 1)])
+    h.fight.run = lambda name_id=None, **_: asked.append(name_id) or Fought.NO_TARGET
+    h.widen = lambda: wider
+    assert h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert h.widened and len(walked) == 2 * 2 * SPAWN_LAPS, "as many laps again"
+    first = asked.index(wider)
+    assert set(asked[:first]) == {9} and set(asked[first:]) == {wider}
+    h, walked = _hunt([Fought.KILLED, Fought.NO_TARGET], [(0, 2)])
+    h.widen = lambda: wider
+    h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR))
+    assert not h.widened, "a rib that killed is not dry"
+    h, walked = _hunt([Fought.NO_TARGET], [(0, 1)], approach=lambda p, **kw: False)
+    h.widen = lambda: wider
+    h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR))
+    assert not h.widened, "a rib stood nowhere is not dry, it is out of reach"
+    h, walked = _hunt([Fought.NO_TARGET], [(0, 1)])
+    h.widen = lambda: None
+    h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR))
+    assert not h.widened and len(walked) == 2 * SPAWN_LAPS, "nothing wider: as before"

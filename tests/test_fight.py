@@ -2968,3 +2968,28 @@ def test_an_attack_that_waits_for_the_swing_is_pressed_once_a_swing():
     assert hid.taps == ["1"] and f._pending_press is None
     f._rotate(values)
     assert hid.taps == ["1"], "pressed again before the swing"
+
+
+def test_a_dry_ribs_wider_kinds_take_only_hostile_normal_units_of_its_levels():
+    """V337: a rib found dry fights any kind spawned round it worth fighting - hostile, of
+    normal rank, at a level none grey and none more than one above the character - and its
+    own kind as ever. An elite, a neutral critter, a unit of unread level or too high is no
+    fight; nor a name the world does not spawn there, a player's among them."""
+    from jev.clients.fight import Kinds
+
+    wider = Kinds(own=1161, names=frozenset({2000}), low=7, high=9)
+    other = {**ALIVE, "target.name_id": 2000, "target.level": 8, "target.reaction": 2,
+             "target.classification": 1}
+    assert wider.takes(other) and wider.takes({**ALIVE, "target.level": 40}), "its own as ever"
+    for refused in ({"target.classification": 2}, {"target.reaction": 4},
+                    {"target.level": 10}, {"target.level": 6}, {"target.level": None},
+                    {"target.name_id": 3000}):
+        assert not wider.takes({**other, **refused}), refused
+    f = _fight([other])
+    assert f._acceptable(wider, values=other) is True
+    assert f._acceptable(1161, values=other) is False, "a rib not found dry hunts its own"
+    assert f._acceptable(wider, values={**other, "target.classification": 2}) is False
+    hid = _Hid()
+    elite = {**other, "target.classification": 2}
+    assert _fight([elite, other], hid=hid).select(wider) is None
+    assert hid.taps == ["tab", "tab"], "Tab moved past the elite to the wolf"

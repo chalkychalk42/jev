@@ -17,7 +17,7 @@ from typing import ClassVar
 from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
-from jev.clients.fight import HEAL_POINT, Fight
+from jev.clients.fight import HEAL_POINT, Fight, Kinds
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth, Hearthed
 from jev.clients.interact import Interact
@@ -52,7 +52,15 @@ from jev.run.evidence import event
 from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import graveyards, hostiles
-from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
+from jev.world.combat import (
+    HEAL_OUT_OF_COMBAT,
+    Role,
+    drink_to,
+    for_class,
+    grey_level,
+    is_caster,
+    rest_mana,
+)
 from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import keep as gear_keep
 from jev.world.gear import load_worn, save_worn
@@ -281,6 +289,9 @@ CONJURE_EVERY_S = 90.0
 # A caster's hunt stands this far short of each station: inside Fireball's 35 yards and
 # Frostbolt's 30, outside most mobs' notice (V167).
 CASTER_STANDOFF_YARDS = 18.0
+# A dry rib's wider prey is at most this many levels above the character (V337), as a rib's
+# creatures are (`graph.RIB_LEVELS_ABOVE`, V323).
+WIDEN_LEVELS_ABOVE = 1
 
 class LiveBody:
     # Every entry has an executor. The verifier receives exactly this capability set.
@@ -813,6 +824,9 @@ class LiveBody:
                     camp_until=lambda station: self._camp_end(station, level),
                     walk_note=lambda: self._walk_note(level))
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
+        if node.kind is StepKind.GRIND:
+            # A rib found dry fights any kind round it worth fighting (V337).
+            hunt.widen = lambda: self._rib_kinds(node, destination.world, yards, wanted, level)
         spawns = spawn_points(self.hunt_spawns, node.id, getattr(destination, "target_id", None))
         outcome = hunt.run(destination.world, yards, wanted, timeout_s=self.hunt_timeout,
                            spawns=spawns,
@@ -835,6 +849,23 @@ class LiveBody:
         wait = self.policy_context.step_stuck(step, why, time.time())
         if wait:
             self.say(f"  {why}: the step waits {wait:.0f}s")
+
+    def _rib_kinds(self, node, world, yards: float, own: int | None,
+                   level: int | None) -> Kinds | None:
+        """What a dry grind rib fights (`Hunt.widen`, V337): its own kind, and any kind of
+        normal rank spawned within its disk and a pack's reach that attacks this character on
+        sight and whose levels lie within the rib's (`jev.world.hostiles.kinds`), the unit
+        taken at a level none grey to the character and at most `WIDEN_LEVELS_ABOVE` above
+        it. `None` with the level, the side or the rib's levels unknown, or nothing more."""
+        band = getattr(node, "level", None)
+        if not isinstance(level, int) or not band or world is None or self.client.bounds is None:
+            return None
+        low, high = max(band[0], grey_level(level) + 1), min(band[1], level + WIDEN_LEVELS_ABOVE)
+        names = hostiles.kinds(self.client.bounds.map_id, world[0], world[1], yards + PACK_YARDS,
+                               side=self._side, low=band[0], high=band[1]) - {own}
+        if low > high or not names:
+            return None
+        return Kinds(own=own, names=names, low=low, high=high)
 
     def _camp_end(self, world, level: int | None) -> float | None:
         """When the death camp the world point `world` lies in ends, as wall time: its nearest

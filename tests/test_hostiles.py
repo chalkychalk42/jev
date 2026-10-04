@@ -134,7 +134,8 @@ def test_a_spawn_whose_creature_is_drawn_from_a_list_is_indexed():
         create table dbc_FactionTemplate (id, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13);
         create table dbc_Faction (id, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13,
                                   c14, c15, c16, c17);
-        create table world_creature_template (Entry, Name, MinLevel, MaxLevel, Faction, UnitFlags);
+        create table world_creature_template (Entry, Name, MinLevel, MaxLevel, Faction, UnitFlags,
+                                              Rank);
         create table world_creature (guid, id, map, position_x, position_y, position_z,
                                      spawndist, MovementType);
         create table world_creature_spawn_entry (guid, entry);
@@ -145,9 +146,9 @@ def test_a_spawn_whose_creature_is_drawn_from_a_list_is_indexed():
         insert into dbc_FactionTemplate values (7, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         insert into dbc_Faction values (19, 4294967295, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                         0, 0, 0, 0);
-        insert into world_creature_template values (285, 'Murloc', 9, 10, 18, 0);
-        insert into world_creature_template values (732, 'Murloc Lurker', 10, 11, 18, 0);
-        insert into world_creature_template values (721, 'Rabbit', 1, 1, 7, 0);
+        insert into world_creature_template values (285, 'Murloc', 9, 10, 18, 0, 0);
+        insert into world_creature_template values (732, 'Murloc Lurker', 10, 11, 18, 0, 0);
+        insert into world_creature_template values (721, 'Rabbit', 1, 1, 7, 0, 0);
         insert into world_creature values (1, 0, 0, '-9500.5', '100.0', '40.0', 5.0, 1);
         insert into world_creature values (2, 721, 0, '-9510.0', '110.0', '40.0', 0.0, 0);
         insert into world_creature values (3, 0, 0, '-9520.0', '120.0', '40.0', 0.0, 0);
@@ -157,5 +158,30 @@ def test_a_spawn_whose_creature_is_drawn_from_a_list_is_indexed():
         insert into world_spawn_group_entry values (7, 721);
         insert into world_spawn_group values (7, 0);
     """)
+    from jev.perceive.radio_frame import name_id
+
     rows = generate(db, maps=(0,))["maps"]["0"]
-    assert rows == [[-9500.5, 100.0, 40.0, 9, 11, 3, 5.0]], "the drawn murloc; no rabbits"
+    kinds = sorted([[name_id("Murloc"), 9, 10, 0], [name_id("Murloc Lurker"), 10, 11, 0]])
+    assert rows == [[-9500.5, 100.0, 40.0, 9, 11, 3, 5.0, kinds]], "the drawn murloc; no rabbits"
+
+
+def test_the_kinds_round_a_rib_are_of_normal_rank_its_levels_and_hostile(tmp_path, monkeypatch):
+    """V337: what a dry rib widens to - the kinds spawned round it that attack the side on
+    sight, normal rank, their levels within the rib's."""
+    rows = [[0.0, 10.0, 5.0, 7, 8, 1, 10.0, [[11, 7, 8, 0]]],        # a wolf
+            [0.0, 15.0, 5.0, 8, 9, 1, 5.0, [[12, 8, 9, 1]]],         # an elite
+            [0.0, 20.0, 5.0, 5, 6, 1, 0.0, [[13, 5, 6, 0]]],         # below the rib
+            [0.0, 25.0, 5.0, 7, 9, 2, 0.0, [[14, 7, 9, 0]]],         # hostile to the Horde
+            [0.0, 30.0, 5.0, 7, 9, 1, 0.0, [[15, 7, 9, 0], [16, 9, 10, 0]]],
+            [0.0, 300.0, 5.0, 7, 8, 1, 0.0, [[17, 7, 8, 0]]],        # too far
+            [0.0, 35.0, 5.0, 7, 8, 1, 0.0]]                          # an old index's row
+    path = tmp_path / "hostile-spawns.json"
+    path.write_text(json.dumps({"format": 1, "maps": {"0": rows}}))
+    monkeypatch.setattr(hostiles, "HOSTILES_PATH", path)
+    hostiles._index.cache_clear()
+    try:
+        assert hostiles.kinds(0, 0.0, 0.0, 80.0, side="alliance", low=7, high=9) == {11, 15}
+        assert hostiles.kinds(0, 0.0, 0.0, 80.0, side=None, low=7, high=9) == frozenset()
+        assert len(hostiles.near(0, 0.0, 0.0, 80.0, side="alliance", level=8)) == 5, "as before"
+    finally:
+        hostiles._index.cache_clear()
