@@ -37,7 +37,7 @@ from jev.coach.situation import with_key
 from jev.coach.verifier import verify
 from jev.guide.graph import Graph, frame_yards, rib_fits, rib_for
 from jev.guide.objectives import progress
-from jev.guide.route_memory import CAMP_YARDS
+from jev.guide.route_memory import CAMP_YARDS, OTHERS_CAMP_WAIT
 from jev.guide.tracker import SHORT_RIB_S, Event, Tracker, waits_for_level
 from jev.guide.tracker import Verdict as TrackVerdict
 from jev.learn.episode import (
@@ -186,6 +186,14 @@ def _dead(state: State) -> bool:
 # immediately; `take` returns an answer if one has arrived since.
 AskFn = Callable[[State, str], bool | None]
 TakeFn = Callable[[str], Decision | TeacherReply | None]
+
+
+def _out_of_camps(ribs: list, level: int | None, camped_any: Callable[..., bool] | None) -> list:
+    """The ribs of `ribs` not wholly in a death camp, any character's (`Context.camped_any`,
+    V346); all of them, with nothing to ask."""
+    if camped_any is None:
+        return list(ribs)
+    return [r for r in ribs if not camped_any(r, level)]
 
 
 @dataclass
@@ -637,9 +645,18 @@ class ClientRuntime:
         free = [r for r in self._ribs_all if r.id != step and rib_fits(r, level)
                 and context.step_waiting(r.id, state.t) is None
                 and not (camped is not None and camped(r, level))]
+        # A rib out of every camp first; for a wait on others' camps only such a rib, and with
+        # none the wait is cut short at once and its stations walked (V346).
+        others = context.step_wait_why.get(step or "") == OTHERS_CAMP_WAIT
+        clean = _out_of_camps(free, level, getattr(context, "camped_any", None))
+        free = clean if clean or others else free
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
         rib = self._rib(level, here, among=free) if free else None
+        if rib is None and others:
+            context.end_wait(step)
+            self._stood = (None, -math.inf)
+            return False
         if rib is None:
             stood = self._stood if self._stood[0] == step else (step, state.t)
             if state.t - stood[1] >= STAND_S:
@@ -701,6 +718,7 @@ class ClientRuntime:
         free = [r for r in self._ribs_all if rib_fits(r, level)
                 and (r.id == node.id or context.step_waiting(r.id, state.t) is None)
                 and not (camped is not None and camped(r, level))]
+        free = _out_of_camps(free, level, getattr(context, "camped_any", None)) or free
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
         memory = self.tracker.memory

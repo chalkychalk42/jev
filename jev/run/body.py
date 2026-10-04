@@ -41,7 +41,8 @@ from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.path import PathStatus
-from jev.guide.route_memory import CAMP_REFUSED, CAMP_YARDS, RECORD_FLUSH_S
+from jev.guide.route_memory import (CAMP_REFUSED, CAMP_YARDS, OTHERS_CAMP_WAIT, OTHERS_RETRY_S,
+                                    RECORD_FLUSH_S)
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.choices import Choice, Stations, objective_key
@@ -342,6 +343,8 @@ class LiveBody:
         # The character's key (`char.key`) as last read: a death camp bars the character whose
         # deaths made it (V339). `None` until read, when every camp bars, as before.
         self._key: int | None = None
+        # When a hunt of each step last ended `camp` on other characters' camps (V346).
+        self._others_left: dict[str | None, float] = {}
         # What each choice has paid off before, and this run's log of them
         # (`jev.learn.choices`); without a memory, tours keep their own order.
         self.choice_memory = None
@@ -863,6 +866,7 @@ class LiveBody:
         wanted = name_id(destination.target_name)
         values = self._read() or {}
         self._note_key(values)
+        step_id = self.arm.step_id if self.arm is not None else None
         caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
         level = values.get("char.level") if isinstance(values.get("char.level"), int) else None
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
@@ -873,6 +877,8 @@ class LiveBody:
                     conjure=self._conjure,
                     camp_until=lambda station: self._camp_end(station, level),
                     others_camp=lambda station: self._others_camp(station, level),
+                    leave_others=(lambda: self._leave_others(step_id))
+                    if node.kind in (StepKind.GRIND, StepKind.DING_GATE) else None,
                     walk_note=lambda: self._walk_note(level), observe=observe,
                     place=self._hunt_place((self.arm.step_id if self.arm is not None else None,
                                             objective_key(wanted, node.id))),
@@ -892,7 +898,12 @@ class LiveBody:
                            others=self._hostiles(destination.world, yards + PACK_YARDS)
                            if spawns else ())
         step = self.arm.step_id if self.arm is not None else None
-        if outcome is Hunted.CAMP and getattr(hunt, "until", None) is not None:
+        if outcome is Hunted.CAMP and getattr(hunt, "others_left", False) is True:
+            # Left for a rib out of every camp, or, with none, walked once its wait is cut
+            # short, its stations taken for `OTHERS_RETRY_S` (V346).
+            self._others_left[step] = time.time()
+            self.policy_context.step_waits(step, hunt.until, OTHERS_CAMP_WAIT, time.time())
+        elif outcome is Hunted.CAMP and getattr(hunt, "until", None) is not None:
             # Not armed again until the camp ends (V334): bot 224's grind was armed again 0.5 s
             # after each hunt whose every walk the camp refused. Waited out on another rib
             # (`ClientRuntime._wait_elsewhere`), or, with none, out of the camp's reach.
@@ -921,16 +932,25 @@ class LiveBody:
             return None
         return map_to_world(*here, bounds)
 
-    def rib_camped(self, node, level: int | None) -> bool:
+    def rib_camped(self, node, level: int | None, anyone: bool = False) -> bool:
         """Does every station a hunt of the rib `node` would stand at lie in a death camp
-        counting at `level` (`Hunt._out_of_camps`, V334)? No, with none known."""
+        counting at `level` (`Hunt._out_of_camps`, V334): one of the character's own, or with
+        `anyone` any character's (V346)? No, with none known."""
         if node is None or node.world is None or self.client.bounds is None \
                 or node.map_id != self.client.bounds.map_id:
             return False
         spawns = spawn_points(self.hunt_spawns, node.id, None)
         tour = (spawn_tour(spawns) if spawns
                 else hunt_stations(node.world, node.hunt_yards or DEFAULT_HUNT_YARDS))
-        return bool(tour) and all(self._camp_end(p, level) is not None for p in tour)
+        return bool(tour) and all(self._camp_end(p, level) is not None
+                                  or (anyone and self._others_camp(p, level) is not None)
+                                  for p in tour)
+
+    def _leave_others(self, step: str | None) -> bool:
+        """Does a hunt of `step` whose every station lies in a camp, others' among them, end
+        `camp` to be left for a rib out of every camp (V346)? Not within `OTHERS_RETRY_S` of
+        the last that did: with no such rib, its wait cut short, it walks them (V339)."""
+        return time.time() - self._others_left.get(step, -math.inf) >= OTHERS_RETRY_S
 
     def _out_of_camp(self, level: int | None) -> bool:
         """Walk clear of the death camp the character stands in, if it stands in one: to the
@@ -997,15 +1017,17 @@ class LiveBody:
         camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level, self._key)
         return camp.camp_until if camp is not None else None
 
-    def _others_camp(self, world, level: int | None) -> bool:
-        """Whether the world point `world` lies in a death camp counting at `level`, whoever's
-        deaths made it: asked of a station out of the character's own camps (`_camp_end`), one
-        in another's (V339), which a hunt leaves out while it has one out of every camp
-        (`Hunt.others_camp`). No, with the character's key unread, when every camp bars it."""
+    def _others_camp(self, world, level: int | None) -> float | None:
+        """When the death camp counting at `level` that the world point `world` lies in ends,
+        whoever's deaths made it, as wall time: asked of a station out of the character's own
+        camps (`_camp_end`), one in another's (V339), which a hunt leaves out while it has one
+        out of every camp (`Hunt.others_camp`). `None` for none, and with the character's key
+        unread, when every camp bars it."""
         memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
         if memory is None or bounds is None or world is None or self._key is None:
-            return False
-        return memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level) is not None
+            return None
+        camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level)
+        return camp.camp_until if camp is not None else None
 
     def _note_key(self, values: dict | None) -> None:
         """Keep the character's key from a reading (V339)."""
@@ -1458,6 +1480,7 @@ class LiveBody:
             context.saved = self._save_purse
         context.trainable = self.trainable
         context.camped = self.rib_camped
+        context.camped_any = lambda node, level: self.rib_camped(node, level, anyone=True)
         context.reserve = self.training_reserve
         context.bindable = self.bindable
         context.discoverable = self.discoverable

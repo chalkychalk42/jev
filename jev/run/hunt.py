@@ -66,6 +66,8 @@ PULL_LINE = HEAL_OUT_OF_COMBAT
 # began again on the same objective after a walk cut by combat (4 Oct 16:26-18:30), the next
 # began 34 s after at the median, 104 s at the 90th percentile, 5,462 within this.
 PLACE_KEEP_S = 300.0
+# A tour left for other characters' camps whose ends are not known is left this long (V346).
+OTHERS_HOLD_S = 600.0
 
 
 class Hunted(StrEnum):
@@ -274,8 +276,12 @@ class Hunt:
     camp_until: Callable[[tuple], float | None] | None = None
     # Whether a station out of the character's own camps lies in a death camp another's
     # deaths made (V339): not a bar, a danger; such stations are left out of the tour while it
-    # has one out of every camp, and walked when it has none.
-    others_camp: Callable[[tuple], bool] | None = None
+    # has one out of every camp, and walked when it has none. Its end, as wall time, when known.
+    others_camp: Callable[[tuple], bool | float | None] | None = None
+    # Whether a tour with no station out of every camp, others' camps among them, ends `camp`
+    # for its step to be waited out on a rib out of every camp (V346), rather than walked:
+    # `None`, or false, walks them (V339).
+    leave_others: Callable[[], bool] | None = None
     # How the last walk that did not arrive went: whether a route was planned for it, and the
     # end of the death camp it was refused through, if it was (V334); `None`, not known.
     walk_note: Callable[[], tuple[bool, float | None]] | None = None
@@ -301,6 +307,8 @@ class Hunt:
     detail: str = field(default="", init=False)
     # For `CAMP`, when the first camp in the way ends (wall time): the step waits for it (V334).
     until: float | None = field(default=None, init=False)
+    # Whether the last hunt ended `camp` on stations in other characters' camps (V346).
+    others_left: bool = field(default=False, init=False)
     # `UNREACHABLE` with no route planned to any station: the character never moved (V335).
     stuck: bool = field(default=False, init=False)
     widened: bool = field(default=False, init=False)     # fought wider after dry laps (V337)
@@ -353,13 +361,15 @@ class Hunt:
         # Each lap's order is learned, when there is a choice to learn (`stations`).
         whole, laps = ((spawn_tour(spawns, others), SPAWN_LAPS) if spawns
                        else (stations(centre, radius_yards), 1))
+        self.others_left = False
         tour, camps = self._out_of_camps(whole)
         if not tour:
             # "Deaths" in its detail: a quest step failed over for it grinds a level, as one
             # whose deaths failed it does, not the short rib it would retry from (V334).
             self.until = min(camps)
             self.detail = (f"every station lies in a death camp, held by deaths at its level "
-                           f"until {_clock(self.until)}")
+                           f"until {_clock(self.until)}"
+                           + (", other characters' among them" if self.others_left else ""))
             return Hunted.CAMP
         lone = len({tuple(p) for p in spawns}) == 1
         chooser = self.stations if len({tuple(p) for p in tour}) > 1 else None
@@ -596,11 +606,19 @@ class Hunt:
                 kept.append(point)
             else:
                 camps.append(until)
-        clear = ([p for p in kept if not self.others_camp(tuple(p))]
-                 if self.others_camp is not None and kept else kept)
+        ends = ([self.others_camp(tuple(p)) for p in kept]
+                if self.others_camp is not None and kept else [])
+        clear = [p for p, end in zip(kept, ends) if not end] if ends else kept
         others = len(kept) - len(clear)
         if clear:
             kept = clear
+        elif kept and self.leave_others is not None and self.leave_others():
+            # Every station in a camp, others' among them: left for a rib out of every camp
+            # (V346). Inside another's held camp the hive's characters died 15.6 times an alive
+            # hour (4 Oct 20:30-21:50), and 434 of its 1,911 deaths came at a station of one.
+            known = [e for e in ends if isinstance(e, (int, float)) and not isinstance(e, bool)]
+            camps = camps + (known or [time.time() + OTHERS_HOLD_S])
+            self.others_left, kept = True, []
         if camps:
             event("hunt.camped", data={"stations": len(camps), "kept": len(kept),
                                        "until": min(camps), "others": others})

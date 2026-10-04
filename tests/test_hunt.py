@@ -667,6 +667,39 @@ def test_stations_in_anothers_camp_are_left_out_while_others_remain_and_never_wa
     assert len(walked) == 1 and h.until is None, "all in another's camp: hunted, no wait"
 
 
+def test_a_grind_with_every_station_in_others_camps_ends_camp_once_to_be_left_for_a_clean_rib():
+    """V346: of the hive's 1,911 deaths on 4 Oct 20:30-21:50, 434 came at a station inside
+    another character's held camp, the hunt's every station lying in camps (V339 walked them).
+    With `leave_others` such a hunt ends `CAMP` until its camps' first end, walking nothing,
+    for its step to be waited out on a rib out of every camp; without it (or once a rib was
+    looked for), it walks them as before. Stations out of every camp are hunted as ever."""
+    import time as clock
+
+    end = clock.time() + 1200.0
+    others = {NEAR: end, FAR: end + 600.0}
+    walked = []
+    h, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)],
+                 approach=lambda p, **kw: walked.append(tuple(p)) or True)
+    h.camp_until = lambda p: None
+    h.others_camp = lambda p: others.get(tuple(p))
+    h.leave_others = lambda: True
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.CAMP
+    assert walked == [] and h.others_left and h.until == end, "its camps' first end"
+    assert "other characters'" in h.detail
+    h.leave_others = lambda: False
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.DONE
+    assert len(walked) == 1 and not h.others_left, "a rib looked for: walked, as V339"
+    del others[FAR]
+    walked.clear()
+    h, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)],
+                 approach=lambda p, **kw: walked.append(tuple(p)) or True)
+    h.camp_until = lambda p: None
+    h.others_camp = lambda p: others.get(tuple(p))
+    h.leave_others = lambda: True
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.DONE
+    assert walked == [FAR] and not h.others_left, "a station out of every camp: hunted"
+
+
 def test_a_station_whose_walk_failed_is_not_walked_again_on_the_next_lap():
     """V334: bot 224 asked for the same refused walks lap after lap and hunt after hunt,
     4,879 in one session (29 Sep 15:10)."""
