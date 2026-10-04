@@ -206,9 +206,10 @@ class Graph(BaseModel):
         return tuple(n for n in self.nodes if n.kind is StepKind.GRIND)
 
     def rib_for(self, level: int | None, preferred: Node | None = None,
-                near: tuple[float, float] | None = None, short: bool = False) -> Node | None:
+                near: tuple[float, float] | None = None, short: bool = False, *,
+                barred: frozenset[str] = frozenset()) -> Node | None:
         """The rib whose mobs suit a character of `level`. See `rib_for`."""
-        return rib_for(self.ribs(), level, preferred, near, short)
+        return rib_for(self.ribs(), level, preferred, near, short, barred=barred)
 
     def unreachable(self) -> tuple[str, ...]:
         """Nodes no edge leads to. Not an error — a rib is reached only on failure — but
@@ -285,13 +286,43 @@ def rib_xp(rib: Node, level: int) -> float:
     return sum(kill_xp(level, m) for m in range(low, high + 1)) / (high - low + 1)
 
 
+def rib_fits(rib: Node, level: int) -> bool:
+    """Do this rib's creatures suit a character of `level` (V323): none above
+    `RIB_LEVELS_ABOVE` over it, and some worth experience to it."""
+    top = rib_levels(rib)[1]
+    return grey_level(level) < top <= level + RIB_LEVELS_ABOVE
+
+
+def rib_within(rib: Node, level: int) -> bool:
+    """The furthest a grind may be from a character of `level` (V329): its lowest creature at
+    most `RIB_LEVELS_ABOVE` above it, and its highest not grey to it."""
+    low, top = rib_levels(rib)
+    return grey_level(level) < top and low <= level + RIB_LEVELS_ABOVE
+
+
+def _best(fit: list[Node], level: int, preferred: Node | None, near) -> Node:
+    """Of ribs that fit: those paying within `RIB_XP_SHARE` of the best a kill, the nearest;
+    unplaced, `preferred`, else the best."""
+    pay = {r.id: rib_xp(r, level) for r in fit}
+    best = max(pay.values())
+    good = [r for r in fit if pay[r.id] >= RIB_XP_SHARE * best]
+    placed = [r for r in good if r.pos is not None]
+    if near is not None and placed:
+        return min(placed, key=lambda r: (math.dist(r.pos, near), -pay[r.id]))
+    if preferred is not None and preferred in good:
+        return preferred
+    return max(good, key=lambda r: pay[r.id])
+
+
 def rib_for(ribs, level: int | None, preferred: Node | None = None,
-            near: tuple[float, float] | None = None, short: bool = False) -> Node | None:
-    """The rib whose creatures pay a character of `level` the most a kill (`rib_xp`) of those
-    none above `RIB_LEVELS_ABOVE` over it and worth experience to it; of those paying within
-    `RIB_XP_SHARE` of the best, the nearest to where it is (`near`, the guide's map fractions),
-    else `preferred`, else the best. With none such, the one with the lowest creatures.
-    `preferred` is the answer when the level is unknown.
+            near: tuple[float, float] | None = None, short: bool = False, *,
+            barred: frozenset[str] = frozenset()) -> Node | None:
+    """The grind for a character of `level`: of the ribs not `barred` at the level, those whose
+    creatures suit it (`rib_fits`), else of those barred (V329); the one paying the most a kill
+    (`rib_xp`), or of those within `RIB_XP_SHARE` of it the nearest to where it is (`near`, the
+    guide's map fractions); unplaced, `preferred`, else the best. With none that suits it, the
+    one of the lowest creatures within `rib_within`; with none of those, `None`: the character
+    goes on along the spine. `preferred` is the answer when the level is unknown.
 
     By its creatures' levels (`rib_levels`), not its window's top (V323): the window was read
     as the creatures' levels and "never above the character", and Westfall's 14-16 window,
@@ -299,33 +330,38 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
     was given the 12-14 window's level 12-13 Kobold Diggers at about 54: the live mage ground
     them 197 minutes at 15. Before, the nearest rib starting up to three levels below won.
 
+    Never one above the character or grey to it (V329): with every rib that suited it barred,
+    the lowest of the ribs left was taken, and hive-200, a level 8 dwarf hunter, went from Dun
+    Morogh's 1-3 rib, grey to it, up the 9-11, 11-13 and 13-15 ribs of Dun Morogh and Loch Modan
+    to Loch Modan's 17-19 and Dun Morogh's 19-20, dying on most, 11:42 to 15:02 on 29 Sep; 12%
+    of the hive's rib time from 11:00 to 15:20 was on a rib above the character or grey to it,
+    each time with a rib that suited it barred.
+
     A short rib (`short`, `jev.guide.tracker.SHORT_RIB_S`) is a wait for a respawn, and its
     minutes run from the failure: the nearest rib whose creatures are none above the character
-    and all worth experience to it. At level 11 the only rib in the band above was 1,550
-    yards from Goldshire, where the inn's steps failed: five minutes was four of walking
-    there and four back (sessions 109 to 111)."""
+    and all worth experience to it, not barred, else barred. At level 11 the only rib in the
+    band above was 1,550 yards from Goldshire, where the inn's steps failed: five minutes was
+    four of walking there and four back (sessions 109 to 111)."""
     ribs = tuple(ribs)
     if not ribs:
         return None
     if level is None:
         return preferred or ribs[0]
-    if near is not None and short:
-        worth = [r for r in ribs if r.pos is not None
-                 and grey_level(level) < rib_levels(r)[0] and rib_levels(r)[1] <= level]
-        if worth:
-            return min(worth, key=lambda r: (math.dist(r.pos, near), -rib_levels(r)[0]))
-    fit = {r.id: rib_xp(r, level) for r in ribs
-           if rib_levels(r)[1] <= level + RIB_LEVELS_ABOVE and rib_levels(r)[1] > grey_level(level)}
-    if not fit:
-        return min(ribs, key=lambda r: (rib_levels(r)[1], rib_levels(r)[0]))
-    best = max(fit.values())
-    good = [r for r in ribs if r.id in fit and fit[r.id] >= RIB_XP_SHARE * best]
-    placed = [r for r in good if r.pos is not None]
-    if near is not None and placed:
-        return min(placed, key=lambda r: (math.dist(r.pos, near), -fit[r.id]))
-    if preferred is not None and preferred in good:
-        return preferred
-    return max(good, key=lambda r: fit[r.id])
+    free = [r for r in ribs if r.id not in barred]
+    held = [r for r in ribs if r.id in barred]
+    for tier in (free, held):
+        if near is not None and short:
+            worth = [r for r in tier if r.pos is not None
+                     and grey_level(level) < rib_levels(r)[0] and rib_levels(r)[1] <= level]
+            if worth:
+                return min(worth, key=lambda r: (math.dist(r.pos, near), -rib_levels(r)[0]))
+        fit = [r for r in tier if rib_fits(r, level)]
+        if fit:
+            return _best(fit, level, preferred, near)
+    within = [r for r in ribs if rib_within(r, level)]
+    if not within:
+        return None
+    return min(within, key=lambda r: (r.id in barred, rib_levels(r)[1], rib_levels(r)[0]))
 
 
 def stats(g: Graph) -> GraphStats:

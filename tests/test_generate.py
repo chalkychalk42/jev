@@ -330,7 +330,7 @@ def test_the_rib_for_a_level_pays_the_most_a_kill_of_those_at_most_a_level_above
     assert rib_for(ribs, 13) is kobolds, "Goretusks of 15 are two above a 13"
     assert rib_for(ribs, 17) is murlocs and rib_for(ribs, 19) is wolves
     assert rib_for(ribs, 25) is wolves, "past every rib: the best still worth a kill"
-    assert rib_for((murlocs, wolves), 12) is murlocs, "below every rib: the lowest"
+    assert rib_for((murlocs, wolves), 12) is None, "below every rib: none, the spine (V329)"
     assert rib_for(ribs, None, preferred=kobolds) is kobolds, "an unread level keeps the guide's"
     assert rib_for((), 3) is None
     # Without the creatures' levels, the window, whose top none of them is above.
@@ -359,7 +359,8 @@ def test_ribs_paying_about_the_same_a_kill_are_chosen_by_distance():
     assert rib_for(ribs, 5, near=(0.42, 0.79)) is far_kobolds
     assert rib_for(ribs, 6, near=at_the_mine) is kobolds, "level 3 wolves pay 40% at 6"
     assert rib_for((wolves,), 2, near=at_the_mine) is wolves
-    assert rib_for((far_kobolds,), 2, near=at_the_mine) is far_kobolds, "nothing else: lowest"
+    assert rib_for((far_kobolds,), 2, near=at_the_mine) is None, "level 5-6 are three above a 2"
+    assert rib_for((far_kobolds,), 4, near=at_the_mine) is far_kobolds, "one above: the next level's"
 
 
 def test_a_short_rib_is_the_nearest_whose_mobs_all_give_experience():
@@ -381,6 +382,31 @@ def test_a_short_rib_is_the_nearest_whose_mobs_all_give_experience():
         "the level 5-6 rib is nearer, but level 5 is grey at 11"
     assert rib_for(ribs, 12, near=(0.07, 0.95), short=True).id == "r11"
     assert rib_for(ribs, 3, near=goldshire, short=True).id == "r1", "nothing but grey: as before"
+
+
+def test_a_barred_rib_that_suits_the_character_comes_before_one_above_it():
+    """hive-200, a level 8 dwarf hunter, went from Dun Morogh's 1-3 rib, grey to it, up the
+    9-11, 11-13 and 13-15 ribs of Dun Morogh and Loch Modan to Loch Modan's 17-19 and Dun
+    Morogh's 19-20, dying on most, 11:42 to 15:02 on 29 Sep: every rib that suited it was
+    barred, and the lowest of the rest was taken (V329). Its ribs' creatures."""
+    from jev.guide.graph import Node, rib_for
+
+    def rib(name, window, mobs):
+        return Node(id=name, kind=StepKind.GRIND, zone="z", zone_id=1, level=window,
+                    mob_levels=mobs, pos=(0.5, 0.5))
+
+    ribs = (rib("dun_morogh_1_3", (1, 3), (1, 1)), rib("dun_morogh_3_5", (3, 5), (3, 4)),
+            rib("dun_morogh_7_9", (7, 9), (7, 8)), rib("dun_morogh_9_11", (9, 11), (10, 11)),
+            rib("loch_modan_11_13", (11, 13), (11, 12)), rib("loch_modan_17_19", (17, 19), (17, 18)))
+    assert rib_for(ribs, 8).id == "dun_morogh_7_9"
+    barred = frozenset({"dun_morogh_7_9", "dun_morogh_3_5"})
+    assert rib_for(ribs, 8, barred=barred).id == "dun_morogh_7_9", "barred, but it suits a level 8"
+    assert rib_for(ribs, 8, near=(0.5, 0.5), barred=barred).id == "dun_morogh_7_9"
+    above = tuple(r for r in ribs if r.id not in barred)
+    assert rib_for(above, 8) is None, "the 1-3 is grey, the 10-11 two above: the spine"
+    assert rib_for(above, 9).id == "dun_morogh_9_11", "its lowest one above: the next level's"
+    assert rib_for(above, 9, barred=frozenset({"dun_morogh_9_11"})).id == "dun_morogh_9_11"
+    assert rib_for((ribs[0],), 9) is None and rib_for((ribs[-1],), 9) is None
 
 
 def test_a_played_guides_ribs_carry_their_creatures_levels():

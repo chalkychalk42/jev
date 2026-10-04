@@ -445,12 +445,14 @@ class ClientRuntime:
         if (node is None or state is None or not node.on_fail or self.finished
                 or skill not in (node.skills or ())):
             return False
-        before = self.tracker.step_id
+        before, memory = self.tracker.step_id, self.tracker.memory
         self._apply(TrackVerdict(Event.FAIL, goto=node.on_fail[0].goto,
                                  reason=f"{skill} out of attempts: {reason}"), state)
         if self.on_progress is not None:
             self._progress()
-        return self.tracker.step_id != before
+        # Entered again counts: with no grind for the level, the step is tried again (V329).
+        return (self.tracker.step_id != before or self.tracker.memory is not memory
+                or self.finished)
 
     def not_offered(self, step_id: str | None) -> bool:
         """The giver answered the accept at `step_id` that it will not give the quest: the
@@ -508,10 +510,9 @@ class ClientRuntime:
             # The camp is on the rib it was working: barred at the level, or the next death at
             # the rib it leaves for comes straight back here (`RIB_BAR`, V317).
             self._bar(node.id, level)
-        ribs = [r for r in self._ribs(level) if out(r)]
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
-        rib = rib_for(ribs, level, near=here)
+        rib = self._rib(level, here, among=[r for r in self._ribs_all if out(r)])
         if rib is None:
             return False
         context.leaving_until, self._leaving = state.t + LEAVE_S, rib.id
@@ -745,7 +746,7 @@ class ClientRuntime:
             return False                                  # nothing to do yet: it waits on
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
-        rib = rib_for(self._ribs(level), level, near=here)
+        rib = self._rib(level, here)
         if rib is None:
             return False
         self.tracker.enter(rib.id, state, rejoin_to=accept.id)
@@ -822,12 +823,15 @@ class ClientRuntime:
                 return quest is not None and quest.complete is True
         return False
 
-    def _ribs(self, level: int | None) -> tuple:
-        """The grind ribs not barred at `level` (`RIB_BAR`); every one when all are."""
-        if level is None:
-            return self._ribs_all
-        free = tuple(r for r in self._ribs_all if f"{RIB_BAR}{r.id}@{level}" not in self._retried)
-        return free or self._ribs_all
+    def _rib(self, level: int | None, near: tuple[float, float] | None = None, *,
+             short: bool = False, preferred=None, among=None):
+        """The grind for the character at `level` (`rib_for`) of its ribs (`among`, else all):
+        of those not barred at the level (`RIB_BAR`), else of those barred (V329); `None` when
+        none suits it."""
+        ribs = self._ribs_all if among is None else tuple(among)
+        barred = (frozenset() if level is None else
+                  frozenset(r.id for r in ribs if f"{RIB_BAR}{r.id}@{level}" in self._retried))
+        return rib_for(ribs, level, preferred, near, short, barred=barred)
 
     def _bar(self, rib_id: str, level: int | None) -> None:
         if level is not None:
@@ -858,7 +862,7 @@ class ClientRuntime:
         elif self.start_grind_then_finish:
             here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                     and state.pos.my is not None else None)
-            rib = rib_for(self._ribs(level), level, near=here)
+            rib = self._rib(level, here)
             if rib is None or rib.id == node.id:
                 memory.expired = False              # nowhere else: it grinds on where it is
                 return False
@@ -948,6 +952,8 @@ class ClientRuntime:
                     target = self.graph.get(verdict.goto)
                     rejoin = node.next[0] if node and node.next else None
                     goto = verdict.goto
+                    short = "deaths" not in (verdict.reason or "")
+                    rib = None
                     if target is not None and target.kind is StepKind.GRIND:
                         # The rib whose mobs suit the character as it is, not as the guide
                         # expected: a level 3 character failed into level 5-6 boars and
@@ -955,15 +961,21 @@ class ClientRuntime:
                         here = ((state.pos.mx, state.pos.my)
                                 if state.pos.mx is not None and state.pos.my is not None
                                 else None)
-                        goto = rib_for(
-                            self._ribs(state.char.level), state.char.level, preferred=target,
-                            near=here, short="deaths" not in (verdict.reason or "")).id
+                        rib = self._rib(state.char.level, here, short=short, preferred=target)
+                        if rib is not None:
+                            goto = rib.id
                         if failed not in self._retried:
                             self._retried.add(failed)
-                            rejoin = failed
-                    self.tracker.enter(goto, state, rejoin_to=rejoin)
-                    if (target is not None and target.kind is StepKind.GRIND
-                            and "deaths" not in (verdict.reason or "")):
+                            # Retried once after its rib; with none, at once, unless it killed
+                            # the character, which a level it has no grind for would cure (V329).
+                            rejoin = failed if rib is not None or short else rejoin
+                        if rib is None:
+                            goto, rejoin = rejoin, None
+                    if goto is None:
+                        self.finished = True             # nothing after it, and no grind
+                    else:
+                        self.tracker.enter(goto, state, rejoin_to=rejoin)
+                    if rib is not None and short:
                         # A level cures a step that kills the character, not one that
                         # could not find its NPC or its mob (`SHORT_RIB_S`).
                         self.tracker.memory.until = state.t + SHORT_RIB_S
