@@ -998,8 +998,11 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     # it keeps being attacked at its level (`danger`, a `jev.learn.danger.DangerMap`).
     hot = None
     if danger is not None:
+        # The level from the facts kept for `HOSTILE_FACTS_S` (V338): read afresh, it was a
+        # capture at every place a plan looked for hot cells, two a plan at the least, each
+        # about a second in the hive's saturated farm processes (29 Sep).
         def hot(map_id):
-            return danger.hot(map_id, (client.read() or {}).get("char.level"))
+            return danger.hot(map_id, values().get("char.level"))
     deaths = None
     if route_memory is not None:
         deaths = DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory, hot=hot,
