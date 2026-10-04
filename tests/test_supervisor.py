@@ -1158,3 +1158,14 @@ def test_a_service_that_failed_is_not_armed_again_within_the_minimum_whatever_th
         assert rt.armed.decision.skill == "BIND_HEARTH", "the minimum passed: asked again"
     finally:
         supervisor.close()
+
+
+def test_a_session_end_lets_the_body_keep_what_it_is_still_saving(tmp_path):
+    """V327: the deaths a session's body is still saving are waited for as it ends, bounded
+    (`LiveBody.end_session`), after the worker has given its input back."""
+    rt = runtime(tmp_path, [seen()])
+    body = Body()
+    ended = []
+    body.end_session = lambda: ended.append(body.active)
+    Supervisor(rt, body, say=lambda _: None).close()
+    assert ended == [0]

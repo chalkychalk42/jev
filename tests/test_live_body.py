@@ -1891,6 +1891,68 @@ def test_a_death_is_kept_as_the_characters_and_a_camp_another_made_is_left_too()
     assert b.policy_context.death_camp is not None, "a camp another made, left as well"
 
 
+def test_the_release_is_pressed_before_the_death_is_saved_and_never_waits_for_the_save(tmp_path):
+    """V327: in the hive's hour from 12:00 on 29 Sep a median of 2,061 s passed between a
+    dead character's release being armed and its press. The death was kept first, and its
+    save waited for the route memory's lock, which every bot of the four farm processes
+    shares (`hive.shared`): hive-576 died at 12:07:41, the server released it itself at
+    12:13:41, and its record was done at 12:27:38, when its release was cancelled, timed out.
+    Now the release comes first and the death is in memory at once, a second one there a
+    death camp as before (V307), and the save waits for the lock on the memory's writer; the
+    session's end waits for it, and no longer than it is given."""
+    import time
+
+    from jev.coach.policy import Context
+    from jev.guide.route_memory import RouteMemory
+    from jev.persist import file_lock
+
+    class Shared(RouteMemory):              # the hive's: a lock every farm process shares
+        def _save(self):
+            with file_lock(self.file.with_suffix(".lock")):
+                order.append("saved")
+                super()._save()
+
+    order = []
+    file = tmp_path / "route-memory.json"
+    holding, freed = threading.Event(), threading.Event()
+
+    def other_process():
+        with file_lock(file.with_suffix(".lock")):
+            holding.set()
+            freed.wait(10.0)
+
+    other = threading.Thread(target=other_process)
+    other.start()
+    holding.wait(5.0)
+    b = body()
+    b.client.route_memory = Shared(file)
+    b.policy_context = Context()
+    b._read = lambda: {"vitals.dead": True, "vitals.ghost": False, "char.level": 7,
+                       "char.key": 576}
+    b._position = lambda: (0.5, 0.5)
+    b.recover = SimpleNamespace(run=lambda release_only: order.append("released")
+                                or Recovered.RELEASED, detail="", graveyard=None)
+    try:
+        started = time.monotonic()
+        assert b._release(None).outcome is SkillOutcome.SUCCEEDED
+        b._position = lambda: (0.5, 0.52)          # two yards on: a death camp
+        assert b._release(None).outcome is SkillOutcome.SUCCEEDED
+        assert time.monotonic() - started < 2.0, "no release waited on the lock"
+        assert order == ["released", "released"], "pressed before any save"
+        assert b.policy_context.death_camp == (0, 48.0, 50.0), "the camp known at once"
+        said = []
+        b.say = said.append
+        started = time.monotonic()
+        b.end_session(timeout=0.3)
+        assert time.monotonic() - started < 2.0 and any("still being saved" in s for s in said)
+    finally:
+        freed.set()
+        other.join()
+    b.end_session(timeout=5.0)
+    assert "saved" in order
+    assert [d.who for d in RouteMemory(file).dangers] == [576]
+
+
 @pytest.mark.parametrize(("deaths", "graveyard_off", "expected"), [
     (1, 300.0, ["corpse"]),            # one death: a death spot, up by the body as before
     (2, 300.0, ["healer"]),            # a death camp: up at the Spirit Healer

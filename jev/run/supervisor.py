@@ -584,5 +584,10 @@ class Supervisor:
         if settle is not None:
             with contextlib.suppress(Exception):
                 settle()
+        # And what it keeps for the next: the deaths still being saved (V327), bounded.
+        end = getattr(self.body, "end_session", None)
+        if end is not None:
+            with contextlib.suppress(Exception):
+                end()
         self.body.release()
         self.runtime.finish(SkillOutcome.UNKNOWN, "run ended")

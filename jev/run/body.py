@@ -40,6 +40,7 @@ from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.path import PathStatus
+from jev.guide.route_memory import RECORD_FLUSH_S
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.choices import Choice, Stations, objective_key
@@ -2285,26 +2286,50 @@ class LiveBody:
         # Released where it died: walks keep clear of the spot for a while
         # (`route_memory.DangerAvoidingQuery`), at about the level it died at; a second death
         # near it within ten minutes, or one in a camp still held, makes the place a death
-        # camp, left once up (V307).
+        # camp, left once up (V307). The death is read before the release and kept after it,
+        # in memory at once and saved by the memory's one writer (V327): kept first, the
+        # release waited on the hive's shared save, and the server released the character
+        # itself six minutes after it died.
         memory, here = getattr(self.client, "route_memory", None), self._position()
         values = self._read() or {}
+        record = None
         if (memory is not None and here is not None and values.get("vitals.dead") is True
                 and values.get("vitals.ghost") is not True):
-            level = values.get("char.level")
-            level = level if isinstance(level, int) else None
-            who = values.get("char.key")
-            at = map_to_world(*here, self.client.bounds)
-            death = memory.died(self.client.bounds.map_id, at, level=level,
-                                who=who if isinstance(who, int) else None)
-            # A camp is made of one character's deaths; one another made, that counts at this
-            # level, is left as well (review of 28 Sep).
-            if death.camp(time.time()) or memory.camp_at(self.client.bounds.map_id, at,
-                                                         time.time(), level) is not None:
-                self.policy_context.camp_left(self.client.bounds.map_id, at[0], at[1])
-                self.say("  died in a death camp: left once up")
+            level, who = values.get("char.level"), values.get("char.key")
+            record = (self.client.bounds.map_id, map_to_world(*here, self.client.bounds),
+                      level if isinstance(level, int) else None,
+                      who if isinstance(who, int) else None)
         released = self.recover.run(release_only=True)
         self._keep_graveyard()
+        if record is not None:
+            self._keep_death(memory, *record)
         return self._result(released, self.recover.detail)
+
+    def _keep_death(self, memory, map_id: int, at, level: int | None, who: int | None) -> None:
+        """Keep a death in the route memory: in memory at once, so a death camp it makes or
+        falls in is known now, and saved by the memory's writer (`save_soon`, V327). A camp is
+        made of one character's deaths; one another made, that counts at this level, is left
+        as well (review of 28 Sep). A memory with no writer saves as it keeps."""
+        soon = getattr(memory, "save_soon", None)
+        try:
+            death = (memory.died(map_id, at, level=level, who=who, save=False)
+                     if soon is not None else memory.died(map_id, at, level=level, who=who))
+            if soon is not None:
+                soon()
+            if (death.camp(time.time())
+                    or memory.camp_at(map_id, at, time.time(), level) is not None):
+                self.policy_context.camp_left(map_id, at[0], at[1])
+                self.say("  died in a death camp: left once up")
+        except Exception as exc:                # the release is made: a record never undoes it
+            self.say(f"  the death was not kept: {type(exc).__name__}: {exc}")
+
+    def end_session(self, timeout: float = RECORD_FLUSH_S) -> None:
+        """What a session's end keeps: the deaths still being saved, waited for at most
+        `timeout` (V327); the process's writer goes on with any left, and its exit waits for
+        them again (`route_memory.EXIT_FLUSH_S`)."""
+        flush = getattr(getattr(self.client, "route_memory", None), "flush", None)
+        if flush is not None and flush(timeout) is False:
+            self.say(f"  deaths still being saved after {timeout:.0f} s: the writer goes on")
 
     def _wait(self, state) -> Result:
         return Result(SkillOutcome.SUCCEEDED)
