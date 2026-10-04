@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 
 from jev.guide.path import Path, PathStatus
 from jev.guide.route_memory import MAX_PER_MAP, RouteMemory, nearest_height
@@ -561,3 +562,100 @@ def test_every_walk_from_one_spot_through_one_camp_is_refused_by_the_first_refus
     asked = corridor.asked
     assert query.path(0, (-150.0, 0.0, 60.0), (330.0, 0.0, 60.0)).detail == CAMP_REFUSED
     assert corridor.asked - asked > 1, "from 50 yards on, searched again"
+def test_deaths_saved_on_the_writer_are_one_save_at_a_time_and_none_is_lost(tmp_path):
+    """V327: every bot of a hive farm process shares one route memory, and each death's save
+    was its own, made on the dead character's worker: up to 274 dead characters stood waiting
+    on their saves at once (29 Sep 13:30). Kept in memory at once, the deaths are saved by the
+    memory's one writer, one save at a time, each writing every death asked for before it."""
+    import time
+
+    from jev.guide.route_memory import RouteMemory as Base
+
+    running, most, saves, by = [0], [0], [0], set()
+    guard = threading.Lock()
+
+    class Slow(Base):
+        def _save(self):
+            with guard:
+                by.add(threading.get_ident())
+                running[0] += 1
+                most[0] = max(most[0], running[0])
+                saves[0] += 1
+            time.sleep(0.05)
+            super()._save()
+            with guard:
+                running[0] -= 1
+
+    memory = Slow(tmp_path / "route-memory.json")
+
+    def die(i):
+        memory.died(0, (200.0 * i, 0.0), level=5, who=i, save=False)
+        memory.save_soon()
+
+    threads = [threading.Thread(target=die, args=(i,)) for i in range(40)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(memory.dangers) == 40, "every death in memory at once"
+    assert memory.flush(5.0) is True
+    assert most[0] == 1 and saves[0] < 40, "one writer, the deaths of a save's wait in one"
+    assert sorted(d.who for d in Base(tmp_path / "route-memory.json").dangers) == list(range(40))
+    assert len(by) == 1 and threading.get_ident() not in by, "saved on the one writer"
+
+
+def test_a_flush_is_bounded_and_a_memory_with_no_file_has_nothing_to_wait_for(tmp_path):
+    """V327: a session's end waits for its deaths' saves, but no longer than it is given: in
+    the hive's hour from 13:00 on 29 Sep a save waited a median of 2,526 s for its lock."""
+    import time
+
+    from jev.guide.route_memory import RouteMemory as Base
+
+    freed = threading.Event()
+
+    class Held(Base):
+        def _save(self):                    # the hive's lock, held by another farm process
+            freed.wait(5.0)
+            super()._save()
+
+    memory = Held(tmp_path / "route-memory.json")
+    memory.died(0, (0.0, 0.0), save=False)
+    memory.save_soon()
+    started = time.monotonic()
+    assert memory.flush(0.2) is False
+    assert time.monotonic() - started < 1.0
+    freed.set()
+    assert memory.flush(5.0) is True
+    assert len(Base(tmp_path / "route-memory.json").dangers) == 1
+    nothing = Base()
+    nothing.died(0, (0.0, 0.0), save=False)
+    nothing.save_soon()
+    assert nothing.flush(0.0) is True
+
+
+def test_a_death_still_being_saved_when_the_process_exits_is_saved(tmp_path):
+    """V327 (the review of 29 Sep 14:51 of the autofixer's V326): a record on a daemon thread
+    of its own was killed with the process at its exit, and the next session did not know
+    the character died there. The writer is waited for at the exit, `EXIT_FLUSH_S` at most."""
+    import subprocess
+    import sys
+    from pathlib import Path as FilePath
+
+    root = FilePath(__file__).resolve().parents[1]
+    file = tmp_path / "route-memory.json"
+    script = (
+        "import sys, time\n"
+        f"sys.path.insert(0, {str(root)!r})\n"
+        "from jev.guide.route_memory import RouteMemory\n"
+        "class Slow(RouteMemory):\n"
+        "    def _save(self):\n"
+        "        time.sleep(0.5)\n"
+        "        super()._save()\n"
+        f"memory = Slow({str(file)!r})\n"
+        "memory.died(0, (10.0, 20.0), level=7, who=576, save=False)\n"
+        "memory.save_soon()\n"
+    )
+    done = subprocess.run([sys.executable, "-c", script], timeout=60)
+    assert done.returncode == 0
+    kept = RouteMemory(file).dangers
+    assert [(d.x, d.y, d.who) for d in kept] == [(10.0, 20.0, 576)]

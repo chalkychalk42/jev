@@ -1891,6 +1891,68 @@ def test_a_death_is_kept_as_the_characters_and_a_camp_another_made_is_left_too()
     assert b.policy_context.death_camp is not None, "a camp another made, left as well"
 
 
+def test_the_release_is_pressed_before_the_death_is_saved_and_never_waits_for_the_save(tmp_path):
+    """V327: in the hive's hour from 12:00 on 29 Sep a median of 2,061 s passed between a
+    dead character's release being armed and its press. The death was kept first, and its
+    save waited for the route memory's lock, which every bot of the four farm processes
+    shares (`hive.shared`): hive-576 died at 12:07:41, the server released it itself at
+    12:13:41, and its record was done at 12:27:38, when its release was cancelled, timed out.
+    Now the release comes first and the death is in memory at once, a second one there a
+    death camp as before (V307), and the save waits for the lock on the memory's writer; the
+    session's end waits for it, and no longer than it is given."""
+    import time
+
+    from jev.coach.policy import Context
+    from jev.guide.route_memory import RouteMemory
+    from jev.persist import file_lock
+
+    class Shared(RouteMemory):              # the hive's: a lock every farm process shares
+        def _save(self):
+            with file_lock(self.file.with_suffix(".lock")):
+                order.append("saved")
+                super()._save()
+
+    order = []
+    file = tmp_path / "route-memory.json"
+    holding, freed = threading.Event(), threading.Event()
+
+    def other_process():
+        with file_lock(file.with_suffix(".lock")):
+            holding.set()
+            freed.wait(10.0)
+
+    other = threading.Thread(target=other_process)
+    other.start()
+    holding.wait(5.0)
+    b = body()
+    b.client.route_memory = Shared(file)
+    b.policy_context = Context()
+    b._read = lambda: {"vitals.dead": True, "vitals.ghost": False, "char.level": 7,
+                       "char.key": 576}
+    b._position = lambda: (0.5, 0.5)
+    b.recover = SimpleNamespace(run=lambda release_only: order.append("released")
+                                or Recovered.RELEASED, detail="", graveyard=None)
+    try:
+        started = time.monotonic()
+        assert b._release(None).outcome is SkillOutcome.SUCCEEDED
+        b._position = lambda: (0.5, 0.52)          # two yards on: a death camp
+        assert b._release(None).outcome is SkillOutcome.SUCCEEDED
+        assert time.monotonic() - started < 2.0, "no release waited on the lock"
+        assert order == ["released", "released"], "pressed before any save"
+        assert b.policy_context.death_camp == (0, 48.0, 50.0), "the camp known at once"
+        said = []
+        b.say = said.append
+        started = time.monotonic()
+        b.end_session(timeout=0.3)
+        assert time.monotonic() - started < 2.0 and any("still being saved" in s for s in said)
+    finally:
+        freed.set()
+        other.join()
+    b.end_session(timeout=5.0)
+    assert "saved" in order
+    assert [d.who for d in RouteMemory(file).dangers] == [576]
+
+
 @pytest.mark.parametrize(("deaths", "graveyard_off", "expected"), [
     (1, 300.0, ["corpse"]),            # one death: a death spot, up by the body as before
     (2, 300.0, ["healer"]),            # a death camp: up at the Spirit Healer
@@ -2180,3 +2242,110 @@ def test_a_service_check_builds_on_the_reading_just_taken():
     b.client.recent_state = lambda max_age_s: None
     b.client.state = lambda: worn
     assert b._service_needed() == "durability is low", "none recent: one of its own"
+# hive-240, 28 Sep (V328): its last death in Tirisfal Glades at 12:12:34, as its session ended;
+# 6 s later the next session began as a ghost at the graveyard by the Ruins of Lordaeron, in
+# the server's zone Undercity, whose map does not hold the body, and no body was ever painted.
+TIRISFAL_FELL = (0.6500566155033448, 0.5450090807148609)
+TIRISFAL_ALIVE = (0.5623907763439764, 0.4942173763828313)
+RUINS_GHOST = (0.6237705843644803, 0.6688431131379939)
+
+
+def _tirisfal_body(tmp_path=None):
+    from jev.coach.policy import Context
+    from jev.guide.coords import bounds_by_radio_id
+
+    b = body()
+    b.client.bounds = bounds_by_radio_id("data/zones-tbc-243.json")[4049]   # the guide's frame
+    if tmp_path is not None:
+        b.purse_memory = tmp_path / "character-0b15a092.purse.json"
+    b.policy_context = Context()
+    b._wait_out_sickness = lambda: 0.0
+    return b
+
+
+def _undercity_ghost():
+    from jev.world.state_v1 import Char, Pos, Vitals
+
+    return seen(char=Char(level=2, faction="horde"), vitals=Vitals(hp=0.0, dead=False, ghost=True),
+                pos=Pos(mx=RUINS_GHOST[0], my=RUINS_GHOST[1], zone="Undercity"))
+
+
+def test_where_the_character_fell_is_kept_the_moment_its_death_is_read(tmp_path):
+    """V328: hive-240's session ended at its death; the next began as a ghost the server had
+    released beside a capital's Spirit Healer, with no body painted, and aborted its corpse
+    run about 1,797 times a session for 27 hours. The death read, where it fell is in the
+    purse file, and the next session's ghost walks there."""
+    from jev.world.state_v1 import Pos, Vitals
+
+    b = _tirisfal_body(tmp_path)
+    b.observe(seen(pos=Pos(mx=TIRISFAL_ALIVE[0], my=TIRISFAL_ALIVE[1], zone="Tirisfal")))
+    b.observe(seen(pos=Pos(mx=TIRISFAL_FELL[0], my=TIRISFAL_FELL[1], zone="Tirisfal"),
+                   vitals=Vitals(hp=0.0, dead=True, ghost=False)))
+    later = _tirisfal_body(tmp_path)                 # the next session, begun as a ghost
+    later.recover.read = lambda: {"vitals.dead": False, "vitals.ghost": True,
+                                  "pos.mx": RUINS_GHOST[0], "pos.my": RUINS_GHOST[1]}
+    walked = []
+    later._short_of_body = lambda point: walked.append(point) or True
+    later.recover.reach = None
+    later._in_reclaim_reach = lambda ghost, corpse: None
+    later.recover.run_spirit_healer = lambda: pytest.fail("the body is known")
+    import jev.clients.recover
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(jev.clients.recover.time, "sleep", lambda seconds: None)
+        result = later._recover(_undercity_ghost())
+    assert walked and walked[0] == pytest.approx(TIRISFAL_FELL)
+    assert result.code == "still_ghost", "walked there; the popup is the next look's"
+
+
+def test_a_ghost_nothing_knows_the_body_of_gets_up_at_the_spirit_healer(tmp_path):
+    """V328: with no body painted, none kept and none told, the corpse run aborted at once,
+    'a ghost with no corpse position', and was armed again half a second later: 858,365
+    times on 29 Sep. Now it takes the Spirit Healer beside it, sickness and all; and one the
+    healer does not raise either is an abort the policy waits on (`Context.death_waiting`)."""
+    b = _tirisfal_body(tmp_path)
+    b.recover.read = lambda: {"vitals.dead": False, "vitals.ghost": True,
+                              "pos.mx": RUINS_GHOST[0], "pos.my": RUINS_GHOST[1]}
+    b.recover.walk_to = lambda point: pytest.fail("no body to walk to")
+    raised = []
+    b.recover.run_spirit_healer = lambda: raised.append(b.recover.graveyard) or Recovered.ALIVE
+    result = b._recover(_undercity_ghost())
+    assert (result.outcome, result.code) == (SkillOutcome.SUCCEEDED, "alive")
+    assert "where the body lies is unknown" in result.detail and len(raised) == 1
+    b.recover.run_spirit_healer = lambda: Recovered.STILL_GHOST
+    result = b._recover(_undercity_ghost())
+    assert (result.outcome, result.code) == (SkillOutcome.ABORTED, "no_corpse")
+    assert "Spirit Healer did not raise it" in result.detail
+
+
+def test_the_servers_word_on_the_body_is_taken_where_the_client_has_it(tmp_path):
+    """V328: the hive's bridge reports every dead or ghost bot's corpse (`hive.client`'s
+    `corpse_world`); the live client has none, and walks by where it saw itself fall."""
+    from jev.guide.coords import map_to_world
+
+    b = _tirisfal_body(tmp_path)
+    corpse = map_to_world(*TIRISFAL_FELL, b.client.bounds)
+    b.client.corpse_world = lambda: (0, corpse[0], corpse[1])
+    passed = []
+    b.recover.run = lambda corpse_point: passed.append(corpse_point) or Recovered.ALIVE
+    assert b._recover(_undercity_ghost()).code == "alive"
+    assert passed[0] == pytest.approx(TIRISFAL_FELL)
+    b.client.corpse_world = lambda: (1, corpse[0], corpse[1])          # another continent's
+    assert b._known_body() is None
+
+
+def test_a_ghost_read_with_no_death_seen_fell_where_it_last_stood_alive(tmp_path):
+    """V328: a session that never read its character dead (released by the server or across
+    a session's end) keeps where it last stood alive, which the session's end keeps too; up
+    again, nothing is kept of the body."""
+    from jev.world.state_v1 import Pos
+
+    b = _tirisfal_body(tmp_path)
+    b.observe(seen(pos=Pos(mx=TIRISFAL_ALIVE[0], my=TIRISFAL_ALIVE[1], zone="Tirisfal")))
+    b.end_session(timeout=0.0)
+    later = _tirisfal_body(tmp_path)
+    later.observe(_undercity_ghost())
+    assert later._known_body() == pytest.approx(TIRISFAL_ALIVE)
+    later.recover.corpse = (0.1, 0.1)
+    later.observe(seen(pos=Pos(mx=0.6, my=0.6, zone="Tirisfal")))
+    assert later._fell is None and later.recover.corpse is None
+    assert _tirisfal_body(tmp_path)._fell is None, "and the purse file forgets it"
