@@ -81,6 +81,23 @@ DETOUR = "detour:"
 # on 29 Sep, and 990 of the hive's 1,112 rib-to-rib moves in 8 h came within 10 minutes of a
 # death. Bars of a level below the character's are dropped as it rises.
 RIB_BAR = "rib-bar:"
+# A quest step passed over - failed again after its rib, refused, or passed by for an accept above
+# the level or a lost prerequisite - is passed for the level, not for good (V342): kept among the
+# retried steps with `PASSED` + its id + "@" + the level it was passed at, it is returned to from
+# a grind once the character has a level more (`_look_back`), when its quest can be worked then.
+# Each return is kept as `RETURNED` + id + "@" + level, once a level, and after `RETURNS` of them
+# the step is passed for good. A step passed before levels were kept counts as passed at the level
+# first read. In the hive's 4 Oct 16:26-18:30, 781 of the 1,040 quest steps its bots came to were
+# left without being done, and their playheads held 5,023 quests passed over that the characters'
+# levels allowed, about 2.98 M experience at those levels, against 1.26 M in the 4,236 handed in.
+PASSED = "passed:"
+RETURNED = "returned:"
+RETURNS = 3
+# A quest is gone back to at most this many levels past its band's top, its own level and five
+# (a quest step's band is its MinLevel to its QuestLevel and three, as the generator and the
+# hive's route builder make every one): TBC pays a quest in full to there, then 80% of it, 60,
+# 40, 20 and 10 (`Quest::XPValue`), and the walk back is to a quest going grey.
+RETURN_LEVELS_ABOVE = 2
 # How far an outgrown guide goes for a hand-in, in map fractions: a quarter of the zone's map,
 # 580 to 870 yards across Elwynn. A hand-in on the way out, not a trip back (V162).
 OUTGROWN_REACH = 0.25
@@ -230,6 +247,9 @@ class ClientRuntime:
     # The last walk along the spine past an accept above the character's level, by what it
     # depends on (`_ahead`), so a character standing at the accept does not walk it each tick.
     _ahead_seen: tuple = field(default=(), init=False)
+    # The last look back along the spine for a step to return to (`_behind`), by what it
+    # depends on, so a character grinding does not walk the spine each tick.
+    _behind_seen: tuple = field(default=(), init=False)
 
     counters: Counters = field(default_factory=Counters)
     armed: Armed | None = None
@@ -322,6 +342,7 @@ class ClientRuntime:
                         and not r.endswith(f"@{state.char.level}")}
             self._retried = ((self._retried - unlevelled - outgrown)
                              | {f"{r}@{state.char.level}" for r in unlevelled})
+            self._mark_passed(state.char.level)
         if (not self.finished and self.outgrown_at is not None
                 and state.char.level is not None and state.char.level >= self.outgrown_at
                 and verdict.event not in (Event.FAIL, Event.DEATH)
@@ -337,8 +358,9 @@ class ClientRuntime:
         # armed for it (V308): armed a tick early, a hunt or a walk began and was cancelled.
         if verdict.event in (Event.NONE, Event.ADVANCE) and not self.finished:
             beyond = self._abandoned_now(state)
-            if beyond is not None:
+            if beyond is not None and not self._back_from_detour(state):
                 self.tracker.enter(beyond, state)
+            if beyond is not None:
                 self._tracker_event = "rejoin_or_skip"
         if self._leave_camp(state):
             self._tracker_event = "rejoin_or_skip"
@@ -368,13 +390,17 @@ class ClientRuntime:
             else:
                 lost = self._unfinished_hand_in(state, step)
             if lost is not None:
-                self.tracker.enter(lost, state)
+                # A step entered on the way goes back where the character was going (V342).
+                if step != self.tracker.step_id or not self._back_from_detour(state):
+                    self.tracker.enter(lost, state)
                 self._tracker_event = "rejoin_or_skip"
             elif stayed and (detour := self._handin_detour(state)) is not None:
                 self._retried.add(f"{DETOUR}{detour}@{state.char.level}")
                 self.tracker.enter(detour, state, rejoin_to=before)
                 self._tracker_event = "rejoin_or_skip"
             elif self._below_level(state):
+                self._tracker_event = "rejoin_or_skip"
+            elif self._look_back(state):
                 self._tracker_event = "rejoin_or_skip"
         node = self.graph.get(self.tracker.step_id)
         state = self._with_guide(state, verdict)
@@ -494,7 +520,8 @@ class ClientRuntime:
         if beyond is None:
             return False
         self._retried.add(node.id)
-        self.tracker.enter(beyond, state)
+        if not self._back_from_detour(state):
+            self.tracker.enter(beyond, state)
         self._tracker_event = "rejoin_or_skip"
         if self.on_progress is not None:
             self._progress()
@@ -577,6 +604,8 @@ class ClientRuntime:
         if (self.armed is not None
                 and not scripted.own_rule(self.armed.rule).startswith("wait.step")):
             return False                    # a meal or a service under way finishes first
+        if self._back_from_detour(state):
+            return True         # a step entered on the way is not waited for (V342)
         level = state.char.level
         if level is None or (self._elsewhere_looked[0] == step
                              and 0.0 <= state.t - self._elsewhere_looked[1] < WAIT_LOOK_S):
@@ -704,10 +733,15 @@ class ClientRuntime:
                 or state.quests is None):
             return None
         quest = next((q for q in state.quests if q.quest_id == node.quest_id), None)
+        objectives = [n for n in self.graph.nodes
+                      if n.quest_id == node.quest_id and n.kind is StepKind.QUEST_OBJECTIVE]
         if quest is None or quest.complete is not False or not any(
-                n.id in self._retried for n in self.graph.nodes
-                if n.quest_id == node.quest_id and n.kind is StepKind.QUEST_OBJECTIVE):
+                n.id in self._retried for n in objectives):
             return None
+        held = {q.quest_id: q for q in state.quests}
+        if (step_id in (None, self.tracker.step_id) and not self.tracker.memory.rejoin_to
+                and any(self._returnable(n, state, held) for n in objectives)):
+            return None             # its objective is returned to first (`_look_back`, V342)
         step = node
         while step is not None and step.quest_id == node.quest_id and step.next:
             step = self.graph.get(step.next[0])
@@ -811,10 +845,9 @@ class ClientRuntime:
                 self._retried.update(passed)
                 self.tracker.enter(step, state)
             else:
-                # A quest in the log behind the accept: done on the way, once a level, and
-                # back to the accept after, as a hand-in on the way is (`DETOUR`).
-                self._retried.add(f"{DETOUR}{step}@{level}")
-                self.tracker.enter(step, state, rejoin_to=accept.id)
+                # A step behind the accept: done on the way, once a level, and back to the
+                # accept after, as a hand-in on the way is (`DETOUR`, `_return_to`).
+                self._return_to(step, state, accept.id)
             return True
         if on_rib:
             return False                                  # nothing to do yet: it waits on
@@ -859,22 +892,13 @@ class ClientRuntime:
                     and node.quest_id not in self.completed and node.id not in self._retried):
                 passed.append(node.id)
             cursor = node.next[0] if node.next else None
-        cursor, seen = self.graph.entry, set()
-        while found is None and cursor is not None and cursor != accept.id and cursor not in seen:
-            seen.add(cursor)
-            node = self._nodes.get(cursor)
-            if node is None:
-                break
-            quest = held.get(node.quest_id)
-            if (quest is not None and node.quest_id not in self.completed
-                    and not self._detour_spent(node.id, level)
-                    and ((node.kind is StepKind.QUEST_TURNIN and quest.complete is True)
-                         or self._doable(node, level, held, lost))):
-                # A hand-in passed over is tried again, once a level (`DETOUR`): Sting of the
-                # Scorpid and Vile Familiars sat complete in hive-386's log, their hand-ins
-                # passed over, while it waited.
-                found = (node.id, ())
-            cursor = node.next[0] if node.next else None
+        if found is None:
+            # A hand-in passed over is tried again, once a level (`DETOUR`): Sting of the
+            # Scorpid and Vile Familiars sat complete in hive-386's log, their hand-ins passed
+            # over, while it waited; and a step passed over at a level below, its quest's work
+            # open to the character now (`_behind`, V342).
+            behind = self._behind(state, accept.id)
+            found = (behind, ()) if behind is not None else None
         self._ahead_seen = (key, found)
         return found
 
@@ -896,6 +920,172 @@ class ClientRuntime:
             case StepKind.QUEST_TURNIN:
                 return quest is not None and quest.complete is True
         return False
+
+    # -- steps passed over, and returned to (V342) ---------------------------
+
+    def _mark_passed(self, level: int) -> None:
+        """Each quest step among the retried steps keeps the level it was passed at (`PASSED`);
+        one without, from before, counts as passed at `level`, the level first read."""
+        plain = {r for r in self._retried if ":" not in r}
+        marks = {r: r[len(PASSED):].rpartition("@")[0] for r in self._retried
+                 if r.startswith(PASSED)}
+        stale = {r for r, step in marks.items() if step not in plain}
+        fresh = {f"{PASSED}{r}@{level}" for r in plain - set(marks.values())
+                 if (n := self._nodes.get(r)) is not None and n.quest_id is not None}
+        if fresh or stale:
+            self._retried = (self._retried - stale) | fresh
+
+    def _passed_at(self, step_id: str) -> int | None:
+        for r in self._retried:
+            if r.startswith(PASSED):
+                step, _, at = r[len(PASSED):].rpartition("@")
+                if step == step_id and at.isdigit():
+                    return int(at)
+        return None
+
+    def _returns(self, step_id: str) -> int:
+        return sum(1 for r in self._retried
+                   if r.startswith(RETURNED) and r[len(RETURNED):].rpartition("@")[0] == step_id)
+
+    def _returnable(self, node, state: State, held: dict) -> bool:
+        """Can the character go back to this step behind it on the spine, now: in its zone, not
+        waiting (`Context.step_waiting`), not yet returned to at this level, and its quest's work
+        open to it - an accept of a quest not taken, at its level, whose prerequisites are handed
+        in; an objective of a quest in the log not complete; a hand-in of one complete. A step
+        passed over (`PASSED`) only from a level above the one it was passed at, and at most
+        `RETURNS` times, and not once it is grey (`RETURN_LEVELS_ABOVE`); a hand-in of a quest
+        complete in the log, once a level, as before."""
+        level = state.char.level
+        if (node.quest_id is None or node.quest_id in self.completed or level is None
+                or node.route_blocked_reason or self._detour_spent(node.id, level)
+                or self.policy_context.step_waiting(node.id, state.t) is not None
+                or (node.coord_zone_id is not None and state.pos.coord_zone_id is not None
+                    and node.coord_zone_id != state.pos.coord_zone_id)):
+            return False
+        quest = held.get(node.quest_id)
+        if node.kind is StepKind.QUEST_TURNIN:
+            return quest is not None and quest.complete is True
+        if self._returns(node.id) >= RETURNS:
+            return False
+        if node.id in self._retried:
+            at = self._passed_at(node.id)
+            if at is None or at >= level:
+                return False                # passed at this level: a level may cure it
+        if level > node.level[1] + RETURN_LEVELS_ABOVE:
+            return False                    # grey to the character by now
+        match node.kind:
+            case StepKind.QUEST_ACCEPT:
+                return (quest is None and level >= node.level[0]
+                        and (not node.quest_prerequisites
+                             or any(all(q in self.completed for q in group)
+                                    for group in node.quest_prerequisites)))
+            case StepKind.QUEST_OBJECTIVE:
+                return quest is not None and quest.complete is not True
+        return False
+
+    def _behind(self, state: State, upto: str) -> str | None:
+        """The first step on the spine before `upto` the character can go back to now
+        (`_returnable`), in the guide's order, so a quest's accept comes before its objective
+        and a quest that unlocks another before it; `None` with none or the log unread."""
+        if state.quests is None or state.char.level is None:
+            return None
+        held = {q.quest_id: q for q in state.quests}
+        key = (upto, state.char.level, state.pos.coord_zone_id, frozenset(self._retried),
+               frozenset(self.completed), tuple(sorted((q, held[q].complete) for q in held)),
+               int(state.t // WAIT_LOOK_S))
+        if self._behind_seen and self._behind_seen[0] == key:
+            return self._behind_seen[1]
+        first, cursor, seen = None, self.graph.entry, set()
+        while cursor is not None and cursor != upto and cursor not in seen:
+            seen.add(cursor)
+            node = self._nodes.get(cursor)
+            if node is None:
+                break
+            if first is None and self._returnable(node, state, held):
+                first = node.id
+            cursor = node.next[0] if node.next else None
+        # Only what lies behind: `upto` off the spine (a rib, an alternative) has no behind.
+        found = first if cursor == upto else None
+        self._behind_seen = (key, found)
+        return found
+
+    def _return_to(self, step_id: str, state: State, rejoin_to: str | None) -> None:
+        """Go back to `step_id`, then on to `rejoin_to`: no longer passed over, and once at the
+        level (`DETOUR`, `RETURNED`)."""
+        level = state.char.level
+        at = self._passed_at(step_id)
+        self._retried.discard(step_id)
+        if at is not None:
+            self._retried.discard(f"{PASSED}{step_id}@{at}")
+        self._retried |= {f"{DETOUR}{step_id}@{level}", f"{RETURNED}{step_id}@{level}"}
+        self.tracker.enter(step_id, state, rejoin_to=rejoin_to)
+
+    def _look_back(self, state: State) -> bool:
+        """From a grind - a rib with a way back, or a level gate the character is below - the
+        first step behind on the spine it can go back to now (`_behind`), and then on where it
+        was going; at a hand-in of a quest not complete, the quest's own objective first. A
+        quest step passed over at a level below is returned to, as a hand-in passed over is
+        once a level (V342): passed over for good, 5,023 quests the characters' levels allowed
+        sat behind the hive's playheads at 19:20 on 4 Oct, and they ground instead.
+
+        It cannot loop: each step is returned to once a level and at most `RETURNS` times, and
+        one that fails, waits or is refused on the way goes straight back (`_back_from_detour`).
+        `True` when the playhead moved."""
+        node = self._nodes.get(self.tracker.step_id)
+        v, level = state.vitals, state.char.level
+        if (node is None or self.finished or level is None or state.quests is None
+                or v.combat is True or v.dead is not False or v.ghost is not False
+                or self._leaving == node.id):
+            return False
+        if node.kind is StepKind.QUEST_TURNIN and not self.tracker.memory.rejoin_to:
+            held = {q.quest_id: q for q in state.quests}
+            quest = held.get(node.quest_id)
+            if quest is None or quest.complete is not False:
+                return False
+            own = next((n for n in self.graph.nodes if n.quest_id == node.quest_id
+                        and n.kind is StepKind.QUEST_OBJECTIVE
+                        and self._returnable(n, state, held)), None)
+            if own is None:
+                return False
+            self._return_to(own.id, state, node.id)
+            return True
+        if node.kind is StepKind.GRIND:
+            upto = self.tracker.memory.rejoin_to
+        elif node.kind is StepKind.DING_GATE and level < node.level[1]:
+            upto = node.id
+        else:
+            return False
+        if upto is None or upto not in self._nodes:
+            return False
+        found = self._behind(state, upto)
+        if found is None:
+            return False
+        self._return_to(found, state, upto)
+        return True
+
+    def _on_detour(self) -> bool:
+        """Is the playhead on a step entered on the way, with somewhere to go back to: a step
+        returned to, a hand-in on the way (V234), an alternative leading on past its step?"""
+        node = self._nodes.get(self.tracker.step_id)
+        back = self.tracker.memory.rejoin_to
+        return (node is not None and node.kind is not StepKind.GRIND and back is not None
+                and back in self._nodes and back != node.id)
+
+    def _repass(self, state: State) -> None:
+        """A step returned to at this level and left undone is passed again, for the level."""
+        step, level = self.tracker.step_id, state.char.level
+        if level is not None and f"{RETURNED}{step}@{level}" in self._retried:
+            self._retried |= {step, f"{PASSED}{step}@{level}"}
+
+    def _back_from_detour(self, state: State) -> bool:
+        """Leave a step entered on the way for where the character was going, rather than the
+        step past its quest on the spine, which lies behind (V342). `True` when it moved."""
+        if not self._on_detour():
+            return False
+        back = self.tracker.memory.rejoin_to
+        self._repass(state)
+        self.tracker.enter(back, state)
+        return True
 
     def _rib(self, level: int | None, near: tuple[float, float] | None = None, *,
              short: bool = False, preferred=None, among=None):
@@ -1006,7 +1196,9 @@ class ClientRuntime:
                 beyond = self._past_abandoned_quest(verdict)
                 back = self.tracker.memory.rejoin_to
                 if back is not None and self._detour_spent(self.tracker.step_id, None):
-                    # A hand-in on the way that could not be done: straight back, no rib.
+                    # A hand-in on the way that could not be done: straight back, no rib. A
+                    # step returned to is passed again, for the level (V342).
+                    self._repass(state)
                     self.tracker.enter(back, state)
                 elif beyond is not None:
                     # The rest of a quest whose accept was passed over: its objective and
