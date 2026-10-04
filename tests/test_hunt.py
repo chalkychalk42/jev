@@ -738,3 +738,120 @@ def test_a_hunt_pass_reads_once_between_fights():
 
     gaps = [b - a for a, b in pairwise(at_fight)]
     assert gaps and all(g == 1 for g in gaps), gaps
+
+
+# hive-260, a level 13 character on a grind rib of six spawns (run 20261004T165752-78d354):
+# its lap stood at five stations, and the walk to the sixth was cut by combat on arrival.
+RIB_260 = ((-9808.2, -511.7, 31.0), (-9769.7, -573.1, 36.8), (-9726.3, -643.8, 45.2),
+           (-9770.8, -653.4, 39.3), (-9691.7, -577.6, 49.8), (-9751.4, -744.5, 41.5))
+
+
+class _Laps:
+    """A station chooser whose laps come in the order given, lap after lap."""
+
+    def __init__(self, *laps):
+        self.laps = [list(lap) for lap in laps]
+
+    def order(self, tour):
+        return self.laps.pop(0) if self.laps else list(tour)
+
+    def leave(self, *_a):
+        pass
+
+    walking = died = leave
+
+    def arrive(self, *_a):
+        pass
+
+
+def _cut_at(stop):
+    """A walk that arrives, except at `stop`, where combat cuts it as the supervisor does."""
+    from jev.run.supervisor import Cancelled
+
+    walked = []
+
+    def approach(p, **_kw):
+        walked.append(tuple(p))
+        if tuple(p) == stop:
+            raise Cancelled("combat interrupted the leg or service")
+        return True
+    return approach, walked
+
+
+def test_a_hunt_cut_short_by_combat_goes_on_from_where_the_character_stands():
+    """V343: hive-260 stood at five of its rib's six stations, its walk to the sixth was cut by
+    combat on arrival, and 22 s after the fight the hunt armed again walked 240 yards back to
+    the first, its tour drawn afresh (run 20261004T165752-78d354, 4 Oct 17:00). Of the 5,495
+    hunts begun again so on 4 Oct 16:26-18:30, 3,460 walked first to the station the cut hunt
+    had begun at. Kept, the hunt goes on from the station nearest the character not stood at
+    this lap, the one its cut walk was going to, and walks none of the five again."""
+    from jev.run.hunt import Place
+    from jev.run.supervisor import Cancelled
+
+    lap1 = list(RIB_260)
+    lap2 = [RIB_260[3], RIB_260[2], RIB_260[0], RIB_260[1], RIB_260[4], RIB_260[5]]
+    place = Place()
+    approach, walked = _cut_at(RIB_260[5])
+    h, _ = _hunt([Fought.NO_TARGET], [(0, 1)], approach=approach)
+    h.stations, h.place, h.where = _Laps(lap1, lap2), place, lambda: None
+    with pytest.raises(Cancelled):
+        h.run(RIB_260[0], 90.0, timeout_s=5, spawns=RIB_260)
+    assert walked == lap1 and place.post == 5 and place.arrived == 5
+    h2, _ = _hunt([Fought.NO_TARGET], [(0, 1)], approach=lambda p, **kw: walked.append(tuple(p)) or True)
+    h2.stations, h2.place = h.stations, place
+    h2.where = lambda: (-9751.0, -744.0)               # where the fight left it
+    walked.clear()
+    assert h2.run(RIB_260[0], 90.0, timeout_s=5, spawns=RIB_260) is Hunted.UNREACHABLE
+    assert h2.resumed and walked[0] == RIB_260[5], "the cut walk taken up, not the tour's head"
+    assert walked[1:] == lap2, "then the next lap; none of the five walked again in this one"
+    assert place.posts == [], "walked the whole disk: the next hunt begins afresh"
+
+
+def test_a_resumed_hunt_takes_the_nearest_station_left_in_its_lap():
+    """V343: a fight moves the character. Of the 5,495 resumed hunts, the next walk went a
+    median 104 yards where the nearest station not yet stood at that lap lay 57 yards off: the
+    walk cut short is taken up from where the character stands, its station kept in the lap."""
+    from jev.run.hunt import Place
+    from jev.run.supervisor import Cancelled
+
+    place = Place()
+    approach, walked = _cut_at(RIB_260[2])
+    h, _ = _hunt([Fought.NO_TARGET], [(0, 1)], approach=approach)
+    h.stations, h.place = _Laps(list(RIB_260), list(RIB_260)), place
+    with pytest.raises(Cancelled):
+        h.run(RIB_260[0], 90.0, timeout_s=5, spawns=RIB_260)
+    assert walked == list(RIB_260[:3])
+    walked.clear()
+    h2, _ = _hunt([Fought.NO_TARGET], [(0, 1)], approach=lambda p, **kw: walked.append(tuple(p)) or True)
+    h2.stations, h2.place = h.stations, place
+    h2.where = lambda: RIB_260[4][:2]                   # chased off toward the fifth
+    assert h2.run(RIB_260[0], 90.0, timeout_s=5, spawns=RIB_260) is Hunted.UNREACHABLE
+    assert walked[:4] == [RIB_260[4], RIB_260[3], RIB_260[2], RIB_260[5]], walked
+    assert RIB_260[0] not in walked[:4] and RIB_260[1] not in walked[:4]
+
+
+def test_a_hunts_place_is_kept_only_for_its_own_tour_and_not_for_long():
+    """V343: a place older than `PLACE_KEEP_S`, of another tour, or of a hunt that ended
+    (done, dead, the disk walked, timed out, camped) begins the next hunt at its tour's head."""
+    from jev.run.hunt import PLACE_KEEP_S, Place
+    from jev.run.supervisor import Cancelled
+
+    now = [1000.0]
+    for later, spawns, fresh in ((10.0, RIB_260, True), (PLACE_KEEP_S + 1.0, RIB_260, False),
+                                 (10.0, RIB_260[:5], False)):
+        place = Place()
+        approach, _walked = _cut_at(RIB_260[2])
+        h, _ = _hunt([Fought.NO_TARGET], [(0, 1)], approach=approach)
+        h.place, h.clock = place, lambda: now[0]
+        with pytest.raises(Cancelled):
+            h.run(RIB_260[0], 90.0, timeout_s=5, spawns=RIB_260)
+        now[0] += later
+        h2, _ = _hunt([Fought.NO_TARGET], [(0, 1)])
+        h2.place, h2.clock = place, lambda: now[0]
+        h2.run(RIB_260[0], 90.0, timeout_s=5, spawns=spawns)
+        assert h2.resumed is fresh, (later, len(spawns))
+    place = Place()
+    h, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)])
+    h.place = place
+    assert h.run(RIB_260[0], 90.0, timeout_s=5, spawns=RIB_260) is Hunted.DONE
+    assert place.posts == [] and not place.fresh(RIB_260, place.at or 0.0)
