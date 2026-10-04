@@ -339,9 +339,11 @@ class Hunt:
         self.detail = ""
         self.until = None
         self.stuck = self.widened = False
+        # The kind's own name id, a grind's pull for experience included (`Paying`, V344): the
+        # station learning reads its objective from it (`choices.backfill_hunts`).
         event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
-                                    "wanted_name_id": name_id, "timeout_s": timeout_s,
-                                    "spawns": len(spawns)})
+                                    "wanted_name_id": getattr(name_id, "own", name_id),
+                                    "timeout_s": timeout_s, "spawns": len(spawns)})
         deadline = time.monotonic() + timeout_s
         # Where the target spawns when the guide knows it; rings round the centre when not.
         # Each lap's order is learned, when there is a choice to learn (`stations`).

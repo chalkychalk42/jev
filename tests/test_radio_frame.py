@@ -683,6 +683,8 @@ CLIENT_API = frozenset({
     "MailFrame", "GetMouseFocus", "WorldFrame", "SpellIsTargeting", "GetCursorInfo",
     # The stock nameplate bindings' state, globals FrameXML keeps (V320).
     "NAMEPLATES_ON", "FRIENDNAMEPLATES_ON",
+    # Whether a unit is tagged, and by the player: the stock target frame's grey (V344).
+    "UnitIsTapped", "UnitIsTappedByPlayer",
 })
 
 FORBIDDEN = (

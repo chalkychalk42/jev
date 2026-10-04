@@ -456,6 +456,16 @@ def test_a_spell_waiting_for_a_target_is_painted(targeting, expected):
     assert values["bars.targeting"] is expected
 
 
+@pytest.mark.parametrize(("state", "expected"), [
+    ({"tapped": 1}, True), ({"tapped": 1, "tappedByMe": 1}, False), ({}, False),
+    ({"tapped": 1, "hasTarget": False}, None)])
+def test_a_target_tagged_by_another_is_painted_as_the_target_frame_greys_it(state, expected):
+    """V344: `UnitIsTapped` and not `UnitIsTappedByPlayer`, the stock target frame's test;
+    unknown with nothing selected."""
+    values = radio.unpack(payload(paint(state))[:PAYLOAD_CELLS])
+    assert values["target.tapped"] is expected
+
+
 def test_the_characters_own_resolved_swings_are_counted_hits_and_misses():
     """2.4.3 gives the Attack action no range; a resolved swing is the reach signal."""
     me, other = "0x0000000000000042", "0x0000000000000099"
