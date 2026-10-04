@@ -109,6 +109,13 @@ SPOT_MIN_KEEP = 10.0
 # ended, 12.5 an hour (39 deaths in 3.1 h).
 # Fifteen minutes would send it back while the spot still killed it at two and a half times
 # the rate elsewhere, and a camp costs its own character a rib, not a stand (V340).
+#
+# A death inside another character's held camp counting at its level makes a camp of the
+# dying character's own at once (V347). While camps barred every character, such a death
+# foretold the next one there no more than an ordinary death (16:26-18:45 on 4 Oct: 7.1 an
+# alive hour within 100 yards in the hour after, against 8.3); once others' camps were walked
+# (V339, 20:30-21:50), 26.8 against 11.3: 394 of the 890 deaths inside another's camp had the
+# same character dead there again within the hour, 253 within ten minutes.
 CAMP_YARDS = 100.0
 # A grind's hunt whose every station lies in a death camp, other characters' among them, ends
 # `camp` with this wait, taken on a rib out of every camp, or cut short at once with none, and
@@ -308,6 +315,8 @@ class RouteMemory:
         (`DANGER_S`); a death near another at about its level within `CAMP_WINDOW_S` makes
         both a death camp (V307), and one near a camp still held is a death of that camp,
         which it holds for `CAMP_S` more; each only among the deaths of the character `who`.
+        A death of a character read inside another's camp held at its level is a camp of its
+        own at once (V347).
         The death kept, a camp's when it made or fell in one. Kept in memory at once, so
         `camp_at` knows it; saved now, or with `save` false by `save_soon` (V327)."""
         now = time.time() if now is None else now
@@ -320,6 +329,11 @@ class RouteMemory:
             # there is one of the camp's, or the character was never led out and walked back
             # in (review of 28 Sep).
             held = [d for d in near if d.camp(now)]
+            # A death inside another character's held camp at its level is a camp of the
+            # character's own at once (V347).
+            inside = who is not None and any(
+                d.map_id == map_id and d.who != who and d.camp(now) and counts_for(d.level, level)
+                and math.dist((d.x, d.y), spot[:2]) <= CAMP_YARDS for d in self.dangers)
             found = next((d for d in near
                           if math.dist((d.x, d.y), spot[:2]) <= DANGER_MERGE_YARDS), None)
             if found is None:
@@ -327,7 +341,7 @@ class RouteMemory:
                 self.dangers.append(found)
             else:
                 found.at, found.level = now, level if level is not None else found.level
-            if recent or held:
+            if recent or held or inside:
                 for death in (*recent, *held, found):
                     death.camp_until = now + CAMP_S
             self._changed()
