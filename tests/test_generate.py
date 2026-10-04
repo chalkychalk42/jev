@@ -461,6 +461,65 @@ def test_a_played_guides_ribs_carry_their_creatures_levels():
     assert with_rib_levels(source, None) is source
 
 
+def test_a_window_has_a_rib_for_each_of_its_creatures_and_steps_fail_into_its_first(human):
+    """V332: one rib a window put every character of a race at a level on one creature: up to
+    38 of the hive's bots on Durotar's Scorpid Workers and 36 on Dun Morogh's Juvenile Snow
+    Leopards at once (29 Sep, 03:00-09:30). A window has up to `RIB_CREATURES` ribs in a zone,
+    each a creature of its own; the first is the one it always had, its id unchanged, and it is
+    the one steps fail into."""
+    from collections import defaultdict
+
+    from jev.guide.generate import RIB_CREATURES, rib_id
+    from jev.guide.graph import window_rib
+
+    ribs = human.ribs()
+    windows = defaultdict(list)
+    for r in ribs:
+        windows[(r.zone_id, r.level)].append(r)
+    assert any(len(w) > 1 for w in windows.values()), "one creature a window again"
+    for (zone, (lo, hi)), group in windows.items():
+        assert len(group) <= RIB_CREATURES
+        assert len({r.target_name for r in group}) == len(group), "each rib its own creature"
+        assert group[0].id == rib_id("t", group[0].zone, lo, hi), "the first's id is the window's"
+    firsts = [w[0] for w in windows.values()]
+    by_id = {r.id: r for r in ribs}
+    for node in human.nodes:
+        for edge in node.on_fail:
+            if edge.goto in by_id:
+                assert by_id[edge.goto] is window_rib(firsts, node.level[0]), node.id
+
+
+def test_characters_spread_over_the_ribs_as_good_for_their_level_and_each_keeps_its_own():
+    """V332: of the ribs paying within `RIB_SPREAD_SHARE` of the best a kill and no more than
+    `RIB_SPREAD_YARDS` further than the nearest, each character takes the one its own hash puts
+    first (`spread_rank`): replayed on the hive's rib time of 29 Sep 03:00-09:30 with each
+    window's three creatures, no rib held more than 14 characters at once, where 38 stood on
+    Durotar's Scorpid Workers. The same character always takes the same rib, and keeps it as
+    others come and go; without a character, the nearest (V323)."""
+    from collections import Counter
+
+    from jev.guide.graph import RIB_SPREAD_YARDS, rib_for
+
+    ribs = (_elwynn("wolves", (5, 7), (5, 6), (0.30, 0.72)),
+            _elwynn("boars", (5, 7), (5, 6), (0.40, 0.88)),
+            _elwynn("cutpurses", (5, 7), (5, 6), (0.42, 0.53)),
+            _elwynn("kobolds", (3, 5), (3, 3), (0.49, 0.35)),
+            _elwynn("far", (5, 7), (5, 6), (0.95, 0.20)))
+    here = (0.40, 0.66)
+    assert rib_for(ribs, 6, near=here).id == "cutpurses", "no character: the nearest"
+    picks = Counter(rib_for(ribs, 6, near=here, key=key).id for key in range(300))
+    assert set(picks) == {"wolves", "boars", "cutpurses"}, "not the far one, nor the kobolds"
+    assert min(picks.values()) > 60, picks
+    for key in range(40):
+        chosen = rib_for(ribs, 6, near=here, key=key)
+        assert chosen is rib_for(ribs, 6, near=here, key=key), "deterministic"
+        for gone in ("wolves", "boars", "cutpurses"):
+            if gone != chosen.id:
+                rest = tuple(r for r in ribs if r.id != gone)
+                assert rib_for(rest, 6, near=here, key=key) is chosen, "kept as others go"
+    assert RIB_SPREAD_YARDS < 2000
+
+
 def test_a_rib_in_a_capital_or_of_a_friendly_creature_is_no_grind_where_a_guide_is_played():
     """V331: V317 leaves a capital's box and a creature friendly to the faction out of the ribs
     it makes, but the hive's `.v2` routes, made before it, held 56 ribs in the boxes of

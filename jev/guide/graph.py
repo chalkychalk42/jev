@@ -18,6 +18,7 @@ to do and no error to explain it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import pathlib
@@ -208,9 +209,9 @@ class Graph(BaseModel):
 
     def rib_for(self, level: int | None, preferred: Node | None = None,
                 near: tuple[float, float] | None = None, short: bool = False, *,
-                barred: frozenset[str] = frozenset()) -> Node | None:
+                barred: frozenset[str] = frozenset(), key: int | str | None = None) -> Node | None:
         """The rib whose mobs suit a character of `level`. See `rib_for`."""
-        return rib_for(self.ribs(), level, preferred, near, short, barred=barred,
+        return rib_for(self.ribs(), level, preferred, near, short, barred=barred, key=key,
                        scale=frame_yards(self.nodes))
 
     def unreachable(self) -> tuple[str, ...]:
@@ -259,6 +260,15 @@ RIB_LEVELS_ABOVE = 1
 # taken: a level 5 character failed out of Echo Ridge Mine into the wolves 1,200 yards away,
 # the kobolds beside the mine passed by (run 20260924T015701-2417ae).
 RIB_XP_SHARE = 0.9
+# Characters spread over the ribs paying within this share of the best a kill and no more than
+# `RIB_SPREAD_YARDS` further than the nearest of them, each taking the one its own hash puts
+# first (`spread_rank`, V332). Replayed on the hive's rib time of 29 Sep 03:00-09:30 with each
+# window's three creatures, 85% put no rib above 14 characters at once (38 on Durotar's Scorpid
+# Workers as played) at 94.6% of the best a kill; 90%, V323's band, spread only creatures of the
+# same levels, and 30 stood on Durotar's level 6-7 Dire Mottled Boars, the only rib of a level 6
+# within it. The distance hardly mattered: 600 and 2,000 yards spread alike.
+RIB_SPREAD_SHARE = 0.85
+RIB_SPREAD_YARDS = 600.0
 # The furthest a short rib is from where its step failed (V330): a minute and a quarter at a run
 # each way, most of its five minutes grinding. Its median was 822 yards in the hive's 95 short
 # ribs from 11:00 to 15:20 on 29 Sep, and 38% were over 1,000.
@@ -341,15 +351,35 @@ def _yards(a: tuple[float, float], b: tuple[float, float],
     return math.hypot((a[0] - b[0]) * scale[0], (a[1] - b[1]) * scale[1])
 
 
-def _best(fit: list[Node], level: int, preferred: Node | None, near, scale) -> Node:
+def spread_rank(key: int | str, rib_id: str) -> int:
+    """Where `rib_id` stands for the character `key` among ribs as good as each other: a hash of
+    the two, the same in every process and session, so a character keeps its rib as others come
+    and go and characters spread over the ribs (V332)."""
+    digest = hashlib.blake2b(f"{key}|{rib_id}".encode(), digest_size=8).digest()
+    return int.from_bytes(digest, "big")
+
+
+def _best(fit: list[Node], level: int, preferred: Node | None, near, key,
+          scale) -> Node:
     """Of ribs that fit: those paying within `RIB_XP_SHARE` of the best a kill, the nearest;
-    unplaced, `preferred`, else the best."""
+    with `key`, of those within `RIB_SPREAD_SHARE` and no more than `RIB_SPREAD_YARDS` further
+    than the nearest of them, the one its `spread_rank` puts first; unplaced, `preferred`, else
+    the best."""
     pay = {r.id: rib_xp(r, level) for r in fit}
     best = max(pay.values())
-    good = [r for r in fit if pay[r.id] >= RIB_XP_SHARE * best]
+    good = [r for r in fit
+            if pay[r.id] >= (RIB_XP_SHARE if key is None else RIB_SPREAD_SHARE) * best]
     placed = [r for r in good if r.pos is not None]
     if near is not None and placed:
-        return min(placed, key=lambda r: (_yards(r.pos, near, scale), -pay[r.id]))
+        far = {r.id: _yards(r.pos, near, scale) for r in placed}
+        nearest = min(placed, key=lambda r: (far[r.id], -pay[r.id]))
+        if key is None:
+            return nearest
+        reach = far[nearest.id] + (RIB_SPREAD_YARDS if scale is not None else math.inf)
+        return max((r for r in placed if far[r.id] <= reach),
+                   key=lambda r: spread_rank(key, r.id))
+    if key is not None:
+        return max(good, key=lambda r: spread_rank(key, r.id))
     if preferred is not None and preferred in good:
         return preferred
     return max(good, key=lambda r: pay[r.id])
@@ -369,17 +399,18 @@ def _short(fit: list[Node], level: int, near, scale) -> Node | None:
 
 def rib_for(ribs, level: int | None, preferred: Node | None = None,
             near: tuple[float, float] | None = None, short: bool = False, *,
-            barred: frozenset[str] = frozenset(),
+            barred: frozenset[str] = frozenset(), key: int | str | None = None,
             scale: tuple[float, float] | None = None) -> Node | None:
     """The grind for a character of `level`: of the ribs not `barred` at the level, those whose
     creatures suit it (`rib_fits`), else of those barred (V329); the one paying the most a kill
     (`rib_xp`), or of those within `RIB_XP_SHARE` of it the nearest to where it is (`near`, the
-    guide's map fractions); unplaced, `preferred`, else the best. With none that suits it, the
-    one of the lowest creatures within `rib_within`; with none of those, `None`: the character
-    goes on along the spine. A rib the route leaves out (`route_blocked_reason`, V331) is none.
-    `preferred` is the answer when the level is unknown. Distances are in yards on the guide's
-    frame (`scale`, `frame_yards`, read off `ribs` when not given), or map fractions without
-    one, when `SHORT_RIB_YARDS` does not apply.
+    guide's map fractions), spread by the character (`key`, `spread_rank`) over those as near
+    (V332); unplaced, `preferred`, else the best. With none that suits it, the one of the lowest
+    creatures within `rib_within`; with none of those, `None`: the character goes on along the
+    spine. A rib the route leaves out (`route_blocked_reason`, V331) is none. `preferred` is the
+    answer when the level is unknown. Distances are in yards on the guide's frame (`scale`,
+    `frame_yards`, read off `ribs` when not given), or map fractions without one, when neither
+    `RIB_SPREAD_YARDS` nor `SHORT_RIB_YARDS` applies.
 
     By its creatures' levels (`rib_levels`), not its window's top (V323): the window was read
     as the creatures' levels and "never above the character", and Westfall's 14-16 window,
@@ -418,7 +449,7 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
             if rib is not None:
                 return rib
             continue
-        return _best(fit, level, preferred, near, scale)
+        return _best(fit, level, preferred, near, key, scale)
     if short and near is not None:
         return None
     within = [r for r in ribs if rib_within(r, level)]

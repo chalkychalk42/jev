@@ -214,6 +214,21 @@ FACTION_GROUP = {"alliance": 0x2, "horde": 0x4}
 
 # Spawn points kept per cluster for a hunt to stand on: the nearest this many to its centre.
 HUNT_SPAWNS = 16
+# The ribs a level window has in a zone, each a creature of its own (V332): the first is the
+# window's safest cluster as before (`grind_clusters`), the others the next creatures of the
+# window not already a rib, `RIB_PASS` and `rib_id`. One a window put every character of a
+# race at a level on one creature: up to 40 of the hive's bots on Durotar's 3-5 rib and Dun
+# Morogh's 5-7 at once (29 Sep), MEASURE.
+RIB_CREATURES = 3
+# How many of a window's safest clusters its first rib is chosen from, as it always was.
+RIB_PASS = 3
+
+
+def rib_id(prefix: str, zone: str, lo: int, hi: int, creature: str | None = None) -> str:
+    """A rib's step id: the window's first rib by its zone and window (`grind_<zone>_<lo>_<hi>`,
+    as `jev.learn.values` and the hive's measures name it), another by its creature too."""
+    base = f"{prefix}_grind_{_slug(zone, 12)}_{lo}_{hi}"
+    return base if creature is None else f"{base}_{_slug(creature, 16)}"
 
 
 def hunt_spawns(spawn: Spawn | None) -> tuple[tuple[float, float, float], ...]:
@@ -688,7 +703,8 @@ class WorldDB:
             return set()
 
     def grind_clusters(self, zone_bounds: ZoneBounds, level_min: int, level_max: int,
-                       limit: int = 2, faction: str | None = None) -> list[tuple[Spawn, int]]:
+                       limit: int | None = 2,
+                       faction: str | None = None) -> list[tuple[Spawn, int]]:
         """Grind ribs: one creature's densest cluster, the safest kinds first.
 
         "Killable" is a heuristic and named as one: normal rank, in level band, carrying
@@ -708,7 +724,7 @@ class WorldDB:
         the band, then the biggest cluster.
 
         None in a capital's box (`AREA_FLAG_CAPITAL`), and given the character's `faction`,
-        none of a creature friendly to it (V317).
+        none of a creature friendly to it (V317). Every one with `limit` `None`.
         """
         if self.capital(zone_bounds.area_id):
             return []
@@ -952,33 +968,57 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
     # is its window. The densest cluster for the whole band was Stonetusk Boars, level
     # 5-6, and every Northshire step failed into it: a level 3 character went there and
     # died three times running (run 20260923T174132-d01302).
+    # Each window's first rib, then up to `RIB_CREATURES` in all of the window's creatures not
+    # yet a rib (V332). Only the first ribs are wired to: the runtime chooses again by the level.
     ribs: list[Node] = []
+    others: list[Node] = []
+
+    def rib(spawn: Spawn, count: int, zid: int, lo: int, hi: int, rid: str) -> Node:
+        frac, world, map_id = place(spawn, zid)
+        if spawn.points:
+            spawns[rid] = [list(p) for p in spawn.points]
+        return Node(
+            id=rid, kind=StepKind.GRIND, zone=zone_names.get(zid, str(zid)),
+            zone_id=zid, level=(lo, hi), pos=frac, world=world, map_id=map_id,
+            r=0.06,   # a rib is a loop you walk, not a point you stand on
+            hunt_yards=hunt_yards(spawn),
+            target_name=spawn.name, target_kind=spawn.kind,
+            objectives=(f"grind {spawn.name}",),
+            skills=("GRIND_UNTIL",), timeout_s=900.0, skippable=True,
+            notes=f"{count} spawns of {spawn.name} clustered here; route not recorded",
+        )
+
     for zid in zone_ids:
         b = db.bounds.get(zid)
         if b is None or b.degenerate:
             continue
+        zone = zone_names.get(zid, str(zid))
         taken: set[int] = set()
+        made: dict[tuple[int, int], int] = {}
         for lo, hi in rib_windows(level_min, level_max):
-            for spawn, count in db.grind_clusters(b, lo, hi, limit=3, faction=faction):
+            for spawn, count in db.grind_clusters(b, lo, hi, limit=RIB_PASS, faction=faction):
                 if spawn.npc_id in taken:
                     continue
                 taken.add(spawn.npc_id)
-                frac, world, map_id = place(spawn, zid)
-                rid = f"{prefix}_grind_{_slug(zone_names.get(zid, str(zid)), 12)}_{lo}_{hi}"
-                if spawn.points:
-                    spawns[rid] = [list(p) for p in spawn.points]
-                ribs.append(Node(
-                    id=rid, kind=StepKind.GRIND, zone=zone_names.get(zid, str(zid)),
-                    zone_id=zid, level=(lo, hi), pos=frac, world=world, map_id=map_id,
-                    r=0.06,   # a rib is a loop you walk, not a point you stand on
-                    hunt_yards=hunt_yards(spawn),
-                    target_name=spawn.name, target_kind=spawn.kind,
-                    objectives=(f"grind {spawn.name}",),
-                    skills=("GRIND_UNTIL",), timeout_s=900.0, skippable=True,
-                    notes=f"{count} spawns of {spawn.name} clustered here; route not recorded",
-                ))
+                ribs.append(rib(spawn, count, zid, lo, hi, rib_id(prefix, zone, lo, hi)))
+                made[(lo, hi)] = 1
                 break
+        ids = {r.id for r in (*ribs, *others)}
+        for lo, hi in rib_windows(level_min, level_max):
+            for spawn, count in db.grind_clusters(b, lo, hi, limit=None, faction=faction):
+                if made.get((lo, hi), 0) >= RIB_CREATURES:
+                    break
+                if spawn.npc_id in taken:
+                    continue
+                rid = rib_id(prefix, zone, lo, hi, spawn.name)
+                if rid in ids:
+                    rid = f"{rid}_{spawn.npc_id}"
+                taken.add(spawn.npc_id)
+                ids.add(rid)
+                others.append(rib(spawn, count, zid, lo, hi, rid))
+                made[(lo, hi)] = made.get((lo, hi), 0) + 1
     nodes.extend(ribs)
+    nodes.extend(others)
 
     # -- services ---------------------------------------------------------------
     for zid in zone_ids:

@@ -834,12 +834,13 @@ class ClientRuntime:
     def _rib(self, level: int | None, near: tuple[float, float] | None = None, *,
              short: bool = False, preferred=None, among=None):
         """The grind for the character at `level` (`rib_for`) of its ribs (`among`, else all):
-        of those not barred at the level (`RIB_BAR`), else of those barred (V329); `None` when
-        none suits it."""
+        of those not barred at the level (`RIB_BAR`), else of those barred (V329), spread by the
+        character (`character_key`, V332); `None` when none suits it."""
         ribs = self._ribs_all if among is None else tuple(among)
         barred = (frozenset() if level is None else
                   frozenset(r.id for r in ribs if f"{RIB_BAR}{r.id}@{level}" in self._retried))
-        return rib_for(ribs, level, preferred, near, short, barred=barred, scale=self._frame)
+        return rib_for(ribs, level, preferred, near, short, barred=barred,
+                       key=self.character_key, scale=self._frame)
 
     def _bar(self, rib_id: str, level: int | None) -> None:
         if level is not None:

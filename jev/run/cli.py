@@ -358,7 +358,7 @@ def remembered(args, graph, key: int | None, level: int | None = None):
             # Harvest Watcher and an 18-19 Dust Devil, dead both times (session 235). Its
             # own grind for its level until the next guide's first, the level kept so a
             # grind runs on across sessions (V214).
-            rib = used.rib_for(level)
+            rib = used.rib_for(level, key=key)
             # A grind still suited to the level is kept, not traded (V272): at 11 the level
             # 9-11 Prowlers' rib gave way to the 11-12 one, eight Riverpaw Gnolls 5 to 9 yards
             # apart, where every pull is two or three.
