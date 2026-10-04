@@ -2154,7 +2154,9 @@ def test_a_grind_whose_stations_lie_in_a_death_camp_waits_for_the_camp():
     b = _grind_body(memory)
     result = b._hunt(seen())
     assert result.code == "camp" and result.outcome is SkillOutcome.ABORTED, result
-    assert b.client.approach.call_count == 0, "no station walked to"
+    (walk,), _ = b.client.approach.call_args
+    assert b.client.approach.call_count == 1, "no station walked to"
+    assert memory.camp_at(0, walk[:2], now, None) is None, "only out of the camp's reach"
     left = b.policy_context.step_waiting("rib", clock.time())
     assert left is not None and abs(left - (CAMP_S - 30.0)) < 5.0
 
@@ -2349,3 +2351,47 @@ def test_a_ghost_read_with_no_death_seen_fell_where_it_last_stood_alive(tmp_path
     later.observe(seen(pos=Pos(mx=0.6, my=0.6, zone="Tirisfal")))
     assert later._fell is None and later.recover.corpse is None
     assert _tirisfal_body(tmp_path)._fell is None, "and the purse file forgets it"
+
+
+def test_a_rib_wholly_in_a_death_camp_is_named_and_one_with_a_station_out_is_not():
+    """V334: the runtime waits a step out on no rib whose every station lies in a camp."""
+    import time as clock
+
+    from jev.guide.route_memory import RouteMemory
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=5)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=5)
+    b = _grind_body(memory)
+    rib = b.graph.nodes[0].model_copy(update={"hunt_yards": 30.0})
+    assert b.rib_camped(rib, 5), "rings of 30 yards round a camp's death"
+    assert not b.rib_camped(rib, 9), "a camp of level 5 deaths holds no level 9"
+    wide = rib.model_copy(update={"hunt_yards": 300.0})
+    assert not b.rib_camped(wide, 5), "its outer ring is out of the camp"
+    assert b.policy_context.camped == b.rib_camped
+
+
+def test_a_step_waiting_on_a_camp_with_nowhere_else_is_waited_out_of_its_reach(monkeypatch):
+    """V334: standing in the camp the character died in twice is where it dies a third time;
+    the wait is stood out of its reach, at the nearest point clear of every camp."""
+    import math as m
+    import time as clock
+
+    from jev.guide.route_memory import CAMP_YARDS, RouteMemory
+    from jev.run.body import CAMP_CLEAR_YARDS
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=5)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=5)
+    b = _grind_body(memory)
+    walked = []
+    b._approach = lambda world, stop_short=0.0: walked.append(world) or True
+    b._position = lambda: (0.6, 0.5)                    # world (40, 60): in the camp
+    assert b._out_of_camp(5) is True and len(walked) == 1
+    spot = walked[0][:2]
+    assert m.dist(spot, (50.0, 50.0)) >= CAMP_YARDS + CAMP_CLEAR_YARDS - 1e-6
+    assert memory.camp_at(0, spot, now, 5) is None
+    walked.clear()
+    assert b._out_of_camp(9) is False and walked == [], "no camp at its level: stays"

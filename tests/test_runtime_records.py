@@ -1305,3 +1305,94 @@ def test_with_nothing_ahead_a_quest_in_the_log_behind_the_accept_is_done_first(t
     assert 5 in rt.completed
     rt.tick(choose=False)
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "gated"), "then waits"
+
+
+def elsewhere_graph():
+    """A quest objective with a fail edge, and three ribs of levels 4-6 for a level 5."""
+    from jev.guide.graph import FailEdge, FailWhen
+
+    base = dict(zone="zone", zone_id=1, map_id=0)
+    ribs = tuple(Node(id=f"rib_{name}", kind=StepKind.GRIND, level=(4, 6), pos=pos,
+                      world=(x, 0.0, 0.0), skills=("GRIND_UNTIL",), **base)
+                 for name, pos, x in (("near", (0.52, 0.5), 50.0), ("mid", (0.6, 0.5), 300.0),
+                                      ("far", (0.9, 0.5), 900.0)))
+    high = Node(id="rib_high", kind=StepKind.GRIND, level=(9, 11), pos=(0.5, 0.51),
+                world=(5.0, 0.0, 0.0), skills=("GRIND_UNTIL",), **base)
+    return Graph(graph_id="g", faction="alliance", entry="kill", nodes=(
+        Node(id="kill", kind=StepKind.QUEST_OBJECTIVE, quest_id=1, pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("GRIND_UNTIL",), timeout_s=600.0,
+             on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=600, goto="rib_near"),), **base),
+        *ribs, high))
+
+
+def _elsewhere(tmp_path, n=8, **kw):
+    from jev.world.state_v1 import Char
+
+    states = [seen(1000.0 + t, char=Char(level=5)) for t in range(n)]
+    return ClientRuntime("c", elsewhere_graph(), ScriptedSource(states), Recorder(tmp_path),
+                         start_step="kill", **kw)
+
+
+def test_a_step_that_waits_on_a_camp_is_waited_out_on_the_nearest_free_rib(tmp_path):
+    """V334 with the coordinator's review: a step that waits on a death camp left the
+    character standing until the camp ended; replayed, the playheads came back to such a
+    step 7,067 times in the hive's 03:00-09:30 of 29 Sep, 413 h before the camps ended. It
+    grinds the nearest rib fit for its level that waits on nothing and has a station out of
+    every camp, and comes back to the step when its wait ends; never a rib above its level."""
+    rt = _elsewhere(tmp_path)
+    rt.policy_context.camped = lambda rib, level: rib.id == "rib_near"
+    rt.policy_context.step_waits("kill", 1000.0 + 3000.0, "camp", 1000.0)
+    rt.tick()
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib_mid", "kill")
+    assert rt.tracker.memory.until == 4000.0, "back when the wait ends"
+    assert rt.armed.decision.skill == "GRIND_UNTIL" and rt.armed.step_id == "rib_mid"
+
+
+def test_a_short_wait_is_stood_and_a_meal_finishes_before_the_detour(tmp_path):
+    from jev.orch.runtime import WAIT_ELSEWHERE_S
+
+    rt = _elsewhere(tmp_path)
+    rt.policy_context.step_waits("kill", 1000.0 + WAIT_ELSEWHERE_S - 10.0, "no route", 1000.0)
+    rt.tick()
+    assert rt.tracker.step_id == "kill" and rt.armed.rule == "wait.step"
+    rt = _elsewhere(tmp_path)
+    rt.tick()
+    rt.armed = rt.armed.__class__(**{**rt.armed.__dict__, "rule": "recover.eat"})
+    rt.policy_context.step_waits("kill", 4000.0, "camp", 1000.0)
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "kill", "the meal first"
+
+
+def test_a_rib_that_waits_hands_its_way_back_to_the_rib_that_replaces_it(tmp_path):
+    rt = _elsewhere(tmp_path, start_rejoin="kill", start_entry_level=5)
+    rt.start_step = "rib_near"
+    rt.start_rib_until = 1500.0
+    rt.policy_context.step_waits("rib_near", 4000.0, "camp", 1000.0)
+    rt.tick(choose=False)
+    memory = rt.tracker.memory
+    assert (rt.tracker.step_id, memory.rejoin_to) == ("rib_mid", "kill")
+    assert (memory.level_at_entry, memory.until) == (5, 1500.0)
+
+
+def test_waiting_elsewhere_cannot_loop_and_stands_when_every_rib_waits(tmp_path):
+    """Each rib sent to that waits in its turn is not chosen again: the detours are fewer
+    than the ribs, then the step is stood out, looked at again every `WAIT_LOOK_S`."""
+    from jev.orch.runtime import WAIT_LOOK_S
+
+    rt = _elsewhere(tmp_path, n=40)
+    rt.policy_context.step_waits("kill", 4000.0, "camp", 1000.0)
+    visited = []
+    for _ in range(12):
+        rt.tick(choose=False)
+        step = rt.tracker.step_id
+        if step != "kill":
+            visited.append(step)
+            # Its hunt ends `camp` too: it waits, and its fail-over takes it back.
+            rt.policy_context.step_waits(step, 4000.0, "camp", 1000.0)
+            rt.tracker.enter("kill", rt.last_state)
+    assert visited == ["rib_near", "rib_mid", "rib_far"], "each once, none above the level"
+    looked = rt._elsewhere_looked
+    assert looked[0] == "kill" and rt.tracker.step_id == "kill"
+    rt.policy_context.step_wait_until.pop("rib_mid")       # its camp ended
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "kill", f"not looked at again within {WAIT_LOOK_S:.0f}s"

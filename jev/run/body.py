@@ -41,7 +41,7 @@ from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.path import PathStatus
-from jev.guide.route_memory import CAMP_REFUSED, RECORD_FLUSH_S
+from jev.guide.route_memory import CAMP_REFUSED, CAMP_YARDS, RECORD_FLUSH_S
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.choices import Choice, Stations, objective_key
@@ -50,7 +50,8 @@ from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
-from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted
+from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, spawn_tour
+from jev.run.hunt import stations as hunt_stations
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import graveyards, hostiles
 from jev.world.combat import (
@@ -301,6 +302,10 @@ CASTER_STANDOFF_YARDS = 18.0
 # A reading this recent stands for the state a service check needs (V338): the hunt's own,
 # taken a moment before it asks.
 RECENT_READ_S = 0.5
+# Where a step that waits on a death camp is waited out with no rib to go to (V334): this far
+# beyond the camp's reach, on the nearest of these bearings round it that lies in no camp.
+CAMP_CLEAR_YARDS = 20.0
+CAMP_CLEAR_BEARINGS = 16
 # A dry rib's wider prey is at most this many levels above the character (V337), as a rib's
 # creatures are (`graph.RIB_LEVELS_ABOVE`, V323).
 WIDEN_LEVELS_ABOVE = 1
@@ -874,14 +879,58 @@ class LiveBody:
         step = self.arm.step_id if self.arm is not None else None
         if outcome is Hunted.CAMP and getattr(hunt, "until", None) is not None:
             # Not armed again until the camp ends (V334): bot 224's grind was armed again 0.5 s
-            # after each hunt whose every walk the camp refused.
+            # after each hunt whose every walk the camp refused. Waited out on another rib
+            # (`ClientRuntime._wait_elsewhere`), or, with none, out of the camp's reach.
             self.policy_context.step_waits(step, hunt.until, "its stations lie in or behind "
                                            "a death camp", time.time())
+            self._out_of_camp(level)
         elif outcome is Hunted.UNREACHABLE and getattr(hunt, "stuck", False):
             self._stuck(step, "no route to any station of its hunt could be planned")
         elif getattr(hunt, "arrived", 0):
             self.policy_context.step_moved(step)
         return self._result(outcome, hunt.detail)
+
+    def rib_camped(self, node, level: int | None) -> bool:
+        """Does every station a hunt of the rib `node` would stand at lie in a death camp
+        counting at `level` (`Hunt._out_of_camps`, V334)? No, with none known."""
+        if node is None or node.world is None or self.client.bounds is None \
+                or node.map_id != self.client.bounds.map_id:
+            return False
+        spawns = spawn_points(self.hunt_spawns, node.id, None)
+        tour = (spawn_tour(spawns) if spawns
+                else hunt_stations(node.world, node.hunt_yards or DEFAULT_HUNT_YARDS))
+        return bool(tour) and all(self._camp_end(p, level) is not None for p in tour)
+
+    def _out_of_camp(self, level: int | None) -> bool:
+        """Walk clear of the death camp the character stands in, if it stands in one: to the
+        nearest point `CAMP_CLEAR_YARDS` beyond its reach that lies in no camp, where a step
+        that waits on it is waited out with nothing else to do (V334). `True` when it walked
+        there."""
+        memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
+        here = self._position()
+        if memory is None or bounds is None or here is None:
+            return False
+        at = map_to_world(*here, bounds)
+        camp = memory.camp_at(bounds.map_id, at[:2], time.time(), level) if at else None
+        if camp is None:
+            return False
+        reach = CAMP_YARDS + CAMP_CLEAR_YARDS
+        ring = [(camp.x + reach * math.cos(a), camp.y + reach * math.sin(a))
+                for a in (2 * math.pi * k / CAMP_CLEAR_BEARINGS for k in range(CAMP_CLEAR_BEARINGS))]
+        clear = [p for p in ring if self._camp_end(p, level) is None]
+        if not clear:
+            return False
+        spot = min(clear, key=lambda p: math.dist(p, at[:2]))
+        self.say(f"  out of the death camp's reach to wait, {math.dist(spot, at[:2]):.0f} yards")
+        return self._approach((spot[0], spot[1], self._height_at(at)))
+
+    def _height_at(self, at) -> float:
+        """The height tracked where the character stands, else 0 (the planner looks 200 yards
+        up and down for a floor, `jevpath_lazy`)."""
+        ground = getattr(self.client, "_ground", None)
+        if ground is not None and math.dist(ground[:2], at[:2]) <= 15.0:
+            return ground[2]
+        return 0.0
 
     def _stuck(self, step: str | None, why: str) -> None:
         """A try at the step planned no route: it waits before it is armed again (V335)."""
@@ -1357,6 +1406,7 @@ class LiveBody:
                         setattr(self, attr, (int(kept[0]), kept[1], kept[2]))
             context.saved = self._save_purse
         context.trainable = self.trainable
+        context.camped = self.rib_camped
         context.reserve = self.training_reserve
         context.bindable = self.bindable
         context.discoverable = self.discoverable

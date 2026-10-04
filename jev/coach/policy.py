@@ -171,6 +171,9 @@ class Context:
         at = self.service_failed_at.get(skill or "")
         return at is not None and abs(now - at) < self.service_wait(skill)
 
+    # Whether a rib lies wholly in a death camp counting at a level (`LiveBody.rib_camped`):
+    # one that does is no rib to wait a step out on (`ClientRuntime._wait_elsewhere`, V334).
+    camped: Callable[..., bool] | None = None
     # When each guide step may be armed again, as wall time (V334), and why it waits; and how
     # many tries at it in a row planned no route (V335).
     step_wait_until: dict[str, float] = field(default_factory=dict)
