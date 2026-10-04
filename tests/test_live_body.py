@@ -2126,3 +2126,112 @@ def test_a_merchant_in_the_zone_the_character_stands_in_counts_too():
     assert b._in_zone([stover, macgregor]) == [stover], "in Elwynn: Elwynn's box"
     b.client.read = lambda: {"pos.zone_id": 40}
     assert b._in_zone([stover, macgregor]) == [stover, macgregor], "in Westfall: its box too"
+
+
+# hive-240, 28 Sep (V328): its last death in Tirisfal Glades at 12:12:34, as its session ended;
+# 6 s later the next session began as a ghost at the graveyard by the Ruins of Lordaeron, in
+# the server's zone Undercity, whose map does not hold the body, and no body was ever painted.
+TIRISFAL_FELL = (0.6500566155033448, 0.5450090807148609)
+TIRISFAL_ALIVE = (0.5623907763439764, 0.4942173763828313)
+RUINS_GHOST = (0.6237705843644803, 0.6688431131379939)
+
+
+def _tirisfal_body(tmp_path=None):
+    from jev.coach.policy import Context
+    from jev.guide.coords import bounds_by_radio_id
+
+    b = body()
+    b.client.bounds = bounds_by_radio_id("data/zones-tbc-243.json")[4049]   # the guide's frame
+    if tmp_path is not None:
+        b.purse_memory = tmp_path / "character-0b15a092.purse.json"
+    b.policy_context = Context()
+    b._wait_out_sickness = lambda: 0.0
+    return b
+
+
+def _undercity_ghost():
+    from jev.world.state_v1 import Char, Pos, Vitals
+
+    return seen(char=Char(level=2, faction="horde"), vitals=Vitals(hp=0.0, dead=False, ghost=True),
+                pos=Pos(mx=RUINS_GHOST[0], my=RUINS_GHOST[1], zone="Undercity"))
+
+
+def test_where_the_character_fell_is_kept_the_moment_its_death_is_read(tmp_path):
+    """V328: hive-240's session ended at its death; the next began as a ghost the server had
+    released beside a capital's Spirit Healer, with no body painted, and aborted its corpse
+    run about 1,797 times a session for 27 hours. The death read, where it fell is in the
+    purse file, and the next session's ghost walks there."""
+    from jev.world.state_v1 import Pos, Vitals
+
+    b = _tirisfal_body(tmp_path)
+    b.observe(seen(pos=Pos(mx=TIRISFAL_ALIVE[0], my=TIRISFAL_ALIVE[1], zone="Tirisfal")))
+    b.observe(seen(pos=Pos(mx=TIRISFAL_FELL[0], my=TIRISFAL_FELL[1], zone="Tirisfal"),
+                   vitals=Vitals(hp=0.0, dead=True, ghost=False)))
+    later = _tirisfal_body(tmp_path)                 # the next session, begun as a ghost
+    later.recover.read = lambda: {"vitals.dead": False, "vitals.ghost": True,
+                                  "pos.mx": RUINS_GHOST[0], "pos.my": RUINS_GHOST[1]}
+    walked = []
+    later._short_of_body = lambda point: walked.append(point) or True
+    later.recover.reach = None
+    later._in_reclaim_reach = lambda ghost, corpse: None
+    later.recover.run_spirit_healer = lambda: pytest.fail("the body is known")
+    import jev.clients.recover
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(jev.clients.recover.time, "sleep", lambda seconds: None)
+        result = later._recover(_undercity_ghost())
+    assert walked and walked[0] == pytest.approx(TIRISFAL_FELL)
+    assert result.code == "still_ghost", "walked there; the popup is the next look's"
+
+
+def test_a_ghost_nothing_knows_the_body_of_gets_up_at_the_spirit_healer(tmp_path):
+    """V328: with no body painted, none kept and none told, the corpse run aborted at once,
+    'a ghost with no corpse position', and was armed again half a second later: 858,365
+    times on 29 Sep. Now it takes the Spirit Healer beside it, sickness and all; and one the
+    healer does not raise either is an abort the policy waits on (`Context.death_waiting`)."""
+    b = _tirisfal_body(tmp_path)
+    b.recover.read = lambda: {"vitals.dead": False, "vitals.ghost": True,
+                              "pos.mx": RUINS_GHOST[0], "pos.my": RUINS_GHOST[1]}
+    b.recover.walk_to = lambda point: pytest.fail("no body to walk to")
+    raised = []
+    b.recover.run_spirit_healer = lambda: raised.append(b.recover.graveyard) or Recovered.ALIVE
+    result = b._recover(_undercity_ghost())
+    assert (result.outcome, result.code) == (SkillOutcome.SUCCEEDED, "alive")
+    assert "where the body lies is unknown" in result.detail and len(raised) == 1
+    b.recover.run_spirit_healer = lambda: Recovered.STILL_GHOST
+    result = b._recover(_undercity_ghost())
+    assert (result.outcome, result.code) == (SkillOutcome.ABORTED, "no_corpse")
+    assert "Spirit Healer did not raise it" in result.detail
+
+
+def test_the_servers_word_on_the_body_is_taken_where_the_client_has_it(tmp_path):
+    """V328: the hive's bridge reports every dead or ghost bot's corpse (`hive.client`'s
+    `corpse_world`); the live client has none, and walks by where it saw itself fall."""
+    from jev.guide.coords import map_to_world
+
+    b = _tirisfal_body(tmp_path)
+    corpse = map_to_world(*TIRISFAL_FELL, b.client.bounds)
+    b.client.corpse_world = lambda: (0, corpse[0], corpse[1])
+    passed = []
+    b.recover.run = lambda corpse_point: passed.append(corpse_point) or Recovered.ALIVE
+    assert b._recover(_undercity_ghost()).code == "alive"
+    assert passed[0] == pytest.approx(TIRISFAL_FELL)
+    b.client.corpse_world = lambda: (1, corpse[0], corpse[1])          # another continent's
+    assert b._known_body() is None
+
+
+def test_a_ghost_read_with_no_death_seen_fell_where_it_last_stood_alive(tmp_path):
+    """V328: a session that never read its character dead (released by the server or across
+    a session's end) keeps where it last stood alive, which the session's end keeps too; up
+    again, nothing is kept of the body."""
+    from jev.world.state_v1 import Pos
+
+    b = _tirisfal_body(tmp_path)
+    b.observe(seen(pos=Pos(mx=TIRISFAL_ALIVE[0], my=TIRISFAL_ALIVE[1], zone="Tirisfal")))
+    b.end_session(timeout=0.0)
+    later = _tirisfal_body(tmp_path)
+    later.observe(_undercity_ghost())
+    assert later._known_body() == pytest.approx(TIRISFAL_ALIVE)
+    later.recover.corpse = (0.1, 0.1)
+    later.observe(seen(pos=Pos(mx=0.6, my=0.6, zone="Tirisfal")))
+    assert later._fell is None and later.recover.corpse is None
+    assert _tirisfal_body(tmp_path)._fell is None, "and the purse file forgets it"

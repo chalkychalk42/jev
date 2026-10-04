@@ -1169,3 +1169,40 @@ def test_a_session_end_lets_the_body_keep_what_it_is_still_saving(tmp_path):
     body.end_session = lambda: ended.append(body.active)
     Supervisor(rt, body, say=lambda _: None).close()
     assert ended == [0]
+
+
+def test_a_ghost_whose_corpse_run_aborts_at_once_is_not_armed_again_every_tick(tmp_path):
+    """V328: hive-240, a ghost with no body known, aborted CORPSE_RUN 1,797 times in its
+    15-minute session from 15:06 on 29 Sep, every arm about 0.3 s. Played again, the same
+    abort is armed 8 times in the 15 minutes; and once up, a death starts afresh."""
+    from jev.learn.episode import SkillOutcome
+
+    rt = runtime(tmp_path, [seen()])
+    life = {"t": 0.0, "ghost": True}
+    rt.source.read = lambda: seen(life["t"], vitals=Vitals(hp=0.0, combat=False, dead=False,
+                                                           ghost=life["ghost"]))
+    body = Body()
+    body.available = body.available | {"RELEASE_SPIRIT", "CORPSE_RUN"}
+    arms = []
+
+    def execute(arm, state, checkpoint):
+        arms.append(state.t)
+        return Result(SkillOutcome.ABORTED, "a ghost with no corpse position; it auto-released "
+                      "before anything recorded where it fell", "no_corpse")
+
+    body.execute = execute
+    supervisor = Supervisor(rt, body, say=lambda _: None)
+    try:
+        for i in range(1800):                       # 900 s, a tick each half second
+            life["t"] = i * 0.5
+            supervisor.step(i * 0.5)
+            if supervisor.worker is not None:
+                assert supervisor.worker.done.wait(1)
+        assert 6 <= len(arms) <= 10, arms
+        assert not supervisor.failure
+        assert rt.policy_context.death_failures["CORPSE_RUN"] == len(arms)
+        life["ghost"] = False
+        supervisor.step(900.0)
+        assert not rt.policy_context.death_failures, "up: a death starts afresh"
+    finally:
+        supervisor.close()
