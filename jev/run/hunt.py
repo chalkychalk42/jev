@@ -270,8 +270,11 @@ class Hunt:
                       else (stations(centre, radius_yards), 1))
         tour, camps = self._out_of_camps(tour)
         if not tour:
+            # "Deaths" in its detail: a quest step failed over for it grinds a level, as one
+            # whose deaths failed it does, not the short rib it would retry from (V334).
             self.until = min(camps)
-            self.detail = f"every station lies in a death camp, until {_clock(self.until)}"
+            self.detail = (f"every station lies in a death camp, held by deaths at its level "
+                           f"until {_clock(self.until)}")
             return Hunted.CAMP
         lone = len({tuple(p) for p in spawns}) == 1
         chooser = self.stations if len({tuple(p) for p in tour}) > 1 else None
@@ -339,7 +342,8 @@ class Hunt:
                         # the first of them to end, not walked again at once (V334).
                         self.until = min((*refused, *camps))
                         self.detail = (f"every walk to a station is refused through a death "
-                                       f"camp, until {_clock(self.until)}")
+                                       f"camp, held by deaths at its level until "
+                                       f"{_clock(self.until)}")
                         return Hunted.CAMP
                     wider = self._wider(laps)
                     if wider is not None:

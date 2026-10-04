@@ -1199,3 +1199,44 @@ def test_a_step_whose_stations_lie_in_a_death_camp_fails_over_at_once_and_never_
         assert rt.tracker.step_id == second.id, "failed over at the first camp, not the third"
     finally:
         supervisor.close()
+
+
+@pytest.mark.parametrize(("code", "short"), [("camp", False), ("unreachable", True)])
+def test_a_quest_step_in_a_death_camp_grinds_a_level_before_it_is_tried_again(tmp_path, code,
+                                                                              short):
+    """V334: a quest step whose stations lie in a death camp fails over as a step that kills
+    the character does, to a level's grind: a short rib's five minutes came back to it while
+    the camp's hour held, and its retry was passed over."""
+    from jev.clients.source import ScriptedSource
+    from jev.guide.graph import FailEdge, FailWhen, Graph, Node
+    from jev.learn.episode import Recorder
+    from jev.orch.runtime import ClientRuntime
+    from jev.run.hunt import Hunt, Hunted
+    from jev.world.state_v1 import StepKind
+
+    hunt = Hunt(fight=None, rest=None, read=lambda: {}, approach=lambda p, **kw: True,
+                progress=lambda: (0, 1), camp_until=lambda p: 5000.0)
+    assert hunt.run((0.0, 0.0, 0.0), 30.0) is Hunted.CAMP
+    detail = hunt.detail if code == "camp" else "walked the whole disk and found nothing to fight"
+    base = dict(zone="zone", zone_id=1, pos=(0.5, 0.5))
+    g = Graph(graph_id="g", faction="alliance", entry="accept", nodes=(
+        Node(id="accept", kind=StepKind.QUEST_ACCEPT, quest_id=1, next=("turnin",),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), timeout_s=600.0,
+             on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=600, goto="rib"),), **base),
+        Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1,
+             skills=("TRAVEL_TO", "TURNIN_QUEST"), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(1, 10), **base),
+    ))
+    rt = ClientRuntime("c", g, ScriptedSource([seen(t / 2) for t in range(8)]),
+                       Recorder(tmp_path))
+    body = Body(result=Result(SkillOutcome.ABORTED, detail, code))
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=1)
+    try:
+        supervisor.step(0)
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(0.5)
+        assert rt.tracker.step_id == "rib"
+        assert (rt.tracker.memory.until is not None) is short
+    finally:
+        supervisor.close()
