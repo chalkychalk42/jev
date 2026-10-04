@@ -18,7 +18,7 @@ from typing import ClassVar
 from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
-from jev.clients.fight import HEAL_POINT, Fight, Kinds
+from jev.clients.fight import HEAL_POINT, Fight, Kinds, Paying
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth, Hearthed
 from jev.clients.interact import Interact
@@ -873,9 +873,14 @@ class LiveBody:
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
         if node.kind is StepKind.GRIND:
             # A rib found dry fights any kind round it worth fighting (V337).
-            hunt.widen = lambda: self._rib_kinds(node, destination.world, yards, wanted, level)
+            def wider():
+                kinds = self._rib_kinds(node, destination.world, yards, wanted, level)
+                return Paying(kinds) if kinds is not None else None
+            hunt.widen = wider
         spawns = spawn_points(self.hunt_spawns, node.id, getattr(destination, "target_id", None))
-        outcome = hunt.run(destination.world, yards, wanted, timeout_s=self.hunt_timeout,
+        # A grind's pulls are for experience: none of a level grey to the character (V344).
+        pull = Paying(wanted) if node.kind in (StepKind.GRIND, StepKind.DING_GATE) else wanted
+        outcome = hunt.run(destination.world, yards, pull, timeout_s=self.hunt_timeout,
                            spawns=spawns,
                            others=self._hostiles(destination.world, yards + PACK_YARDS)
                            if spawns else ())
@@ -1108,8 +1113,9 @@ class LiveBody:
         plan = service(state, context=self.policy_context)
         return plan.decision.why if plan else None
 
-    def _objective_name(self) -> int | None:
-        """The creature the armed guide step wants, when it names one; else None."""
+    def _objective_name(self) -> int | Paying | None:
+        """The creature the armed guide step wants, when it names one, as a pull for experience
+        on a grind (`Paying`); else None."""
         node = self._node()
         if node is None:
             return None
@@ -1122,7 +1128,9 @@ class LiveBody:
             target = selection.target
         if target is None or target.target_kind != "creature" or not target.target_name:
             return None
-        return name_id(target.target_name)
+        wanted = name_id(target.target_name)
+        # A grind's are for experience (V344); a quest's count at any level.
+        return Paying(wanted) if node.kind in (StepKind.GRIND, StepKind.DING_GATE) else wanted
 
     def _fight(self, state) -> Result:
         # Inside an objective the fight is for its creature, not the nearest plate: the

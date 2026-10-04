@@ -2439,3 +2439,28 @@ def test_a_grinds_hunt_armed_again_after_a_fight_goes_on_from_its_place():
     b.observe(seen(vitals=Vitals(hp=0.0, dead=True, ghost=False)))
     assert b._place is None, "a death begins the hunt afresh"
     assert b._hunt_place(("other", "x")) is not place
+
+
+def test_a_grinds_pulls_are_for_experience_and_a_quests_are_not():
+    """V344: a grind's hunt and its defence ask the fight for a pull that pays (`Paying`);
+    a quest objective's kind counts toward the quest at any level."""
+    from jev.clients.fight import Paying
+    from jev.guide.route_memory import RouteMemory
+
+    b = _grind_body(RouteMemory())
+    b.hunt_spawns = {"rib": ((50.0, 50.0, 0.0),)}
+    b._hostiles = lambda *a, **k: ()
+    b._stations = lambda *a, **k: None
+    b._service_needed = lambda: None
+    asked = []
+    b.fight = SimpleNamespace(run=lambda name_id=None, **k: asked.append(name_id) or Fought.DIED,
+                              pressed=[], closed=0, heals_landed=0, heals_ignored=0, detail="",
+                              broken=False, top_up=lambda *a, **k: True, top_ups=0,
+                              top_ups_landed=0)
+    b._read = lambda: {"vitals.hp": 1.0, "char.level": 2}
+    b._approach = lambda p, **kw: True
+    b._hunt(seen())
+    assert asked == [Paying(name_id("Wolf"))]
+    assert b._objective_name() == Paying(name_id("Wolf"))
+    quest = body(StepKind.QUEST_OBJECTIVE)
+    assert quest._objective_name() == name_id("NPC"), "a quest's kind, at any level"
