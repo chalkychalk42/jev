@@ -1541,3 +1541,60 @@ def test_waiting_elsewhere_cannot_loop_and_stands_when_every_rib_waits(tmp_path)
     rt.policy_context.step_wait_until.pop("rib_mid")       # its camp ended
     rt.tick(choose=False)
     assert rt.tracker.step_id == "kill", f"not looked at again within {WAIT_LOOK_S:.0f}s"
+
+
+def ding_graph():
+    """V345: an accept at level 10 waited on from a rib, the rib entered for it at level 7 to
+    grind to 10; Durotar-like ribs of 4-6 where the character stands and 7-9 fifty yards off."""
+    base = dict(zone="zone", zone_id=1, map_id=0)
+    return Graph(graph_id="g", faction="horde", entry="gated", nodes=(
+        Node(id="gated", kind=StepKind.QUEST_ACCEPT, quest_id=1, level=(10, 14), pos=(0.3, 0.3),
+             world=(-500.0, 0.0, 0.0), skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+        Node(id="rib_low", kind=StepKind.GRIND, level=(4, 6), pos=(0.5, 0.5),
+             world=(0.0, 0.0, 0.0), skills=("GRIND_UNTIL",), **base),
+        Node(id="rib_up", kind=StepKind.GRIND, level=(7, 9), pos=(0.52, 0.5),
+             world=(50.0, 0.0, 0.0), skills=("GRIND_UNTIL",), **base),
+    ))
+
+
+def _ding(tmp_path, states):
+    return ClientRuntime("c", ding_graph(), ScriptedSource(states), Recorder(tmp_path),
+                         start_step="rib_low", start_rejoin="gated", start_entry_level=9)
+
+
+def test_a_rib_that_goes_on_past_a_ding_is_chosen_again_for_the_new_level(tmp_path):
+    """V345: a rib was chosen once and kept across dings; in the hive's 4 Oct 16:26-18:30, 16
+    of 98 dings on a rib were still on it two minutes on: hive-524, a troll shaman, ground the
+    Barrens' 1-3 rib for eight minutes at level 7, 16 experience a kill, where Durotar's 7-9
+    paid 82 (run 20261004T171527-9c5635). At a ding the rib is chosen again for the new level,
+    between skills, its way back and the level it grinds to carried; one still the best stays."""
+    from jev.world.state_v1 import Vitals
+
+    fighting = Vitals(hp=0.7, power=1, combat=True, dead=False, ghost=False)
+    rt = _ding(tmp_path, [level6(0, level=7), level6(1, level=8, vitals=fighting),
+                          level6(2, level=8)])
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_low"
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_low", "not in a fight: the ding waits for it"
+    rt.tick(choose=False)
+    memory = rt.tracker.memory
+    assert (rt.tracker.step_id, memory.rejoin_to, memory.level_at_entry) == ("rib_up", "gated", 9)
+    stays = _ding(tmp_path, [level6(0, level=6), level6(1, level=7), level6(2, level=7)])
+    for _ in range(3):
+        stays.tick(choose=False)
+    assert stays.tracker.step_id == "rib_low", "at 7 the 7-9 rib is above it: the same rib"
+
+
+def test_a_ding_waits_for_the_hunt_under_way_to_end(tmp_path):
+    """V345: the rib is chosen again between skills: a hunt, a meal or a service armed when
+    the ding comes finishes first, as a wait elsewhere waits for a meal."""
+    rt = _ding(tmp_path, [level6(0, level=7), level6(1, level=8), level6(2, level=8),
+                          level6(3, level=8)])
+    rt.tick()
+    assert rt.armed is not None and rt.armed.decision.skill == "GRIND_UNTIL"
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "rib_low", "the hunt goes on"
+    rt.finish(SkillOutcome.PREEMPTED, "combat interrupted the leg or service")
+    rt.tick()
+    assert rt.tracker.step_id == "rib_up" and rt.armed.step_id == "rib_up"
