@@ -752,3 +752,22 @@ def test_the_floors_over_a_high_spot_are_looked_for_round_a_height_known_there()
     mesh = SimpleNamespace(path=path)
     assert surfaces_under(mesh, 1, 10884.5, 912.5) == []
     assert surfaces_under(mesh, 1, 10884.5, 912.5, around=1333.5) == [cave, hill]
+
+
+def test_the_hot_cells_are_asked_for_at_the_level_kept_for_the_plan_not_read_afresh():
+    """V338: `hot` read the screen at every look for hot cells, two a plan at the least,
+    about a second each in the hive's saturated farm processes (29 Sep)."""
+    from jev.guide.route_memory import RouteMemory
+
+    client, values = client_in("Elwynn", (0.5, 0.5))
+    values["char.level"] = 12
+    reads = []
+    read = client.read
+    client.read = lambda: reads.append(1) or read()
+    danger = Mock()
+    danger.hot.return_value = []
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES,
+                route_memory=RouteMemory(), danger=danger, teleports=())
+    for _ in range(10):
+        client.query.inner.hot(0)
+    assert len(reads) == 1 and danger.hot.call_args_list[-1].args == (0, 12)

@@ -595,3 +595,78 @@ def test_a_purse_file_from_before_the_backoff_restores_none():
                            "service_failed_at": ["no"]})
     assert context.service_failures == {} and context.service_failed_at == {}
     assert context.service_wait("VENDOR_REPAIR") == SERVICE_RETRY_MIN_S
+
+
+def test_a_step_that_waits_is_not_armed_while_fights_and_services_still_are():
+    """V334: bot 224's grind was armed again 0.5 s after each hunt whose every walk a death
+    camp refused, 4,879 walks in one session. A step that waits arms nothing; a service due
+    is still a service, and the step is armed again once the wait is over."""
+    from jev.coach.policy import STEP_WAIT_MAX_S, Context
+    from jev.world.state_v1 import GuidePos as Guide
+
+    graph = Graph.load("content/tbc/ally_human_1_12.json")
+    node = graph.get(graph.entry)
+    context = Context()
+    context.step_waits(node.id, 1600.0, "its stations lie in or behind a death camp", 1000.0)
+
+    def at(t, **kw):
+        return _s(guide=Guide(step_id=node.id),
+                  pos=Pos(zone=node.zone, zone_id=node.zone_id, mx=node.pos[0], my=node.pos[1]),
+                  **kw).model_copy(update={"t": t})
+    plan = decide(at(1000.0), node, context=context)
+    assert plan.rule == "wait.step" and plan.decision.skill is None
+    assert plan.decision.intent is Intent.WAIT and "death camp" in plan.decision.why
+    assert verify(plan.decision, at(1000.0), NAMES).ok
+    hurt = decide(at(1000.0, vitals=Vitals(hp=0.3, power=1.0, combat=False, dead=False,
+                                           ghost=False)), node, context=context)
+    assert hurt.decision.skill == "EAT_DRINK", "a meal is no step"
+    assert decide(at(1601.0), node, context=context).rule == "guide.step", "the wait is over"
+    assert decide(at(1600.0 - STEP_WAIT_MAX_S - 1.0), node, context=context).rule == \
+        "guide.step", "a wall clock set back holds nothing for good"
+    other = _s(guide=Guide(step_id="another")).model_copy(update={"t": 1000.0})
+    assert decide(other, None, context=context).rule != "wait.step", "by step"
+    context.step_waits(node.id, 1200.0, "sooner", 1000.0)
+    assert context.step_wait_until[node.id] == 1600.0, "the later wait holds"
+    restored = Context()
+    restored.restore_purse(context.purse())
+    assert restored.step_waiting(node.id, 1000.0) == 600.0, "kept across sessions"
+    assert "death camp" in restored.step_wait_why[node.id]
+
+
+def test_jev_is_not_offered_the_grind_of_a_step_that_waits():
+    """V334: Jev's picks are the coach's plans; the step's grind, or a grind where the
+    character stands, is the walk the camp refused (bot 224 took `fallback.grind`)."""
+    from jev.coach.judge import candidates
+    from jev.coach.policy import Context
+    from jev.world.state_v1 import GuidePos as Guide
+
+    graph = Graph.load("content/tbc/ally_human_1_12.json")
+    node = graph.get(graph.entry)
+    context = Context()
+    context.step_waits(node.id, 1600.0, "camp", 1000.0)
+    state = _s(guide=Guide(step_id=node.id, attempts=2),
+               pos=Pos(zone=node.zone, zone_id=node.zone_id, mx=node.pos[0], my=node.pos[1])
+               ).model_copy(update={"t": 1000.0})
+    floor = decide(state, node, context=context)
+    plans = candidates(state, node, context, floor)
+    assert plans[0] is floor
+    assert all(p.decision.skill not in ("GRIND_UNTIL", "TRAVEL_TO") for p in plans)
+
+
+def test_a_step_that_planned_no_route_waits_twice_as_long_each_time_in_a_row():
+    """V335: after V325 made refusals instant, bot 224's hunt that planned no route was armed
+    again a median 0.6 s after the last, 204 times in a row (29 Sep 15:10-15:15)."""
+    from jev.coach.policy import STEP_RETRY_MAX_S, STEP_RETRY_MIN_S, Context
+
+    context = Context()
+    waits = [context.step_stuck("rib", "no route", 1000.0 + 10_000.0 * n) for n in range(8)]
+    assert waits[:3] == [STEP_RETRY_MIN_S, 2 * STEP_RETRY_MIN_S, 4 * STEP_RETRY_MIN_S]
+    assert waits[-1] == STEP_RETRY_MAX_S
+    now = 1000.0 + 70_000.0
+    assert context.step_waiting("rib", now) == STEP_RETRY_MAX_S
+    restored = Context()
+    restored.restore_purse(context.purse())
+    assert restored.step_failures == {"rib": 8}, "kept across sessions"
+    context.step_moved("rib")
+    assert context.step_stuck("rib", "no route", now + 5_000.0) == STEP_RETRY_MIN_S, \
+        "a try that walked ends the run"

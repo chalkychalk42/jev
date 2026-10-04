@@ -44,9 +44,13 @@ def _index() -> dict[int, dict[tuple[int, int], list[tuple]]]:
     index: dict[int, dict[tuple[int, int], list[tuple]]] = {}
     for map_id, rows in (raw.get("maps") or {}).items():
         cells = index.setdefault(int(map_id), {})
-        for x, y, z, low, high, sides, wander in rows:
+        for row in rows:
+            x, y, z, low, high, sides, wander = row[:7]
+            # The kinds the spawn may be (V337), `(name id, min, max, rank)`; none in an
+            # index generated before them.
+            kinds = tuple(tuple(k) for k in row[7]) if len(row) > 7 else ()
             key = (math.floor(x / CELL_YARDS), math.floor(y / CELL_YARDS))
-            cells.setdefault(key, []).append((x, y, z, low, high, sides, wander))
+            cells.setdefault(key, []).append((x, y, z, low, high, sides, wander, kinds))
     return index
 
 
@@ -68,10 +72,32 @@ def near(map_id: int, x: float, y: float, radius: float, *, side: str | None,
     found = []
     for i in range(cx - span, cx + span + 1):
         for j in range(cy - span, cy + span + 1):
-            for sx, sy, sz, _low, high, sides, wander in cells.get((i, j), ()):
+            for sx, sy, sz, _low, high, sides, wander, _kinds in cells.get((i, j), ()):
                 if sides & bit and high > grey and math.dist((sx, sy), (x, y)) <= radius:
                     extra = max(0.0, min(wander, MAX_WANDER_YARDS) - ORDINARY_WANDER_YARDS)
                     if isinstance(level, int):
                         extra += min(max(0, high - level), MAX_LEVEL_YARDS)
                     found.append((sx, sy, sz, extra))
     return found
+
+
+def kinds(map_id: int, x: float, y: float, radius: float, *, side: str | None,
+          low: int, high: int) -> frozenset[int]:
+    """The name ids of the kinds of normal rank (no elite, no rare) spawned within `radius`
+    yards of (x, y) that attack `side` on sight and whose levels lie within `low`-`high`
+    (V337): what a dry grind rib widens to. None for an unknown side or `low` above `high`."""
+    bit = SIDES.get(side or "")
+    if bit is None or low > high:
+        return frozenset()
+    cells = _index().get(map_id) or {}
+    cx, cy = math.floor(x / CELL_YARDS), math.floor(y / CELL_YARDS)
+    span = math.ceil(radius / CELL_YARDS)
+    found = set()
+    for i in range(cx - span, cx + span + 1):
+        for j in range(cy - span, cy + span + 1):
+            for sx, sy, _sz, _low, _high, sides, _wander, spawn in cells.get((i, j), ()):
+                if not sides & bit or math.dist((sx, sy), (x, y)) > radius:
+                    continue
+                found.update(name for name, least, most, rank in spawn
+                             if rank == 0 and low <= least and most <= high)
+    return frozenset(found)

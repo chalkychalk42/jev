@@ -18,7 +18,7 @@ from typing import ClassVar
 from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
-from jev.clients.fight import HEAL_POINT, Fight
+from jev.clients.fight import HEAL_POINT, Fight, Kinds
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth, Hearthed
 from jev.clients.interact import Interact
@@ -41,7 +41,7 @@ from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.path import PathStatus
-from jev.guide.route_memory import RECORD_FLUSH_S
+from jev.guide.route_memory import CAMP_REFUSED, CAMP_YARDS, RECORD_FLUSH_S
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.choices import Choice, Stations, objective_key
@@ -50,10 +50,19 @@ from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
-from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt
+from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, spawn_tour
+from jev.run.hunt import stations as hunt_stations
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import graveyards, hostiles
-from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
+from jev.world.combat import (
+    HEAL_OUT_OF_COMBAT,
+    Role,
+    drink_to,
+    for_class,
+    grey_level,
+    is_caster,
+    rest_mana,
+)
 from jev.world.combat import from_bar as profile_from_bar
 from jev.world.gear import keep as gear_keep
 from jev.world.gear import load_worn, save_worn
@@ -259,6 +268,14 @@ CLASS_IDS = {name: class_id for class_id, name in CLASS_BY_ID.items()}
 RACE_IDS = {name: race_id for race_id, name in RACE_BY_ID.items()}
 
 
+def _counted(value) -> tuple[int | None, int | None, bool | None]:
+    """An objective's progress as a hunt counts it: (have, need, complete), a positive
+    complete flag with no counter (1, 1)."""
+    if value.complete is True and value.have is None:
+        return 1, 1, True  # a positive complete flag, including objectives with no counter
+    return value.have, value.need, value.complete
+
+
 def _tour(points, start) -> list[tuple[float, float, float]]:
     """Every point, from the one nearest `start`, always on to the nearest one left."""
     left, tour = [tuple(p) for p in points], []
@@ -282,6 +299,16 @@ CONJURE_EVERY_S = 90.0
 # A caster's hunt stands this far short of each station: inside Fireball's 35 yards and
 # Frostbolt's 30, outside most mobs' notice (V167).
 CASTER_STANDOFF_YARDS = 18.0
+# A reading this recent stands for the state a service check needs (V338): the hunt's own,
+# taken a moment before it asks.
+RECENT_READ_S = 0.5
+# Where a step that waits on a death camp is waited out with no rib to go to (V334): this far
+# beyond the camp's reach, on the nearest of these bearings round it that lies in no camp.
+CAMP_CLEAR_YARDS = 20.0
+CAMP_CLEAR_BEARINGS = 16
+# A dry rib's wider prey is at most this many levels above the character (V337), as a rib's
+# creatures are (`graph.RIB_LEVELS_ABOVE`, V323).
+WIDEN_LEVELS_ABOVE = 1
 
 class LiveBody:
     # Purse saves, one at a time (V328); a body made without `__init__` shares this one.
@@ -690,6 +717,20 @@ class LiveBody:
         if node is None or node.world is None or node.map_id != self.client.bounds.map_id:
             return Result(SkillOutcome.ABORTED, "step has no supported map destination", "unsupported")
         ok = self._approach(node.world)
+        step = self.arm.step_id if self.arm is not None else None
+        level = (self._read() or {}).get("char.level") if not ok else None
+        note = self._walk_note(level if isinstance(level, int) else None) if not ok else None
+        if note is not None and note[1] is not None:
+            # Refused through a death camp: the step waits for the camp to end (V334).
+            self.policy_context.step_waits(step, note[1], "its walk is refused through a "
+                                           "death camp", time.time())
+        elif note is not None and note[0] is False:
+            # No route planned, not a yard walked: the step waits before it is armed again
+            # (V335). Bot 480's walks from Dolanaar, TRAVEL_TO among them, were refused for 20
+            # minutes on end (29 Sep 04:31-04:56).
+            self._stuck(step, "no route to the step could be planned")
+        elif ok or (note is not None and note[0]):
+            self.policy_context.step_moved(step)
         return Result(SkillOutcome.SUCCEEDED if ok else SkillOutcome.ABORTED,
                       "", "arrived" if ok else "unreachable")
 
@@ -737,10 +778,19 @@ class LiveBody:
         return value
 
     def _progress(self):
-        value = self._quest_progress()
-        if value.complete is True and value.have is None:
-            return 1, 1  # a positive complete flag, including objectives with no counter
-        return value.have, value.need
+        return _counted(self._quest_progress())[:2]
+
+    def _log_progress(self):
+        """`_quest_progress` from the log as the last reading left it, without reading again
+        (V338)."""
+        node = self._node()
+        with self.client._capturing:
+            log = self.client.log.complete
+        value = progress(log, node.quest_id if node else None)
+        if (node and not node.objective_targets and value.first_incomplete is not None
+                and value.first_incomplete > 0):
+            raise Unsupported("next objective needs its own generated target; this graph places only the first")
+        return value
 
     def _hunt(self, state) -> Result:
         node = self._node()
@@ -752,6 +802,9 @@ class LiveBody:
         progress_reader = self._progress
         def complete_reader():
             return self._quest_progress().complete
+        # The counter in the log the hunt's own reading fed, read no more (V338).
+        def observe(values):
+            return _counted(self._log_progress())
         if node.kind is StepKind.QUEST_OBJECTIVE and node.objective_targets:
             self._quest_ids()
             with self.client._capturing:
@@ -777,6 +830,10 @@ class LiveBody:
                 return (1, 1) if value.complete is True and value.have is None else (value.have, value.need)
             def complete_reader():
                 return selected_progress().complete
+            def observe(values):
+                with self.client._capturing:
+                    return _counted(target_progress(self.client.log.complete, node.quest_id,
+                                                    destination))
         if isinstance(destination, ObjectiveTarget) and destination.kind == "explore":
             return self._explore(destination, complete_reader)
         if (isinstance(destination, ObjectiveTarget) and destination.kind == "loot"
@@ -795,22 +852,133 @@ class LiveBody:
             def complete_reader():
                 level, needed = progress_reader()
                 return None if level is None else level >= needed
+            def observe(values):
+                level = (values or {}).get("char.level")
+                return level, target, None if level is None else level >= target
         wanted = name_id(destination.target_name)
         values = self._read() or {}
         caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
+        level = values.get("char.level") if isinstance(values.get("char.level"), int) else None
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
                     is_complete=complete_reader, service_needed=self._service_needed,
                     stations=self._stations("hunt.station", objective_key(wanted, node.id)),
                     standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0,
-                    conjure=self._conjure)
+                    conjure=self._conjure,
+                    camp_until=lambda station: self._camp_end(station, level),
+                    walk_note=lambda: self._walk_note(level), observe=observe)
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
+        if node.kind is StepKind.GRIND:
+            # A rib found dry fights any kind round it worth fighting (V337).
+            hunt.widen = lambda: self._rib_kinds(node, destination.world, yards, wanted, level)
         spawns = spawn_points(self.hunt_spawns, node.id, getattr(destination, "target_id", None))
         outcome = hunt.run(destination.world, yards, wanted, timeout_s=self.hunt_timeout,
                            spawns=spawns,
                            others=self._hostiles(destination.world, yards + PACK_YARDS)
                            if spawns else ())
+        step = self.arm.step_id if self.arm is not None else None
+        if outcome is Hunted.CAMP and getattr(hunt, "until", None) is not None:
+            # Not armed again until the camp ends (V334): bot 224's grind was armed again 0.5 s
+            # after each hunt whose every walk the camp refused. Waited out on another rib
+            # (`ClientRuntime._wait_elsewhere`), or, with none, out of the camp's reach.
+            self.policy_context.step_waits(step, hunt.until, "its stations lie in or behind "
+                                           "a death camp", time.time())
+            self._out_of_camp(level)
+        elif outcome is Hunted.UNREACHABLE and getattr(hunt, "stuck", False):
+            self._stuck(step, "no route to any station of its hunt could be planned")
+        elif getattr(hunt, "arrived", 0):
+            self.policy_context.step_moved(step)
         return self._result(outcome, hunt.detail)
+
+    def rib_camped(self, node, level: int | None) -> bool:
+        """Does every station a hunt of the rib `node` would stand at lie in a death camp
+        counting at `level` (`Hunt._out_of_camps`, V334)? No, with none known."""
+        if node is None or node.world is None or self.client.bounds is None \
+                or node.map_id != self.client.bounds.map_id:
+            return False
+        spawns = spawn_points(self.hunt_spawns, node.id, None)
+        tour = (spawn_tour(spawns) if spawns
+                else hunt_stations(node.world, node.hunt_yards or DEFAULT_HUNT_YARDS))
+        return bool(tour) and all(self._camp_end(p, level) is not None for p in tour)
+
+    def _out_of_camp(self, level: int | None) -> bool:
+        """Walk clear of the death camp the character stands in, if it stands in one: to the
+        nearest point `CAMP_CLEAR_YARDS` beyond its reach that lies in no camp, where a step
+        that waits on it is waited out with nothing else to do (V334). `True` when it walked
+        there."""
+        memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
+        here = self._position()
+        if memory is None or bounds is None or here is None:
+            return False
+        at = map_to_world(*here, bounds)
+        camp = memory.camp_at(bounds.map_id, at[:2], time.time(), level) if at else None
+        if camp is None:
+            return False
+        reach = CAMP_YARDS + CAMP_CLEAR_YARDS
+        ring = [(camp.x + reach * math.cos(a), camp.y + reach * math.sin(a))
+                for a in (2 * math.pi * k / CAMP_CLEAR_BEARINGS for k in range(CAMP_CLEAR_BEARINGS))]
+        clear = [p for p in ring if self._camp_end(p, level) is None]
+        if not clear:
+            return False
+        spot = min(clear, key=lambda p: math.dist(p, at[:2]))
+        self.say(f"  out of the death camp's reach to wait, {math.dist(spot, at[:2]):.0f} yards")
+        return self._approach((spot[0], spot[1], self._height_at(at)))
+
+    def _height_at(self, at) -> float:
+        """The height tracked where the character stands, else 0 (the planner looks 200 yards
+        up and down for a floor, `jevpath_lazy`)."""
+        ground = getattr(self.client, "_ground", None)
+        if ground is not None and math.dist(ground[:2], at[:2]) <= 15.0:
+            return ground[2]
+        return 0.0
+
+    def _stuck(self, step: str | None, why: str) -> None:
+        """A try at the step planned no route: it waits before it is armed again (V335)."""
+        wait = self.policy_context.step_stuck(step, why, time.time())
+        if wait:
+            self.say(f"  {why}: the step waits {wait:.0f}s")
+
+    def _rib_kinds(self, node, world, yards: float, own: int | None,
+                   level: int | None) -> Kinds | None:
+        """What a dry grind rib fights (`Hunt.widen`, V337): its own kind, and any kind of
+        normal rank spawned within its disk and a pack's reach that attacks this character on
+        sight and whose levels lie within the rib's (`jev.world.hostiles.kinds`), the unit
+        taken at a level none grey to the character and at most `WIDEN_LEVELS_ABOVE` above
+        it. `None` with the level, the side or the rib's levels unknown, or nothing more."""
+        band = getattr(node, "level", None)
+        if not isinstance(level, int) or not band or world is None or self.client.bounds is None:
+            return None
+        low, high = max(band[0], grey_level(level) + 1), min(band[1], level + WIDEN_LEVELS_ABOVE)
+        names = hostiles.kinds(self.client.bounds.map_id, world[0], world[1], yards + PACK_YARDS,
+                               side=self._side, low=band[0], high=band[1]) - {own}
+        if low > high or not names:
+            return None
+        return Kinds(own=own, names=names, low=low, high=high)
+
+    def _camp_end(self, world, level: int | None) -> float | None:
+        """When the death camp the world point `world` lies in ends, as wall time: its nearest
+        camp death counting at `level` (`RouteMemory.camp_at`, V307); `None` for none, or with
+        no route memory (V334)."""
+        memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
+        if memory is None or bounds is None or world is None:
+            return None
+        camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level)
+        return camp.camp_until if camp is not None else None
+
+    def _walk_note(self, level: int | None) -> tuple[bool, float | None] | None:
+        """How the last walk that did not arrive went (`Hunt.walk_note`, V334): whether its
+        route was planned, and when the death camp it was refused through ends; `None` from
+        a client that does not say."""
+        if not hasattr(self.client, "last_plan"):
+            return None
+        plan = self.client.last_plan
+        if plan is None:
+            return False, None
+        if plan.status is PathStatus.NOPATH and plan.detail == CAMP_REFUSED:
+            camp = getattr(plan, "camp", None)
+            end = self._camp_end(camp, level) if camp is not None else None
+            return False, end
+        return plan.usable, None
 
     def _explore(self, target: ObjectiveTarget, complete: Callable[[], bool | None]) -> Result:
         """Walk to an exploration trigger's point and wait for the quest's own credit.
@@ -902,7 +1070,12 @@ class LiveBody:
 
     def _service_needed(self) -> str | None:
         self.checkpoint()
-        state = self.client.state()
+        # The state of the reading the hunt has just taken, not another (V338): a state
+        # built afresh at each look was a capture more between a fight and the next pull.
+        recent = getattr(self.client, "recent_state", None)
+        state = recent(RECENT_READ_S) if callable(recent) else None
+        if state is None:
+            state = self.client.state()
         if state is None:
             return None
         # On the armed step, as the policy sees it: a merchant or repairer found out of
@@ -1233,6 +1406,7 @@ class LiveBody:
                         setattr(self, attr, (int(kept[0]), kept[1], kept[2]))
             context.saved = self._save_purse
         context.trainable = self.trainable
+        context.camped = self.rib_camped
         context.reserve = self.training_reserve
         context.bindable = self.bindable
         context.discoverable = self.discoverable

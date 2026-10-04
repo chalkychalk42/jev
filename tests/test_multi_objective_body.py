@@ -46,6 +46,9 @@ def test_two_hunts_use_separate_destinations_and_only_quest_flag_advances(monkey
                 expected.world, expected.hunt_yards, name_id(expected.target_name))
             assert self.callbacks["progress"]() == ((7, 8) if index == 0 else (0, 5))
             assert self.callbacks["is_complete"]() is False
+            # The same counter from the log the hunt's reading fed, no read more (V338).
+            assert self.callbacks["observe"]({}) == ((7, 8, False) if index == 0
+                                                     else (0, 5, False))
             current = b.client.log.complete[0]
             updated = tuple(o.model_copy(update={"have": o.need}) if o.counter_index == index else o
                             for o in current.objectives)

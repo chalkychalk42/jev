@@ -178,6 +178,9 @@ class Path:
     detail: str = ""
     teleport: Teleport | None = None
     jump: int = 0
+    # A walk refused through a death camp (`route_memory.CAMP_REFUSED`): where the camp's
+    # death lies, (x, y), for whoever waits for it to end (V334).
+    camp: tuple[float, float] | None = None
 
     @property
     def usable(self) -> bool:
@@ -255,7 +258,13 @@ class MmapQuery:
         # matters.
         self.launcher = tuple(launcher)
         self._procs: dict[int, subprocess.Popen] = {}
-        self._lock = threading.Lock()
+        # One lock a map (V338): a map's sidecar answers one request at a time, and the maps'
+        # are separate processes. One lock for all of them, in a farm process of about 80 bots
+        # sharing this query (`hive.farm`), queued every plan behind every other map's, and
+        # behind a map's tiles loading at its sidecar's start (2.2 s for map 0). `_guard`
+        # keeps the maps' locks and sidecars.
+        self._guard = threading.Lock()
+        self._locks: dict[int, threading.Lock] = {}
 
     @staticmethod
     def _dispose(proc: subprocess.Popen, *, close_stdout: bool = True) -> None:
@@ -327,50 +336,60 @@ class MmapQuery:
                 if not reader.is_alive():
                     proc.stdout.close()
 
+    def _lock(self, map_id: int) -> threading.Lock:
+        """The lock of `map_id`'s sidecar (V338)."""
+        with self._guard:
+            lock = self._locks.get(map_id)
+            if lock is None:
+                lock = self._locks[map_id] = threading.Lock()
+            return lock
+
     def _proc(self, map_id: int) -> subprocess.Popen | None:
-        with self._lock:
+        """`map_id`'s sidecar, started if it is not running; the map's lock held."""
+        with self._guard:
             proc = self._procs.get(map_id)
-            if proc is not None and proc.poll() is None:
-                return proc
-            if not self.launcher and not pathlib.Path(self.binary).exists():
-                return None
-            # CREATE_NO_WINDOW, because the planner must not steal focus from the game.
-            # Launched through `wsl.exe` on Windows it opens a console, Windows raises
-            # that console, and the next keypress the bot sends is refused by its own
-            # focus guard — which presents as "could not type /target" a full minute
-            # later, in a completely different part of the run.
-            flags = 0x08000000 if sys.platform == "win32" else 0
-            proc = subprocess.Popen(
-                [*self.launcher, self.binary, self.mmaps_dir, str(map_id)],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, text=True, bufsize=1,
-                creationflags=flags,
-            )
-            ready = self._readline(proc)
-            if '"ready"' not in ready:
-                self._dispose(proc)
-                return None
-            self._procs[map_id] = proc
+        if proc is not None and proc.poll() is None:
             return proc
+        if not self.launcher and not pathlib.Path(self.binary).exists():
+            return None
+        # CREATE_NO_WINDOW, because the planner must not steal focus from the game.
+        # Launched through `wsl.exe` on Windows it opens a console, Windows raises
+        # that console, and the next keypress the bot sends is refused by its own
+        # focus guard — which presents as "could not type /target" a full minute
+        # later, in a completely different part of the run.
+        flags = 0x08000000 if sys.platform == "win32" else 0
+        proc = subprocess.Popen(
+            [*self.launcher, self.binary, self.mmaps_dir, str(map_id)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, text=True, bufsize=1,
+            creationflags=flags,
+        )
+        ready = self._readline(proc)
+        if '"ready"' not in ready:
+            self._dispose(proc)
+            return None
+        with self._guard:
+            self._procs[map_id] = proc
+        return proc
 
     def path(self, map_id: int, start: Point, end: Point) -> Path:
-        try:
-            proc = self._proc(map_id)
-        except (OSError, ValueError) as exc:
-            return Path(PathStatus.UNAVAILABLE, source="mmap", detail=str(exc))
-        if proc is None:
-            return Path(PathStatus.UNAVAILABLE, source="mmap",
-                        detail=f"no sidecar at {self.binary} for map {map_id}")
-        try:
-            with self._lock:
+        with self._lock(map_id):
+            try:
+                proc = self._proc(map_id)
+            except (OSError, ValueError) as exc:
+                return Path(PathStatus.UNAVAILABLE, source="mmap", detail=str(exc))
+            if proc is None:
+                return Path(PathStatus.UNAVAILABLE, source="mmap",
+                            detail=f"no sidecar at {self.binary} for map {map_id}")
+            try:
                 proc.stdin.write(
                     f"{start[0]:.3f} {start[1]:.3f} {start[2]:.3f} "
                     f"{end[0]:.3f} {end[1]:.3f} {end[2]:.3f}\n"
                 )
                 proc.stdin.flush()
                 line = self._readline(proc)
-        except (OSError, ValueError) as exc:
-            return Path(PathStatus.UNAVAILABLE, source="mmap", detail=str(exc))
+            except (OSError, ValueError) as exc:
+                return Path(PathStatus.UNAVAILABLE, source="mmap", detail=str(exc))
 
         if not line:
             return Path(PathStatus.UNAVAILABLE, source="mmap", detail="sidecar went away")
@@ -391,10 +410,13 @@ class MmapQuery:
         )
 
     def close(self) -> None:
-        with self._lock:
-            for proc in self._procs.values():
+        with self._guard:
+            maps = list(self._procs)
+        for map_id in maps:
+            with self._lock(map_id), self._guard:
+                proc = self._procs.pop(map_id, None)
+            if proc is not None:
                 self._dispose(proc)
-            self._procs.clear()
 
 
 class RecordedQuery:

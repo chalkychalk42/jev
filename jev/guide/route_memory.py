@@ -104,6 +104,20 @@ CAMP_S = 3600.0
 CAMP_REFUSED = "no way that keeps out of a death camp"
 REFUSAL_S = 60.0
 REFUSAL_YARDS = 5.0
+# A refusal is kept by where the walk starts and the camp it passes, whatever its end (V336):
+# a hunt's stations are as many ends, each 20 to 60 yards from the next, and the 5 yards an
+# end was matched within never matched one station's refusal to the next station's walk, so
+# each of a hunt's 12 to 24 walks searched its rings again. Walks from one spot through one
+# camp share the way out the camp blocks.
+#
+# The search for a way round stops after `ROUND_BUDGET_S` or `ROUND_QUERIES` planner asks,
+# whichever comes first, with the best way found by then (V336), as `ExposureQuery`'s does
+# (`EXPOSURE_BUDGET_S`, V257); a camp with none found is refused, and the refusal kept. Its
+# two ring searches are up to `ROUND_QUERIES` asks, the whole of them, so a quick planner
+# answers as before; in the hive's farm processes, saturated on Python's lock at 100-140 ms an
+# ask, a refusal took a median of 17.7 s, and 30 to 76 s in bot 480's log (29 Sep 03:00-09:30).
+ROUND_BUDGET_S = 1.0
+ROUND_QUERIES = 2 * len(DANGER_RINGS) * VIA_BEARINGS * 2
 # A death past `DANGER_S` and out of any camp is kept by no rule here: `dangers_on` passes it
 # over and `died` drops it. The hive's merge (`hive.shared.SharedRoutes`) took each back from
 # the file at every save, and at 14:05 on 29 Sep its memory held 8,678 deaths, 506 of them
@@ -605,11 +619,13 @@ class DangerAvoidingQuery:
     def __init__(self, inner, memory: RouteMemory, clock: Callable[[], float] = time.time,
                  hot: Callable[[int], list] | None = None,
                  level: Callable[[], int | None] | None = None,
-                 ghost: Callable[[], bool] | None = None):
+                 ghost: Callable[[], bool] | None = None,
+                 timer: Callable[[], float] = time.monotonic):
         self.inner, self.memory, self.clock = inner, memory, clock
         self.hot = hot
         self.level = level
         self.ghost = ghost
+        self.timer = timer                  # the search's budget (`ROUND_BUDGET_S`, V336)
         # (when, map, start, end, camp) of each walk refused through a camp (`REFUSAL_S`).
         self._refused: list[tuple[float, int, tuple, tuple, tuple]] = []
 
@@ -670,34 +686,41 @@ class DangerAvoidingQuery:
         camp = next((spot for spot in passed if spot[4]), None)
         now = self.clock()
         if camp is not None and self._refused_before(map_id, start, end, camp, now):
-            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED)
+            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED,
+                        camp=tuple(camp[:2]))
         # Round every spot within `DANGER_DETOUR` of the way through; through a death camp,
         # round every spot, then round the camps alone, however far (V307).
         tries = [(hit, spots, direct.length_yards() * DANGER_DETOUR)] if camp is None else [
             (hit, spots, math.inf), (camp, camps, math.inf)]
+        budget = _Budget(self.timer, ROUND_BUDGET_S, ROUND_QUERIES)
         for centre, keep, limit in tries:
-            way = self._ring(map_id, start, end, direct, centre, keep, limit)
+            way = self._ring(map_id, start, end, direct, centre, keep, limit, budget)
             if way is not None:
                 return way
+            if budget.spent():
+                break
         if camp is not None:
             self._refused.append((now, map_id, tuple(start[:2]), tuple(end[:2]), camp[:2]))
-            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED)
+            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED,
+                        camp=tuple(camp[:2]))
         return direct
 
     def _refused_before(self, map_id: int, start: Point, end: Point, camp, now: float) -> bool:
-        """Was this walk refused through the same camp within `REFUSAL_S`?"""
+        """Was a walk from here refused through the same camp within `REFUSAL_S`, to any end
+        (V336)?"""
         self._refused = [r for r in self._refused if 0 <= now - r[0] < REFUSAL_S]
         return any(m == map_id and was == camp[:2]
                    and math.dist(a, start[:2]) <= REFUSAL_YARDS
-                   and math.dist(b, end[:2]) <= REFUSAL_YARDS
-                   for _, m, a, b, was in self._refused)
+                   for _, m, a, _b, was in self._refused)
 
     def _ring(self, map_id: int, start: Point, end: Point, direct: Path, hit, spots,
-              limit: float) -> Path | None:
+              limit: float, budget: _Budget | None = None) -> Path | None:
         """The shortest way through a point on rings round `hit` that keeps clear of `spots`
-        and is no longer than `limit`, or `None`."""
+        and is no longer than `limit`, or `None`; with `budget`, the best of the ring being
+        searched when it is spent (V336)."""
         z = (start[2] + end[2]) / 2
         near = _Near(spots)
+        budget = budget or _Budget(self.timer, math.inf, math.inf)
 
         def clear(route) -> bool:
             return near.first(route.points) is None
@@ -706,13 +729,17 @@ class DangerAvoidingQuery:
             radius = hit[2] + margin - DANGER_YARDS    # rings kept the death spots' spacing
             best: tuple[float, Path] | None = None
             for k in range(VIA_BEARINGS):
+                if budget.spent():
+                    break
                 angle = 2 * math.pi * k / VIA_BEARINGS
                 via = (hit[0] + radius * math.cos(angle), hit[1] + radius * math.sin(angle), z)
-                first = self.inner.path(map_id, start, via)
+                first = budget.ask(self.inner, map_id, start, via)
                 if first.status is not PathStatus.COMPLETE or len(first.points) < 2 \
                         or not clear(first):
                     continue
-                second = self.inner.path(map_id, first.points[-1], end)
+                if budget.spent():
+                    break
+                second = budget.ask(self.inner, map_id, first.points[-1], end)
                 if not second.usable or second.status is not direct.status or not clear(second):
                     continue
                 length = first.length_yards() + second.length_yards()
@@ -721,7 +748,25 @@ class DangerAvoidingQuery:
                                          direct.source, f"round {hit[3]}"))
             if best is not None:
                 return best[1]
+            if budget.spent():
+                return None
         return None
 
     def close(self) -> None:
         self.inner.close()
+
+
+class _Budget:
+    """A search's planner asks and seconds left (V336)."""
+
+    def __init__(self, timer: Callable[[], float], seconds: float, queries: float):
+        self.timer, self.queries = timer, queries
+        self.deadline = timer() + seconds
+        self.asked = 0
+
+    def ask(self, inner, map_id: int, start: Point, end: Point) -> Path:
+        self.asked += 1
+        return inner.path(map_id, start, end)
+
+    def spent(self) -> bool:
+        return self.asked >= self.queries or self.timer() >= self.deadline

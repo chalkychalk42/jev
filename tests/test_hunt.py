@@ -386,7 +386,11 @@ def test_a_hunt_stands_where_its_target_spawns_when_the_guide_knows():
     spawns = ((24.0, 0.0, 80.0), (0.0, 36.0, 80.0), (30.0, 5.0, 80.0), (60.0, 60.0, 80.0))
     h, _walked = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: False)
     assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=spawns) is Hunted.UNREACHABLE
-    assert h.moves == 3 * SPAWN_LAPS, "a spawn ten yards from a station is the same stance"
+    # A walk that failed is not walked again on the next lap (V334).
+    assert h.moves == 3, "a spawn ten yards from a station is the same stance"
+    h, _walked = _hunt([Fought.NO_TARGET], [(1, 10)], approach=lambda p: True)
+    assert h.run((0.0, 0.0, 80.0), 90.0, timeout_s=5, spawns=spawns) is Hunted.UNREACHABLE
+    assert h.moves == 3 * SPAWN_LAPS
 
 
 def test_spawn_stations_are_a_walk_not_a_zigzag():
@@ -613,3 +617,124 @@ def test_a_casters_hunt_stands_short_of_each_station_and_a_paladins_does_not():
     hunt.standoff_yards = 0.0
     hunt.run((0.0, 0.0, 0.0), 30.0, 9, timeout_s=0.5)
     assert asked and all(kw == {} for kw in asked)
+
+
+NEAR, FAR = (0.0, 0.0, 80.0), (60.0, 0.0, 80.0)
+
+
+def test_stations_in_a_death_camp_are_not_walked_and_a_hunt_all_in_one_waits_for_it():
+    """V334: of the hive's walks to a station inside a death camp (V307) that arrived, 6.1%
+    ended in a death near it within three minutes, against 1.0% elsewhere; and 55% of its
+    40,711 walks that did not arrive were to such a station (29 Sep 03:00-09:30). A station
+    in a camp is not walked to; a hunt with every station in one ends `CAMP`, waiting for the
+    first to end."""
+    ends = {NEAR: 5000.0, FAR: 4000.0}
+    walked = []
+    h, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)],
+                 approach=lambda p, **kw: walked.append(tuple(p)) or True)
+    h.camp_until = lambda p: ends.get(tuple(p))
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.CAMP
+    assert walked == [] and h.fight.calls == 0 and h.until == 4000.0
+    assert "death camp" in h.detail
+    del ends[FAR]
+    h, _ = _hunt([Fought.KILLED], [(0, 1), (1, 1)],
+                 approach=lambda p, **kw: walked.append(tuple(p)) or True)
+    h.camp_until = lambda p: ends.get(tuple(p))
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.DONE
+    assert walked == [FAR], "the station out of the camp, and only it"
+
+
+def test_a_station_whose_walk_failed_is_not_walked_again_on_the_next_lap():
+    """V334: bot 224 asked for the same refused walks lap after lap and hunt after hunt,
+    4,879 in one session (29 Sep 15:10)."""
+    walked = []
+    h, _ = _hunt([Fought.NO_TARGET], [(0, 1)],
+                 approach=lambda p, **kw: walked.append(tuple(p)) or tuple(p) != FAR)
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert walked.count(FAR) == 1 and walked.count(NEAR) == 2, walked
+    assert h.arrived == 2
+
+
+def test_a_hunt_whose_every_walk_is_refused_through_a_death_camp_waits_for_the_camp():
+    """V334: after five deaths at its Shadowglen grind, every walk bot 480 asked for from
+    Dolanaar was refused through the camp for over 20 minutes (29 Sep 04:31-04:56). Every walk
+    refused so, and none arrived: `CAMP`, until the first refusing camp ends. One refused for
+    any other reason is no camp's to wait out."""
+    h, _ = _hunt([Fought.NO_TARGET], [(0, 1)], approach=lambda p, **kw: False)
+    ends = iter([4000.0, 3000.0])
+    h.walk_note = lambda: (False, next(ends))
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.CAMP
+    assert h.until == 3000.0 and h.moves == 2, "each station tried once"
+    notes = iter([(False, 4000.0), (False, None)])
+    h.walk_note = lambda: next(notes)
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert h.until is None
+
+
+def test_a_hunt_that_could_plan_no_walk_is_stuck_and_one_that_walked_is_not():
+    """V335: a hunt that planned no route to any station never moved the character; it says
+    so, for its step to wait before it is armed again."""
+    h, _ = _hunt([Fought.NO_TARGET], [(0, 1)], approach=lambda p, **kw: False)
+    h.walk_note = lambda: (False, None)
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert h.stuck and "no route" in h.detail
+    notes = iter([(False, None), (True, None)])
+    h.walk_note = lambda: next(notes)
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert not h.stuck and "whole disk" in h.detail, "a walk that began is no stuck hunt"
+    h.walk_note = None
+    assert h.run(NEAR, 90.0, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert not h.stuck, "a body that does not say may have walked"
+
+
+def test_a_dry_rib_fights_wider_for_another_round_of_laps_once():
+    """V337: a grind rib hunts one kind, and in the hive's crowded ribs logs show 14-station
+    tours of "no nameplate and no Tab target worth fighting" (`184.log`, `192.log`). After its
+    laps stood at stations and killed nothing, it fights wider for as many laps more, once."""
+    from jev.run.hunt import SPAWN_LAPS
+
+    wider = object()
+    asked = []
+    h, walked = _hunt([Fought.NO_TARGET], [(0, 1)])
+    h.fight.run = lambda name_id=None, **_: asked.append(name_id) or Fought.NO_TARGET
+    h.widen = lambda: wider
+    assert h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR)) is Hunted.UNREACHABLE
+    assert h.widened and len(walked) == 2 * 2 * SPAWN_LAPS, "as many laps again"
+    first = asked.index(wider)
+    assert set(asked[:first]) == {9} and set(asked[first:]) == {wider}
+    h, walked = _hunt([Fought.KILLED, Fought.NO_TARGET], [(0, 2)])
+    h.widen = lambda: wider
+    h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR))
+    assert not h.widened, "a rib that killed is not dry"
+    h, walked = _hunt([Fought.NO_TARGET], [(0, 1)], approach=lambda p, **kw: False)
+    h.widen = lambda: wider
+    h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR))
+    assert not h.widened, "a rib stood nowhere is not dry, it is out of reach"
+    h, walked = _hunt([Fought.NO_TARGET], [(0, 1)])
+    h.widen = lambda: None
+    h.run(NEAR, 90.0, 9, timeout_s=5, spawns=(NEAR, FAR))
+    assert not h.widened and len(walked) == 2 * SPAWN_LAPS, "nothing wider: as before"
+
+
+def test_a_hunt_pass_reads_once_between_fights():
+    """V338: after each fight the loop read the state, then the grind's progress and complete
+    readers each read it again, 1.86 s at the median in the hive (bot 201, 29 Sep). With an
+    `observe`, the pass's one reading serves the objective and the next pull's health."""
+    reads, at_fight = [], []
+
+    class Counting(_Fight):
+        def run(self, name_id=None, **_):
+            at_fight.append(len(reads))
+            return super().run(name_id)
+
+    h, _ = _hunt([], [(0, 1)])
+    h.fight = Counting([Fought.NO_TARGET, Fought.KILLED, Fought.NO_TARGET])
+    h.read = lambda: reads.append(1) or {"char.level": 5 + h.kills}
+    h.progress = lambda: pytest.fail("read again for the counter")
+    h.observe = lambda v: (v.get("char.level"), 6, v.get("char.level", 0) >= 6)
+    h.sleep = lambda seconds: None
+    assert h.run(NEAR, 30.0, timeout_s=5, spawns=(NEAR,)) is Hunted.DONE
+    from itertools import pairwise
+
+    gaps = [b - a for a, b in pairwise(at_fight)]
+    assert gaps and all(g == 1 for g in gaps), gaps

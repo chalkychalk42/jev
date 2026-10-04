@@ -30,6 +30,9 @@ def test_hunt_loots_repairs_and_resumes_the_same_objective(tmp_path):
                         bags=Bags(free=8, durability_min=self.durability, money_copper=100))
 
         def values(self):
+            # A reading feeds the quest log as `Client.reading` does, which the hunt's own
+            # reading is read for (V338).
+            live.client.log.complete = self.read().quests
             return {"vitals.hp": 1.0, "vitals.combat": False, "bags.free": 8,
                     "bags.durability_min": self.durability}
 

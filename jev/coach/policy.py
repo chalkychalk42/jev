@@ -27,6 +27,7 @@ always usable on its own.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -99,6 +100,21 @@ SERVICE_RETRY_MIN_S = 60.0
 # SPACE 20 and BIND_HEARTH 21, none done; and the walks were where the mage died, 13 of its 29
 # deaths in fights begun on them. Kept in the purse file, as a 15-minute session would forget it.
 SERVICE_RETRY_MAX_S = 1800.0
+# A guide step whose hunt found every station in or behind a death camp (V307) is not armed
+# again until the first such camp ends (V334), as wall time, by step: the rest of the policy -
+# a fight, a service, a meal - goes on, and the step's grind waits. Bot 224, its only road
+# out of the Sepulcher through a camp of its own deaths, armed its grind again 0.5 s after
+# each one failed, 4,879 walks refused in one session (29 Sep 15:10-15:15). No wait is kept
+# longer than `STEP_WAIT_MAX_S` ahead, against a wall clock set back (the WSL clock, 28 Sep).
+STEP_WAIT_MAX_S = 7200.0
+# A guide step whose hunt or walk planned no route at all - the character never moved - waits
+# `STEP_RETRY_MIN_S` before it is armed again, twice as long for each such try in a row, to at
+# most `STEP_RETRY_MAX_S` (V335), as a failed service does (V322); a try that moves the
+# character ends the run. After V325 made refusals instant, bot 224's hunt that planned none
+# was armed again a median 0.6 s after the last ended, 204 times in a row, and bot 217's 124
+# (29 Sep 15:10-15:15).
+STEP_RETRY_MIN_S = 60.0
+STEP_RETRY_MAX_S = 1800.0
 # A death skill that failed - aborted or timed out - is armed again at once the first time,
 # then `DEATH_RETRY_MIN_S` after each failure more in a row, doubled each time, to at most
 # `DEATH_RETRY_MAX_S`; the character up again, or the skill done, it starts afresh (V328).
@@ -155,6 +171,53 @@ class Context:
         at = self.service_failed_at.get(skill or "")
         return at is not None and abs(now - at) < self.service_wait(skill)
 
+    # Whether a rib lies wholly in a death camp counting at a level (`LiveBody.rib_camped`):
+    # one that does is no rib to wait a step out on (`ClientRuntime._wait_elsewhere`, V334).
+    camped: Callable[..., bool] | None = None
+    # When each guide step may be armed again, as wall time (V334), and why it waits; and how
+    # many tries at it in a row planned no route (V335).
+    step_wait_until: dict[str, float] = field(default_factory=dict)
+    step_wait_why: dict[str, str] = field(default_factory=dict)
+    step_failures: dict[str, int] = field(default_factory=dict)
+
+    def step_stuck(self, step_id: str | None, why: str, now: float) -> float:
+        """A try at `step_id` planned no route (V335): it waits `STEP_RETRY_MIN_S`, doubled for
+        each such try in a row, at most `STEP_RETRY_MAX_S`. The seconds it waits."""
+        if not step_id:
+            return 0.0
+        failures = self.step_failures[step_id] = self.step_failures.get(step_id, 0) + 1
+        wait = min(STEP_RETRY_MIN_S * 2 ** max(0, min(failures, 16) - 1), STEP_RETRY_MAX_S)
+        self.step_waits(step_id, now + wait, why, now)
+        self._save()
+        return wait
+
+    def step_moved(self, step_id: str | None) -> None:
+        """A try at `step_id` walked somewhere: its run of tries that could not ends (V335)."""
+        if step_id and self.step_failures.pop(step_id, None) is not None:
+            self._save()
+
+    def step_waits(self, step_id: str | None, until: float, why: str, now: float) -> None:
+        """Hold `step_id` until `until` (wall time), the later of this and any wait it has."""
+        if not step_id:
+            return
+        until = min(until, now + STEP_WAIT_MAX_S)
+        if until <= self.step_wait_until.get(step_id, -math.inf):
+            return
+        self.step_wait_until = {k: v for k, v in self.step_wait_until.items()
+                                if 0.0 < v - now <= STEP_WAIT_MAX_S}
+        self.step_wait_why = {k: v for k, v in self.step_wait_why.items()
+                              if k in self.step_wait_until}
+        self.step_wait_until[step_id], self.step_wait_why[step_id] = until, why
+        self._save()
+
+    def step_waiting(self, step_id: str | None, now: float) -> float | None:
+        """Seconds `step_id` still waits at `now`, or `None`; a wait that would end further
+        off than `STEP_WAIT_MAX_S` is a clock set back, and none."""
+        until = self.step_wait_until.get(step_id or "")
+        if until is None:
+            return None
+        left = until - now
+        return left if 0.0 < left <= STEP_WAIT_MAX_S else None
     # When each death skill last failed, and how many times in a row (V328).
     death_failed_at: dict[str, float] = field(default_factory=dict)
     death_failures: dict[str, int] = field(default_factory=dict)
@@ -297,7 +360,8 @@ class Context:
              "supplies_needed", "train_blocked_level", "train_blocked_until",
              "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step",
              "repair_unreachable_until", "supplies_unreachable_until", "bags_unreachable_until",
-             "service_failed_at", "service_failures")
+             "service_failed_at", "service_failures", "step_wait_until", "step_wait_why",
+             "step_failures")
 
     def purse(self) -> dict:
         return {name: (dict(value) if isinstance(value := getattr(self, name), dict) else value)
@@ -306,9 +370,12 @@ class Context:
     def restore_purse(self, raw: dict) -> None:
         for name in self.PURSE:
             value = raw.get(name)
-            if name.startswith("service_"):
+            if name == "step_wait_why":
                 kept = value if isinstance(value, dict) else {}
-                number = int if name == "service_failures" else float
+                self.step_wait_why = {str(k): v for k, v in kept.items() if isinstance(v, str)}
+            elif name.startswith(("service_", "step_")):
+                kept = value if isinstance(value, dict) else {}
+                number = int if name in ("service_failures", "step_failures") else float
                 setattr(self, name, {str(k): number(v) for k, v in kept.items()
                                      if isinstance(v, (int, float)) and not isinstance(v, bool)})
             elif name.endswith("blocked"):
@@ -757,6 +824,19 @@ def _derate(plan: Plan) -> Plan:
                 False, plan.rule + "+blind")
 
 
+def step_wait(state: State, context: Context | None) -> Plan | None:
+    """The guide step waits (`Context.step_waits`, V334): nothing is armed for it, and the
+    character stands where it is, a fight or a service still taken as they come."""
+    if context is None or state.guide.step_id is None:
+        return None
+    left = context.step_waiting(state.guide.step_id, state.t)
+    if left is None:
+        return None
+    why = context.step_wait_why.get(state.guide.step_id) or "its last try could not begin"
+    return Plan(_d(Intent.WAIT, None, f"{state.guide.step_id} waits {left:.0f}s more: {why}",
+                   1.0), True, "wait.step")
+
+
 def decide(state: State, node: Node | None = None, *, context: Context | None = None) -> Plan:
     """Always returns a usable plan. Never raises, never returns None.
 
@@ -771,7 +851,7 @@ def decide(state: State, node: Node | None = None, *, context: Context | None = 
         if plan is not None:
             return plan
 
-    plan = _guide(state, node) or _fallback(state)
+    plan = step_wait(state, context) or _guide(state, node) or _fallback(state)
     return _derate(plan) if _blind(state) else plan
 
 

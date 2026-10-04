@@ -162,3 +162,30 @@ def test_the_strip_grid_is_remembered_across_runs(tmp_path, monkeypatch):
     third = Client(hwnd=1, hid=None, cap=_Cap(), origin=(0, 0), size=(1600, 900),
                    grid_memory=memory)
     assert third.reading() is not None and asked[-1] is None, "a bad file is no memory"
+
+
+def test_the_state_of_the_reading_just_taken_is_built_without_another_capture(monkeypatch):
+    """V338: a service check between a hunt's fights built its state from a capture of its
+    own, a second reading a pass."""
+    import time as clock
+    from types import SimpleNamespace
+
+    from jev.run.client import Client
+
+    grabs = []
+    client = Client.__new__(Client)
+    reading = SimpleNamespace(values={"seq": 1}, ok=True)
+    built = []
+    monkeypatch.setattr(Client, "reading", lambda self, tries=6: grabs.append(1) or reading)
+    monkeypatch.setattr(Client, "state_from",
+                        lambda self, r, *, captured_at: built.append((r, captured_at)) or "state")
+    client.bounds = None
+    client._last_reading = None
+    import threading
+    client._capturing = threading.RLock()
+    assert client.recent_state(0.5) is None, "nothing read yet"
+    client.read()
+    assert client.recent_state(0.5) == "state" and len(grabs) == 1
+    assert built[-1][0] is reading and abs(built[-1][1] - clock.time()) < 1.0
+    client._last_reading = (clock.monotonic() - 1.0, clock.time() - 1.0, reading)
+    assert client.recent_state(0.5) is None, "too old"
