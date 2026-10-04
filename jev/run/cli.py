@@ -364,11 +364,14 @@ def remembered(args, graph, key: int | None, level: int | None = None):
             # apart, where every pull is two or three.
             kept = used.get(memory.step_id) if memory.step_id else None
             first = entry - ENTRY_LEVELS_ABOVE          # the next guide's lowest grind's level
+            # The guide's last grinds wait with the next guide (V276, V280) when it has no grind
+            # of its own for the wait: the 1-12 guide's Westfall ribs for 12 to 14 (V333).
+            own = [r for r in used.ribs() if first <= r.level[0] <= level <= r.level[1]
+                   and not r.route_blocked_reason]
             if (kept is not None and kept.kind is StepKind.GRIND and not kept.route_blocked_reason
                     and kept.level[0] <= level
                     and (level <= kept.level[1]
-                         # the guide's last grinds wait with the next guide (V276, V280)
-                         or (kept.level[1] >= first - 1
+                         or (not own and kept.level[1] >= first - 1
                              and level <= kept.level[1] + ENTRY_LEVELS_ABOVE))):
                 rib = kept
             if rib is not None:

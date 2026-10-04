@@ -898,6 +898,8 @@ def generate(
     level_max: int = 12,
     max_quests: int | None = None,
     spawns: dict[str, list] | None = None,
+    wait_zones: dict[int, str] | None = None,
+    wait_to: int | None = None,
 ) -> Graph:
     """Build a spine plus ribs and services for one faction over one level band.
 
@@ -905,20 +907,26 @@ def generate(
     `node_id` and `node_id#target_id` (`hunt_spawns`, `jev.run.hunt.spawn_stations`). It is
     routine data kept out of the guide: the guide's bytes are the tutor's knowledge
     fingerprint, and a changed fingerprint starts the motor learner's corpus again.
+
+    `wait_zones` and `wait_to`: where and to what level a character finished with this guide
+    waits for the next (V333): ribs for the windows from `level_max` to `wait_to` in those
+    zones, the next guide's first, wired to by no step.
     """
     db = WorldDB(db_path)
     spawns = {} if spawns is None else spawns
     try:
         return _generate(db, graph_id=graph_id, faction=faction, zone_ids=zone_ids,
                          zone_names=zone_names, level_min=level_min,
-                         level_max=level_max, max_quests=max_quests, spawns=spawns)
+                         level_max=level_max, max_quests=max_quests, spawns=spawns,
+                         wait_zones=wait_zones or {}, wait_to=wait_to)
     finally:
         db.close()
 
 
 def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, ...],
               zone_names: dict[int, str], level_min: int, level_max: int,
-              max_quests: int | None, spawns: dict[str, list]) -> Graph:
+              max_quests: int | None, spawns: dict[str, list],
+              wait_zones: dict[int, str] | None = None, wait_to: int | None = None) -> Graph:
     nodes: list[Node] = []
     prefix = graph_id
     # NPCs whose spawn exists but falls outside every zone box in scope. Recorded so a
@@ -973,12 +981,14 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
     ribs: list[Node] = []
     others: list[Node] = []
 
+    names = {**(wait_zones or {}), **zone_names}
+
     def rib(spawn: Spawn, count: int, zid: int, lo: int, hi: int, rid: str) -> Node:
         frac, world, map_id = place(spawn, zid)
         if spawn.points:
             spawns[rid] = [list(p) for p in spawn.points]
         return Node(
-            id=rid, kind=StepKind.GRIND, zone=zone_names.get(zid, str(zid)),
+            id=rid, kind=StepKind.GRIND, zone=names.get(zid, str(zid)),
             zone_id=zid, level=(lo, hi), pos=frac, world=world, map_id=map_id,
             r=0.06,   # a rib is a loop you walk, not a point you stand on
             hunt_yards=hunt_yards(spawn),
@@ -988,23 +998,28 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             notes=f"{count} spawns of {spawn.name} clustered here; route not recorded",
         )
 
-    for zid in zone_ids:
+    # The next guide's first zone, for the levels a character finished with this one waits at
+    # for it (V333): wired to by no step, as the window's other creatures are not.
+    waits = [(zid, rib_windows(level_max, wait_to)) for zid in (wait_zones or {})
+             if wait_to is not None and wait_to > level_max]
+    for zid, windows in [*((z, rib_windows(level_min, level_max)) for z in zone_ids), *waits]:
         b = db.bounds.get(zid)
         if b is None or b.degenerate:
             continue
-        zone = zone_names.get(zid, str(zid))
+        zone = names.get(zid, str(zid))
         taken: set[int] = set()
         made: dict[tuple[int, int], int] = {}
-        for lo, hi in rib_windows(level_min, level_max):
+        firsts = ribs if zid in zone_ids else others
+        for lo, hi in windows:
             for spawn, count in db.grind_clusters(b, lo, hi, limit=RIB_PASS, faction=faction):
                 if spawn.npc_id in taken:
                     continue
                 taken.add(spawn.npc_id)
-                ribs.append(rib(spawn, count, zid, lo, hi, rib_id(prefix, zone, lo, hi)))
+                firsts.append(rib(spawn, count, zid, lo, hi, rib_id(prefix, zone, lo, hi)))
                 made[(lo, hi)] = 1
                 break
         ids = {r.id for r in (*ribs, *others)}
-        for lo, hi in rib_windows(level_min, level_max):
+        for lo, hi in windows:
             for spawn, count in db.grind_clusters(b, lo, hi, limit=None, faction=faction):
                 if made.get((lo, hi), 0) >= RIB_CREATURES:
                     break

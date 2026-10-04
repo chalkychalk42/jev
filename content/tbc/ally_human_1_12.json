@@ -770,6 +770,141 @@
       "source": "generated"
     },
     {
+      "id": "alli_human_1_12_grind_westfall_12_14",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        12,
+        14
+      ],
+      "pos": [
+        0.03080670817092557,
+        0.8278850455508894
+      ],
+      "world": [
+        -9855.791666666666,
+        1428.491678873698,
+        40.13298416137695
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 28.596744940327458,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Kobold Digger",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Kobold Digger"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "6 spawns of Kobold Digger clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_westfall_12_14_sand_crawler",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        12,
+        14
+      ],
+      "pos": [
+        -0.020262886879663277,
+        0.7520397740187093
+      ],
+      "world": [
+        -9680.241489955357,
+        1605.7457275390625,
+        10.745295592716761
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 24.41902017623904,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Sand Crawler",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Sand Crawler"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "7 spawns of Sand Crawler clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
+      "id": "alli_human_1_12_grind_westfall_12_14_murloc_coastrunn",
+      "kind": "grind",
+      "zone": "Westfall",
+      "zone_id": 40,
+      "level": [
+        12,
+        14
+      ],
+      "pos": [
+        0.012323714931059493,
+        0.7277666566520824
+      ],
+      "world": [
+        -9624.059344951924,
+        1492.64306640625,
+        5.546664289557016
+      ],
+      "map_id": 0,
+      "coord_zone_id": 12,
+      "r": 0.06,
+      "hunt_yards": 55.23860231281759,
+      "quest_id": null,
+      "quest_prerequisites": [],
+      "route_blocked_reason": null,
+      "title": "",
+      "npc_id": null,
+      "target_name": "Murloc Coastrunner",
+      "target_kind": "creature",
+      "objective_targets": [],
+      "objectives": [
+        "grind Murloc Coastrunner"
+      ],
+      "requires": [],
+      "next": [],
+      "on_fail": [],
+      "skills": [
+        "GRIND_UNTIL"
+      ],
+      "xp_est": null,
+      "timeout_s": 900.0,
+      "skippable": true,
+      "notes": "15 spawns of Murloc Coastrunner clustered here; route not recorded",
+      "source": "generated"
+    },
+    {
       "id": "alli_human_1_12_vendor_elwynn_0",
       "kind": "vendor",
       "zone": "Elwynn",

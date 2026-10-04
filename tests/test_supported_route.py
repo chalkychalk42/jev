@@ -49,9 +49,12 @@ def test_supported_route_reaches_the_end_without_visiting_excluded_nodes():
 
 
 def test_committed_graph_is_reproducible_from_the_local_database(tmp_path):
+    from jev.guide.cli import wait_ribs
+
     generated = generate("data/knowledge/tbc-243.sqlite", graph_id="alli_human_1_12",
                          faction="alliance", zone_ids=(9, 12),
-                         zone_names={9: "Northshire", 12: "Elwynn"})
+                         zone_names={9: "Northshire", 12: "Elwynn"},
+                         **wait_ribs("human", 1, 12))
     output = tmp_path / "graph.json"
     generated.save(output)
     assert output.read_bytes() == Path("content/tbc/ally_human_1_12.json").read_bytes()
