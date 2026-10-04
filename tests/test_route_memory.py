@@ -458,3 +458,18 @@ def test_a_death_camp_is_made_of_one_characters_own_deaths(tmp_path):
     assert memory.camp_at(0, (0.0, 0.0), 1200.0, level=8) is not None, "held for all"
     kept = RouteMemory(file)
     assert sorted(d.who or 0 for d in kept.dangers) == [0, 11, 11, 22], "the key kept on disk"
+
+
+def test_a_walk_refused_through_a_death_camp_names_the_camp():
+    """V334: the hunt waits for the camp that refused its walks; the refusal says which."""
+    from jev.guide.path import PathStatus
+    from jev.guide.route_memory import CAMP_REFUSED, DangerAvoidingQuery
+
+    camp = RouteMemory()
+    camp.died(0, (100.0, 0.0), now=1000.0, level=8)
+    camp.died(0, (100.0, 4.0), now=1100.0, level=8)
+    query = DangerAvoidingQuery(_Corridor(), camp, clock=lambda: 1200.0, level=lambda: 8)
+    for _ in range(2):                                # searched, then remembered
+        refused = query.path(0, (-200.0, 0.0, 61.0), (400.0, 0.0, 60.0))
+        assert refused.status is PathStatus.NOPATH and refused.detail == CAMP_REFUSED
+        assert refused.camp == (100.0, 0.0), "the camp death, the second merged into it"

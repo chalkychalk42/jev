@@ -178,6 +178,9 @@ class Path:
     detail: str = ""
     teleport: Teleport | None = None
     jump: int = 0
+    # A walk refused through a death camp (`route_memory.CAMP_REFUSED`): where the camp's
+    # death lies, (x, y), for whoever waits for it to end (V334).
+    camp: tuple[float, float] | None = None
 
     @property
     def usable(self) -> bool:

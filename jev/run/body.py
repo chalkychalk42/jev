@@ -40,6 +40,7 @@ from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
 from jev.guide.path import PathStatus
+from jev.guide.route_memory import CAMP_REFUSED
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
 from jev.learn.choices import Choice, Stations, objective_key
@@ -48,7 +49,7 @@ from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
-from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt
+from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import graveyards, hostiles
 from jev.world.combat import HEAL_OUT_OF_COMBAT, Role, drink_to, for_class, is_caster, rest_mana
@@ -788,19 +789,53 @@ class LiveBody:
         wanted = name_id(destination.target_name)
         values = self._read() or {}
         caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
+        level = values.get("char.level") if isinstance(values.get("char.level"), int) else None
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
                     is_complete=complete_reader, service_needed=self._service_needed,
                     stations=self._stations("hunt.station", objective_key(wanted, node.id)),
                     standoff_yards=CASTER_STANDOFF_YARDS if caster else 0.0,
-                    conjure=self._conjure)
+                    conjure=self._conjure,
+                    camp_until=lambda station: self._camp_end(station, level),
+                    walk_note=lambda: self._walk_note(level))
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
         spawns = spawn_points(self.hunt_spawns, node.id, getattr(destination, "target_id", None))
         outcome = hunt.run(destination.world, yards, wanted, timeout_s=self.hunt_timeout,
                            spawns=spawns,
                            others=self._hostiles(destination.world, yards + PACK_YARDS)
                            if spawns else ())
+        step = self.arm.step_id if self.arm is not None else None
+        if outcome is Hunted.CAMP and hunt.until is not None:
+            # Not armed again until the camp ends (V334): bot 224's grind was armed again 0.5 s
+            # after each hunt whose every walk the camp refused.
+            self.policy_context.step_waits(step, hunt.until, "its stations lie in or behind "
+                                           "a death camp", time.time())
         return self._result(outcome, hunt.detail)
+
+    def _camp_end(self, world, level: int | None) -> float | None:
+        """When the death camp the world point `world` lies in ends, as wall time: its nearest
+        camp death counting at `level` (`RouteMemory.camp_at`, V307); `None` for none, or with
+        no route memory (V334)."""
+        memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
+        if memory is None or bounds is None or world is None:
+            return None
+        camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level)
+        return camp.camp_until if camp is not None else None
+
+    def _walk_note(self, level: int | None) -> tuple[bool, float | None] | None:
+        """How the last walk that did not arrive went (`Hunt.walk_note`, V334): whether its
+        route was planned, and when the death camp it was refused through ends; `None` from
+        a client that does not say."""
+        if not hasattr(self.client, "last_plan"):
+            return None
+        plan = self.client.last_plan
+        if plan is None:
+            return False, None
+        if plan.status is PathStatus.NOPATH and plan.detail == CAMP_REFUSED:
+            camp = getattr(plan, "camp", None)
+            end = self._camp_end(camp, level) if camp is not None else None
+            return False, end
+        return plan.usable, None
 
     def _explore(self, target: ObjectiveTarget, complete: Callable[[], bool | None]) -> Result:
         """Walk to an exploration trigger's point and wait for the quest's own credit.

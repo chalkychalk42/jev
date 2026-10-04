@@ -2064,3 +2064,57 @@ def test_a_merchant_in_the_zone_the_character_stands_in_counts_too():
     assert b._in_zone([stover, macgregor]) == [stover], "in Elwynn: Elwynn's box"
     b.client.read = lambda: {"pos.zone_id": 40}
     assert b._in_zone([stover, macgregor]) == [stover, macgregor], "in Westfall: its box too"
+
+
+def _grind_body(memory):
+    node = Node(id="rib", kind=StepKind.GRIND, zone="zone", zone_id=1, pos=(0.5, 0.5),
+                world=(50.0, 50.0, 0.0), map_id=0, level=(1, 3), target_name="Wolf",
+                target_kind="creature", skills=("GRIND_UNTIL",))
+    b = body()
+    b.graph = Graph(graph_id="g", faction="alliance", entry=node.id, nodes=(node,))
+    b.client.route_memory = memory
+    d = Decision(goal="g", intent=Intent.ADVANCE, skill="GRIND_UNTIL", abort_if=["dead"],
+                 confidence=1, why="fixture", params={"until_level": 3})
+    b.arm = Armed(d, ArmedBy.POLICY, 0, "guide", "d", node.id)
+    return b
+
+
+def test_a_grind_whose_stations_lie_in_a_death_camp_waits_for_the_camp():
+    """V334: no station of the rib is walked to, and its step waits until the camp ends."""
+    import time as clock
+
+    from jev.guide.route_memory import CAMP_S, RouteMemory
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=None)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=None)
+    b = _grind_body(memory)
+    result = b._hunt(seen())
+    assert result.code == "camp" and result.outcome is SkillOutcome.ABORTED, result
+    assert b.client.approach.call_count == 0, "no station walked to"
+    left = b.policy_context.step_waiting("rib", clock.time())
+    assert left is not None and abs(left - (CAMP_S - 30.0)) < 5.0
+
+
+def test_a_walk_refused_through_a_death_camp_says_when_the_camp_ends():
+    """V334: the hunt waits for the camp that refused its walk (`Path.camp`)."""
+    import time as clock
+
+    from jev.guide.path import Path, PathStatus
+    from jev.guide.route_memory import CAMP_REFUSED, RouteMemory
+
+    memory = RouteMemory()
+    now = clock.time()
+    memory.died(0, (50.0, 50.0), now=now - 60.0, level=8)
+    memory.died(0, (55.0, 50.0), now=now - 30.0, level=8)
+    b = _grind_body(memory)
+    b.client.last_plan = Path(PathStatus.NOPATH, (), "mmap", CAMP_REFUSED, camp=(50.0, 50.0))
+    planned, until = b._walk_note(8)
+    assert planned is False and until == memory.camp_at(0, (50.0, 50.0), now, 8).camp_until
+    b.client.last_plan = Path(PathStatus.NOPATH, (), "mmap", "no route")
+    assert b._walk_note(8) == (False, None)
+    b.client.last_plan = Path(PathStatus.COMPLETE, ((0, 0, 0), (1, 1, 0)), "mmap")
+    assert b._walk_note(8) == (True, None)
+    b.client.last_plan = None
+    assert b._walk_note(8) == (False, None), "no plan asked for: the walk never began"

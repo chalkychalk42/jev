@@ -587,7 +587,8 @@ class DangerAvoidingQuery:
         camp = next((spot for spot in passed if spot[4]), None)
         now = self.clock()
         if camp is not None and self._refused_before(map_id, start, end, camp, now):
-            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED)
+            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED,
+                        camp=tuple(camp[:2]))
         # Round every spot within `DANGER_DETOUR` of the way through; through a death camp,
         # round every spot, then round the camps alone, however far (V307).
         tries = [(hit, spots, direct.length_yards() * DANGER_DETOUR)] if camp is None else [
@@ -598,7 +599,8 @@ class DangerAvoidingQuery:
                 return way
         if camp is not None:
             self._refused.append((now, map_id, tuple(start[:2]), tuple(end[:2]), camp[:2]))
-            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED)
+            return Path(PathStatus.NOPATH, (), direct.source, CAMP_REFUSED,
+                        camp=tuple(camp[:2]))
         return direct
 
     def _refused_before(self, map_id: int, start: Point, end: Point, camp, now: float) -> bool:

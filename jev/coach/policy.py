@@ -27,6 +27,7 @@ always usable on its own.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -99,6 +100,13 @@ SERVICE_RETRY_MIN_S = 60.0
 # SPACE 20 and BIND_HEARTH 21, none done; and the walks were where the mage died, 13 of its 29
 # deaths in fights begun on them. Kept in the purse file, as a 15-minute session would forget it.
 SERVICE_RETRY_MAX_S = 1800.0
+# A guide step whose hunt found every station in or behind a death camp (V307) is not armed
+# again until the first such camp ends (V334), as wall time, by step: the rest of the policy -
+# a fight, a service, a meal - goes on, and the step's grind waits. Bot 224, its only road
+# out of the Sepulcher through a camp of its own deaths, armed its grind again 0.5 s after
+# each one failed, 4,879 walks refused in one session (29 Sep 15:10-15:15). No wait is kept
+# longer than `STEP_WAIT_MAX_S` ahead, against a wall clock set back (the WSL clock, 28 Sep).
+STEP_WAIT_MAX_S = 7200.0
 
 
 @dataclass(frozen=True)
@@ -145,6 +153,33 @@ class Context:
         clock set back (the WSL clock, 28 Sep) does not hold a service off for good."""
         at = self.service_failed_at.get(skill or "")
         return at is not None and abs(now - at) < self.service_wait(skill)
+
+    # When each guide step may be armed again, as wall time (V334), and why it waits.
+    step_wait_until: dict[str, float] = field(default_factory=dict)
+    step_wait_why: dict[str, str] = field(default_factory=dict)
+
+    def step_waits(self, step_id: str | None, until: float, why: str, now: float) -> None:
+        """Hold `step_id` until `until` (wall time), the later of this and any wait it has."""
+        if not step_id:
+            return
+        until = min(until, now + STEP_WAIT_MAX_S)
+        if until <= self.step_wait_until.get(step_id, -math.inf):
+            return
+        self.step_wait_until = {k: v for k, v in self.step_wait_until.items()
+                                if 0.0 < v - now <= STEP_WAIT_MAX_S}
+        self.step_wait_why = {k: v for k, v in self.step_wait_why.items()
+                              if k in self.step_wait_until}
+        self.step_wait_until[step_id], self.step_wait_why[step_id] = until, why
+        self._save()
+
+    def step_waiting(self, step_id: str | None, now: float) -> float | None:
+        """Seconds `step_id` still waits at `now`, or `None`; a wait that would end further
+        off than `STEP_WAIT_MAX_S` is a clock set back, and none."""
+        until = self.step_wait_until.get(step_id or "")
+        if until is None:
+            return None
+        left = until - now
+        return left if 0.0 < left <= STEP_WAIT_MAX_S else None
 
     fight_unengaged: int = 0
     fight_paused_until: float = 0.0
@@ -258,7 +293,7 @@ class Context:
              "supplies_needed", "train_blocked_level", "train_blocked_until",
              "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step",
              "repair_unreachable_until", "supplies_unreachable_until", "bags_unreachable_until",
-             "service_failed_at", "service_failures")
+             "service_failed_at", "service_failures", "step_wait_until", "step_wait_why")
 
     def purse(self) -> dict:
         return {name: (dict(value) if isinstance(value := getattr(self, name), dict) else value)
@@ -267,7 +302,10 @@ class Context:
     def restore_purse(self, raw: dict) -> None:
         for name in self.PURSE:
             value = raw.get(name)
-            if name.startswith("service_"):
+            if name == "step_wait_why":
+                kept = value if isinstance(value, dict) else {}
+                self.step_wait_why = {str(k): v for k, v in kept.items() if isinstance(v, str)}
+            elif name.startswith(("service_", "step_")):
                 kept = value if isinstance(value, dict) else {}
                 number = int if name == "service_failures" else float
                 setattr(self, name, {str(k): number(v) for k, v in kept.items()
@@ -711,6 +749,19 @@ def _derate(plan: Plan) -> Plan:
                 False, plan.rule + "+blind")
 
 
+def step_wait(state: State, context: Context | None) -> Plan | None:
+    """The guide step waits (`Context.step_waits`, V334): nothing is armed for it, and the
+    character stands where it is, a fight or a service still taken as they come."""
+    if context is None or state.guide.step_id is None:
+        return None
+    left = context.step_waiting(state.guide.step_id, state.t)
+    if left is None:
+        return None
+    why = context.step_wait_why.get(state.guide.step_id) or "its last try could not begin"
+    return Plan(_d(Intent.WAIT, None, f"{state.guide.step_id} waits {left:.0f}s more: {why}",
+                   1.0), True, "wait.step")
+
+
 def decide(state: State, node: Node | None = None, *, context: Context | None = None) -> Plan:
     """Always returns a usable plan. Never raises, never returns None.
 
@@ -725,7 +776,7 @@ def decide(state: State, node: Node | None = None, *, context: Context | None = 
         if plan is not None:
             return plan
 
-    plan = _guide(state, node) or _fallback(state)
+    plan = step_wait(state, context) or _guide(state, node) or _fallback(state)
     return _derate(plan) if _blind(state) else plan
 
 

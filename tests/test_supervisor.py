@@ -1158,3 +1158,44 @@ def test_a_service_that_failed_is_not_armed_again_within_the_minimum_whatever_th
         assert rt.armed.decision.skill == "BIND_HEARTH", "the minimum passed: asked again"
     finally:
         supervisor.close()
+
+
+def test_a_step_whose_stations_lie_in_a_death_camp_fails_over_at_once_and_never_stops_the_run(
+        tmp_path):
+    """V334: a hunt with every station in or behind a death camp has no attempt left until
+    the camp ends, so its step takes its fail edge at the first such hunt; with no edge to
+    take, the step waits for the camp (`Context.step_waits`) and the run goes on - the
+    third failure of an autofix's `empty` hunt stopped the run (`auto/20260929-1038`)."""
+    from jev.guide.graph import FailEdge, FailWhen
+    from jev.guide.tracker import Tracker
+
+    camped = Result(SkillOutcome.ABORTED, "every station lies in a death camp", "camp")
+    rt = runtime(tmp_path, [seen(t / 2) for t in range(40)])
+    body = Body(result=camped)
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=3)
+    try:
+        for t in range(16):
+            supervisor.step(t / 2)
+            if supervisor.worker is not None:
+                assert supervisor.worker.done.wait(1)
+        assert body.calls >= 4, "armed again with no wait kept: the real body keeps one"
+        assert not supervisor.stopped.is_set(), supervisor.failure
+    finally:
+        supervisor.close()
+    rt = runtime(tmp_path, [seen(t / 2) for t in range(8)])
+    first, second = rt.graph.nodes
+    first = first.model_copy(update={"on_fail": (FailEdge(when=FailWhen.TIMEOUT, value=600,
+                                                          goto=second.id),)})
+    rt.graph = rt.graph.model_copy(update={"nodes": (first, second)})
+    rt.tracker = Tracker(rt.graph, first.id)
+    body = Body(result=camped)
+    body.allow_finish.set()
+    supervisor = Supervisor(rt, body, say=lambda line: None, max_failures=3)
+    try:
+        supervisor.step(0)
+        assert supervisor.worker.done.wait(1)
+        supervisor.step(0.5)
+        assert rt.tracker.step_id == second.id, "failed over at the first camp, not the third"
+    finally:
+        supervisor.close()

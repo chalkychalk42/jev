@@ -67,6 +67,7 @@ class Hunted(StrEnum):
     DIED = "died"
     NO_FOOD = "no_food"          # too hurt to continue and nothing to eat
     UNREACHABLE = "unreachable"  # could not stand anywhere on the disk
+    CAMP = "camp"                # every station in or behind a death camp (V334)
     TIMEOUT = "timeout"
     BLIND = "blind"
     REFUSED = "refused"
@@ -169,6 +170,11 @@ def spawn_tour(spawns, others=()) -> list[tuple[float, float, float]]:
     return tour
 
 
+def _clock(wall: float) -> str:
+    """A wall time as the logs read it."""
+    return time.strftime("%H:%M:%S", time.localtime(wall))
+
+
 def _passes(a, b, c, reach: float) -> bool:
     """Does the straight walk from `a` to `b` come within `reach` of `c`?"""
     (ax, ay), (bx, by), (cx, cy) = a[:2], b[:2], c[:2]
@@ -199,12 +205,21 @@ class Hunt:
     # hunt drinks before most pulls, and a stock made only after the policy's rests ran
     # out mid-hunt (review, 25 September).
     conjure: Callable[[], None] | None = None
+    # When the death camp a station lies in ends, as wall time, `None` for one in none
+    # (`RouteMemory.camp_at`, V307): such a station is not walked to (V334).
+    camp_until: Callable[[tuple], float | None] | None = None
+    # How the last walk that did not arrive went: whether a route was planned for it, and the
+    # end of the death camp it was refused through, if it was (V334); `None`, not known.
+    walk_note: Callable[[], tuple[bool, float | None]] | None = None
     _found: bool = field(default=False, init=False)
 
     kills: int = field(default=0, init=False)
     _outdoors: bool | None = field(default=None, init=False)
     moves: int = field(default=0, init=False)
+    arrived: int = field(default=0, init=False)          # stations stood at
     detail: str = field(default="", init=False)
+    # For `CAMP`, when the first camp in the way ends (wall time): the step waits for it (V334).
+    until: float | None = field(default=None, init=False)
 
     @traced("hunt")
     def run(self, centre: tuple[float, float, float], radius_yards: float,
@@ -231,9 +246,10 @@ class Hunt:
         return values.get("vitals.dead") is True or values.get("vitals.ghost") is True
 
     def _hunt(self, centre, radius_yards, name_id, *, timeout_s, spawns, others=()) -> Hunted:
-        self.kills = self.moves = 0
+        self.kills = self.moves = self.arrived = 0
         self._outdoors = None
         self.detail = ""
+        self.until = None
         event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
                                     "wanted_name_id": name_id, "timeout_s": timeout_s,
                                     "spawns": len(spawns)})
@@ -242,6 +258,11 @@ class Hunt:
         # Each lap's order is learned, when there is a choice to learn (`stations`).
         tour, laps = ((spawn_tour(spawns, others), SPAWN_LAPS) if spawns
                       else (stations(centre, radius_yards), 1))
+        tour, camps = self._out_of_camps(tour)
+        if not tour:
+            self.until = min(camps)
+            self.detail = f"every station lies in a death camp, until {_clock(self.until)}"
+            return Hunted.CAMP
         lone = len({tuple(p) for p in spawns}) == 1
         chooser = self.stations if len({tuple(p) for p in tour}) > 1 else None
         posts = ([p for _ in range(laps) for p in chooser.order(tour)] if chooser is not None
@@ -250,6 +271,11 @@ class Hunt:
         dry = 0
         stood = False
         close = False                # a lone spawn looked for from its own spot (V221)
+        # Stations whose walk failed, not walked to again this hunt (V334), and the ends of
+        # the death camps such walks were refused through.
+        failed: set[tuple] = set()
+        walks_failed = 0
+        refused: list[float] = []
 
         while time.monotonic() < deadline:
             # A ghost cannot fight, heal or eat, and every skill below reports something
@@ -286,7 +312,18 @@ class Hunt:
                 return Hunted.BAGS_FULL
 
             if not stood:
+                # A station whose walk failed is passed on the next lap (V334): bot 224 asked
+                # for the same 12 refused walks lap after lap, 4,879 in one session.
+                while post < len(posts) and tuple(posts[post]) in failed:
+                    post += 1
                 if post >= len(posts):
+                    if not self.arrived and refused and len(refused) == walks_failed:
+                        # Every walk refused through a death camp (V307): the step waits for
+                        # the first of them to end, not walked again at once (V334).
+                        self.until = min((*refused, *camps))
+                        self.detail = (f"every walk to a station is refused through a death "
+                                       f"camp, until {_clock(self.until)}")
+                        return Hunted.CAMP
                     self.detail = "walked the whole disk and found nothing to fight"
                     return Hunted.UNREACHABLE
                 target = posts[post]
@@ -302,6 +339,11 @@ class Hunt:
                                if standoff else self.approach(target))
                     span.finish(code="true" if arrived else "false")
                 if not arrived:
+                    failed.add(tuple(target))
+                    walks_failed += 1
+                    note = self.walk_note() if self.walk_note is not None else None
+                    if note is not None and note[1] is not None:
+                        refused.append(note[1])
                     continue          # a station we cannot stand on is not a dead end
                 if self._wrong_side_of_a_door():
                     continue
@@ -311,6 +353,7 @@ class Hunt:
                     # were scored lost in sessions 205-217, most of them never arrived (V252).
                     chooser.arrive(target)
                 stood = True
+                self.arrived += 1
                 dry = 0
 
             # Before the next plate, not after selected outcomes. Topping up only after
@@ -370,6 +413,25 @@ class Hunt:
         have, need = self.progress()
         self.detail = f"{timeout_s:.0f}s and the counter is {have}/{need}"
         return Hunted.TIMEOUT
+
+    def _out_of_camps(self, tour) -> tuple[list, list[float]]:
+        """The tour without its stations in a death camp, and when each such camp ends (V334).
+        A camp is where the character died twice in ten minutes at its level, and of the
+        hive's walks that arrived at a station inside one, 6.1% ended in a death near it
+        within three minutes, 1.0% elsewhere (03:00-09:30 on 29 Sep)."""
+        if self.camp_until is None:
+            return list(tour), []
+        kept, camps = [], []
+        for point in tour:
+            until = self.camp_until(tuple(point))
+            if until is None:
+                kept.append(point)
+            else:
+                camps.append(until)
+        if camps:
+            event("hunt.camped", data={"stations": len(camps), "kept": len(kept),
+                                       "until": min(camps)})
+        return kept, camps
 
     def _loot(self) -> Hunted | None:
         """Take what the corpse is holding, straight after the kill.

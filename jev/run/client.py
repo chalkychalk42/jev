@@ -201,6 +201,9 @@ class Client:
     route_memory: object | None = field(default=None, init=False)
     # How the last `approach` walk ended, for a caller that needs more than arrived or not.
     last_travel: object | None = field(default=None, init=False)
+    # And the plan it walked, or would have: `None` when none was asked for (V334). A walk
+    # with no usable plan never moved; one refused through a death camp names the camp.
+    last_plan: Route | None = field(default=None, init=False)
     # Yards the last walk brought the character nearer its destination, in a straight line,
     # and how far from it the walk began.
     last_headway: float | None = field(default=None, init=False)
@@ -602,6 +605,7 @@ class Client:
         walked, `TELEPORTS_MAX` teleports at most. A teleport that does not move it ends the
         walk short of the destination, said so.
         """
+        self.last_plan = None
         if self.travel is None or self.query is None or self.bounds is None:
             return False
         here = self.travel.position()
@@ -610,7 +614,7 @@ class Client:
             return False
         hw = began = map_to_world(here[0], here[1], self.bounds)
         destination = world
-        path = self._plan(hw, destination)
+        path = self.last_plan = self._plan(hw, destination)
         teleports = 0
         while True:
             teleport = path.teleport if path.usable else None
@@ -732,7 +736,7 @@ class Client:
                 self.last_distance = math.dist(began[:2], destination[:2])
                 self.last_headway = self.last_distance - math.dist(hw, destination[:2])
                 return True
-            path = self._plan(hw, destination)
+            path = self.last_plan = self._plan(hw, destination)
         ended = self.travel.position()
         self._following = ()
         arrived = result.outcome.value == "arrived" and teleport is None

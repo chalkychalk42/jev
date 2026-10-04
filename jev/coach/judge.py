@@ -264,7 +264,9 @@ def candidates(state: State, node: Node | None, context, floor) -> list:
     # began and ended 296 times in six minutes, "bags are nearly full" (V303), and walks were
     # cancelled every second or two on five bots after it (the coach, 28 September). A quest
     # taken or handed in where the character stands still is.
-    if due:
+    # Nor while the step waits (`policy.step_wait`, V334): its grind, or a grind where the
+    # character stands, is the walk that was refused.
+    if due or floor.rule.startswith("wait.step"):
         plans = [p for p in plans if p is floor
                  or p.decision.skill not in ("GRIND_UNTIL", "TRAVEL_TO")]
     return plans
