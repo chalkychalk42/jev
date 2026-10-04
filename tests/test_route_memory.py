@@ -473,3 +473,91 @@ def test_a_walk_refused_through_a_death_camp_names_the_camp():
         refused = query.path(0, (-200.0, 0.0, 61.0), (400.0, 0.0, 60.0))
         assert refused.status is PathStatus.NOPATH and refused.detail == CAMP_REFUSED
         assert refused.camp == (100.0, 0.0), "the camp death, the second merged into it"
+
+
+class _Slow:
+    """A planner each of whose answers takes `seconds` of a shared clock, as a farm process
+    saturated on Python's lock answered (100-140 ms an ask, 29 Sep)."""
+
+    def __init__(self, inner, clock, seconds):
+        self.inner, self.clock, self.seconds = inner, clock, seconds
+        self.asked = 0
+
+    def path(self, map_id, start, end):
+        self.asked += 1
+        self.clock[0] += self.seconds
+        return self.inner.path(map_id, start, end)
+
+
+def _camp_memory():
+    camp = RouteMemory()
+    camp.died(0, (100.0, 0.0), now=1000.0, level=8)
+    camp.died(0, (100.0, 4.0), now=1100.0, level=8)
+    return camp
+
+
+def test_the_search_round_a_camp_stops_after_its_budget_and_its_refusal_is_kept():
+    """V336: a camp refusal's two ring searches, up to 144 asks, took a median of 17.7 s in
+    the hive's farm processes at 100-140 ms an ask (29 Sep 03:00-09:30). The search stops at
+    `ROUND_BUDGET_S`; with no way found the walk is refused, and kept refused."""
+    from jev.guide.path import PathStatus
+    from jev.guide.route_memory import CAMP_REFUSED, ROUND_BUDGET_S, DangerAvoidingQuery
+
+    start, end = (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0)
+    timer = [0.0]
+    slow = _Slow(_Corridor(), timer, 0.12)
+    query = DangerAvoidingQuery(slow, _camp_memory(), clock=lambda: 1200.0, level=lambda: 8,
+                                timer=lambda: timer[0])
+    refused = query.path(0, start, end)
+    assert refused.status is PathStatus.NOPATH and refused.detail == CAMP_REFUSED
+    assert timer[0] <= ROUND_BUDGET_S + 0.12 * 3, f"{timer[0]:.2f}s searching"
+    asked = slow.asked
+    assert query.path(0, start, end).detail == CAMP_REFUSED and slow.asked - asked == 1
+
+
+def test_a_quick_planner_finds_the_same_way_round_a_camp_as_with_no_budget(monkeypatch):
+    """V336: the budget is the whole search's asks, so a quick planner answers as before."""
+    from jev.guide import route_memory
+    from jev.guide.route_memory import DangerAvoidingQuery
+
+    start, end = (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0)
+    budgeted = DangerAvoidingQuery(_FarRound(), _camp_memory(), clock=lambda: 1200.0,
+                                   level=lambda: 8).path(0, start, end)
+    monkeypatch.setattr(route_memory, "ROUND_BUDGET_S", float("inf"))
+    monkeypatch.setattr(route_memory, "ROUND_QUERIES", float("inf"))
+    unbudgeted = DangerAvoidingQuery(_FarRound(), _camp_memory(), clock=lambda: 1200.0,
+                                     level=lambda: 8).path(0, start, end)
+    assert budgeted == unbudgeted and budgeted.detail == "round a death camp"
+
+
+def test_a_walk_round_a_death_spot_out_of_budget_goes_as_it_would_with_no_way_round():
+    """V336: an ordinary death spot's way round not found in time is the way through, as a
+    way round too long always was (`DANGER_DETOUR`)."""
+    from jev.guide.route_memory import DangerAvoidingQuery
+
+    spot = RouteMemory()
+    spot.died(0, (100.0, 0.0), now=1000.0, level=8)
+    timer = [0.0]
+    slow = _Slow(_OpenGround(), timer, 2.0)
+    query = DangerAvoidingQuery(slow, spot, clock=lambda: 1200.0, level=lambda: 8,
+                                timer=lambda: timer[0])
+    route = query.path(0, (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0))
+    assert route.usable and len(route.points) == 2 and slow.asked <= 3
+
+
+def test_every_walk_from_one_spot_through_one_camp_is_refused_by_the_first_refusal():
+    """V336: a hunt's stations are as many ends; matched within 5 yards of the refused end,
+    each of a hunt's 12 to 24 walks behind a camp searched again. Kept by its start and its
+    camp, the next station's walk is refused at once; a walk from elsewhere is searched."""
+    from jev.guide.route_memory import CAMP_REFUSED, DangerAvoidingQuery
+
+    corridor = _Corridor()
+    query = DangerAvoidingQuery(corridor, _camp_memory(), clock=lambda: 1200.0,
+                                level=lambda: 8)
+    assert query.path(0, (-200.0, 0.0, 60.0), (400.0, 0.0, 60.0)).detail == CAMP_REFUSED
+    asked = corridor.asked
+    station = query.path(0, (-198.0, 0.0, 60.0), (330.0, 0.0, 60.0))
+    assert station.detail == CAMP_REFUSED and corridor.asked - asked == 1, "the next station"
+    asked = corridor.asked
+    assert query.path(0, (-150.0, 0.0, 60.0), (330.0, 0.0, 60.0)).detail == CAMP_REFUSED
+    assert corridor.asked - asked > 1, "from 50 yards on, searched again"
