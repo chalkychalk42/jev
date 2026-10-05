@@ -433,6 +433,13 @@ BANDAGE_BELOW = 0.7
 BANDAGE_AGAIN_S = 60.0
 BANDAGE_BEHIND_S = 2.5
 NONE_HELD_S = 120.0
+# Last, a losing fight below this health, lost for `RETREAT_PERSIST_S` running, walks out the way
+# it came (V369: `Fight.retreat`), once a fight, a blow that slows or holds the unit (Hamstring,
+# Wing Clip, Gouge) or run speed (Sprint) pressed first where one is ready. Replayed on the
+# hive's fights since 14:21 on 5 Oct, 80 of 83 deaths came to it, a median 9.1 s before the death,
+# and 46 of 569 kills (8%).
+RETREAT_HP = 0.5
+RETREAT_PERSIST_S = 1.0
 
 # Which key an action slot is. The default bindings run 1-9, then 0, then the two keys
 # left of Backspace — which is where a fresh character's food and water sit, so getting
@@ -523,6 +530,7 @@ class Fought(StrEnum):
     REFUSED = "refused"
     INTERRUPTED = "interrupted"
     HELD = "held"                    # the selected unit held out of it (Polymorph): the other next
+    RETREATED = "retreated"          # walked out of a losing fight the way it came (V369)
 
     @property
     def ok(self) -> bool:
@@ -709,6 +717,9 @@ class Fight:
     # Use the best healing potion ("potion") or bandage ("bandage") the bags hold: the item
     # used, or `None` (V368). Without it, nothing is taken from the bags.
     use_item: Callable[[str], int | None] | None = None
+    # Walk out of a losing fight the way the character came (V369): `True` out of combat,
+    # `False` still in it, `None` with no way known.
+    retreat: Callable[[], bool | None] | None = None
 
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
@@ -835,6 +846,11 @@ class Fight:
     _used_at: dict[str, float] = field(default_factory=dict, init=False)
     _none_held: dict[str, tuple] = field(default_factory=dict, init=False)
     _held_at: float | None = field(default=None, init=False)
+    # Since when this fight has been lost without a break, whether it has tried its retreat,
+    # and whether the retreat took it out of combat (V369).
+    _losing_since: float | None = field(default=None, init=False)
+    _retreat_tried: bool = field(default=False, init=False)
+    _retreated: bool = field(default=False, init=False)
 
     # -- the skill -----------------------------------------------------------
 
@@ -870,7 +886,7 @@ class Fight:
             low = self._low_hp
             went_badly = result is Fought.DIED or (low is not None and low < BAD_FIGHT_HP)
             came_to_blows = result in (Fought.KILLED, Fought.DIED, Fought.LOSING, Fought.TIMEOUT,
-                                       Fought.UNREACHABLE, Fought.LOST)
+                                       Fought.UNREACHABLE, Fought.LOST, Fought.RETREATED)
             # Cut short (a death, a stop): known only when it was going badly. A fight that
             # became one against two or more teaches the pack's line, not the single's.
             if line is not None and (came_to_blows or (result is None and went_badly)):
@@ -942,6 +958,7 @@ class Fight:
         self._shooting_at, self._shots_silent, self._no_shots = None, 0, False
         self._dotted, self._queued, self._dot_guid = {}, {}, None
         self.losing_at, self.escapes, self._held_at = None, [], None
+        self._losing_since, self._retreat_tried, self._retreated = None, False, False
         event("fight.request", data={"wanted_name_id": _logged(name_id), "timeout_s": timeout_s})
 
         v = self.read()
@@ -1190,6 +1207,8 @@ class Fight:
                 self._rotate(v)
                 if self._input_refused:
                     return Fought.REFUSED
+                if self._retreated:
+                    return Fought.RETREATED
                 time.sleep(pace(self.hid, 0.2))
                 continue
             self._from_range = False
@@ -1273,6 +1292,8 @@ class Fight:
             self._rotate(v)
             if self._input_refused:
                 return Fought.REFUSED
+            if self._retreated:
+                return Fought.RETREATED
             time.sleep(pace(self.hid, 0.2))
 
         self.detail = f"{timeout_s:.0f}s and it is still standing"
@@ -2436,6 +2457,10 @@ class Fight:
         # 1a. A fight being lost spends what it has (V367), unless a heal fixes it: a class with
         #     a heal, the mana for it and one attacker, with time to cast it, heals as before.
         look = self.outlook(values)
+        if look.losing:
+            self._losing_since = self._losing_since if self._losing_since is not None else looked
+        else:
+            self._losing_since = None
         heal_fixes = (heal is not None and not giving_up and self._has_mana_for(heal, values)
                       and look.attackers < 2
                       and (look.to_die_s is None or look.to_die_s >= HEAL_FIXES_S))
@@ -2602,7 +2627,40 @@ class Fight:
             return True
         if hurt and hp < POTION_BELOW and self._take("potion", values):
             return True
+        if (self.retreat is not None and not self._retreat_tried and hurt and hp < RETREAT_HP
+                and self._losing_since is not None
+                and now - self._losing_since >= RETREAT_PERSIST_S):
+            self._retreat_tried = True
+            self._before_retreat(profile, values, pressable, out)
+            event("fight.retreat_request", data=look.data())
+            if self._input_refused:
+                return True
+            if self.retreat():
+                self._retreated = True
+                self.escapes.append("retreat")
+                self.detail = f"walked out of a losing fight at {hp:.0%} health the way it came"
+            self._aim_code = None             # whatever it faced, it faces away now
+            return True
         return False
+
+    def _before_retreat(self, profile: CombatProfile, values: dict, pressable, out: int) -> None:
+        """One press before the walk out (V369): an instant blow that slows or holds the unit
+        in melee (Hamstring, Wing Clip, Gouge), else run speed (Sprint)."""
+        near = values.get("target.in_melee") is True
+        for row in profile.by_role(Role.ATTACK):
+            known, facts = spell_facts(row.spell_id), reach(row.spell_id)
+            if (near and known is not None and (known.slows or known.holds)
+                    and facts is not None and facts.instant and pressable(row)
+                    and not out & (1 << (row.slot - 1)) and self._mana_left_after(row, values) >= 0):
+                self._press(row)
+                self.escapes.append(row.name)
+                return
+        for row in profile.by_role(Role.ESCAPE):
+            known = spell_facts(row.spell_id)
+            if known is not None and known.aura == AURA_SPEED and pressable(row):
+                self._press(row)
+                self.escapes.append(row.name)
+                return
 
     def _take(self, kind: str, values: dict) -> bool:
         """A healing potion or a bandage from the bags (V368), once in its cooldown (a potion's

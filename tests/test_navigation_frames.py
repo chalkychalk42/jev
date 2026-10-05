@@ -771,3 +771,16 @@ def test_the_hot_cells_are_asked_for_at_the_level_kept_for_the_plan_not_read_afr
     for _ in range(10):
         client.query.inner.hot(0)
     assert len(reads) == 1 and danger.hot.call_args_list[-1].args == (0, 12)
+
+
+def test_the_way_walked_is_kept_a_point_each_three_yards_and_begun_again_after_a_jump():
+    """V369: a losing fight retreats along the way it came in, indoors or out."""
+    client, values = client_in("Elwynn", (0.5, 0.5))
+    start = map_to_world(0.5, 0.5, ELWYNN)
+    for dy in (0.0, 1.0, 3.5, 7.0, 10.5):
+        values["pos.mx"], values["pos.my"] = world_to_map(start[0], start[1] + dy, ELWYNN)
+        client.position()
+    assert [round(p[2] - start[1], 1) for p in client.walked()] == [0.0, 3.5, 7.0, 10.5]
+    values["pos.mx"], values["pos.my"] = world_to_map(start[0] + 200.0, start[1], ELWYNN)
+    client.position()
+    assert len(client.walked()) == 1, "a hearthstone's jump: the way in is not known"

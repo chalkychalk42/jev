@@ -105,6 +105,10 @@ TRAIL_POINTS = 400
 # Outdoor points kept at the trail's head, and how near its end a walk back has arrived.
 TRAIL_OUTSIDE_POINTS = 3
 TRAIL_DONE_YARDS = 5.0
+# The way walked, indoors or out, for a fight being lost to retreat along (V369): a point each
+# `TRAIL_STEP_YARDS` with the time it was reached, the newest last, at most `WALKED_POINTS`
+# (about 120 yards), begun again after a jump.
+WALKED_POINTS = 40
 # Near where the strip has read indoors, no spot is learned as blocked (V238): the
 # indoor flag is not painted in every doorway and hall, and a blocked spot learned in the
 # Lion's Pride Inn's hall routed every walk to its stairs round it. Within `DOOR_YARDS`
@@ -223,6 +227,8 @@ class Client:
     _trail_anchored: bool = field(default=False, init=False)
     _outside: bool = field(default=False, init=False)     # the last read was outdoors
     _indoor_seen: list = field(default_factory=list, init=False)   # (monotonic, x, y)
+    # (monotonic, world x, y, height) each `TRAIL_STEP_YARDS` walked (`walked`, V369).
+    _walked: list = field(default_factory=list, init=False)
     # The way in outlives the session (V232): saved at close, and taken up by the next
     # session if its first read is where the last one ended.
     trail_memory: Path | None = field(default=None, init=False)
@@ -347,8 +353,30 @@ class Client:
         self._take_ground(v)
         self._track_height(v)
         self._note_trail(v)
+        self._note_walked(v)
         self._note_jump(v)
         return (v["pos.mx"], v["pos.my"])
+
+    def _note_walked(self, values: dict) -> None:
+        """Keep the way walked (`walked`, V369)."""
+        if self.bounds is None:
+            return
+        at = map_to_world(values["pos.mx"], values["pos.my"], self.bounds)
+        if at is None:
+            return
+        x, y = at[:2]
+        last = self._walked[-1] if self._walked else None
+        if last is not None and math.dist(last[1:3], (x, y)) > TRAIL_JUMP_YARDS:
+            self._walked = []                # a hearthstone, a death, a teleport
+            last = None
+        if last is None or math.dist(last[1:3], (x, y)) >= TRAIL_STEP_YARDS:
+            self._walked = [*self._walked, (time.monotonic(), x, y, self._height_near((x, y)))]
+            del self._walked[:-WALKED_POINTS]
+
+    def walked(self) -> list[tuple[float, float, float, float | None]]:
+        """The way the character walked here, newest last: (monotonic, world x, y, height) a
+        point each `TRAIL_STEP_YARDS` (V369)."""
+        return list(self._walked)
 
     def _note_jump(self, values: dict) -> None:
         """Keep the last jump between two reads (`JUMP_YARDS`), for a walk through a teleport
