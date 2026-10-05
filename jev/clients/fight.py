@@ -393,6 +393,34 @@ FINISH_EVIDENCE_S = 3.0
 FINISH_WINDOW_S = 6.0
 FINISH_FLOOR = 0.25
 
+# How the fight is going, at every look (V367): the seconds to kill the selected unit at the rate
+# its health has fallen, against the seconds to die at the rate ours has, each over the last
+# `OUTLOOK_WINDOW_S` and only with `OUTLOOK_EVIDENCE_S` of looks behind it, and the attackers
+# counted. Unlike `_finishes_first` a cast's looks count for the kill: a caster's damage is its
+# casts. Of the hive's 1,782 fatal fights on 4 Oct (20:30-21:45) the unit was above 80% of its
+# health at the death in 29%, and a warrior, rogue, warlock or hunter pressed nothing but its
+# attacks to the end: once in combat a fight ran to the death (`FLEE_HP` holds only out of it).
+OUTLOOK_WINDOW_S = 8.0
+OUTLOOK_EVIDENCE_S = 3.0
+# A unit whose health has not moved is not falling only after this long: the first seconds of a
+# fight the mob opened are the walk to it, and its health stands still while ours falls.
+OUTLOOK_STALL_S = 6.0
+# Dead before the kill, and soon: a race counts as lost only with under this long to live.
+LOSING_SOON_S = 20.0
+# Lost: dead before `LOSING_MARGIN` of the kill, or a second attacker with health under
+# `LOSING_PACK_HP` (two or more attackers were 9% of kills and 46% of deaths).
+LOSING_MARGIN = 0.8
+LOSING_PACK_HP = 0.5
+# A heal fixes a fight against one attacker with this long to live: a cast and its pushback. A
+# class with a heal and its mana heals as before; the rest spends what a losing fight has.
+HEAL_FIXES_S = 4.0
+# An escape with no cooldown of its own (Fear, Entangling Roots) is not pressed again inside this.
+ESCAPE_AGAIN_S = 10.0
+# The auras an escape is told by (`SpellFacts.aura`): run speed is the retreat's (Sprint), a root
+# on the unit is stepped clear of as Frost Nova is (Entangling Roots).
+AURA_SPEED = 31
+AURA_ROOT = 26
+
 # Which key an action slot is. The default bindings run 1-9, then 0, then the two keys
 # left of Backspace — which is where a fresh character's food and water sit, so getting
 # 10-12 wrong is not academic.
@@ -405,6 +433,67 @@ def _area(ability: Ability) -> bool:
     """Damage to every enemy round the character (V277): Arcane Explosion, Thunder Clap."""
     known = spell_facts(ability.spell_id)
     return known is not None and known.role == "area"
+
+
+@dataclass(frozen=True)
+class Outlook:
+    """How a fight is going (V367): the seconds to kill the selected unit and to die, at the
+    rates the fight has shown (`None` with too little evidence, infinite for a health that is
+    not falling), the attackers counted and our health."""
+
+    to_kill_s: float | None
+    to_die_s: float | None
+    attackers: int = 0
+    hp: float | None = None
+
+    @property
+    def why(self) -> str | None:
+        """Why the fight is being lost - "pack": a second attacker with health under
+        `LOSING_PACK_HP`; "race": dead before `LOSING_MARGIN` of the kill - or `None`."""
+        if (self.attackers >= 2 and isinstance(self.hp, (int, float))
+                and self.hp < LOSING_PACK_HP):
+            return "pack"
+        if (self.to_die_s is not None and self.to_kill_s is not None
+                and self.to_die_s < LOSING_SOON_S
+                and self.to_die_s < LOSING_MARGIN * self.to_kill_s):
+            return "race"
+        return None
+
+    @property
+    def losing(self) -> bool:
+        return self.why is not None
+
+    def data(self) -> dict:
+        def s(v):
+            return None if v is None else (round(v, 1) if math.isfinite(v) else "inf")
+        return {"to_kill_s": s(self.to_kill_s), "to_die_s": s(self.to_die_s),
+                "attackers": self.attackers, "hp": None if self.hp is None else round(self.hp, 3),
+                "why": self.why}
+
+
+def _seconds_left(samples: list[tuple[float, float | None]], now: float,
+                  stall_s: float = OUTLOOK_EVIDENCE_S) -> float | None:
+    """Seconds until the health in `samples` ((time, health) each) is gone at the rate it fell
+    over the last `OUTLOOK_WINDOW_S`: infinite when it did not fall for `stall_s`, `None` with
+    under `OUTLOOK_EVIDENCE_S` of looks (or a health unmoved for less than `stall_s`)."""
+    recent = [(t, h) for t, h in samples
+              if isinstance(h, (int, float)) and now - t <= OUTLOOK_WINDOW_S]
+    span = recent[-1][0] - recent[0][0] if len(recent) >= 2 else 0.0
+    if span < OUTLOOK_EVIDENCE_S:
+        return None
+    fell = recent[0][1] - recent[-1][1]
+    if fell <= 0.0:
+        return math.inf if span >= stall_s else None
+    return recent[-1][1] / (fell / span)
+
+
+def outlook(race: list[tuple], now: float, attackers: int | None = None) -> Outlook:
+    """The fight's outlook from its looks (`Fight._race`: time, our health, the unit's, casting,
+    its guid), V367."""
+    mine = _seconds_left([(t, h) for t, h, *_ in race], now)
+    theirs = _seconds_left([(t, h) for t, _, h, *_ in race], now, OUTLOOK_STALL_S)
+    hp = next((h for _, h, *_ in reversed(race) if isinstance(h, (int, float))), None)
+    return Outlook(theirs, mine, attackers or 0, hp)
 
 
 class Fought(StrEnum):
@@ -722,6 +811,9 @@ class Fight:
     _dotted: dict[tuple, float] = field(default_factory=dict, init=False)
     _dot_guid: object = field(default=None, init=False)
     _queued: dict[int, tuple[float, int]] = field(default_factory=dict, init=False)
+    # When this fight was first seen being lost, and what it spent since (V367).
+    losing_at: float | None = field(default=None, init=False)
+    escapes: list[str] = field(default_factory=list, init=False)
 
     # -- the skill -----------------------------------------------------------
 
@@ -828,6 +920,7 @@ class Fight:
         self._saved_at = None
         self._shooting_at, self._shots_silent, self._no_shots = None, 0, False
         self._dotted, self._queued, self._dot_guid = {}, {}, None
+        self.losing_at, self.escapes = None, []
         event("fight.request", data={"wanted_name_id": _logged(name_id), "timeout_s": timeout_s})
 
         v = self.read()
@@ -2319,6 +2412,16 @@ class Fight:
         if survival_only:
             return
 
+        # 1a. A fight being lost spends what it has (V367), unless a heal fixes it: a class with
+        #     a heal, the mana for it and one attacker, with time to cast it, heals as before.
+        look = self.outlook(values)
+        heal_fixes = (heal is not None and not giving_up and self._has_mana_for(heal, values)
+                      and look.attackers < 2
+                      and (look.to_die_s is None or look.to_die_s >= HEAL_FIXES_S))
+        if (in_combat and look.losing and not heal_fixes
+                and self._spend_losing(profile, values, pressable, look)):
+            return
+
         # 1b. Stop a runner. Gnolls and Defias run at about a fifth of their health and come
         #     back with their camp: two of session 149's deaths were among four and five
         #     Riverpaw gnolls, after "Riverpaw Herbalist attempts to run away in fear!".
@@ -2410,6 +2513,64 @@ class Fight:
                     self.judge.ask(values, {_jev_name(a): _jev_text(a) for a in attacks
                                             if not a.toggle and affordable(a)})
             return
+
+    def outlook(self, values: dict) -> Outlook:
+        """How this fight is going now (V367), from its looks (`_sample_race`)."""
+        return outlook(self._race, time.monotonic(), values.get("combat.attackers"))
+
+    def _spend_losing(self, profile: CombatProfile, values: dict, pressable, look: Outlook) -> bool:
+        """One press of what a losing fight has (V367), in this order: an escape on the bar
+        (Fear, Psychic Scream, Evasion, Entangling Roots, Concussive Shot; not one of run speed,
+        which is the retreat's), a save (Divine Protection, Power Word: Shield while it is not
+        up), a stun on the unit attacking (Hammer of Justice), and at contact a root round the
+        caster, stepped clear of (Frost Nova, V169). An entangled unit in melee alone is stepped
+        clear of too. `True` if something was pressed."""
+        now = time.monotonic()
+        if self.losing_at is None:
+            self.losing_at = now
+            event("fight.losing", data=look.data())
+        out = values.get("bars.out_range")
+        out = out if isinstance(out, int) else 0
+        rows: list[Ability] = []
+        for row in profile.by_role(Role.ESCAPE):
+            known = spell_facts(row.spell_id)
+            if ((known is not None and known.aura == AURA_SPEED)
+                    or now - self._last_use.get(row.slot, -math.inf) < ESCAPE_AGAIN_S):
+                continue
+            rows.append(row)
+        for row in profile.by_role(Role.SAVE):
+            if row.every_s > 0 and now - self._lasting.get(row.name, -math.inf) < row.every_s:
+                continue                     # a shield still up (V361)
+            rows.append(row)
+        if values.get("target.attacking_me") is True:
+            rows.extend(profile.by_role(Role.STUN))
+        for row in rows:
+            if (not pressable(row) or out & (1 << (row.slot - 1))
+                    or self._mana_left_after(row, values) < 0):
+                continue
+            if not self._press(row):
+                return True
+            self.escapes.append(row.name or row.role.value)
+            event("fight.escape", data={"slot": row.slot, "role": row.role.value,
+                                        "name": row.name, **look.data()})
+            if row.role is Role.SAVE:
+                self._saved_at = now
+                if row.every_s > 0:
+                    self._lasting[row.name] = now
+            known = spell_facts(row.spell_id)
+            if (known is not None and known.aura == AURA_ROOT and look.attackers < 2
+                    and values.get("target.in_melee") is True):
+                event("engage.root", data={"slot": row.slot, "step": "s", "step_s": STEP_CLEAR_S})
+                if not self.hid.hold("s", STEP_CLEAR_S):
+                    self._input_refused = True
+                    self.detail = "step-clear input refused"
+            return True
+        if (values.get("target.in_melee") is True and profile.by_role(Role.ROOT)
+                and not self._holding_now(now) and self._root(profile, values)):
+            self.escapes.append("root")
+            event("fight.escape", data={"role": Role.ROOT.value, **look.data()})
+            return True
+        return False
 
     def _sample_race(self, values: dict) -> None:
         """One look for `_finishes_first`. A new selection starts the samples again."""
