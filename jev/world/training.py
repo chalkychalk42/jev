@@ -52,8 +52,8 @@ TRAINER_REACH_SPELLS = 2
 
 # Roles worth a new bar slot, in the order free slots are handed out.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
-NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort", "conjure",
-                  "root", "cc", "area")
+NEW_LINE_ROLES = ("aura", "long_buff", "strike", "dot", "save", "stun", "last_resort",
+                  "conjure", "root", "cc", "area")
 BAR_SLOTS = 12
 
 # The roles the fight code presses (`jev.world.combat.TRAINED_ROLES`), in the order a spell
@@ -64,8 +64,9 @@ BAR_SLOTS = 12
 # nothing. Polymorph is pressed since V287 (`cc`): it holds one of two attackers out of the
 # fight. The mage with a spell's money a visit bought Conjure Water before Frostbolt at
 # level 5 and Conjure Food before Fire Blast at 6, in the stock window's order.
-FIGHT_ROLES = ("strike", "short_buff", "root", "stun", "cc", "area", "save", "last_resort",
-               "heal", "aura", "attack")
+# Damage over time is damage (V361): Corruption, Shadow Word: Pain, Serpent Sting, Rend.
+FIGHT_ROLES = ("strike", "dot", "short_buff", "root", "stun", "cc", "area", "save",
+               "last_resort", "heal", "aura", "attack")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
 # What holds more than one attacker, bought before the oldest gap (V242). Polymorph holds
@@ -91,6 +92,9 @@ class SpellFacts:
     slows: bool = False
     # The item a conjure makes (V166).
     creates: int | None = None
+    # A trainer's spell that teaches others (V359): Judgement is sold as 10321, which teaches
+    # 20271 and a Seal of Righteousness; these facts are the first one's.
+    teaches: tuple[int, ...] = ()
 
     @property
     def self_cast(self) -> bool:
@@ -145,7 +149,7 @@ def spell(spell_id: int | None, facts: dict | None = None) -> SpellFacts | None:
                       cooldown_s=float(raw.get("cooldown_s", 0.0)),
                       target=raw.get("target", "other"), spends=bool(raw.get("spends")),
                       aura=raw.get("aura"), slows=bool(raw.get("slows")),
-                      creates=raw.get("creates"))
+                      creates=raw.get("creates"), teaches=tuple(raw.get("teaches") or ()))
 
 
 def side(race_id: int | None) -> str | None:
@@ -294,6 +298,8 @@ def _find_learnable(trainer: Trainer, level: int, known: Iterable[int],
         if offer.spell_id in have:
             return True
         facts_of = spell(offer.spell_id, facts)
+        if facts_of is not None and facts_of.teaches and facts_of.teaches[0] in have:
+            return True                     # what it teaches is in the spellbook (V359)
         return (facts_of is not None and bool(facts_of.rank)
                 and ranks.get(facts_of.name, 0) >= facts_of.rank)
 
@@ -390,6 +396,19 @@ def training_cost(class_id: int | None, race_id: int | None, level: int | None,
     return least or 0
 
 
+def unpressed(known: Iterable[int], *, facts: dict | None = None) -> tuple[list[str], list[int]]:
+    """What the character knows that nothing presses (V361), for the session's one line: the
+    spell lines whose role the fight has no use for (`utility`: Charge, Life Tap, Hunter's
+    Mark, a totem), by name, passives left out; and the spell ids the catalog does not know
+    at all (a pet's, Tame Beast, a racial's)."""
+    known = set(known)
+    lines = _lines(known, facts)
+    names = sorted(f.name for f in lines.values()
+                   if f.role not in BUY_ORDER and f.role != "passive")
+    unknown = sorted(s for s in known if spell(s, facts) is None)
+    return names, unknown
+
+
 def _lines(spells: Iterable[int], facts: dict | None) -> dict[str, SpellFacts]:
     """The highest known rank of each spell, by name."""
     best: dict[str, SpellFacts] = {}
@@ -397,7 +416,11 @@ def _lines(spells: Iterable[int], facts: dict | None) -> dict[str, SpellFacts]:
         f = spell(spell_id, facts)
         if f is None:
             continue
-        if f.name not in best or f.rank > best[f.name].rank:
+        here = best.get(f.name)
+        # The spell itself before the trainer's spell that teaches it (V359): the one is in
+        # the spellbook and goes on the bar, the other only on the trainer's list.
+        if (here is None or f.rank > here.rank
+                or (f.rank == here.rank and here.teaches and not f.teaches)):
             best[f.name] = f
     return best
 

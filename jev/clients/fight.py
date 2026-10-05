@@ -97,8 +97,12 @@ from jev.world.combat import (
     Role,
     for_class,
     grey_level,
+    by_value,
+    instant_blow,
+    lingers,
     ranged,
     reach,
+    repeats,
 )
 from jev.world.training import spell as spell_facts
 
@@ -324,6 +328,11 @@ RANGED_STEP_S = 0.8
 # yards, less than the reach it is short of.
 BLIND_STEP_S = 0.4
 MAX_RANGED_STEPS = 8
+# A shooter's repeating shot (Auto Shot, V358) with no damage to the unit for this long is
+# taken to have stopped or never begun: pressed again, and after `SHOT_GIVE_UP` such silences
+# a fight the shooter fights in melee, as before. Two shots of a 2.8-3.0 s bow and a margin.
+SHOT_SILENT_S = 7.0
+SHOT_GIVE_UP = 2
 # After a root at contact (Frost Nova) a caster backs off this long, still facing: about
 # nine yards at the walk backwards, out of the held unit's reach (V169).
 STEP_CLEAR_S = 2.0
@@ -701,6 +710,18 @@ class Fight:
     _mana_seen: tuple[float | None, float | None] = field(default=(None, None), init=False)
     _last_near: bool = field(default=False, init=False)
     _ranged_steps: int = field(default=0, init=False)
+    # A shooter's repeating shot (V358): when it was pressed and is taken to be repeating
+    # (`None`: not shooting), how many times it went silent this fight, and whether the
+    # fight has given shooting up.
+    _shooting_at: float | None = field(default=None, init=False)
+    _shots_silent: int = field(default=0, init=False)
+    _no_shots: bool = field(default=False, init=False)
+    # Damage over time put on a unit this fight, by (its guid, the spell's name), until when
+    # it lasts (V360): not pressed on it again before then. A next-swing blow pressed and its
+    # cost, until its swing (`NEXT_SWING_HOLD_S`): what else is pressed leaves that much.
+    _dotted: dict[tuple, float] = field(default_factory=dict, init=False)
+    _dot_guid: object = field(default=None, init=False)
+    _queued: dict[int, tuple[float, int]] = field(default_factory=dict, init=False)
 
     # -- the skill -----------------------------------------------------------
 
@@ -805,6 +826,8 @@ class Fight:
         self.detail = ""
         self._last_use = {}
         self._saved_at = None
+        self._shooting_at, self._shots_silent, self._no_shots = None, 0, False
+        self._dotted, self._queued, self._dot_guid = {}, {}, None
         event("fight.request", data={"wanted_name_id": _logged(name_id), "timeout_s": timeout_s})
 
         v = self.read()
@@ -989,6 +1012,7 @@ class Fight:
             profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
             if profile.caster and self._unhurt_by(v):
                 return Fought.UNREACHABLE
+            self._watch_shots(profile, v)
             if self._ranged_ready(profile, v):
                 # A caster with the mana casts from where it stands (V164). The client says
                 # what is wrong with a cast - too far, not facing, out of sight - and each
@@ -1771,9 +1795,14 @@ class Fight:
     def _ranged_ready(self, profile: CombatProfile, values: dict) -> bool:
         """A caster (`CombatProfile.caster`) with a spell cast from range that it can use now:
         the client says the slot is usable, which a spell is not without its mana. Out of
-        mana, a caster fights with its staff until the mana comes back (V164)."""
+        mana, a caster fights with its staff until the mana comes back (V164).
+
+        A shooter (`CombatProfile.shooter`, V358) the same with its repeating shot, while the
+        unit is not at hand: Auto Shot reaches no unit in melee (the dead zone), and there it
+        fights with its blade; and not once this fight has given shooting up (`_watch_shots`).
+        """
         if not profile.caster:
-            return False
+            return profile.shooter and self._shot_ready(profile, values)
         usable = values.get("bars.usable")
         for attack in profile.by_role(Role.ATTACK):
             if not ranged(attack):
@@ -1785,6 +1814,43 @@ class Fight:
                 return True
         return False
 
+    def _shot_ready(self, profile: CombatProfile, values: dict) -> bool:
+        """A shooter's repeating shot usable at a unit not at hand (V358)."""
+        if self._no_shots or values.get("target.in_melee") is True:
+            return False
+        usable = values.get("bars.usable")
+        return any(usable is None or bool(usable & (1 << (a.slot - 1)))
+                   for a in profile.by_role(Role.ATTACK) if repeats(a))
+
+    def _watch_shots(self, profile: CombatProfile, values: dict) -> None:
+        """Whether the repeating shot still repeats (V358). The server stops Auto Shot when
+        the unit comes into the dead zone, and the client marks its slot out of range there:
+        then it is pressed again once the unit is back out of it. A shot with no damage to
+        the unit for `SHOT_SILENT_S` is taken as stopped (pressed again: on the client a
+        press of a repeating shot stops it, so it is never pressed while taken to repeat),
+        and after `SHOT_GIVE_UP` such silences the fight is fought in melee."""
+        if self._shooting_at is None:
+            return
+        out = values.get("bars.out_range")
+        slots = [a.slot for a in profile.by_role(Role.ATTACK) if repeats(a)]
+        if (values.get("target.in_melee") is True
+                or (isinstance(out, int) and any(out & (1 << (slot - 1)) for slot in slots))):
+            self._shooting_at = None
+            return
+        now = time.monotonic()
+        if now - max(self._shooting_at, self._damage_at) < SHOT_SILENT_S:
+            return
+        self._shooting_at = None
+        self._shots_silent += 1
+        self._no_shots = self._shots_silent >= SHOT_GIVE_UP
+        event("fight.shots_silent", data={"times": self._shots_silent,
+                                          "given_up": self._no_shots})
+
+    def _dotted_now(self, attack: Ability, now: float) -> bool:
+        """Damage over time of this attack's already on the selected unit (V360)."""
+        return (lingers(attack)
+                and self._dotted.get((self._dot_guid, attack.name), -math.inf) > now)
+
     @staticmethod
     def _caster_order(attacks: tuple[Ability, ...], values: dict) -> tuple[Ability, ...]:
         """A caster's attacks, best first (V165): at contact an instant (Fire Blast), which
@@ -1793,15 +1859,17 @@ class Fight:
         near = values.get("target.in_melee") is True
         coming = values.get("target.attacking_me") is True
 
-        def rank(attack: Ability) -> tuple[int, int]:
+        def rank(attack: Ability) -> int:
             facts = reach(attack.spell_id)
             if near:
-                return (0 if facts is not None and facts.instant else 1, attack.slot)
+                return 0 if facts is not None and facts.instant else 1
             if not coming:
                 known = spell_facts(attack.spell_id)
-                return (0 if known is not None and known.slows else 1, attack.slot)
-            return (0, attack.slot)
+                return 0 if known is not None and known.slows else 1
+            return 0
 
+        # A stable sort: within a rank, the order the attacks came in, the bar's with those
+        # of known damage by damage a second (`by_value`, V360).
         return tuple(sorted(attacks, key=rank))
 
     @staticmethod
@@ -2196,7 +2264,7 @@ class Fight:
             bit = 1 << (a.slot - 1)
             return (bool(ready & bit) and bool(usable & bit)
                     and self._held.get(a.slot, 0.0) <= looked
-                    and (a.toggle or not self._in_gcd(looked)))
+                    and (a.toggle or repeats(a) or not self._in_gcd(looked)))
 
         hp = values.get("vitals.hp")
         in_combat = values.get("vitals.combat") is True
@@ -2231,11 +2299,19 @@ class Fight:
             # way is clear already.
             for guard in () if saved else (*profile.by_role(Role.SAVE),
                                            *profile.by_role(Role.STUN)):
+                # A shield that lasts (Power Word: Shield, V361) is not pressed again while it
+                # does, across fights: its Weakened Soul refuses it for 15 s.
+                lasts = guard.role is Role.SAVE and guard.every_s > 0
+                if (lasts and time.monotonic() - self._lasting.get(guard.name, -math.inf)
+                        < guard.every_s):
+                    continue
                 if (pressable(guard) and self._has_mana_for(guard, values)
                         and (guard.role is Role.SAVE
                              or values.get("target.attacking_me") is True)):
                     if self._press(guard) and guard.role is Role.SAVE:
                         self._saved_at = time.monotonic()
+                        if lasts:
+                            self._lasting[guard.name] = self._saved_at
                     return
             if self._press(heal):
                 self._pending_heal = (hp, time.monotonic())
@@ -2264,7 +2340,12 @@ class Fight:
         reserve = self._mana_reserve(profile) if in_combat else 0
 
         def affordable(a: Ability) -> bool:
-            return self._mana_left_after(a, values) >= reserve
+            facts = reach(a.spell_id)
+            keep = 0 if facts is not None and facts.next_swing else held_back()
+            return self._mana_left_after(a, values) >= reserve + keep
+
+        def held_back() -> int:
+            return sum(cost for until, cost in self._queued.values() if until > now)
 
         for buff in (*profile.by_role(Role.AURA), *profile.by_role(Role.BUFF)):
             if profile.caster and buff.lasting and in_combat:
@@ -2285,9 +2366,23 @@ class Fight:
                  and (values.get("combat.attackers") or 0) >= 2
                  and not self._holding_now(time.monotonic()))       # it would wake it (V287)
         areas = tuple(a for a in profile.by_role(Role.ATTACK) if _area(a))
-        attacks = tuple(a for a in profile.by_role(Role.ATTACK) if not _area(a))
+        # By damage a second where the data says it, not by the bar's slot (V360): Smite in
+        # slot 2 left Mind Blast pressed in 1% of the priests' kills.
+        # A caster's instant blows keep their places: kept for contact (V165).
+        attacks = by_value(tuple(a for a in profile.by_role(Role.ATTACK) if not _area(a)),
+                           keep=instant_blow if casting_instead else None)
+        # Damage over time already on this unit is not pressed again while it lasts, and a
+        # next-swing blow pressed keeps its cost for its swing (V360).
+        self._dot_guid = values.get("target.guid")
+        attacks = tuple(a for a in attacks if not self._dotted_now(a, now))
         if casting_instead:
             attacks = self._caster_order(attacks, values)
+        # A shooter's repeating shot first, once: it costs nothing and no global cooldown, and
+        # pressed while it repeats it would stop (V358). Never in melee, where it cannot reach.
+        shots = tuple(a for a in attacks if repeats(a))
+        attacks = tuple(a for a in attacks if not repeats(a))
+        if casting_instead and self._shooting_at is None:
+            attacks = (*shots, *attacks)
         if crowd:
             attacks = (*areas, *attacks)
         # Jev's pick among the attacks ready now, asked as the last press began (V298); the
@@ -2446,8 +2541,17 @@ class Fight:
             return False
         now = time.monotonic()
         facts = reach(ability.spell_id)
+        if lingers(ability) and facts is not None:
+            # On this unit until it runs out (V360); taken off again if the press goes
+            # unanswered (`_press_answered`).
+            self._dotted[(self._dot_guid, ability.name)] = now + facts.dot_s
         if facts is not None and facts.next_swing:
             self._held[ability.slot] = now + NEXT_SWING_HOLD_S
+            self._queued[ability.slot] = (now + NEXT_SWING_HOLD_S, ability.mana)
+        elif repeats(ability):
+            # No cast, no global cooldown and nothing spent: nothing for the client to answer
+            # with, so no press waits on one. Taken as repeating (`_watch_shots`).
+            self._shooting_at = now
         elif not ability.toggle:
             self._pending_press = (ability, now, dict(self._last_use), dict(self._lasting),
                                    self._saved_at, self._mana_seen[1])
@@ -2500,6 +2604,7 @@ class Fight:
             return True                        # counted after all, as before
         self._dropped = (ability.slot, times)
         self._last_use, self._lasting, self._saved_at = last_use, lasting, saved_at
+        self._dotted.pop((self._dot_guid, ability.name), None)
         if ability.role is Role.HEAL:
             self._pending_heal = None
         return True

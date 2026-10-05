@@ -5,7 +5,10 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 200.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "17": {
    "min_yd": 0.0,
@@ -15,7 +18,9 @@
   "53": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "66": {
    "min_yd": 0.0,
@@ -25,18 +30,23 @@
   "72": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 6.0,
+   "gcd_s": 1.5
   },
   "75": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "repeats": true,
+   "weapon": true
   },
   "78": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "99": {
    "min_yd": 0.0,
@@ -46,12 +56,15 @@
   "100": {
    "min_yd": 8.0,
    "max_yd": 25.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true
   },
   "116": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 19.0,
+   "gcd_s": 1.5
   },
   "118": {
    "min_yd": 0.0,
@@ -61,12 +74,16 @@
   "120": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 103.0,
+   "gcd_s": 1.5
   },
   "122": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 20.0,
+   "gcd_s": 1.5
   },
   "126": {
    "min_yd": 0.0,
@@ -92,7 +109,11 @@
   "133": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 18.0,
+   "dot": 2.0,
+   "dot_s": 4.0,
+   "gcd_s": 1.5
   },
   "136": {
    "min_yd": 0.0,
@@ -107,12 +128,20 @@
   "143": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 38.0,
+   "dot": 3.0,
+   "dot_s": 6.0,
+   "gcd_s": 1.5
   },
   "145": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 63.0,
+   "dot": 6.0,
+   "dot_s": 6.0,
+   "gcd_s": 1.5
   },
   "168": {
    "min_yd": 0.0,
@@ -122,24 +151,31 @@
   "172": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 40.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "205": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.8
+   "cast_s": 1.8,
+   "dmg": 33.0,
+   "gcd_s": 1.5
   },
   "284": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "285": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "324": {
    "min_yd": 0.0,
@@ -164,12 +200,19 @@
   "339": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 20.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "348": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 8.0,
+   "dot": 20.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "370": {
    "min_yd": 0.0,
@@ -179,17 +222,23 @@
   "403": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 14.0,
+   "gcd_s": 1.5
   },
   "408": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "421": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 204.0,
+   "gcd_s": 1.5
   },
   "453": {
    "min_yd": 0.0,
@@ -239,7 +288,9 @@
   "529": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 28.0,
+   "gcd_s": 1.5
   },
   "543": {
    "min_yd": 0.0,
@@ -259,7 +310,9 @@
   "548": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 49.0,
+   "gcd_s": 1.5
   },
   "552": {
    "min_yd": 0.0,
@@ -274,7 +327,9 @@
   "585": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 15.0,
+   "gcd_s": 1.5
   },
   "586": {
    "min_yd": 0.0,
@@ -294,12 +349,17 @@
   "589": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 30.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "591": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 28.0,
+   "gcd_s": 1.5
   },
   "592": {
    "min_yd": 0.0,
@@ -309,7 +369,10 @@
   "594": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 66.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "596": {
    "min_yd": 0.0,
@@ -324,7 +387,9 @@
   "598": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 58.0,
+   "gcd_s": 1.5
   },
   "600": {
    "min_yd": 0.0,
@@ -339,7 +404,10 @@
   "603": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 3200.0,
+   "dot_s": 60.0,
+   "gcd_s": 1.5
   },
   "604": {
    "min_yd": 0.0,
@@ -395,7 +463,9 @@
   "686": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.7
+   "cast_s": 1.7,
+   "dmg": 14.0,
+   "gcd_s": 1.5
   },
   "687": {
    "min_yd": 0.0,
@@ -406,7 +476,10 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 50.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "693": {
    "min_yd": 0.0,
@@ -416,12 +489,16 @@
   "694": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 22.0,
+   "gcd_s": 1.5
   },
   "695": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.2
+   "cast_s": 2.2,
+   "dmg": 26.0,
+   "gcd_s": 1.5
   },
   "696": {
    "min_yd": 0.0,
@@ -438,7 +515,10 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 85.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "702": {
    "min_yd": 0.0,
@@ -448,7 +528,10 @@
   "703": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 144.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.0
   },
   "704": {
    "min_yd": 0.0,
@@ -458,7 +541,9 @@
   "705": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.8
+   "cast_s": 2.8,
+   "dmg": 52.0,
+   "gcd_s": 1.5
   },
   "706": {
    "min_yd": 0.0,
@@ -468,13 +553,20 @@
   "707": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 19.0,
+   "dot": 40.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "709": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 145.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "710": {
    "min_yd": 0.0,
@@ -511,7 +603,9 @@
   "769": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 21.0,
+   "gcd_s": 1.5
   },
   "770": {
    "min_yd": 0.0,
@@ -521,7 +615,10 @@
   "772": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 15.0,
+   "dot_s": 9.0,
+   "gcd_s": 1.5
   },
   "774": {
    "min_yd": 0.0,
@@ -536,12 +633,16 @@
   "779": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 10.0,
+   "gcd_s": 1.5
   },
   "780": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 14.0,
+   "gcd_s": 1.5
   },
   "781": {
    "min_yd": 0.0,
@@ -561,13 +662,16 @@
   "837": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.2
+   "cast_s": 2.2,
+   "dmg": 54.0,
+   "gcd_s": 1.5
   },
   "845": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "853": {
    "min_yd": 0.0,
@@ -577,7 +681,9 @@
   "865": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 35.0,
+   "gcd_s": 1.5
   },
   "871": {
    "min_yd": 0.0,
@@ -587,7 +693,9 @@
   "879": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 90.0,
+   "gcd_s": 1.5
   },
   "905": {
    "min_yd": 0.0,
@@ -602,7 +710,9 @@
   "915": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 89.0,
+   "gcd_s": 1.5
   },
   "921": {
    "min_yd": 0.0,
@@ -612,7 +722,9 @@
   "930": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 294.0,
+   "gcd_s": 1.5
   },
   "939": {
    "min_yd": 0.0,
@@ -622,7 +734,9 @@
   "943": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 134.0,
+   "gcd_s": 1.5
   },
   "945": {
    "min_yd": 0.0,
@@ -637,7 +751,10 @@
   "970": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 132.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "976": {
    "min_yd": 0.0,
@@ -647,12 +764,17 @@
   "980": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 84.0,
+   "dot_s": 24.0,
+   "gcd_s": 1.5
   },
   "984": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 98.0,
+   "gcd_s": 1.5
   },
   "988": {
    "min_yd": 0.0,
@@ -667,7 +789,10 @@
   "992": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 234.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "996": {
    "min_yd": 0.0,
@@ -683,7 +808,9 @@
   "1004": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 160.0,
+   "gcd_s": 1.5
   },
   "1006": {
    "min_yd": 0.0,
@@ -698,7 +825,10 @@
   "1014": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 180.0,
+   "dot_s": 24.0,
+   "gcd_s": 1.5
   },
   "1020": {
    "min_yd": 0.0,
@@ -743,7 +873,10 @@
   "1062": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 50.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "1064": {
    "min_yd": 0.0,
@@ -758,12 +891,18 @@
   "1079": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 18.0,
+   "dot_s": 12.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "1082": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "1086": {
    "min_yd": 0.0,
@@ -773,12 +912,18 @@
   "1088": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 92.0,
+   "gcd_s": 1.5
   },
   "1094": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 45.0,
+   "dot": 90.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "1098": {
    "min_yd": 0.0,
@@ -788,7 +933,9 @@
   "1106": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 152.0,
+   "gcd_s": 1.5
   },
   "1108": {
    "min_yd": 0.0,
@@ -799,7 +946,10 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 55.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "1126": {
    "min_yd": 0.0,
@@ -849,22 +999,30 @@
   "1449": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 34.0,
+   "gcd_s": 1.5
   },
   "1454": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "1455": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "1456": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "1459": {
    "min_yd": 0.0,
@@ -894,7 +1052,9 @@
   "1464": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "1490": {
    "min_yd": 0.0,
@@ -909,7 +1069,9 @@
   "1495": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 25.0,
+   "gcd_s": 1.5
   },
   "1499": {
    "min_yd": 0.0,
@@ -919,8 +1081,11 @@
   "1510": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3,
-   "channel": true
+   "cast_s": 0.0,
+   "channel": true,
+   "dot": 300.0,
+   "dot_s": 6.0,
+   "gcd_s": 1.5
   },
   "1513": {
    "min_yd": 0.0,
@@ -946,22 +1111,29 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "1671": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 18.0,
+   "gcd_s": 1.5
   },
   "1672": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "1680": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "1706": {
    "min_yd": 0.0,
@@ -976,7 +1148,9 @@
   "1715": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 5.0,
+   "gcd_s": 1.5
   },
   "1719": {
    "min_yd": 0.0,
@@ -996,57 +1170,79 @@
   "1752": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "1757": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "1758": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "1759": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "1760": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "1766": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 15.0,
+   "gcd_s": 1.0
   },
   "1767": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 30.0,
+   "gcd_s": 1.0
   },
   "1768": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.0
   },
   "1769": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 80.0,
+   "gcd_s": 1.0
   },
   "1776": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 10.0,
+   "gcd_s": 1.0
   },
   "1777": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 20.0,
+   "gcd_s": 1.0
   },
   "1784": {
    "min_yd": 0.0,
@@ -1076,17 +1272,29 @@
   "1822": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 17.0,
+   "dot": 30.0,
+   "dot_s": 9.0,
+   "gcd_s": 1.0
   },
   "1823": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 26.0,
+   "dot": 45.0,
+   "dot_s": 9.0,
+   "gcd_s": 1.0
   },
   "1824": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 40.0,
+   "dot": 60.0,
+   "dot_s": 9.0,
+   "gcd_s": 1.0
   },
   "1833": {
    "min_yd": 0.0,
@@ -1121,13 +1329,21 @@
   "1943": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 24.0,
+   "dot_s": 6.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "1949": {
    "min_yd": 0.0,
    "max_yd": 0.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 2490.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "1953": {
    "min_yd": 0.0,
@@ -1142,7 +1358,10 @@
   "1978": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 20.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "2006": {
    "min_yd": 0.0,
@@ -1233,32 +1452,46 @@
   "2098": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 3.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "2120": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 60.0,
+   "gcd_s": 1.5
   },
   "2121": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 109.0,
+   "gcd_s": 1.5
   },
   "2136": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 28.0,
+   "gcd_s": 1.5
   },
   "2137": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 64.0,
+   "gcd_s": 1.5
   },
   "2138": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 115.0,
+   "gcd_s": 1.5
   },
   "2139": {
    "min_yd": 0.0,
@@ -1283,17 +1516,23 @@
   "2589": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "2590": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "2591": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "2637": {
    "min_yd": 0.0,
@@ -1303,7 +1542,9 @@
   "2643": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "2645": {
    "min_yd": 0.0,
@@ -1318,12 +1559,16 @@
   "2764": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true
   },
   "2767": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 366.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "2782": {
    "min_yd": 0.0,
@@ -1343,7 +1588,9 @@
   "2812": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 395.0,
+   "gcd_s": 1.5
   },
   "2835": {
    "min_yd": 0.0,
@@ -1363,7 +1610,9 @@
   "2860": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 401.0,
+   "gcd_s": 1.5
   },
   "2870": {
    "min_yd": 0.0,
@@ -1393,28 +1642,39 @@
   "2912": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 99.0,
+   "gcd_s": 1.5
   },
   "2941": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 90.0,
+   "dot": 165.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "2948": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 59.0,
+   "gcd_s": 1.5
   },
   "2973": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "2974": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 5.0,
+   "gcd_s": 1.5
   },
   "2983": {
    "min_yd": 0.0,
@@ -1424,22 +1684,26 @@
   "3029": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "3034": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "3043": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "3044": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 15.0,
+   "gcd_s": 1.5
   },
   "3045": {
    "min_yd": 0.0,
@@ -1459,7 +1723,11 @@
   "3140": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 100.0,
+   "dot": 12.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "3411": {
    "min_yd": 8.0,
@@ -1489,32 +1757,44 @@
   "3561": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "3562": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "3563": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "3565": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "3566": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "3567": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "3627": {
    "min_yd": 0.0,
@@ -1567,7 +1847,7 @@
   "5116": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "5118": {
    "min_yd": 0.0,
@@ -1584,49 +1864,70 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 72.0,
+   "dot_s": 3.0,
+   "gcd_s": 1.5
   },
   "5144": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 144.0,
+   "dot_s": 4.0,
+   "gcd_s": 1.5
   },
   "5145": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 280.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "5171": {
    "min_yd": 0.0,
    "max_yd": 100.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "5176": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 13.0,
+   "gcd_s": 1.5
   },
   "5177": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.7
+   "cast_s": 1.7,
+   "dmg": 27.0,
+   "gcd_s": 1.5
   },
   "5178": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 48.0,
+   "gcd_s": 1.5
   },
   "5179": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 68.0,
+   "gcd_s": 1.5
   },
   "5180": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 108.0,
+   "gcd_s": 1.5
   },
   "5185": {
    "min_yd": 0.0,
@@ -1656,17 +1957,25 @@
   "5195": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 90.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "5196": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 140.0,
+   "dot_s": 21.0,
+   "gcd_s": 1.5
   },
   "5201": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "5209": {
    "min_yd": 0.0,
@@ -1691,7 +2000,9 @@
   "5221": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "5225": {
    "min_yd": 0.0,
@@ -1701,7 +2012,8 @@
   "5229": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true
   },
   "5232": {
    "min_yd": 0.0,
@@ -1731,7 +2043,9 @@
   "5308": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "5384": {
    "min_yd": 0.0,
@@ -1786,12 +2100,16 @@
   "5614": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 162.0,
+   "gcd_s": 1.5
   },
   "5615": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 231.0,
+   "gcd_s": 1.5
   },
   "5627": {
    "min_yd": 0.0,
@@ -1806,7 +2124,9 @@
   "5676": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 38.0,
+   "gcd_s": 1.5
   },
   "5697": {
    "min_yd": 0.0,
@@ -1816,7 +2136,9 @@
   "5699": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "5730": {
    "min_yd": 0.0,
@@ -1827,7 +2149,10 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 168.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "5763": {
    "min_yd": 0.0,
@@ -1842,22 +2167,30 @@
   "5784": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "5938": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "6041": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 183.0,
+   "gcd_s": 1.5
   },
   "6060": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 226.0,
+   "gcd_s": 1.5
   },
   "6063": {
    "min_yd": 0.0,
@@ -1922,13 +2255,18 @@
   "6131": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 55.0,
+   "gcd_s": 1.5
   },
   "6141": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 352.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "6143": {
    "min_yd": 0.0,
@@ -1938,7 +2276,8 @@
   "6178": {
    "min_yd": 8.0,
    "max_yd": 25.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true
   },
   "6190": {
    "min_yd": 0.0,
@@ -1965,12 +2304,16 @@
   "6201": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "6202": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "6205": {
    "min_yd": 0.0,
@@ -1990,23 +2333,35 @@
   "6217": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 324.0,
+   "dot_s": 24.0,
+   "gcd_s": 1.5
   },
   "6219": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 384.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "6222": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 90.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "6223": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 222.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "6226": {
    "min_yd": 0.0,
@@ -2022,7 +2377,9 @@
   "6343": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 10.0,
+   "gcd_s": 1.5
   },
   "6346": {
    "min_yd": 0.0,
@@ -2032,7 +2389,9 @@
   "6353": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 703.0,
+   "gcd_s": 1.5
   },
   "6363": {
    "min_yd": 0.0,
@@ -2087,37 +2446,54 @@
   "6546": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 28.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "6547": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 45.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "6548": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 66.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "6552": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 20.0,
+   "gcd_s": 1.5
   },
   "6554": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 50.0,
+   "gcd_s": 1.5
   },
   "6572": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 55.0,
+   "gcd_s": 1.5
   },
   "6574": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 85.0,
+   "gcd_s": 1.5
   },
   "6603": {
    "min_yd": 0.0,
@@ -2137,17 +2513,29 @@
   "6760": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 7.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "6761": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 13.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "6762": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 20.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "6768": {
    "min_yd": 0.0,
@@ -2162,7 +2550,9 @@
   "6774": {
    "min_yd": 0.0,
    "max_yd": 100.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "6778": {
    "min_yd": 0.0,
@@ -2172,7 +2562,9 @@
   "6780": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 148.0,
+   "gcd_s": 1.5
   },
   "6783": {
    "min_yd": 0.0,
@@ -2182,12 +2574,16 @@
   "6785": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "6787": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "6789": {
    "min_yd": 0.0,
@@ -2207,19 +2603,23 @@
   "6800": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "6808": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "6809": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "6940": {
    "min_yd": 0.0,
@@ -2259,43 +2659,58 @@
   "7322": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.6
+   "cast_s": 2.6,
+   "dmg": 78.0,
+   "gcd_s": 1.5
   },
   "7369": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "7372": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 18.0,
+   "gcd_s": 1.5
   },
   "7373": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "7379": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 118.0,
+   "gcd_s": 1.5
   },
   "7384": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "7400": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 31.0,
+   "gcd_s": 1.5
   },
   "7402": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 46.0,
+   "gcd_s": 1.5
   },
   "7405": {
    "min_yd": 0.0,
@@ -2305,7 +2720,9 @@
   "7641": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 217.0,
+   "gcd_s": 1.5
   },
   "7646": {
    "min_yd": 0.0,
@@ -2315,13 +2732,19 @@
   "7648": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 324.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "7651": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 205.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "7658": {
    "min_yd": 0.0,
@@ -2336,7 +2759,9 @@
   "7887": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "8004": {
    "min_yd": 0.0,
@@ -2366,17 +2791,23 @@
   "8017": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "8018": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "8019": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "8024": {
    "min_yd": 0.0,
@@ -2406,47 +2837,71 @@
   "8042": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 18.0,
+   "gcd_s": 1.5
   },
   "8044": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 33.0,
+   "gcd_s": 1.5
   },
   "8045": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 62.0,
+   "gcd_s": 1.5
   },
   "8046": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 123.0,
+   "gcd_s": 1.5
   },
   "8050": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 21.0,
+   "dot": 28.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8052": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "dot": 48.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8053": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 86.0,
+   "dot": 96.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8056": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 92.0,
+   "gcd_s": 1.5
   },
   "8058": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 213.0,
+   "gcd_s": 1.5
   },
   "8075": {
    "min_yd": 0.0,
@@ -2456,32 +2911,44 @@
   "8092": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 41.0,
+   "gcd_s": 1.5
   },
   "8102": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 75.0,
+   "gcd_s": 1.5
   },
   "8103": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 116.0,
+   "gcd_s": 1.5
   },
   "8104": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 172.0,
+   "gcd_s": 1.5
   },
   "8105": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 224.0,
+   "gcd_s": 1.5
   },
   "8106": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 288.0,
+   "gcd_s": 1.5
   },
   "8122": {
    "min_yd": 0.0,
@@ -2571,17 +3038,23 @@
   "8198": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 23.0,
+   "gcd_s": 1.5
   },
   "8204": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 37.0,
+   "gcd_s": 1.5
   },
   "8205": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 55.0,
+   "gcd_s": 1.5
   },
   "8227": {
    "min_yd": 0.0,
@@ -2607,13 +3080,19 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 155.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "8289": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 295.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "8380": {
    "min_yd": 0.0,
@@ -2623,100 +3102,147 @@
   "8400": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 163.0,
+   "dot": 20.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "8401": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 232.0,
+   "dot": 28.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "8402": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 295.0,
+   "dot": 32.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "8406": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 132.0,
+   "gcd_s": 1.5
   },
   "8407": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 182.0,
+   "gcd_s": 1.5
   },
   "8408": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 237.0,
+   "gcd_s": 1.5
   },
   "8412": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 185.0,
+   "gcd_s": 1.5
   },
   "8413": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 266.0,
+   "gcd_s": 1.5
   },
   "8416": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 415.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "8417": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 575.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "8422": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 173.0,
+   "gcd_s": 1.5
   },
   "8423": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 246.0,
+   "gcd_s": 1.5
   },
   "8427": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 520.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "8437": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 60.0,
+   "gcd_s": 1.5
   },
   "8438": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 101.0,
+   "gcd_s": 1.5
   },
   "8439": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 145.0,
+   "gcd_s": 1.5
   },
   "8444": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 85.0,
+   "gcd_s": 1.5
   },
   "8445": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 110.0,
+   "gcd_s": 1.5
   },
   "8446": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 146.0,
+   "gcd_s": 1.5
   },
   "8450": {
    "min_yd": 0.0,
@@ -2756,7 +3282,9 @@
   "8492": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 153.0,
+   "gcd_s": 1.5
   },
   "8494": {
    "min_yd": 0.0,
@@ -2786,37 +3314,58 @@
   "8621": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "8623": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 30.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "8624": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 44.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "8629": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 32.0,
+   "gcd_s": 1.0
   },
   "8631": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 204.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.0
   },
   "8632": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 282.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.0
   },
   "8633": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 354.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.0
   },
   "8637": {
    "min_yd": 0.0,
@@ -2826,37 +3375,60 @@
   "8639": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 36.0,
+   "dot_s": 6.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "8640": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 54.0,
+   "dot_s": 6.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "8643": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "8647": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "8649": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "8650": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "8676": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "8687": {
    "min_yd": 0.0,
@@ -2881,17 +3453,23 @@
   "8721": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "8724": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "8725": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "8737": {
    "min_yd": 0.0,
@@ -2901,7 +3479,9 @@
   "8820": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "8835": {
    "min_yd": 0.0,
@@ -2916,7 +3496,9 @@
   "8905": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 199.0,
+   "gcd_s": 1.5
   },
   "8907": {
    "min_yd": 0.0,
@@ -2942,37 +3524,65 @@
   "8921": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 8.0,
+   "dot": 12.0,
+   "dot_s": 9.0,
+   "gcd_s": 1.5
   },
   "8924": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 15.0,
+   "dot": 32.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8925": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 28.0,
+   "dot": 52.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8926": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 44.0,
+   "dot": 80.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8927": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 67.0,
+   "dot": 124.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8928": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 89.0,
+   "dot": 164.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8929": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 115.0,
+   "dot": 212.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "8936": {
    "min_yd": 0.0,
@@ -3002,17 +3612,23 @@
   "8949": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 152.0,
+   "gcd_s": 1.5
   },
   "8950": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 221.0,
+   "gcd_s": 1.5
   },
   "8951": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 307.0,
+   "gcd_s": 1.5
   },
   "8955": {
    "min_yd": 0.0,
@@ -3023,7 +3639,8 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "8983": {
    "min_yd": 0.0,
@@ -3033,7 +3650,9 @@
   "8992": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "8998": {
    "min_yd": 0.0,
@@ -3083,12 +3702,20 @@
   "9492": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 24.0,
+   "dot_s": 12.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "9493": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 36.0,
+   "dot_s": 12.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "9578": {
    "min_yd": 0.0,
@@ -3114,7 +3741,8 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "9747": {
    "min_yd": 0.0,
@@ -3134,12 +3762,18 @@
   "9752": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 54.0,
+   "dot_s": 12.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "9754": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 41.0,
+   "gcd_s": 1.5
   },
   "9756": {
    "min_yd": 0.0,
@@ -3169,27 +3803,43 @@
   "9829": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "9830": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "9833": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 142.0,
+   "dot": 264.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "9834": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 171.0,
+   "dot": 320.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "9835": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 205.0,
+   "dot": 384.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "9839": {
    "min_yd": 0.0,
@@ -3219,22 +3869,32 @@
   "9849": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "9850": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "9852": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 200.0,
+   "dot_s": 24.0,
+   "gcd_s": 1.5
   },
   "9853": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 270.0,
+   "dot_s": 27.0,
+   "gcd_s": 1.5
   },
   "9856": {
    "min_yd": 0.0,
@@ -3266,34 +3926,44 @@
   "9866": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "9867": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "9875": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 395.0,
+   "gcd_s": 1.5
   },
   "9876": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 485.0,
+   "gcd_s": 1.5
   },
   "9880": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "9881": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "9884": {
    "min_yd": 0.0,
@@ -3323,12 +3993,20 @@
   "9894": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 72.0,
+   "dot_s": 12.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "9896": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 102.0,
+   "dot_s": 12.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "9898": {
    "min_yd": 0.0,
@@ -3343,7 +4021,11 @@
   "9904": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 55.0,
+   "dot": 75.0,
+   "dot_s": 9.0,
+   "gcd_s": 1.0
   },
   "9907": {
    "min_yd": 0.0,
@@ -3353,7 +4035,9 @@
   "9908": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 60.0,
+   "gcd_s": 1.5
   },
   "9910": {
    "min_yd": 0.0,
@@ -3363,7 +4047,9 @@
   "9912": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 250.0,
+   "gcd_s": 1.5
   },
   "9913": {
    "min_yd": 0.0,
@@ -3413,22 +4099,38 @@
   "10148": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 366.0,
+   "dot": 40.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "10149": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 449.0,
+   "dot": 52.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "10150": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 542.0,
+   "dot": 60.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "10151": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 638.0,
+   "dot": 72.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "10156": {
    "min_yd": 0.0,
@@ -3443,17 +4145,23 @@
   "10159": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 213.0,
+   "gcd_s": 1.5
   },
   "10160": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 277.0,
+   "gcd_s": 1.5
   },
   "10161": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 350.0,
+   "gcd_s": 1.5
   },
   "10169": {
    "min_yd": 0.0,
@@ -3483,35 +4191,50 @@
   "10179": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 304.0,
+   "gcd_s": 1.5
   },
   "10180": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 368.0,
+   "gcd_s": 1.5
   },
   "10181": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 446.0,
+   "gcd_s": 1.5
   },
   "10185": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 720.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "10186": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 936.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "10187": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 1192.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "10191": {
    "min_yd": 0.0,
@@ -3531,59 +4254,83 @@
   "10197": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 363.0,
+   "gcd_s": 1.5
   },
   "10199": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 470.0,
+   "gcd_s": 1.5
   },
   "10201": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 194.0,
+   "gcd_s": 1.5
   },
   "10202": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 253.0,
+   "gcd_s": 1.5
   },
   "10205": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 177.0,
+   "gcd_s": 1.5
   },
   "10206": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 219.5,
+   "gcd_s": 1.5
   },
   "10207": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 254.0,
+   "gcd_s": 1.5
   },
   "10211": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 755.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "10212": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 960.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "10215": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 325.0,
+   "gcd_s": 1.5
   },
   "10216": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 417.0,
+   "gcd_s": 1.5
   },
   "10219": {
    "min_yd": 0.0,
@@ -3608,7 +4355,9 @@
   "10230": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 75.0,
+   "gcd_s": 1.5
   },
   "10278": {
    "min_yd": 0.0,
@@ -3668,22 +4417,35 @@
   "10312": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 323.0,
+   "gcd_s": 1.5
   },
   "10313": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 416.0,
+   "gcd_s": 1.5
   },
   "10314": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 534.0,
+   "gcd_s": 1.5
   },
   "10318": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 533.0,
+   "gcd_s": 1.5
+  },
+  "10321": {
+   "min_yd": 0.0,
+   "max_yd": 100.0,
+   "cast_s": 0.0
   },
   "10322": {
    "min_yd": 0.0,
@@ -3713,12 +4475,16 @@
   "10391": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 241.0,
+   "gcd_s": 1.5
   },
   "10392": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 299.0,
+   "gcd_s": 1.5
   },
   "10395": {
    "min_yd": 0.0,
@@ -3733,7 +4499,9 @@
   "10399": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "10406": {
    "min_yd": 0.0,
@@ -3753,17 +4521,23 @@
   "10412": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 232.0,
+   "gcd_s": 1.5
   },
   "10413": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 370.0,
+   "gcd_s": 1.5
   },
   "10414": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 531.0,
+   "gcd_s": 1.5
   },
   "10427": {
    "min_yd": 0.0,
@@ -3803,12 +4577,20 @@
   "10447": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 152.0,
+   "dot": 168.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "10448": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 230.0,
+   "dot": 256.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "10456": {
    "min_yd": 0.0,
@@ -3843,12 +4625,16 @@
   "10472": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 343.0,
+   "gcd_s": 1.5
   },
   "10473": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 500.0,
+   "gcd_s": 1.5
   },
   "10478": {
    "min_yd": 0.0,
@@ -3928,7 +4714,9 @@
   "10605": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 522.0,
+   "gcd_s": 1.5
   },
   "10613": {
    "min_yd": 0.0,
@@ -3993,17 +4781,26 @@
   "10892": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 510.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "10893": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 672.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "10894": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 852.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "10898": {
    "min_yd": 0.0,
@@ -4076,12 +4873,16 @@
   "10933": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 305.0,
+   "gcd_s": 1.5
   },
   "10934": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 393.0,
+   "gcd_s": 1.5
   },
   "10937": {
    "min_yd": 0.0,
@@ -4106,17 +4907,23 @@
   "10945": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 356.0,
+   "gcd_s": 1.5
   },
   "10946": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 437.0,
+   "gcd_s": 1.5
   },
   "10947": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 517.0,
+   "gcd_s": 1.5
   },
   "10951": {
    "min_yd": 0.0,
@@ -4176,87 +4983,134 @@
   "11197": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "11198": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "11267": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "11268": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "11269": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "11273": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 81.0,
+   "dot_s": 6.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "11274": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 111.0,
+   "dot_s": 6.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "11275": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 180.0,
+   "dot_s": 6.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "11279": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "11280": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "11281": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "11285": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 55.0,
+   "gcd_s": 1.0
   },
   "11286": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 75.0,
+   "gcd_s": 1.0
   },
   "11289": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 444.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.0
   },
   "11290": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 552.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.0
   },
   "11293": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "11294": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "11297": {
    "min_yd": 0.0,
@@ -4266,12 +5120,20 @@
   "11299": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 68.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "11300": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 96.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "11303": {
    "min_yd": 0.0,
@@ -4382,65 +5244,87 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "11565": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "11566": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "11567": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "11572": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 98.0,
+   "dot_s": 21.0,
+   "gcd_s": 1.5
   },
   "11573": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 126.0,
+   "dot_s": 21.0,
+   "gcd_s": 1.5
   },
   "11574": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 147.0,
+   "dot_s": 21.0,
+   "gcd_s": 1.5
   },
   "11578": {
    "min_yd": 8.0,
    "max_yd": 25.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true
   },
   "11580": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 82.0,
+   "gcd_s": 1.5
   },
   "11581": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 103.0,
+   "gcd_s": 1.5
   },
   "11584": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "11585": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "11596": {
    "min_yd": 0.0,
@@ -4455,119 +5339,174 @@
   "11600": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 200.0,
+   "gcd_s": 1.5
   },
   "11601": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 300.0,
+   "gcd_s": 1.5
   },
   "11604": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "11605": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "11608": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "11609": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "11659": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 298.0,
+   "gcd_s": 1.5
   },
   "11660": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 381.0,
+   "gcd_s": 1.5
   },
   "11661": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 481.0,
+   "gcd_s": 1.5
   },
   "11665": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 134.0,
+   "dot": 255.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "11667": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 192.0,
+   "dot": 365.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "11668": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 258.0,
+   "dot": 485.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "11671": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 486.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "11672": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 666.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "11675": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 455.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "11677": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 620.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "11678": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 904.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "11683": {
    "min_yd": 0.0,
    "max_yd": 0.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 4170.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "11684": {
    "min_yd": 0.0,
    "max_yd": 0.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 6240.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "11687": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "11688": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "11689": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "11693": {
    "min_yd": 0.0,
@@ -4591,13 +5530,19 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 275.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "11700": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 355.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "11703": {
    "min_yd": 0.0,
@@ -4624,17 +5569,26 @@
   "11711": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 504.0,
+   "dot_s": 24.0,
+   "gcd_s": 1.5
   },
   "11712": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 780.0,
+   "dot_s": 24.0,
+   "gcd_s": 1.5
   },
   "11713": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 1044.0,
+   "dot_s": 24.0,
+   "gcd_s": 1.5
   },
   "11717": {
    "min_yd": 0.0,
@@ -4669,12 +5623,16 @@
   "11729": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "11730": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "11733": {
    "min_yd": 0.0,
@@ -4710,32 +5668,56 @@
   "12505": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 208.0,
+   "dot": 72.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "12522": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 291.0,
+   "dot": 96.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "12523": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 374.0,
+   "dot": 124.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "12524": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 461.0,
+   "dot": 156.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "12525": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 567.0,
+   "dot": 188.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "12526": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 675.0,
+   "dot": 228.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "12678": {
    "min_yd": 0.0,
@@ -4760,22 +5742,30 @@
   "13018": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 221.0,
+   "gcd_s": 1.5
   },
   "13019": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 303.0,
+   "gcd_s": 1.5
   },
   "13020": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 399.0,
+   "gcd_s": 1.5
   },
   "13021": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 503.0,
+   "gcd_s": 1.5
   },
   "13031": {
    "min_yd": 0.0,
@@ -4850,37 +5840,58 @@
   "13549": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 40.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "13550": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 80.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "13551": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 140.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "13552": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 210.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "13553": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 290.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "13554": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 385.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "13555": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 490.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "13795": {
    "min_yd": 0.0,
@@ -4900,74 +5911,93 @@
   "13819": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "14260": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "14261": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "14262": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "14263": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "14264": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "14265": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "14266": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "14267": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 25.0,
+   "gcd_s": 1.5
   },
   "14268": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 50.0,
+   "gcd_s": 1.5
   },
   "14269": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "14270": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 75.0,
+   "gcd_s": 1.5
   },
   "14271": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 115.0,
+   "gcd_s": 1.5
   },
   "14272": {
    "min_yd": 0.0,
@@ -4982,79 +6012,105 @@
   "14274": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "14279": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "14280": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "14281": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 23.0,
+   "gcd_s": 1.5
   },
   "14282": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 36.0,
+   "gcd_s": 1.5
   },
   "14283": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 65.0,
+   "gcd_s": 1.5
   },
   "14284": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 91.0,
+   "gcd_s": 1.5
   },
   "14285": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 125.0,
+   "gcd_s": 1.5
   },
   "14286": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 158.0,
+   "gcd_s": 1.5
   },
   "14287": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 200.0,
+   "gcd_s": 1.5
   },
   "14288": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "14289": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "14290": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "14294": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3,
-   "channel": true
+   "cast_s": 0.0,
+   "channel": true,
+   "dot": 390.0,
+   "dot_s": 6.0,
+   "gcd_s": 1.5
   },
   "14295": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3,
-   "channel": true
+   "cast_s": 0.0,
+   "channel": true,
+   "dot": 480.0,
+   "dot_s": 6.0,
+   "gcd_s": 1.5
   },
   "14302": {
    "min_yd": 0.0,
@@ -5159,7 +6215,11 @@
   "14914": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 88.0,
+   "dot": 30.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "15107": {
    "min_yd": 0.0,
@@ -5179,92 +6239,134 @@
   "15207": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 368.0,
+   "gcd_s": 1.5
   },
   "15208": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 443.0,
+   "gcd_s": 1.5
   },
   "15261": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 402.0,
+   "dot": 145.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "15262": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 108.0,
+   "dot": 40.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "15263": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 149.0,
+   "dot": 55.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "15264": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 187.0,
+   "dot": 65.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "15265": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 231.0,
+   "dot": 85.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "15266": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 288.0,
+   "dot": 100.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "15267": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 345.0,
+   "dot": 125.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "15430": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 54.0,
+   "gcd_s": 1.5
   },
   "15431": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 82.0,
+   "gcd_s": 1.5
   },
   "15629": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "15630": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "15631": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "15632": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "16314": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "16315": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "16316": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "16339": {
    "min_yd": 0.0,
@@ -5325,31 +6427,46 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 700.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "17311": {
    "min_yd": 0.0,
    "max_yd": 20.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 126.0,
+   "dot_s": 3.0,
+   "gcd_s": 1.5
   },
   "17312": {
    "min_yd": 0.0,
    "max_yd": 20.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 186.0,
+   "dot_s": 3.0,
+   "gcd_s": 1.5
   },
   "17313": {
    "min_yd": 0.0,
    "max_yd": 20.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 261.0,
+   "dot_s": 3.0,
+   "gcd_s": 1.5
   },
   "17314": {
    "min_yd": 0.0,
    "max_yd": 20.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 330.0,
+   "dot_s": 3.0,
+   "gcd_s": 1.5
   },
   "17329": {
    "min_yd": 0.0,
@@ -5359,12 +6476,16 @@
   "17347": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "17348": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "17390": {
    "min_yd": 0.0,
@@ -5385,13 +6506,19 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 1000.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "17402": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 1340.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "17727": {
    "min_yd": 0.0,
@@ -5406,32 +6533,44 @@
   "17919": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 65.0,
+   "gcd_s": 1.5
   },
   "17920": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 95.0,
+   "gcd_s": 1.5
   },
   "17921": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 134.0,
+   "gcd_s": 1.5
   },
   "17922": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 173.0,
+   "gcd_s": 1.5
   },
   "17923": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 222.0,
+   "gcd_s": 1.5
   },
   "17924": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 792.0,
+   "gcd_s": 1.5
   },
   "17925": {
    "min_yd": 0.0,
@@ -5487,67 +6626,99 @@
    "min_yd": 0.0,
    "max_yd": 20.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 426.0,
+   "dot_s": 3.0,
+   "gcd_s": 1.5
   },
   "18809": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 803.0,
+   "dot": 268.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "18867": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 123.0,
+   "gcd_s": 1.5
   },
   "18868": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 198.0,
+   "gcd_s": 1.5
   },
   "18869": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 277.0,
+   "gcd_s": 1.5
   },
   "18870": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 371.0,
+   "gcd_s": 1.5
   },
   "18871": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 476.0,
+   "gcd_s": 1.5
   },
   "18879": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 220.0,
+   "dot_s": 30.0,
+   "gcd_s": 1.5
   },
   "18880": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 330.0,
+   "dot_s": 30.0,
+   "gcd_s": 1.5
   },
   "18881": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 450.0,
+   "dot_s": 30.0,
+   "gcd_s": 1.5
   },
   "18930": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 356.0,
+   "gcd_s": 1.5
   },
   "18931": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 431.0,
+   "gcd_s": 1.5
   },
   "18932": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 502.0,
+   "gcd_s": 1.5
   },
   "18937": {
    "min_yd": 0.0,
@@ -5587,7 +6758,7 @@
   "19801": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "19834": {
    "min_yd": 0.0,
@@ -5802,7 +6973,8 @@
   "20271": {
    "min_yd": 0.0,
    "max_yd": 10.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true
   },
   "20287": {
    "min_yd": 0.0,
@@ -5897,18 +7069,23 @@
   "20559": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 71.0,
+   "gcd_s": 1.5
   },
   "20560": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 93.0,
+   "gcd_s": 1.5
   },
   "20569": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "20580": {
    "min_yd": 0.0,
@@ -5943,22 +7120,30 @@
   "20658": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "20660": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "20661": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "20662": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "20719": {
    "min_yd": 0.0,
@@ -5973,7 +7158,7 @@
   "20736": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "20739": {
    "min_yd": 0.0,
@@ -6043,27 +7228,37 @@
   "20900": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "20901": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "20902": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "20903": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "20904": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "20905": {
    "min_yd": 0.0,
@@ -6078,12 +7273,16 @@
   "20909": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 70.0,
+   "gcd_s": 1.5
   },
   "20910": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 110.0,
+   "gcd_s": 1.5
   },
   "20912": {
    "min_yd": 0.0,
@@ -6148,12 +7347,16 @@
   "20929": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "20930": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "21082": {
    "min_yd": 0.0,
@@ -6168,17 +7371,23 @@
   "21551": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "21552": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "21553": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "21562": {
    "min_yd": 0.0,
@@ -6203,12 +7412,18 @@
   "22568": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 22.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "22570": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "22782": {
    "min_yd": 0.0,
@@ -6228,17 +7443,26 @@
   "22827": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 32.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "22828": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 50.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "22829": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 70.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "22842": {
    "min_yd": 0.0,
@@ -6263,17 +7487,23 @@
   "23892": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "23893": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "23894": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "23920": {
    "min_yd": 0.0,
@@ -6283,47 +7513,62 @@
   "23923": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 270.0,
+   "gcd_s": 1.5
   },
   "23924": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 310.0,
+   "gcd_s": 1.5
   },
   "23925": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 350.0,
+   "gcd_s": 1.5
   },
   "24132": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "24133": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "24239": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.5
+   "cast_s": 0.5,
+   "dmg": 530.0,
+   "gcd_s": 0.5
   },
   "24248": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 90.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "24274": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.5
+   "cast_s": 0.5,
+   "dmg": 420.0,
+   "gcd_s": 0.5
   },
   "24275": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.5
+   "cast_s": 0.5,
+   "dmg": 320.0,
+   "gcd_s": 0.5
   },
   "24398": {
    "min_yd": 0.0,
@@ -6333,22 +7578,34 @@
   "24974": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 192.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "24975": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 300.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "24976": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 432.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "24977": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 594.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "25046": {
    "min_yd": 0.0,
@@ -6368,7 +7625,10 @@
   "25208": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 182.0,
+   "dot_s": 21.0,
+   "gcd_s": 1.5
   },
   "25210": {
    "min_yd": 0.0,
@@ -6378,7 +7638,9 @@
   "25212": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 63.0,
+   "gcd_s": 1.5
   },
   "25213": {
    "min_yd": 0.0,
@@ -6414,7 +7676,8 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "25233": {
    "min_yd": 0.0,
@@ -6424,7 +7687,9 @@
   "25234": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "25235": {
    "min_yd": 0.0,
@@ -6434,47 +7699,65 @@
   "25236": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "25241": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "25242": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "25248": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "25251": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "25258": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 390.0,
+   "gcd_s": 1.5
   },
   "25264": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 123.0,
+   "gcd_s": 1.5
   },
   "25266": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 114.0,
+   "gcd_s": 1.5
   },
   "25269": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 400.0,
+   "gcd_s": 1.5
   },
   "25272": {
    "min_yd": 8.0,
@@ -6490,12 +7773,15 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "25288": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 380.0,
+   "gcd_s": 1.5
   },
   "25289": {
    "min_yd": 0.0,
@@ -6520,12 +7806,17 @@
   "25294": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "25295": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 555.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "25296": {
    "min_yd": 0.0,
@@ -6540,7 +7831,9 @@
   "25298": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 540.0,
+   "gcd_s": 1.5
   },
   "25299": {
    "min_yd": 0.0,
@@ -6550,7 +7843,9 @@
   "25300": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "25302": {
    "min_yd": 0.0,
@@ -6560,17 +7855,25 @@
   "25304": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 535.0,
+   "gcd_s": 1.5
   },
   "25306": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 678.0,
+   "dot": 76.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "25307": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 510.0,
+   "gcd_s": 1.5
   },
   "25308": {
    "min_yd": 0.0,
@@ -6580,12 +7883,19 @@
   "25309": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 279.0,
+   "dot": 510.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "25311": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 822.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "25312": {
    "min_yd": 0.0,
@@ -6610,13 +7920,18 @@
   "25331": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 261.0,
+   "gcd_s": 1.5
   },
   "25345": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 1150.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "25347": {
    "min_yd": 0.0,
@@ -6641,32 +7956,46 @@
   "25363": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 429.0,
+   "gcd_s": 1.5
   },
   "25364": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 578.0,
+   "gcd_s": 1.5
   },
   "25367": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 1002.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "25368": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 1236.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "25372": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 572.0,
+   "gcd_s": 1.5
   },
   "25375": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 728.0,
+   "gcd_s": 1.5
   },
   "25379": {
    "min_yd": 0.0,
@@ -6681,13 +8010,20 @@
   "25384": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 467.0,
+   "dot": 165.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "25387": {
    "min_yd": 0.0,
    "max_yd": 20.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 528.0,
+   "dot_s": 3.0,
+   "gcd_s": 1.5
   },
   "25389": {
    "min_yd": 0.0,
@@ -6742,37 +8078,53 @@
   "25439": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 645.0,
+   "gcd_s": 1.5
   },
   "25442": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 786.0,
+   "gcd_s": 1.5
   },
   "25448": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 530.0,
+   "gcd_s": 1.5
   },
   "25449": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 603.0,
+   "gcd_s": 1.5
   },
   "25454": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 675.0,
+   "gcd_s": 1.5
   },
   "25457": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 377.0,
+   "dot": 420.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "25464": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 658.0,
+   "gcd_s": 1.5
   },
   "25469": {
    "min_yd": 0.0,
@@ -6787,12 +8139,16 @@
   "25479": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "25485": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "25489": {
    "min_yd": 0.0,
@@ -6962,7 +8318,11 @@
   "26679": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "weapon": true,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "26786": {
    "min_yd": 0.0,
@@ -6972,47 +8332,73 @@
   "26839": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 666.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.0
   },
   "26861": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "26862": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "26863": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "26864": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "26865": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 120.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "26866": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "26867": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 210.0,
+   "dot_s": 6.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "26884": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 810.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.0
   },
   "26889": {
    "min_yd": 0.0,
@@ -7063,32 +8449,49 @@
   "26984": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 295.0,
+   "gcd_s": 1.5
   },
   "26985": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 405.0,
+   "gcd_s": 1.5
   },
   "26986": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 588.0,
+   "gcd_s": 1.5
   },
   "26987": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 239.0,
+   "dot": 444.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "26988": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 331.0,
+   "dot": 600.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "26989": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 351.0,
+   "dot_s": 27.0,
+   "gcd_s": 1.5
   },
   "26990": {
    "min_yd": 0.0,
@@ -7119,12 +8522,15 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "26997": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 84.0,
+   "gcd_s": 1.5
   },
   "26998": {
    "min_yd": 0.0,
@@ -7139,22 +8545,32 @@
   "27000": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "27001": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "27002": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "27003": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 78.0,
+   "dot": 108.0,
+   "dot_s": 9.0,
+   "gcd_s": 1.0
   },
   "27004": {
    "min_yd": 0.0,
@@ -7164,7 +8580,9 @@
   "27005": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "27006": {
    "min_yd": 0.0,
@@ -7174,7 +8592,11 @@
   "27008": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 144.0,
+   "dot_s": 12.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "27009": {
    "min_yd": 0.0,
@@ -7190,18 +8612,25 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 2060.0,
+   "dot_s": 10.0,
+   "gcd_s": 1.5
   },
   "27013": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 792.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "27014": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "27015": {
    "min_yd": 0.0,
@@ -7211,33 +8640,43 @@
   "27016": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dot": 660.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "27018": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "27019": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0,
+   "dmg": 273.0,
+   "gcd_s": 1.5
   },
   "27020": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "27021": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "27022": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3,
-   "channel": true
+   "cast_s": 0.0,
+   "channel": true,
+   "dot": 630.0,
+   "dot_s": 6.0,
+   "gcd_s": 1.5
   },
   "27023": {
    "min_yd": 0.0,
@@ -7267,7 +8706,9 @@
   "27065": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "27066": {
    "min_yd": 0.0,
@@ -7277,84 +8718,118 @@
   "27067": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 165.0,
+   "gcd_s": 1.5
   },
   "27068": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 4293967.3
+   "cast_s": 0.0
   },
   "27070": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 3.5
+   "cast_s": 3.5,
+   "dmg": 719.0,
+   "dot": 84.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "27071": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 557.0,
+   "gcd_s": 1.5
   },
   "27072": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 620.0,
+   "gcd_s": 1.5
   },
   "27073": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 293.0,
+   "gcd_s": 1.5
   },
   "27074": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 333.0,
+   "gcd_s": 1.5
   },
   "27075": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 1200.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "27078": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 588.0,
+   "gcd_s": 1.5
   },
   "27079": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 725.0,
+   "gcd_s": 1.5
   },
   "27080": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 318.0,
+   "gcd_s": 1.5
   },
   "27082": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 392.0,
+   "gcd_s": 1.5
   },
   "27085": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 1472.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "27086": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 523.0,
+   "gcd_s": 1.5
   },
   "27087": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 429.0,
+   "gcd_s": 1.5
   },
   "27088": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 105.0,
+   "gcd_s": 1.5
   },
   "27101": {
    "min_yd": 0.0,
@@ -7394,12 +8869,18 @@
   "27132": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 960.0,
+   "dot": 312.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "27133": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 580.0,
+   "gcd_s": 1.5
   },
   "27134": {
    "min_yd": 0.0,
@@ -7424,12 +8905,16 @@
   "27138": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 655.0,
+   "gcd_s": 1.5
   },
   "27139": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 690.0,
+   "gcd_s": 1.5
   },
   "27140": {
    "min_yd": 0.0,
@@ -7544,7 +9029,9 @@
   "27174": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "27179": {
    "min_yd": 0.0,
@@ -7554,67 +9041,100 @@
   "27180": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.5
+   "cast_s": 0.5,
+   "dmg": 700.0,
+   "gcd_s": 0.5
   },
   "27209": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "dmg": 572.0,
+   "gcd_s": 1.5
   },
   "27210": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 265.0,
+   "gcd_s": 1.5
   },
   "27211": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 945.0,
+   "gcd_s": 1.5
   },
   "27212": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 1212.0,
+   "dot_s": 8.0,
+   "gcd_s": 1.5
   },
   "27213": {
    "min_yd": 0.0,
    "max_yd": 0.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 9180.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "27215": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dmg": 327.0,
+   "dot": 615.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "27216": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 900.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "27217": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 620.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "27218": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 1356.0,
+   "dot_s": 24.0,
+   "gcd_s": 1.5
   },
   "27219": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 435.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "27220": {
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 540.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "27221": {
    "min_yd": 0.0,
@@ -7625,7 +9145,9 @@
   "27222": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "27223": {
    "min_yd": 0.0,
@@ -7650,7 +9172,9 @@
   "27230": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "27238": {
    "min_yd": 0.0,
@@ -7660,7 +9184,10 @@
   "27243": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.0
+   "cast_s": 2.0,
+   "dot": 1044.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "27250": {
    "min_yd": 0.0,
@@ -7681,12 +9208,17 @@
   "27263": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 548.0,
+   "gcd_s": 1.5
   },
   "27264": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 520.0,
+   "dot_s": 30.0,
+   "gcd_s": 1.5
   },
   "27265": {
    "min_yd": 0.0,
@@ -7696,7 +9228,9 @@
   "27266": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 575.0,
+   "gcd_s": 1.5
   },
   "27282": {
    "min_yd": 0.0,
@@ -7711,7 +9245,9 @@
   "27441": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "27448": {
    "min_yd": 0.0,
@@ -7731,17 +9267,23 @@
   "27799": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 114.0,
+   "gcd_s": 1.5
   },
   "27800": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 151.0,
+   "gcd_s": 1.5
   },
   "27801": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 195.0,
+   "gcd_s": 1.5
   },
   "27841": {
    "min_yd": 0.0,
@@ -7796,7 +9338,9 @@
   "28730": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "28734": {
    "min_yd": 0.0,
@@ -7816,28 +9360,39 @@
   "29228": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 309.0,
+   "dot": 344.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "29704": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 63.0,
+   "gcd_s": 1.5
   },
   "29707": {
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "29722": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 435.0,
+   "gcd_s": 1.5
   },
   "29858": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "29893": {
    "min_yd": 0.0,
@@ -7848,12 +9403,16 @@
   "30016": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "30022": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "30030": {
    "min_yd": 0.0,
@@ -7869,47 +9428,66 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
-   "next_swing": true
+   "next_swing": true,
+   "weapon": true
   },
   "30330": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "30335": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "30356": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 430.0,
+   "gcd_s": 1.5
   },
   "30357": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 460.0,
+   "gcd_s": 1.5
   },
   "30404": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 840.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "30405": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 1050.0,
+   "dot_s": 18.0,
+   "gcd_s": 1.5
   },
   "30413": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.5
+   "cast_s": 0.5,
+   "dmg": 503.0,
+   "gcd_s": 0.5
   },
   "30414": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.5
+   "cast_s": 0.5,
+   "dmg": 670.0,
+   "gcd_s": 0.5
   },
   "30449": {
    "min_yd": 0.0,
@@ -7919,17 +9497,23 @@
   "30451": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 700.0,
+   "gcd_s": 1.5
   },
   "30455": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 174.0,
+   "gcd_s": 1.5
   },
   "30459": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dmg": 295.0,
+   "gcd_s": 1.5
   },
   "30482": {
    "min_yd": 0.0,
@@ -7939,12 +9523,16 @@
   "30545": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 1130.0,
+   "gcd_s": 1.5
   },
   "30546": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 631.0,
+   "gcd_s": 1.5
   },
   "30908": {
    "min_yd": 0.0,
@@ -7960,27 +9548,42 @@
   "30910": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 4200.0,
+   "dot_s": 60.0,
+   "gcd_s": 1.5
   },
   "30911": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dot": 630.0,
+   "dot_s": 30.0,
+   "gcd_s": 1.5
   },
   "30912": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 650.0,
+   "gcd_s": 1.5
   },
   "31016": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 108.0,
+   "combo": true,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "31018": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 82.0,
+   "combo": true,
+   "gcd_s": 1.0
   },
   "31224": {
    "min_yd": 0.0,
@@ -8000,7 +9603,9 @@
   "31789": {
    "min_yd": 0.0,
    "max_yd": 40.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "31801": {
    "min_yd": 0.0,
@@ -8025,7 +9630,9 @@
   "32231": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 2.5
+   "cast_s": 2.5,
+   "dmg": 479.0,
+   "gcd_s": 1.5
   },
   "32266": {
    "min_yd": 0.0,
@@ -8040,12 +9647,16 @@
   "32271": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "32272": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "32375": {
    "min_yd": 0.0,
@@ -8055,7 +9666,9 @@
   "32379": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 486.0,
+   "gcd_s": 1.5
   },
   "32546": {
    "min_yd": 0.0,
@@ -8075,22 +9688,32 @@
   "32645": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 144.0,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "32684": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 180.0,
+   "unread": true,
+   "gcd_s": 1.0
   },
   "32699": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.0
+   "cast_s": 1.0,
+   "dmg": 411.0,
+   "gcd_s": 1.0
   },
   "32700": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.0
+   "cast_s": 1.0,
+   "dmg": 548.0,
+   "gcd_s": 1.0
   },
   "32796": {
    "min_yd": 0.0,
@@ -8100,7 +9723,9 @@
   "32996": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 618.0,
+   "gcd_s": 1.5
   },
   "32999": {
    "min_yd": 0.0,
@@ -8110,22 +9735,30 @@
   "33041": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 490.0,
+   "gcd_s": 1.5
   },
   "33042": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 620.0,
+   "gcd_s": 1.5
   },
   "33043": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 735.0,
+   "gcd_s": 1.5
   },
   "33072": {
    "min_yd": 0.0,
    "max_yd": 20.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "33076": {
    "min_yd": 0.0,
@@ -8145,7 +9778,9 @@
   "33690": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "33691": {
    "min_yd": 0.0,
@@ -8160,7 +9795,11 @@
   "33745": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 31.0,
+   "dot": 155.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "33763": {
    "min_yd": 0.0,
@@ -8180,12 +9819,18 @@
   "33933": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 670.0,
+   "gcd_s": 1.5
   },
   "33938": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 6.0
+   "cast_s": 6.0,
+   "dmg": 1065.0,
+   "dot": 356.0,
+   "dot_s": 12.0,
+   "gcd_s": 1.5
   },
   "33944": {
    "min_yd": 0.0,
@@ -8200,37 +9845,51 @@
   "33982": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "33983": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.0
   },
   "33986": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "33987": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "weapon": true,
+   "gcd_s": 1.5
   },
   "34026": {
    "min_yd": 0.0,
    "max_yd": 45.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true
   },
   "34074": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "34120": {
    "min_yd": 0.0,
    "max_yd": 35.0,
-   "cast_s": 1.0
+   "cast_s": 1.0,
+   "dmg": 150.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "34411": {
    "min_yd": 0.0,
@@ -8250,7 +9909,9 @@
   "34428": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 45.0,
+   "gcd_s": 1.5
   },
   "34433": {
    "min_yd": 0.0,
@@ -8270,7 +9931,9 @@
   "34769": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 3.0
+   "cast_s": 3.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "34863": {
    "min_yd": 0.0,
@@ -8295,17 +9958,25 @@
   "34916": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 600.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "34917": {
    "min_yd": 0.0,
    "max_yd": 30.0,
-   "cast_s": 1.5
+   "cast_s": 1.5,
+   "dot": 650.0,
+   "dot_s": 15.0,
+   "gcd_s": 1.5
   },
   "35715": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "35717": {
    "min_yd": 0.0,
@@ -8315,7 +9986,9 @@
   "36916": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 150.0,
+   "gcd_s": 1.5
   },
   "36936": {
    "min_yd": 0.0,
@@ -8331,17 +10004,24 @@
    "min_yd": 0.0,
    "max_yd": 30.0,
    "cast_s": 0.0,
-   "channel": true
+   "channel": true,
+   "dot": 1300.0,
+   "dot_s": 5.0,
+   "gcd_s": 1.5
   },
   "38764": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 105.0,
+   "gcd_s": 1.0
   },
   "38768": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "dmg": 110.0,
+   "gcd_s": 1.0
   },
   "45438": {
    "min_yd": 0.0,
@@ -8351,12 +10031,16 @@
   "49358": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "49359": {
    "min_yd": 0.0,
    "max_yd": 0.0,
-   "cast_s": 10.0
+   "cast_s": 10.0,
+   "unread": true,
+   "gcd_s": 1.5
   },
   "49360": {
    "min_yd": 0.0,

@@ -76,7 +76,7 @@ from jev.world.taxi import flight as flight_plan
 from jev.world.taxi import load_nodes, save_node, visited
 from jev.world.training import placements as spell_placements
 from jev.world.training import spell as spell_facts
-from jev.world.training import trainer_due, training_cost
+from jev.world.training import trainer_due, training_cost, unpressed
 from jev.world.vendor import (
     Supply,
     bag_prices,
@@ -298,6 +298,8 @@ CONJURE_CASTS = 3
 CONJURE_CAST_WAIT_S = 5.0
 # A census of the bags takes a look a slot; once stocked, the next is not before this.
 CONJURE_EVERY_S = 90.0
+# The spell ids unknown to the catalog the kit line names (V361); the evidence has them all.
+KIT_IDS_SAID = 8
 # A caster's hunt stands this far short of each station: inside Fireball's 35 yards and
 # Frostbolt's 30, outside most mobs' notice (V167).
 CASTER_STANDOFF_YARDS = 18.0
@@ -366,6 +368,7 @@ class LiveBody:
         self._conjure_next = 0.0                  # when the next census may be taken
         self._conjured_last: frozenset[str] = frozenset()   # while the bar is unread (V243)
         self._placing_checked: object = object()  # the bar and spellbook last planned from
+        self._kit_said: frozenset | None = None   # the spellbook last reported on (V361)
         self.travelling = False
         self.policy_context = Context()
         self.checkpoint: Callable[[], None] = lambda: None
@@ -859,7 +862,10 @@ class LiveBody:
                 return level, target, None if level is None else level >= target
         wanted = name_id(destination.target_name)
         values = self._read() or {}
-        caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
+        profile = for_class(values.get("char.class_id"), values.get("char.race_id"))
+        # A shooter stands off as a caster does (V358): Auto Shot reaches 35 yards, and a
+        # hunter walked into melee pressed it 0.06 times a kill.
+        caster = profile.caster or profile.shooter
         level = values.get("char.level") if isinstance(values.get("char.level"), int) else None
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
@@ -1739,6 +1745,7 @@ class LiveBody:
         if bar is None or known is None or (not force and mark == self._placing_checked):
             return "no spells placed"
         self._placing_checked = mark
+        self._say_kit(known)
         plan = spell_placements(bar, known)
         if not plan:
             return "nothing to place"
@@ -1750,6 +1757,22 @@ class LiveBody:
         self.say(f"  spells on the bar: {outcome.value} {len(book.placed)}/{len(plan)}"
                  + (f" [{done}]" if done else "") + (f" ({book.detail})" if book.detail else ""))
         return f"placed {len(book.placed)} of {len(plan)} spells ({outcome.value})"
+
+    def _say_kit(self, known) -> None:
+        """One line when the spellbook is first read, and again when it changes: the spells
+        it holds that nothing presses (`jev.world.training.unpressed`, V361). A spell nobody
+        classified was a spell nobody pressed, and nothing said so."""
+        book = frozenset(known)
+        if book == self._kit_said:
+            return
+        self._kit_said = book
+        names, unknown = unpressed(book)
+        if not names and not unknown:
+            return
+        event("kit.unpressed", data={"spells": names, "unknown_ids": unknown})
+        self.say("  kit: not pressed - " + (", ".join(names) or "none")
+                 + (f"; {len(unknown)} not in the catalog {unknown[:KIT_IDS_SAID]}"
+                    if unknown else ""))
 
     def _clear_of_spawns(self) -> None:
         """Walk out of reach of the step's own spawn points, and of every unit's near that
