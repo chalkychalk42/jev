@@ -91,6 +91,9 @@ class SpellFacts:
     slows: bool = False
     # The item a conjure makes (V166).
     creates: int | None = None
+    # A trainer's spell that teaches others (V359): Judgement is sold as 10321, which teaches
+    # 20271 and a Seal of Righteousness; these facts are the first one's.
+    teaches: tuple[int, ...] = ()
 
     @property
     def self_cast(self) -> bool:
@@ -145,7 +148,7 @@ def spell(spell_id: int | None, facts: dict | None = None) -> SpellFacts | None:
                       cooldown_s=float(raw.get("cooldown_s", 0.0)),
                       target=raw.get("target", "other"), spends=bool(raw.get("spends")),
                       aura=raw.get("aura"), slows=bool(raw.get("slows")),
-                      creates=raw.get("creates"))
+                      creates=raw.get("creates"), teaches=tuple(raw.get("teaches") or ()))
 
 
 def side(race_id: int | None) -> str | None:
@@ -294,6 +297,8 @@ def _find_learnable(trainer: Trainer, level: int, known: Iterable[int],
         if offer.spell_id in have:
             return True
         facts_of = spell(offer.spell_id, facts)
+        if facts_of is not None and facts_of.teaches and facts_of.teaches[0] in have:
+            return True                     # what it teaches is in the spellbook (V359)
         return (facts_of is not None and bool(facts_of.rank)
                 and ranks.get(facts_of.name, 0) >= facts_of.rank)
 
@@ -397,7 +402,11 @@ def _lines(spells: Iterable[int], facts: dict | None) -> dict[str, SpellFacts]:
         f = spell(spell_id, facts)
         if f is None:
             continue
-        if f.name not in best or f.rank > best[f.name].rank:
+        here = best.get(f.name)
+        # The spell itself before the trainer's spell that teaches it (V359): the one is in
+        # the spellbook and goes on the bar, the other only on the trainer's list.
+        if (here is None or f.rank > here.rank
+                or (f.rank == here.rank and here.teaches and not f.teaches)):
             best[f.name] = f
     return best
 

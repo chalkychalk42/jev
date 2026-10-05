@@ -26,11 +26,28 @@ def test_the_catalog_reads_each_paladin_spell_by_what_it_does():
     assert spell(19740).every_s == 595.0
 
 
-def test_judgement_is_taught_by_a_spell_that_learns_it():
-    """The trainer's entry is 10321, whose effect is "learn spell 20271"."""
+def test_judgement_is_sold_as_the_trainer_spell_that_teaches_it():
+    """The trainer's entry is 10321, whose effect is "learn spell 20271" (V359): it is sold by
+    that id, which the server's trainer list holds, and its facts are Judgement's. The hive's
+    paladins asked the server for 20271, "not trained", at every visit, and never had it."""
     sammuel = next(t for t in training.trainers(2, 1, 0) if t.name == "Brother Sammuel")
-    assert 20271 in {o.spell_id for o in sammuel.offers}
-    assert 10321 not in {o.spell_id for o in sammuel.offers}
+    assert 10321 in {o.spell_id for o in sammuel.offers}
+    assert 20271 not in {o.spell_id for o in sammuel.offers}
+    sold = spell(10321)
+    assert sold.name == "Judgement" and sold.role == "strike" and sold.teaches == (20271, 21084)
+
+
+def test_judgement_is_bought_once_and_goes_on_the_bar():
+    """Worth buying while its spell is not in the spellbook; once it is, not for sale, and
+    Judgement itself (20271) goes on the bar, never the trainer's 10321."""
+    sammuel = next(t for t in training.trainers(2, 1, 0) if t.name == "Brother Sammuel")
+    bar = training.starting_bar(2, 1)
+    known = {6603, 20154, 635}
+    assert 10321 in {o.spell_id for o in training.learnable(sammuel, 4, known, bar=bar)}
+    taught = known | {20271, 21084}
+    assert 10321 not in {o.spell_id for o in training.learnable(sammuel, 4, taught, bar=bar)}
+    assert [p.spell_id for p in placements(bar, taught)] == [20271]
+    assert [p.spell_id for p in placements(bar, taught | {10321})] == [20271]
 
 
 def test_a_paladin_is_trained_by_its_own_side_on_its_own_map():

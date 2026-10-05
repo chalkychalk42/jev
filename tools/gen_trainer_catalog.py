@@ -7,12 +7,15 @@ database, like the vendor and gear catalogs:
 - `trainers`: every class trainer with a spawn, its class, which sides it serves (by its
   faction template's masks), where it stands, and the gossip line that opens its training
   window ("I would like to train further in the ways of the Light.") where it has one;
-- `offers`: per trainer, the spells it teaches - the spell learned (a trainer spell whose
-  effect is "learn spell" teaches its trigger spell: Judgement is taught by 10321), the
-  level and the price;
+- `offers`: per trainer, the spells it teaches - the trainer's own spell, which is what its
+  window lists and the server sells (a trainer spell whose effect is "learn spell" teaches
+  its trigger spells: Judgement is sold as 10321, which teaches 20271 and a Seal of
+  Righteousness), the level and the price;
 - `spells`: for every spell taught (all of a trainer spell's "learn spell" effects), every
   spell a class starts with on its bar, and every spell that replaces one of those on the
-  bar when learned, what it is: its name and rank, and a **role** read from what it does.
+  bar when learned, what it is: its name and rank, and a **role** read from what it does;
+  and for a trainer spell that teaches others, the facts of the first it teaches with
+  `teaches`, the spells it teaches (V359).
 
 Roles, from the spell's own data, never from its name:
 
@@ -230,6 +233,7 @@ def _successors(db: sqlite3.Connection, spells: set[int]) -> set[int]:
 
 def generate(db: sqlite3.Connection) -> dict:
     trainers, offers, taught = [], {}, set()
+    wrappers: dict[int, list[int]] = {}
     for entry, name, faction, klass, template, menu in db.execute(
             "select Entry, Name, Faction, TrainerClass, TrainerTemplateId, GossipMenuId "
             "from world_creature_template where TrainerType=0 and TrainerClass>0 "
@@ -255,7 +259,12 @@ def generate(db: sqlite3.Connection) -> dict:
                 if skill:
                     continue                      # a profession's recipe, not a class spell
                 learned = _learned(db, spell)
-                rows.append({"spell": learned[0], "level": level, "cost": cost})
+                # Sold by its own id (V359): the server's CMSG_TRAINER_BUY_SPELL looks the
+                # trainer's list up by it, and the hive's paladins asked for 20271, "not
+                # trained", at every visit, and never had Judgement.
+                rows.append({"spell": spell, "level": level, "cost": cost})
+                if learned != [spell]:
+                    wrappers[spell] = learned
                 taught.update(learned)
             offers[key] = rows
         for map_id, x, y, z in spawns:
@@ -269,6 +278,10 @@ def generate(db: sqlite3.Connection) -> dict:
         facts = spell_facts(db, spell_id)
         if facts is not None:
             spells[str(spell_id)] = facts
+    for spell_id, learned in sorted(wrappers.items()):
+        facts = spells.get(str(learned[0]))
+        if facts is not None:
+            spells[str(spell_id)] = {**facts, "teaches": learned}
     return {"format": 1, "trainers": trainers, "offers": offers, "spells": spells}
 
 
