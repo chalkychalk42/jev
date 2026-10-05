@@ -361,8 +361,7 @@ def test_a_step_retried_in_an_earlier_session_is_passed_over_on_its_next_failure
     for _ in states:
         rt.tick(choose=False)
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "after")
-    # Passed over, for the level it was first read at (V342).
-    assert saved[-1][2] == frozenset({"turnin", "passed:turnin@3"})
+    assert saved[-1][2] == frozenset({"turnin"})
 
     from jev.guide import playhead
     path = tmp_path / "character.json"
@@ -441,7 +440,7 @@ def test_with_no_grind_for_the_level_a_failed_step_is_tried_again_at_once(tmp_pa
     rt.tick(choose=False)                            # the hand-in times out
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("turnin", None)
     assert rt.tracker.memory.until is None and "turnin" in rt._retried
-    assert saved[-1] == ("turnin", None, frozenset({"turnin", "passed:turnin@3"}))
+    assert saved[-1] == ("turnin", None, frozenset({"turnin"}))
     rt.tick(choose=False)
     rt.tick(choose=False)                            # and again: passed over
     assert rt.tracker.step_id == "after" and not rt.finished
@@ -861,8 +860,7 @@ def objective_graph():
 @pytest.mark.parametrize(("complete", "retried", "expected"), [
     (False, frozenset({"do"}), "after"),       # passed over, never finished: nothing to hand in
     (True, frozenset({"do"}), "turnin"),       # finished after all: hand it in
-    # Not passed over: its objective first, then back to the hand-in (V342).
-    (False, frozenset(), "do"),
+    (False, frozenset(), "turnin"),            # not passed over: the hand-in waits on the log
 ])
 def test_a_hand_in_whose_objective_was_passed_over_is_passed_by(tmp_path, complete, retried,
                                                                   expected):

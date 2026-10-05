@@ -44,11 +44,6 @@ STOP_COMBAT_GRACE_S = 90.0
 # Reads to wait at start for one whole quest-log cycle (about 0.13 s each). Forty failed
 # sessions 97 and 98 with "complete quest log unavailable" while the radio painted.
 STARTUP_LOG_TRIES = 250
-# Attempts a step's own skill gets in a session before the step fails over to its rib
-# (`Supervisor.max_failures`). The hive plays with these too (V341): with one, its first
-# unreachable walk to a quest giver was the quest's failure: 203 of the 383 quest steps failed
-# over in its 4 Oct 16:26-18:30, where the live bot would have walked again.
-RETRIES = 3
 
 
 @contextmanager
@@ -77,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="stop cooperatively when this file exists; the file is never deleted")
     parser.add_argument("--steps", type=int, default=0, help="debug cap on completed guide steps")
     parser.add_argument("--run-for", type=float, default=3600)
-    parser.add_argument("--retries", type=int, default=RETRIES)
+    parser.add_argument("--retries", type=int, default=3)
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--hunt", type=float, default=600)
     parser.add_argument("--mmaps", default="/home/ash/cmangos/run/bin/mmaps")
