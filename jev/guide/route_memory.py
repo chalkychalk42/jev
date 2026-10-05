@@ -110,11 +110,6 @@ SPOT_MIN_KEEP = 10.0
 # Fifteen minutes would send it back while the spot still killed it at two and a half times
 # the rate elsewhere, and a camp costs its own character a rib, not a stand (V340).
 CAMP_YARDS = 100.0
-# A grind's hunt whose every station lies in a death camp, other characters' among them, ends
-# `camp` with this wait, taken on a rib out of every camp, or cut short at once with none, and
-# its stations walked then (V346).
-OTHERS_CAMP_WAIT = "its stations lie in other characters' death camps"
-OTHERS_RETRY_S = 300.0
 CAMP_WINDOW_S = 600.0
 CAMP_S = 3600.0
 # A walk refused through a death camp (`CAMP_REFUSED`) is refused again without a search for

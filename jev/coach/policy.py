@@ -174,9 +174,6 @@ class Context:
     # Whether a rib lies wholly in a death camp counting at a level (`LiveBody.rib_camped`):
     # one that does is no rib to wait a step out on (`ClientRuntime._wait_elsewhere`, V334).
     camped: Callable[..., bool] | None = None
-    # The same of any character's camps (`LiveBody.rib_camped`, `anyone`): a rib out of every
-    # camp is taken before one wholly in another's, and only it for a wait on others' (V346).
-    camped_any: Callable[..., bool] | None = None
     # When each guide step may be armed again, as wall time (V334), and why it waits; and how
     # many tries at it in a row planned no route (V335).
     step_wait_until: dict[str, float] = field(default_factory=dict)

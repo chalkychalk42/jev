@@ -2162,13 +2162,11 @@ def test_a_grind_whose_stations_lie_in_a_death_camp_waits_for_the_camp():
 
 
 def test_a_grind_in_a_camp_another_made_is_hunted_and_its_own_camp_waits():
-    """V339: a camp bars only the character whose deaths made it; another's is hunted through
-    once no rib out of every camp is free (V346: the first hunt ends `camp` with the others'
-    wait, which `_wait_elsewhere` cuts short at once with no such rib), and the step waits on
-    nothing then. With the character's key unread, every camp bars."""
+    """V339: a camp bars only the character whose deaths made it; another's is hunted through,
+    and the step waits on nothing. With the character's key unread, every camp bars."""
     import time as clock
 
-    from jev.guide.route_memory import OTHERS_CAMP_WAIT, RouteMemory
+    from jev.guide.route_memory import RouteMemory
     from jev.world.state_v1 import Char
 
     memory = RouteMemory()
@@ -2180,10 +2178,6 @@ def test_a_grind_in_a_camp_another_made_is_hunted_and_its_own_camp_waits():
     b.client.approach = Mock(return_value=False)
     b.observe(seen(char=Char(key=22)))
     assert b._camp_end((50.0, 50.0, 0.0), None) is None and b._others_camp((50.0, 50.0), None)
-    left = b._hunt(seen())
-    assert left.code == "camp" and b.client.approach.call_count == 0, "left for a clean rib"
-    assert b.policy_context.step_wait_why["rib"] == OTHERS_CAMP_WAIT
-    b.policy_context.end_wait("rib")                    # no rib out of every camp: cut short
     result = b._hunt(seen())
     assert result.code != "camp" and b.client.approach.call_count > 1, "its stations walked"
     assert b.policy_context.step_waiting("rib", clock.time()) is None, "nothing to wait on"
@@ -2194,34 +2188,6 @@ def test_a_grind_in_a_camp_another_made_is_hunted_and_its_own_camp_waits():
     unread = _grind_body(memory)
     assert unread._camp_end((50.0, 50.0, 0.0), None) is not None, "unread: as before"
     assert not unread._others_camp((50.0, 50.0), None)
-
-
-def test_a_quest_objective_in_others_camps_is_still_hunted_and_a_rib_asks_any_camp():
-    """V346: only a grind or a level gate is left for a rib out of every camp; a quest's
-    creatures are where they are, and its hunt walks another's camp as V339 did. A rib's
-    `anyone` check (`Context.camped_any`) counts another's camp where the own check does not."""
-    import time as clock
-
-    from jev.guide.route_memory import RouteMemory
-    from jev.world.state_v1 import Char
-
-    memory = RouteMemory()
-    now = clock.time()
-    memory.died(0, (50.0, 50.0), now=now - 60.0, level=None, who=11)
-    memory.died(0, (55.0, 50.0), now=now - 30.0, level=None, who=11)
-    b = _grind_body(memory)
-    quest = b.graph.nodes[0].model_copy(update={"kind": StepKind.QUEST_OBJECTIVE, "quest_id": 7})
-    b.graph = Graph(graph_id="g", faction="alliance", entry=quest.id, nodes=(quest,))
-    b.client.state = lambda: seen()
-    b.client.approach = Mock(return_value=False)
-    b.observe(seen(char=Char(key=22)))
-    assert b._hunt(seen()).code != "camp" and b.client.approach.call_count > 1
-    rib = _grind_body(memory)
-    rib.observe(seen(char=Char(key=22)))
-    node = rib.graph.nodes[0]
-    assert not rib.rib_camped(node, None), "not its own camp"
-    assert rib.rib_camped(node, None, anyone=True), "another's"
-    assert rib.policy_context.camped_any(node, None)
 
 
 def test_a_walk_refused_through_a_death_camp_says_when_the_camp_ends():
