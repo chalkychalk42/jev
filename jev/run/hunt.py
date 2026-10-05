@@ -304,11 +304,16 @@ class Hunt:
     @traced("hunt")
     def run(self, centre: tuple[float, float, float], radius_yards: float,
             name_id: int | None = None, *, timeout_s: float = 900.0,
-            spawns=(), others=()) -> Hunted:
+            spawns=(), others=(), also=(), also_first: bool = False) -> Hunted:
+        """Hunt round `centre` for `name_id` until the objective is done; `spawns` its own
+        creature's spawn points, `others` the hostile ones round them, and `also` the spawn
+        points of the other held quests' creatures round the hunt (V363), toured after its own
+        or, `also_first`, before them."""
         self._found = False
         try:
             outcome = self._hunt(centre, radius_yards, name_id, timeout_s=timeout_s,
-                                 spawns=spawns, others=others)
+                                 spawns=spawns, others=others, also=also,
+                                 also_first=also_first)
             if self.place is not None and outcome in ENDED:
                 self.place.clear()           # nothing to go on from: the next begins afresh
             return outcome
@@ -333,7 +338,8 @@ class Hunt:
             return False
         return values.get("vitals.dead") is True or values.get("vitals.ghost") is True
 
-    def _hunt(self, centre, radius_yards, name_id, *, timeout_s, spawns, others=()) -> Hunted:
+    def _hunt(self, centre, radius_yards, name_id, *, timeout_s, spawns, others=(), also=(),
+              also_first=False) -> Hunted:
         self.kills = self.moves = self.arrived = 0
         self._outdoors = None
         self.detail = ""
@@ -343,12 +349,22 @@ class Hunt:
         # station learning reads its objective from it (`choices.backfill_hunts`).
         event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
                                     "wanted_name_id": getattr(name_id, "own", name_id),
-                                    "timeout_s": timeout_s, "spawns": len(spawns)})
+                                    "timeout_s": timeout_s, "spawns": len(spawns),
+                                    "also": len(also)})
         deadline = time.monotonic() + timeout_s
         # Where the target spawns when the guide knows it; rings round the centre when not.
         # Each lap's order is learned, when there is a choice to learn (`stations`).
         whole, laps = ((spawn_tour(spawns, others), SPAWN_LAPS) if spawns
                        else (stations(centre, radius_yards), 1))
+        lone = len({tuple(p) for p in spawns}) == 1
+        if also and not lone:
+            # The other held quests' creatures' spawns round it (V363), each a station not
+            # already stood at: after the step's own, or before a grind's own creature. A lone
+            # spawn, a named one, is waited at as ever.
+            extra = [p for p in spawn_tour(also, others)
+                     if all(math.dist(p[:2], q[:2]) > SPAWN_MERGE_YARDS for q in whole)]
+            if extra:
+                whole, laps = (extra + whole if also_first else whole + extra), SPAWN_LAPS
         tour, camps = self._out_of_camps(whole)
         if not tour:
             # "Deaths" in its detail: a quest step failed over for it grinds a level, as one
@@ -357,7 +373,6 @@ class Hunt:
             self.detail = (f"every station lies in a death camp, held by deaths at its level "
                            f"until {_clock(self.until)}")
             return Hunted.CAMP
-        lone = len({tuple(p) for p in spawns}) == 1
         chooser = self.stations if len({tuple(p) for p in tour}) > 1 else None
         clear = {tuple(p) for p in tour}           # out of every death camp now (V334)
         # Stations whose walk failed, not walked to again this hunt (V334), and the ends of

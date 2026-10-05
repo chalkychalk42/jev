@@ -18,7 +18,7 @@ from typing import ClassVar
 from jev.clients.advance import AdvanceQuestFrame, Goal
 from jev.clients.camera import Camera
 from jev.clients.choose import ChooseListLine
-from jev.clients.fight import HEAL_POINT, Fight, Kinds, Paying
+from jev.clients.fight import HEAL_POINT, Fight, Kinds, Paying, Quarry
 from jev.clients.gather import Gather, Gathered
 from jev.clients.hearth import Hearth, Hearthed
 from jev.clients.interact import Interact
@@ -68,6 +68,8 @@ from jev.world.gear import keep as gear_keep
 from jev.world.gear import load_worn, save_worn
 from jev.world.gear import upgrades as gear_upgrades
 from jev.world.home import load_home, save_home
+from jev.world.quarry import NEAR_YARDS, Held
+from jev.world.quarry import held as quarry_held
 from jev.world.state_v1 import PowerType, State, StepKind
 from jev.world.taxi import Node as TaxiNode
 from jev.world.taxi import flight as flight_plan
@@ -871,19 +873,30 @@ class LiveBody:
                                             objective_key(wanted, node.id))),
                     where=self._world_position)
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
+        grind = node.kind in (StepKind.GRIND, StepKind.DING_GATE)
+        # Every held quest's creatures round the hunt are its quarry too (V363).
+        held = self._held(destination.world, yards, wanted, level, grind)
+
+        def quarry(own):
+            return Quarry(own, held.names, held.high) if held else own
         if node.kind is StepKind.GRIND:
             # A rib found dry fights any kind round it worth fighting (V337).
             def wider():
                 kinds = self._rib_kinds(node, destination.world, yards, wanted, level)
-                return Paying(kinds) if kinds is not None else None
+                return Paying(quarry(kinds)) if kinds is not None else None
             hunt.widen = wider
         spawns = spawn_points(self.hunt_spawns, node.id, getattr(destination, "target_id", None))
         # A grind's pulls are for experience: none of a level grey to the character (V344).
-        pull = Paying(wanted) if node.kind in (StepKind.GRIND, StepKind.DING_GATE) else wanted
+        pull = Paying(quarry(wanted)) if grind else quarry(wanted)
+        reach = yards + (NEAR_YARDS if held else 0.0) + PACK_YARDS
+        # The other quests' stations, nearest the hunt's centre first: after the step's own
+        # objective, before a grind's own creature (V363).
+        also = sorted(held.points, key=lambda p: math.dist(p[:2], destination.world[:2]))
         outcome = hunt.run(destination.world, yards, pull, timeout_s=self.hunt_timeout,
                            spawns=spawns,
-                           others=self._hostiles(destination.world, yards + PACK_YARDS)
-                           if spawns else ())
+                           others=self._hostiles(destination.world, reach)
+                           if spawns or also else (),
+                           also=tuple(also), also_first=grind)
         step = self.arm.step_id if self.arm is not None else None
         if outcome is Hunted.CAMP and getattr(hunt, "until", None) is not None:
             # Not armed again until the camp ends (V334): bot 224's grind was armed again 0.5 s
@@ -897,6 +910,25 @@ class LiveBody:
         elif getattr(hunt, "arrived", 0):
             self.policy_context.step_moved(step)
         return self._result(outcome, hunt.detail)
+
+    def _held(self, world, yards: float, own: int | None, level: int | None,
+              grind: bool) -> Held:
+        """What a hunt of `yards` round `world` fights for the quests in the log besides its own
+        creature `own` (`jev.world.quarry.held`, V363), said once a hunt; nothing with the log
+        unread or the world snapshot unreadable."""
+        bounds = self.client.bounds
+        if world is None or bounds is None:
+            return Held()
+        with self.client._capturing:
+            log = self.client.log.complete
+        found = quarry_held(log, bounds.map_id, world, yards, level=level, grind=grind, own=own)
+        if found:
+            event("hunt.quests", data={"quests": list(found.quests), "names": sorted(found.names),
+                                       "stations": len(found.points), "high": found.high})
+            self.say(f"  hunting for {len(found.quests)} more held quest(s) too: "
+                     f"{len(found.names)} kind(s), {len(found.points)} spawn(s) "
+                     f"(quests {', '.join(str(q) for q in found.quests)})")
+        return found
 
     def _hunt_place(self, key) -> Place:
         """Where the last hunt of this step and objective got to (`Place`, V343), kept while

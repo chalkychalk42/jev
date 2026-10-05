@@ -492,14 +492,49 @@ class Paying:
         return getattr(self.wanted, name)
 
 
+# What another held quest's creature may be when a hunt takes it (`Quarry`, V363): not friendly
+# (1-2 hostile, 3 unfriendly, 4 neutral; a quest's boars and striders are often neutral).
+QUEST_REACTIONS = (1, 2, 3, 4)
+
+
+@dataclass(frozen=True)
+class Quarry:
+    """A hunt's pull for every quest held (V363): `wanted`, the step's own (a name id, or a dry
+    rib's `Kinds`), as ever, and any of `names`, the creatures the log's other open kill and loot
+    counters want round the hunt (`jev.world.quarry.held`), when the unit selected is not
+    friendly, of normal rank and of a level at most `high`. A grind asks for it as a pull that
+    pays (`Paying`, V344); a quest objective at any level its own creature, as before."""
+
+    wanted: object
+    names: frozenset[int]
+    high: int | None = None
+
+    @property
+    def own(self):
+        return getattr(self.wanted, "own", self.wanted)
+
+    def named(self, name: int | None) -> bool:
+        return name is not None and (name in self.names or _named(self.wanted, name))
+
+    def takes(self, values: dict) -> bool:
+        if _takes(self.wanted, values):
+            return True
+        level = values.get("target.level")
+        return (values.get("target.name_id") in self.names and isinstance(level, int)
+                and (self.high is None or level <= self.high)
+                and values.get("target.reaction") in QUEST_REACTIONS
+                and values.get("target.classification") == NORMAL_RANK)
+
+
 def _named(wanted, name: int | None) -> bool:
-    """Is `name` the unit `wanted` (a name id, `Kinds` or `Paying`), by name alone?"""
-    return wanted.named(name) if isinstance(wanted, (Kinds, Paying)) else name == wanted
+    """Is `name` the unit `wanted` (a name id, `Kinds`, `Quarry` or `Paying`), by name alone?"""
+    return (wanted.named(name) if isinstance(wanted, (Kinds, Paying, Quarry))
+            else name == wanted)
 
 
 def _takes(wanted, values: dict) -> bool:
-    """Is the selected unit the one `wanted` (a name id, `Kinds` or `Paying`)?"""
-    return (wanted.takes(values) if isinstance(wanted, (Kinds, Paying))
+    """Is the selected unit the one `wanted` (a name id, `Kinds`, `Quarry` or `Paying`)?"""
+    return (wanted.takes(values) if isinstance(wanted, (Kinds, Paying, Quarry))
             else values.get("target.name_id") == wanted)
 
 
@@ -507,6 +542,9 @@ def _logged(wanted):
     """`wanted` as the evidence keeps it."""
     if isinstance(wanted, Paying):
         return _logged(wanted.wanted)
+    if isinstance(wanted, Quarry):
+        inner = _logged(wanted.wanted)
+        return sorted({*(inner if isinstance(inner, list) else [inner]), *wanted.names} - {None})
     return sorted({wanted.own, *wanted.names} - {None}) if isinstance(wanted, Kinds) else wanted
 
 
