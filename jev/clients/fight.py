@@ -99,6 +99,7 @@ from jev.world.combat import (
     grey_level,
     ranged,
     reach,
+    repeats,
 )
 from jev.world.training import spell as spell_facts
 
@@ -324,6 +325,11 @@ RANGED_STEP_S = 0.8
 # yards, less than the reach it is short of.
 BLIND_STEP_S = 0.4
 MAX_RANGED_STEPS = 8
+# A shooter's repeating shot (Auto Shot, V358) with no damage to the unit for this long is
+# taken to have stopped or never begun: pressed again, and after `SHOT_GIVE_UP` such silences
+# a fight the shooter fights in melee, as before. Two shots of a 2.8-3.0 s bow and a margin.
+SHOT_SILENT_S = 7.0
+SHOT_GIVE_UP = 2
 # After a root at contact (Frost Nova) a caster backs off this long, still facing: about
 # nine yards at the walk backwards, out of the held unit's reach (V169).
 STEP_CLEAR_S = 2.0
@@ -663,6 +669,12 @@ class Fight:
     _mana_seen: tuple[float | None, float | None] = field(default=(None, None), init=False)
     _last_near: bool = field(default=False, init=False)
     _ranged_steps: int = field(default=0, init=False)
+    # A shooter's repeating shot (V358): when it was pressed and is taken to be repeating
+    # (`None`: not shooting), how many times it went silent this fight, and whether the
+    # fight has given shooting up.
+    _shooting_at: float | None = field(default=None, init=False)
+    _shots_silent: int = field(default=0, init=False)
+    _no_shots: bool = field(default=False, init=False)
 
     # -- the skill -----------------------------------------------------------
 
@@ -767,6 +779,7 @@ class Fight:
         self.detail = ""
         self._last_use = {}
         self._saved_at = None
+        self._shooting_at, self._shots_silent, self._no_shots = None, 0, False
         event("fight.request", data={"wanted_name_id": _logged(name_id), "timeout_s": timeout_s})
 
         v = self.read()
@@ -951,6 +964,7 @@ class Fight:
             profile = self.profile or for_class(v.get("char.class_id"), v.get("char.race_id"))
             if profile.caster and self._unhurt_by(v):
                 return Fought.UNREACHABLE
+            self._watch_shots(profile, v)
             if self._ranged_ready(profile, v):
                 # A caster with the mana casts from where it stands (V164). The client says
                 # what is wrong with a cast - too far, not facing, out of sight - and each
@@ -1733,9 +1747,14 @@ class Fight:
     def _ranged_ready(self, profile: CombatProfile, values: dict) -> bool:
         """A caster (`CombatProfile.caster`) with a spell cast from range that it can use now:
         the client says the slot is usable, which a spell is not without its mana. Out of
-        mana, a caster fights with its staff until the mana comes back (V164)."""
+        mana, a caster fights with its staff until the mana comes back (V164).
+
+        A shooter (`CombatProfile.shooter`, V358) the same with its repeating shot, while the
+        unit is not at hand: Auto Shot reaches no unit in melee (the dead zone), and there it
+        fights with its blade; and not once this fight has given shooting up (`_watch_shots`).
+        """
         if not profile.caster:
-            return False
+            return profile.shooter and self._shot_ready(profile, values)
         usable = values.get("bars.usable")
         for attack in profile.by_role(Role.ATTACK):
             if not ranged(attack):
@@ -1746,6 +1765,38 @@ class Fight:
             elif self._mana_left_after(attack, values) >= 0:
                 return True
         return False
+
+    def _shot_ready(self, profile: CombatProfile, values: dict) -> bool:
+        """A shooter's repeating shot usable at a unit not at hand (V358)."""
+        if self._no_shots or values.get("target.in_melee") is True:
+            return False
+        usable = values.get("bars.usable")
+        return any(usable is None or bool(usable & (1 << (a.slot - 1)))
+                   for a in profile.by_role(Role.ATTACK) if repeats(a))
+
+    def _watch_shots(self, profile: CombatProfile, values: dict) -> None:
+        """Whether the repeating shot still repeats (V358). The server stops Auto Shot when
+        the unit comes into the dead zone, and the client marks its slot out of range there:
+        then it is pressed again once the unit is back out of it. A shot with no damage to
+        the unit for `SHOT_SILENT_S` is taken as stopped (pressed again: on the client a
+        press of a repeating shot stops it, so it is never pressed while taken to repeat),
+        and after `SHOT_GIVE_UP` such silences the fight is fought in melee."""
+        if self._shooting_at is None:
+            return
+        out = values.get("bars.out_range")
+        slots = [a.slot for a in profile.by_role(Role.ATTACK) if repeats(a)]
+        if (values.get("target.in_melee") is True
+                or (isinstance(out, int) and any(out & (1 << (slot - 1)) for slot in slots))):
+            self._shooting_at = None
+            return
+        now = time.monotonic()
+        if now - max(self._shooting_at, self._damage_at) < SHOT_SILENT_S:
+            return
+        self._shooting_at = None
+        self._shots_silent += 1
+        self._no_shots = self._shots_silent >= SHOT_GIVE_UP
+        event("fight.shots_silent", data={"times": self._shots_silent,
+                                          "given_up": self._no_shots})
 
     @staticmethod
     def _caster_order(attacks: tuple[Ability, ...], values: dict) -> tuple[Ability, ...]:
@@ -2158,7 +2209,7 @@ class Fight:
             bit = 1 << (a.slot - 1)
             return (bool(ready & bit) and bool(usable & bit)
                     and self._held.get(a.slot, 0.0) <= looked
-                    and (a.toggle or not self._in_gcd(looked)))
+                    and (a.toggle or repeats(a) or not self._in_gcd(looked)))
 
         hp = values.get("vitals.hp")
         in_combat = values.get("vitals.combat") is True
@@ -2250,6 +2301,12 @@ class Fight:
         attacks = tuple(a for a in profile.by_role(Role.ATTACK) if not _area(a))
         if casting_instead:
             attacks = self._caster_order(attacks, values)
+        # A shooter's repeating shot first, once: it costs nothing and no global cooldown, and
+        # pressed while it repeats it would stop (V358). Never in melee, where it cannot reach.
+        shots = tuple(a for a in attacks if repeats(a))
+        attacks = tuple(a for a in attacks if not repeats(a))
+        if casting_instead and self._shooting_at is None:
+            attacks = (*shots, *attacks)
         if crowd:
             attacks = (*areas, *attacks)
         # Jev's pick among the attacks ready now, asked as the last press began (V298); the
@@ -2410,6 +2467,10 @@ class Fight:
         facts = reach(ability.spell_id)
         if facts is not None and facts.next_swing:
             self._held[ability.slot] = now + NEXT_SWING_HOLD_S
+        elif repeats(ability):
+            # No cast, no global cooldown and nothing spent: nothing for the client to answer
+            # with, so no press waits on one. Taken as repeating (`_watch_shots`).
+            self._shooting_at = now
         elif not ability.toggle:
             self._pending_press = (ability, now, dict(self._last_use), dict(self._lasting),
                                    self._saved_at, self._mana_seen[1])

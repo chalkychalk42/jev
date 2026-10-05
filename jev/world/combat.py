@@ -183,6 +183,9 @@ class Reach(NamedTuple):
     # Waits for the next melee swing (V306): no cast, no global cooldown, nothing spent until
     # the swing lands.
     next_swing: bool = False
+    # Repeats until stopped (V358): Auto Shot, a wand's Shoot. Pressed once it shoots on every
+    # ranged swing; pressed again while it repeats, the client stops it.
+    repeats: bool = False
 
     @property
     def instant(self) -> bool:
@@ -196,7 +199,7 @@ def _reaches() -> dict[int, Reach]:
     except (OSError, ValueError):
         return {}
     return {int(k): Reach(v["min_yd"], v["max_yd"], v["cast_s"], bool(v.get("channel")),
-                          bool(v.get("next_swing")))
+                          bool(v.get("next_swing")), bool(v.get("repeats")))
             for k, v in (raw.get("spells") or {}).items()}
 
 
@@ -210,6 +213,12 @@ def ranged(ability: Ability) -> bool:
     facts = reach(ability.spell_id)
     return (ability.role is Role.ATTACK and not ability.toggle and facts is not None
             and facts[1] >= RANGED_YD)
+
+
+def repeats(ability: Ability) -> bool:
+    """A ranged attack that repeats until stopped (`Reach.repeats`): Auto Shot (V358)."""
+    facts = reach(ability.spell_id)
+    return ranged(ability) and facts is not None and facts.repeats
 
 
 def _nuke(ability: Ability) -> bool:
@@ -230,6 +239,14 @@ class CombatProfile:
 
     def by_role(self, role: Role) -> tuple[Ability, ...]:
         return tuple(a for a in self.abilities if a.role is role)
+
+    @property
+    def shooter(self) -> bool:
+        """A class whose main attack repeats from range at no cost (`repeats`): a hunter's
+        Auto Shot (V358). It opens from range and shoots while the unit is not at hand, as a
+        caster casts while it has the mana; at hand it fights in melee. A wand's Shoot
+        would make a caster one too, which it already is."""
+        return any(repeats(a) for a in self.abilities)
 
     def first(self, role: Role) -> Ability | None:
         found = self.by_role(role)

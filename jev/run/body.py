@@ -867,7 +867,10 @@ class LiveBody:
         values = self._read() or {}
         self._note_key(values)
         step_id = self.arm.step_id if self.arm is not None else None
-        caster = for_class(values.get("char.class_id"), values.get("char.race_id")).caster
+        profile = for_class(values.get("char.class_id"), values.get("char.race_id"))
+        # A shooter stands off as a caster does (V358): Auto Shot reaches 35 yards, and a
+        # hunter walked into melee pressed it 0.06 times a kill.
+        caster = profile.caster or profile.shooter
         level = values.get("char.level") if isinstance(values.get("char.level"), int) else None
         hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
