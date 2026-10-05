@@ -420,6 +420,19 @@ ESCAPE_AGAIN_S = 10.0
 # on the unit is stepped clear of as Frost Nova is (Entangling Roots).
 AURA_SPEED = 31
 AURA_ROOT = 26
+# A healing potion from the bags (V368), after the escapes, in a losing fight below this health
+# and once its two minutes' cooldown, shared by every potion, is over (kept across fights). With
+# none held the bags are not looked through again until they change. Of 735 bag censuses in the
+# hive on 5 Oct (10:00-16:15), 655 held Minor Healing Potions (118 characters) and 473 Lesser
+# Healing Potions, and nothing in Jev ever drank one.
+POTION_BELOW = 0.5
+POTION_COOLDOWN_S = 120.0
+# A bandage (First Aid) in a fight only behind a hold of the one attacker - a stun, a root or a
+# fear just pressed - below this health, and not again inside its Recently Bandaged minute.
+BANDAGE_BELOW = 0.7
+BANDAGE_AGAIN_S = 60.0
+BANDAGE_BEHIND_S = 2.5
+NONE_HELD_S = 120.0
 
 # Which key an action slot is. The default bindings run 1-9, then 0, then the two keys
 # left of Backspace — which is where a fresh character's food and water sit, so getting
@@ -693,6 +706,9 @@ class Fight:
     choices: object | None = None
     # Jev, when it picks this character's attacks (`jev.coach.judge.CombatJudge`, V298).
     judge: object | None = None
+    # Use the best healing potion ("potion") or bandage ("bandage") the bags hold: the item
+    # used, or `None` (V368). Without it, nothing is taken from the bags.
+    use_item: Callable[[str], int | None] | None = None
 
     pressed: list[int] = field(default_factory=list, init=False)
     closed: int = field(default=0, init=False)
@@ -814,6 +830,11 @@ class Fight:
     # When this fight was first seen being lost, and what it spent since (V367).
     losing_at: float | None = field(default=None, init=False)
     escapes: list[str] = field(default_factory=list, init=False)
+    # When a potion or bandage was last used, across fights, and the bags' revision and the time
+    # none was held (V368); when this fight last held its one attacker (a stun, root or fear).
+    _used_at: dict[str, float] = field(default_factory=dict, init=False)
+    _none_held: dict[str, tuple] = field(default_factory=dict, init=False)
+    _held_at: float | None = field(default=None, init=False)
 
     # -- the skill -----------------------------------------------------------
 
@@ -920,7 +941,7 @@ class Fight:
         self._saved_at = None
         self._shooting_at, self._shots_silent, self._no_shots = None, 0, False
         self._dotted, self._queued, self._dot_guid = {}, {}, None
-        self.losing_at, self.escapes = None, []
+        self.losing_at, self.escapes, self._held_at = None, [], None
         event("fight.request", data={"wanted_name_id": _logged(name_id), "timeout_s": timeout_s})
 
         v = self.read()
@@ -2529,6 +2550,12 @@ class Fight:
         if self.losing_at is None:
             self.losing_at = now
             event("fight.losing", data=look.data())
+        hp = values.get("vitals.hp")
+        hurt = isinstance(hp, (int, float))
+        if (self._held_at is not None and now - self._held_at < BANDAGE_BEHIND_S
+                and look.attackers < 2 and hurt and hp < BANDAGE_BELOW
+                and values.get("bars.casting") is not True and self._take("bandage", values)):
+            return True                      # behind the hold, the bandage (V368)
         out = values.get("bars.out_range")
         out = out if isinstance(out, int) else 0
         rows: list[Ability] = []
@@ -2558,6 +2585,8 @@ class Fight:
                 if row.every_s > 0:
                     self._lasting[row.name] = now
             known = spell_facts(row.spell_id)
+            if row.role is Role.STUN or (known is not None and known.holds):
+                self._held_at = now
             if (known is not None and known.aura == AURA_ROOT and look.attackers < 2
                     and values.get("target.in_melee") is True):
                 event("engage.root", data={"slot": row.slot, "step": "s", "step_s": STEP_CLEAR_S})
@@ -2568,9 +2597,37 @@ class Fight:
         if (values.get("target.in_melee") is True and profile.by_role(Role.ROOT)
                 and not self._holding_now(now) and self._root(profile, values)):
             self.escapes.append("root")
+            self._held_at = now
             event("fight.escape", data={"role": Role.ROOT.value, **look.data()})
             return True
+        if hurt and hp < POTION_BELOW and self._take("potion", values):
+            return True
         return False
+
+    def _take(self, kind: str, values: dict) -> bool:
+        """A healing potion or a bandage from the bags (V368), once in its cooldown (a potion's
+        two minutes, a bandage's minute), and not looked for again while the bags are as they
+        were when none was held (`NONE_HELD_S` with no revision painted). `True` if used."""
+        if self.use_item is None:
+            return False
+        now = time.monotonic()
+        again = POTION_COOLDOWN_S if kind == "potion" else BANDAGE_AGAIN_S
+        if now - self._used_at.get(kind, -math.inf) < again:
+            return False
+        revision = values.get("inventory.revision")
+        seen = self._none_held.get(kind)
+        if (seen is not None and seen[0] == revision
+                and (revision is not None or now - seen[1] < NONE_HELD_S)):
+            return False
+        used = self.use_item(kind)
+        if used is None:
+            self._none_held[kind] = (revision, now)
+            return False
+        self._used_at[kind] = time.monotonic()
+        self.escapes.append(kind)
+        event("fight.consumable", data={"kind": kind, "item": used, "hp": values.get("vitals.hp"),
+                                        "attackers": values.get("combat.attackers")})
+        return True
 
     def _sample_race(self, values: dict) -> None:
         """One look for `_finishes_first`. A new selection starts the samples again."""

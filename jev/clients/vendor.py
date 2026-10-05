@@ -297,13 +297,15 @@ class Vendor:
         return sum(count for item, count in slots.values() if item in items)
 
     @traced("vendor.use_item")
-    def use_item(self, candidates: tuple[int, ...], *, timeout_s: float = 30.0) -> int | None:
+    def use_item(self, candidates: tuple[int, ...], *, timeout_s: float = 30.0,
+                 in_combat: bool = False) -> int | None:
         """Use the best of `candidates` the bags hold (best first): a right-click, as
         equipping is, and only with no shop open. The item used, or `None` (V166).
 
         A caster's conjured water is not on the bar, whose drink slot holds the water it
         started with; when that runs out, the meal takes the conjured one from the bags.
-        Used is the bags changing after the click: a stack one shorter."""
+        Used is the bags changing after the click: a stack one shorter. `in_combat`: a potion
+        in a losing fight (V368), where combat is no reason to stop."""
         slots = self.census(timeout_s=timeout_s / 2)
         present = {item for item, count in slots.values() if count}
         best = next((item for item in candidates if item in present), None)
@@ -326,14 +328,14 @@ class Vendor:
                         continue
                     revision = values.get("inventory.revision")
                     self._click(values, "inventory.", right=True)
-                    self._await_worn(revision)
+                    self._await_worn(revision, in_combat=in_combat)
                     return best
                 self.sleep(0.05)
         except _Stop as stop:
             self.detail = stop.detail
             return None
 
-    def _await_worn(self, revision, seconds: float = 4.0) -> None:
+    def _await_worn(self, revision, seconds: float = 4.0, *, in_combat: bool = False) -> None:
         """The bags changing after an equip click, answering "will bind it to you" on the
         way. Read raw: every other read here refuses a dialog, and this one is expected."""
         until = min(self._deadline, self.clock() + seconds)
@@ -342,8 +344,8 @@ class Vendor:
             values = self.read()
             if values is None:
                 raise _Stop(Vended.BLIND, "inventory radio unreadable after the equip click")
-            if (values.get("vitals.combat") is True or values.get("vitals.dead") is True
-                    or values.get("vitals.ghost") is True):
+            if ((values.get("vitals.combat") is True and not in_combat)
+                    or values.get("vitals.dead") is True or values.get("vitals.ghost") is True):
                 raise _Stop(Vended.INTERRUPTED, "combat or death while putting an item on")
             if values.get("ui.modal") is True and not accepted:
                 self._click(values, "ui.advance_")        # the popup's first button: Okay

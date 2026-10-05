@@ -1674,6 +1674,340 @@
    "level": 65,
    "item_level": 75,
    "conjured": false
+  },
+  "118": {
+   "role": "potion",
+   "heals": 80.0,
+   "level": 1,
+   "item_level": 5,
+   "conjured": false
+  },
+  "858": {
+   "role": "potion",
+   "heals": 160.0,
+   "level": 3,
+   "item_level": 13,
+   "conjured": false
+  },
+  "929": {
+   "role": "potion",
+   "heals": 320.0,
+   "level": 12,
+   "item_level": 22,
+   "conjured": false
+  },
+  "1251": {
+   "role": "bandage",
+   "skill": 1,
+   "heals": 66,
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "1710": {
+   "role": "potion",
+   "heals": 520.0,
+   "level": 21,
+   "item_level": 31,
+   "conjured": false
+  },
+  "2462": {
+   "role": "potion",
+   "heals": 160.0,
+   "level": 1,
+   "item_level": 15,
+   "conjured": false
+  },
+  "2581": {
+   "role": "bandage",
+   "skill": 20,
+   "heals": 114,
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "3530": {
+   "role": "bandage",
+   "skill": 50,
+   "heals": 161,
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "3531": {
+   "role": "bandage",
+   "skill": 75,
+   "heals": 301,
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "3928": {
+   "role": "potion",
+   "heals": 800.0,
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "4596": {
+   "role": "potion",
+   "heals": 160.0,
+   "level": 5,
+   "item_level": 15,
+   "conjured": false
+  },
+  "6450": {
+   "role": "bandage",
+   "skill": 100,
+   "heals": 400,
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "6451": {
+   "role": "bandage",
+   "skill": 125,
+   "heals": 640,
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "8544": {
+   "role": "bandage",
+   "skill": 150,
+   "heals": 800,
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "8545": {
+   "role": "bandage",
+   "skill": 175,
+   "heals": 1104,
+   "level": 0,
+   "item_level": 1,
+   "conjured": false
+  },
+  "9144": {
+   "role": "potion",
+   "heals": 750.5,
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "13446": {
+   "role": "potion",
+   "heals": 1400.0,
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "14529": {
+   "role": "bandage",
+   "skill": 200,
+   "heals": 1360,
+   "level": 0,
+   "item_level": 52,
+   "conjured": false
+  },
+  "14530": {
+   "role": "bandage",
+   "skill": 225,
+   "heals": 2000,
+   "level": 0,
+   "item_level": 58,
+   "conjured": false
+  },
+  "17348": {
+   "role": "potion",
+   "heals": 1120.0,
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "17349": {
+   "role": "potion",
+   "heals": 640.0,
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "19066": {
+   "role": "bandage",
+   "skill": 225,
+   "heals": 2000,
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "19067": {
+   "role": "bandage",
+   "skill": 175,
+   "heals": 1104,
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "19068": {
+   "role": "bandage",
+   "skill": 125,
+   "heals": 640,
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "19307": {
+   "role": "bandage",
+   "skill": 225,
+   "heals": 2000,
+   "level": 0,
+   "item_level": 58,
+   "conjured": false
+  },
+  "20065": {
+   "role": "bandage",
+   "skill": 175,
+   "heals": 1104,
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "20066": {
+   "role": "bandage",
+   "skill": 225,
+   "heals": 2000,
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "20067": {
+   "role": "bandage",
+   "skill": 125,
+   "heals": 640,
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "20232": {
+   "role": "bandage",
+   "skill": 175,
+   "heals": 1104,
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "20234": {
+   "role": "bandage",
+   "skill": 225,
+   "heals": 2000,
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "20235": {
+   "role": "bandage",
+   "skill": 125,
+   "heals": 640,
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "20237": {
+   "role": "bandage",
+   "skill": 175,
+   "heals": 1104,
+   "level": 35,
+   "item_level": 45,
+   "conjured": false
+  },
+  "20243": {
+   "role": "bandage",
+   "skill": 225,
+   "heals": 2000,
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "20244": {
+   "role": "bandage",
+   "skill": 125,
+   "heals": 640,
+   "level": 25,
+   "item_level": 35,
+   "conjured": false
+  },
+  "21990": {
+   "role": "bandage",
+   "skill": 300,
+   "heals": 2800,
+   "level": 0,
+   "item_level": 64,
+   "conjured": false
+  },
+  "21991": {
+   "role": "bandage",
+   "skill": 325,
+   "heals": 3400,
+   "level": 0,
+   "item_level": 70,
+   "conjured": false
+  },
+  "22829": {
+   "role": "potion",
+   "heals": 2000.0,
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "23579": {
+   "role": "potion",
+   "heals": 1400.0,
+   "level": 45,
+   "item_level": 55,
+   "conjured": false
+  },
+  "23684": {
+   "role": "bandage",
+   "skill": 225,
+   "heals": 2500,
+   "level": 0,
+   "item_level": 60,
+   "conjured": false
+  },
+  "28100": {
+   "role": "potion",
+   "heals": 1400.0,
+   "level": 55,
+   "item_level": 60,
+   "conjured": false
+  },
+  "32763": {
+   "role": "potion",
+   "heals": 2000.0,
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "32905": {
+   "role": "potion",
+   "heals": 2000.0,
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "32947": {
+   "role": "potion",
+   "heals": 2000.0,
+   "level": 55,
+   "item_level": 65,
+   "conjured": false
+  },
+  "33934": {
+   "role": "potion",
+   "heals": 2000.0,
+   "level": 55,
+   "item_level": 60,
+   "conjured": false
   }
  }
 }

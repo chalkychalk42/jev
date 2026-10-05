@@ -2464,3 +2464,30 @@ def test_a_grinds_pulls_are_for_experience_and_a_quests_are_not():
     assert b._objective_name() == Paying(name_id("Wolf"))
     quest = body(StepKind.QUEST_OBJECTIVE)
     assert quest._objective_name() == name_id("NPC"), "a quest's kind, at any level"
+
+
+def test_the_fight_and_the_rest_take_potions_and_bandages_from_the_bags(monkeypatch):
+    """V368: the body hands the fight a potion and the rest a bandage from the bags, a bandage
+    only with First Aid in the spellbook; combat does not stop the live click."""
+    import jev.run.body as live
+
+    b = body()
+    assert b.fight.use_item == b._use_kind and b.rest.bandage is not None
+    used = []
+
+    class _Bags:
+        def __init__(self, *a, **kw):
+            self.detail = ""
+
+        def use_item(self, candidates, *, timeout_s=30.0, in_combat=False):
+            used.append((candidates[:2], timeout_s, in_combat))
+            return candidates[0]
+
+    monkeypatch.setattr(live, "Vendor", _Bags)
+    b.client.read = lambda: {"vitals.hp": 0.4, "vitals.combat": True, "char.level": 6}
+    b.client.spells = SimpleNamespace(bar={}, known=[6603, 78])
+    assert b._use_kind("potion") in (858, 4596, 2462), "the best that heals 140-180 at 6"
+    assert used[0][2] is True and used[0][1] == live.USE_IN_COMBAT_S
+    assert b._use_kind("bandage") is None, "no First Aid, no bandage"
+    b.client.spells = SimpleNamespace(bar={}, known=[6603, 78, 3273])
+    assert b._use_kind("bandage") == 3531, "Heavy Wool, the best Apprentice First Aid binds"
