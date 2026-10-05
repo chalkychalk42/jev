@@ -441,3 +441,39 @@ def test_what_nothing_presses_is_said():
     """V361: a spell nobody classified was a spell nobody pressed, and nothing said so."""
     names, unknown = training.unpressed({6603, 78, 100, 6673, 772, 2687, 999999})
     assert names == ["Bloodrage", "Charge"] and unknown == [999999]
+
+
+# -- what a losing fight spends is classified, bought and placed (V366) -------------------
+
+def test_fear_roots_slows_and_the_casters_own_defences_are_escapes():
+    """Read from the spell's data: fear, disorientation or a root on the enemy or round the
+    caster, a slow alone, and the caster's dodge, speed or damage taken lowered on a long
+    cooldown. They were `utility` or short buffs (pressed at every pull), and nothing pressed
+    them in a losing fight (strategy review 1, 2.6)."""
+    escapes = (5782, 8122, 5246, 6789, 2094, 339, 5116, 5277, 2983, 22812)
+    assert {sid: spell(sid).role for sid in escapes} == dict.fromkeys(escapes, "escape")
+    assert spell(5277).aura == 49 and spell(2983).aura == 31 and spell(22812).aura == 87
+    assert spell(5782).aura == 7 and spell(339).aura == 26 and spell(5116).aura == 33
+    # Recklessness raises the damage the warrior takes: no defence. Shield Block's cooldown is
+    # five seconds: a buff, as before. A stun stays a stun, a root round the caster a root.
+    assert spell(1719).role == "short_buff" and spell(2565).role == "short_buff"
+    assert spell(853).role == "stun" and spell(122).role == "root"
+
+
+def test_what_holds_or_slows_the_enemy_is_marked_whatever_its_role():
+    for sid in (1776, 853, 122, 5782, 8122, 339):             # Gouge, HoJ, Frost Nova, Fear ...
+        assert spell(sid).holds, (sid, spell(sid).name)
+    for sid in (1715, 2974, 5116, 116):                       # Hamstring, Wing Clip, Concussive
+        assert spell(sid).slows and not spell(sid).holds, (sid, spell(sid).name)
+    assert not spell(133).holds and not spell(78).holds       # Fireball, Heroic Strike
+
+
+def test_a_rogue_a_warlock_a_hunter_and_a_druid_buy_and_place_their_escapes():
+    cases = {(4, 1): ({6603, 1752, 2098}, 5277),             # rogue: Evasion at 8
+             (9, 1): ({6603, 686, 348}, 5782),               # warlock: Fear at 8
+             (3, 3): ({6603, 75, 2973}, 5116),               # hunter: Concussive Shot at 8
+             (11, 4): ({6603, 5176, 5185}, 339)}             # druid: Entangling Roots at 8
+    for (class_id, race_id), (known, escape) in cases.items():
+        bar = training.starting_bar(class_id, race_id)
+        assert worth_buying(escape, known, bar), (class_id, escape)
+        assert escape in {p.spell_id for p in placements(bar, known | {escape})}, class_id
