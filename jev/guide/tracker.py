@@ -79,7 +79,8 @@ class StepMemory:
     closest: float | None = None
     closest_at: float | None = None
     closest_to: tuple[float, float] | None = None
-    # The step's quest counters as last seen: a kill or a pickup starts its clock again.
+    # The log's quest counters as last seen on an objective step: a kill or a pickup for any
+    # held quest starts its clock again (V365).
     counters: int | None = None
     # A rib entered for a failure the character's level cannot cure rejoins at this wall
     # time (`SHORT_RIB_S`), whatever else it has or has not done.
@@ -451,13 +452,15 @@ def _quest_in_log(state: State, node: Node | None) -> bool:
 
 
 def _counters(state: State, node: Node) -> int | None:
-    """How far an objective step's quest has got, summed over its counters; `None` unread."""
+    """How far the quests in the log have got while an objective step is worked, summed over
+    their counters; `None` unread, or the step's own quest not in the log. Every held quest's,
+    not its own alone (V365): its hunt fights every held quest's creatures round it (V363), and
+    a kill or a pickup for any of them is the step working, not a stall."""
     if node.kind is not StepKind.QUEST_OBJECTIVE or node.quest_id is None or state.quests is None:
         return None
-    for quest in state.quests:
-        if quest.quest_id == node.quest_id:
-            return sum(min(o.have, o.need) for o in quest.objectives)
-    return None
+    if not any(quest.quest_id == node.quest_id for quest in state.quests):
+        return None
+    return sum(min(o.have, o.need) for quest in state.quests for o in quest.objectives)
 
 
 def _quest_log_readable(state: State) -> bool:

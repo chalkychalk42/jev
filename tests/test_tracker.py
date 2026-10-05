@@ -384,6 +384,33 @@ def test_an_objectives_clock_starts_again_on_each_kill():
     assert stalled.index(Event.FAIL) <= 11
 
 
+def test_an_objectives_clock_starts_again_on_a_kill_for_any_held_quest():
+    """V365: an objective's hunt fights every held quest's creatures round it (V363); a kill or
+    a pickup for another held quest is the step working too, and its clock starts again, where
+    only its own quest's counters started it."""
+    base = dict(zone="Elwynn", zone_id=12, pos=(0.5, 0.5))
+    graph = Graph(graph_id="g", faction="alliance", entry="do", nodes=(
+        Node(id="do", kind=StepKind.QUEST_OBJECTIVE, quest_id=7, next=("rib",), timeout_s=60.0,
+             on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=60, goto="rib"),), **base),
+        Node(id="rib", kind=StepKind.GRIND, level=(1, 10), **base),
+    ))
+
+    def log(t, own, other):
+        return _s(float(t), quests=(
+            Quest(quest_id=7, objectives=(Objective(text="", have=own, need=10),)),
+            Quest(quest_id=8, objectives=(Objective(text="", have=other, need=10),))))
+    tr = Tracker(graph, "do")
+    tr.enter("do", log(0, 0, 0))
+    working = [tr.tick(log(t, 0, t // 50)).event for t in range(1, 300)]
+    assert Event.FAIL not in working, "a kill for another held quest every fifty seconds"
+    stalled = [tr.tick(log(t, 0, 5)).event for t in range(300, 400)]
+    assert Event.FAIL in stalled and stalled.index(Event.FAIL) <= 11
+    gone = Tracker(graph, "do")
+    gone.enter("do", _s(0.0))
+    assert gone.tick(_s(1.0)).event is not Event.ADVANCE and gone.memory.counters is None, \
+        "its own quest not in the log: no counters, as before"
+
+
 def test_a_rib_that_keeps_killing_the_character_is_left_for_its_way_back():
     """Mangy Wolves killed a level 6 paladin three times in one session, each time back at
     its body among them (run 20260924T035309-97796e)."""
