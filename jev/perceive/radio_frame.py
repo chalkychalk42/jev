@@ -859,7 +859,6 @@ def to_state(reading: RadioReading, *, t: float, client_id: str,
         classification=CLASSIFICATION_BY_ID.get(v["target.classification"]),
         attacking_me=v["target.attacking_me"],
         in_melee=v["target.in_melee"],
-        tapped_by_other=v.get("target.tapped"),       # schema 21 (V344); unknown before it
     )
 
     # Schema 7 carries exact copper for merchant transaction verification. Historical

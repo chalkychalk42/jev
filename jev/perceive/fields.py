@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 21                                   # bump when the field table changes shape
+SCHEMA = 20                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -79,7 +79,6 @@ and button, the scroll button toward a row out of view, and the row Train buys (
 19: the talent points unspent, and the talents one per paint: tab, tier, column, rank, and
 the button that spends a point in it, or its tab's (V261).
 20: which nameplates the client draws, enemy and friendly (V320).
-21: whether the selected unit is tagged by another, as the target frame greys it (V344).
 Old schemas remain readable, with appended observations unknown: `SCHEMA_FIELDS`."""
 LAST_HEADER_SCHEMA = 14
 EXTENDED = 0
@@ -688,18 +687,6 @@ FIELDS: tuple[Field, ...] = (
          "the client draws hostile nameplates (the NAMEPLATES binding's state)"),
     _tri("ui.plates_friendly", "return tri(FRIENDNAMEPLATES_ON)",
          "the client draws friendly nameplates (the FRIENDNAMEPLATES binding's state)"),
-
-    # -- schema 21: a unit another has tagged (V344) --------------------------------------
-    #
-    # A creature tagged by another pays its kill and its loot to them, and Tab selects it all
-    # the same: in the hive's 4 Oct 16:26-18:30, 1,273 kills paid nothing that Tab had pulled
-    # while nothing attacked the character, 1,020 of them already hurt, and the server refused
-    # 814 of their corpses. Its nameplate is drawn grey, which the look passes over, and the
-    # stock target frame greys its name for exactly this test (`TargetFrame_CheckFaction`).
-    _tri("target.tapped",
-         "if not UnitExists('target') then return 0 end\n"
-         "return tri(UnitIsTapped('target') and not UnitIsTappedByPlayer('target'))",
-         "the selected unit is tagged by someone else: its kill pays them, not the character"),
 )
 
 # --------------------------------------------------------------------------- layout
@@ -712,8 +699,7 @@ _LEGACY = FIELDS[:1] + FIELDS[2:131]
 SCHEMA_FIELDS = {6: _LEGACY[:75], 7: _LEGACY[:112], 8: _LEGACY[:117], 9: _LEGACY[:121],
                  10: _LEGACY[:125], 11: _LEGACY[:126], 12: _LEGACY[:127], 13: _LEGACY[:128],
                  14: _LEGACY, 15: FIELDS[:147], 16: FIELDS[:154], 17: FIELDS[:157],
-                 18: FIELDS[:171], 19: FIELDS[:180], 20: FIELDS[:182],
-                 21: FIELDS}
+                 18: FIELDS[:171], 19: FIELDS[:180], 20: FIELDS}
 # Schema 14 was the last the 4-bit header could name (15 is its not-available code), and
 # was redefined once, within the hour it was installed on one client, to add `target.guid`.
 # From 15 the header says EXTENDED and the number is in `schema_rev`; a new layout appends
@@ -740,8 +726,6 @@ assert sum(f.bits for f in SCHEMA_FIELDS[18]) == 1537
 assert SCHEMA_FIELDS[18][-1].name == "trainer.go_y"
 assert sum(f.bits for f in SCHEMA_FIELDS[19]) == 1580
 assert SCHEMA_FIELDS[19][-1].name == "talents.y"
-assert sum(f.bits for f in SCHEMA_FIELDS[20]) == 1584
-assert SCHEMA_FIELDS[20][-1].name == "ui.plates_friendly"
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

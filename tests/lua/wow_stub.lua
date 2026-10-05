@@ -151,9 +151,6 @@ function UnitIsUnit(a, b)
     return pick("targetsMe", nil)
 end
 function CheckInteractDistance() return pick("inMelee", 1) end
--- Tagged by anyone, and by the player (2.4.3 answers 1 or nil, as the target frame reads).
-function UnitIsTapped() return pick("tapped", nil) end
-function UnitIsTappedByPlayer() return pick("tappedByMe", nil) end
 function GetMouseFocus()
     if STATE.mouseFocus == "world" then return WorldFrame end
     if STATE.mouseFocus == "ui" then return UIParent end

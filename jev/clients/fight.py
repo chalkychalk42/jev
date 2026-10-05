@@ -452,61 +452,19 @@ class Kinds:
                 and values.get("target.classification") == NORMAL_RANK)
 
 
-def pays(values: dict) -> bool:
-    """Does a kill of the selected unit pay the character experience: its level above the
-    character's grey level (`grey_level`, the server's rule), both as the strip paints them?
-    Either unknown, it may (a skull's level is unknown, and pays)."""
-    level, own = values.get("target.level"), values.get("char.level")
-    return not (isinstance(level, int) and isinstance(own, int) and level <= grey_level(own))
-
-
-def tagged(values: dict) -> bool:
-    """Is the selected unit tagged by someone else and not attacking the character (V344)?
-    Its kill and its loot are theirs; one attacking the character is its fight whoever
-    tagged it. Unknown (a strip before schema 21) is not tagged."""
-    return values.get("target.tapped") is True and values.get("target.attacking_me") is not True
-
-
-@dataclass(frozen=True)
-class Paying:
-    """A pull for experience (V344): `wanted` (a name id, or `Kinds`) at a level that pays the
-    character (`pays`). A grind's hunt asks for this; a quest's does not, a grey kill counting
-    for a quest as any other. Self-defence takes what attacks the character at any level, as
-    ever. Anything else asked of it is asked of `wanted` (`own`, `names`, `low`, `high`)."""
-
-    wanted: object
-
-    def named(self, name: int | None) -> bool:
-        return _named(self.wanted, name)
-
-    def takes(self, values: dict) -> bool:
-        return _takes(self.wanted, values) and pays(values)
-
-    @property
-    def own(self):
-        return getattr(self.wanted, "own", self.wanted)
-
-    def __getattr__(self, name: str):
-        if name.startswith("__") or name == "wanted":
-            raise AttributeError(name)
-        return getattr(self.wanted, name)
-
-
 def _named(wanted, name: int | None) -> bool:
-    """Is `name` the unit `wanted` (a name id, `Kinds` or `Paying`), by name alone?"""
-    return wanted.named(name) if isinstance(wanted, (Kinds, Paying)) else name == wanted
+    """Is `name` the unit `wanted` (a name id, or `Kinds`), by name alone?"""
+    return wanted.named(name) if isinstance(wanted, Kinds) else name == wanted
 
 
 def _takes(wanted, values: dict) -> bool:
-    """Is the selected unit the one `wanted` (a name id, `Kinds` or `Paying`)?"""
-    return (wanted.takes(values) if isinstance(wanted, (Kinds, Paying))
+    """Is the selected unit the one `wanted` (a name id, or `Kinds`)?"""
+    return (wanted.takes(values) if isinstance(wanted, Kinds)
             else values.get("target.name_id") == wanted)
 
 
 def _logged(wanted):
     """`wanted` as the evidence keeps it."""
-    if isinstance(wanted, Paying):
-        return _logged(wanted.wanted)
     return sorted({wanted.own, *wanted.names} - {None}) if isinstance(wanted, Kinds) else wanted
 
 
@@ -826,12 +784,12 @@ class Fight:
         friendly = isinstance(v.get("target.reaction"), int) and v["target.reaction"] >= 5
         engaged = (in_combat and v.get("target.has") is True
                    and v.get("target.hp") is not None and v["target.hp"] > DEAD_HP
-                   and not bystander and not friendly and not tagged(v))
+                   and not bystander and not friendly)
         # Already selected and alive, and the unit we came for: that is the fight. Whoever
         # selected it - the tutor, a previous look - re-acquiring could only swap it for
         # another of the same name, or for something else entirely.
         chosen = (not engaged and name_id is not None and v.get("target.has") is True
-                  and _takes(name_id, v) and not tagged(v)
+                  and _takes(name_id, v)
                   and isinstance(v.get("target.hp"), (int, float)) and v["target.hp"] > DEAD_HP
                   and not (in_combat and bystander) and not friendly)
         if chosen:
@@ -1284,8 +1242,6 @@ class Fight:
             return False                       # held out of the fight a moment ago (V287)
         if attackers_only and v.get("target.attacking_me") is not True:
             return False
-        if tagged(v):
-            return False                       # another's kill and loot (V344)
         if (defend and v.get("target.attacking_me") is not True
                 and (v.get("combat.attackers") or 0) >= 1):
             # A bystander of the wanted kind is a fight, but not while something else is
@@ -1328,10 +1284,6 @@ class Fight:
                 continue
             if v.get("target.hp") is not None and v["target.hp"] <= DEAD_HP:
                 continue                       # a corpse is selectable and not a fight
-            if tagged(v):
-                # Tab takes a unit another has tagged, as the look's grey plate does not:
-                # 1,273 kills that paid nothing in the hive's two hours (V344).
-                continue
             if (name_id is not None and not _takes(name_id, v)
                     and not (defend and v.get("target.attacking_me") is True)):
                 continue

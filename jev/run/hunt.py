@@ -61,12 +61,6 @@ DEFAULT_HUNT_YARDS = 30.0
 # kobold below it is the thing the top-up exists to prevent.
 PULL_LINE = HEAL_OUT_OF_COMBAT
 
-# How long a hunt's place on its tour (`Place`) is kept for the same objective armed again:
-# across the fight that cut its walk and the meal after it (V343). Of the 5,495 hunts the hive
-# began again on the same objective after a walk cut by combat (4 Oct 16:26-18:30), the next
-# began 34 s after at the median, 104 s at the 90th percentile, 5,462 within this.
-PLACE_KEEP_S = 300.0
-
 
 class Hunted(StrEnum):
     DONE = "done"                # the counter reached its requirement
@@ -191,64 +185,6 @@ def _passes(a, b, c, reach: float) -> bool:
 
 
 @dataclass
-class Place:
-    """Where a hunt had got to on its tour, kept by the body for its objective (V343): the
-    tour, its posts (laps in their learned order), the post walked to or stood at, the
-    stations whose walk failed, what it fights and its kills and arrivals so far. A hunt of
-    the same tour armed again within `PLACE_KEEP_S` goes on from it - after the fight that cut
-    its walk, the meal after the fight - instead of drawing a new tour from its head.
-
-    In the hive a combat-cut walk ended 6,549 of 17,234 hunts (4 Oct 16:26-18:30). Of the
-    5,495 begun again on the same objective, 3,460 walked first to the station the cut hunt
-    had begun at and 2,219 to one already stood at in the lap; 5,917 walks went back to
-    stations stood at, 25.0 of the 84.2 hours those hunts walked."""
-
-    tour: tuple = ()
-    posts: list = field(default_factory=list)
-    post: int = 0                          # the post walked to or stood at, not yet left
-    lap: int = 1                           # posts a lap
-    failed: set = field(default_factory=set)
-    name: object = None                    # what it fights, once widened (V337)
-    widened: bool = False
-    kills: int = 0
-    arrived: int = 0
-    at: float | None = None                # when the hunt last went on, on the hunt's clock
-
-    def fresh(self, tour, now: float) -> bool:
-        """Is this the place of a hunt of `tour` that went on within `PLACE_KEEP_S`, posts
-        left to walk?"""
-        return (bool(self.posts) and self.tour == tuple(tuple(p) for p in tour)
-                and self.at is not None and 0.0 <= now - self.at < PLACE_KEEP_S
-                and self.post < len(self.posts))
-
-    def begin(self, tour, posts: list, lap: int) -> None:
-        self.clear()
-        self.tour, self.posts, self.lap = tuple(tuple(p) for p in tour), posts, max(1, lap)
-
-    def clear(self) -> None:
-        self.tour, self.posts, self.post, self.lap = (), [], 0, 1
-        self.failed = set()
-        self.name, self.widened, self.kills, self.arrived, self.at = None, False, 0, 0, None
-
-    def resume(self, here, walkable: Callable[[tuple], bool]) -> int:
-        """The post to go on from: of the lap's posts not yet left, the one nearest `here`
-        that `walkable` takes, moved up to be next; the posts left this lap are not walked
-        again. The post it was walking to when the walk was cut is among them, so the walk
-        is taken up again from where the character stands, unless another is nearer."""
-        end = min(len(self.posts), (self.post // self.lap + 1) * self.lap)
-        free = [i for i in range(self.post, end) if walkable(tuple(self.posts[i]))]
-        if here is not None and free:
-            pick = min(free, key=lambda i: math.dist(self.posts[i][:2], here[:2]))
-            self.posts[self.post], self.posts[pick] = self.posts[pick], self.posts[self.post]
-        return self.post
-
-
-# How a hunt ends that leaves nothing to go on from: the next begins its tour afresh (V343).
-ENDED = frozenset({Hunted.DONE, Hunted.DIED, Hunted.UNREACHABLE, Hunted.TIMEOUT, Hunted.CAMP,
-                   Hunted.NO_FOOD})
-
-
-@dataclass
 class Hunt:
     fight: Fight
     rest: Rest
@@ -281,13 +217,6 @@ class Hunt:
     # The objective's (have, need, complete) from a reading the hunt has just taken (V338);
     # `None` asks `progress` and `is_complete`, each of which reads again.
     observe: Callable[[dict | None], tuple[int | None, int | None, bool | None]] | None = None
-    # Where the last hunt of this objective got to (`Place`, V343), kept by the body; `None`
-    # begins every hunt at its tour's head. `where` is the character's world position, for
-    # the post a resumed hunt goes on from; `None`, the post it was at.
-    place: Place | None = None
-    where: Callable[[], tuple | None] | None = None
-    clock: Callable[[], float] = time.monotonic
-    resumed: bool = field(default=False, init=False)
     _found: bool = field(default=False, init=False)
 
     kills: int = field(default=0, init=False)
@@ -307,17 +236,9 @@ class Hunt:
             spawns=(), others=()) -> Hunted:
         self._found = False
         try:
-            outcome = self._hunt(centre, radius_yards, name_id, timeout_s=timeout_s,
-                                 spawns=spawns, others=others)
-            if self.place is not None and outcome in ENDED:
-                self.place.clear()           # nothing to go on from: the next begins afresh
-            return outcome
+            return self._hunt(centre, radius_yards, name_id, timeout_s=timeout_s,
+                              spawns=spawns, others=others)
         finally:
-            if self.place is not None and self.place.posts:
-                # However it ended - a walk cut by combat raises through here - the place
-                # is as it got to, kept from now (V343).
-                self.place.kills, self.place.arrived = self.kills, self.arrived
-                self.place.at = self.clock()
             if self.stations is not None:
                 if self._dead():
                     # Killed at it, whether in the hunt's own fight or after it, the hunt
@@ -339,17 +260,15 @@ class Hunt:
         self.detail = ""
         self.until = None
         self.stuck = self.widened = False
-        # The kind's own name id, a grind's pull for experience included (`Paying`, V344): the
-        # station learning reads its objective from it (`choices.backfill_hunts`).
         event("hunt.request", data={"centre": centre, "radius_yards": radius_yards,
-                                    "wanted_name_id": getattr(name_id, "own", name_id),
-                                    "timeout_s": timeout_s, "spawns": len(spawns)})
+                                    "wanted_name_id": name_id, "timeout_s": timeout_s,
+                                    "spawns": len(spawns)})
         deadline = time.monotonic() + timeout_s
         # Where the target spawns when the guide knows it; rings round the centre when not.
         # Each lap's order is learned, when there is a choice to learn (`stations`).
-        whole, laps = ((spawn_tour(spawns, others), SPAWN_LAPS) if spawns
-                       else (stations(centre, radius_yards), 1))
-        tour, camps = self._out_of_camps(whole)
+        tour, laps = ((spawn_tour(spawns, others), SPAWN_LAPS) if spawns
+                      else (stations(centre, radius_yards), 1))
+        tour, camps = self._out_of_camps(tour)
         if not tour:
             # "Deaths" in its detail: a quest step failed over for it grinds a level, as one
             # whose deaths failed it does, not the short rib it would retry from (V334).
@@ -359,35 +278,15 @@ class Hunt:
             return Hunted.CAMP
         lone = len({tuple(p) for p in spawns}) == 1
         chooser = self.stations if len({tuple(p) for p in tour}) > 1 else None
-        clear = {tuple(p) for p in tour}           # out of every death camp now (V334)
-        # Stations whose walk failed, not walked to again this hunt (V334), and the ends of
-        # the death camps such walks were refused through.
-        failed: set[tuple] = set()
-        place = self.place
-        self.resumed = place is not None and place.fresh(whole, self.clock())
-        if self.resumed:
-            # The same objective's hunt, cut short - its walk by a fight, or handed back for a
-            # meal or a service - goes on where it got to (V343): its lap, the stations it
-            # failed to reach, what it fights, from the post nearest the character.
-            posts, failed = place.posts, place.failed
-            here = self.where() if self.where is not None else None
-            post = place.resume(here, lambda p: p in clear and p not in failed)
-            self.kills, self.arrived = place.kills, place.arrived
-            if place.widened:
-                name_id, self.widened = place.name, True
-            event("hunt.resumed", data={"post": post, "posts": len(posts), "lap": place.lap,
-                                        "destination": list(posts[post]) if post < len(posts)
-                                        else None, "here": list(here) if here else None})
-        else:
-            posts = ([p for _ in range(laps) for p in chooser.order(tour)] if chooser is not None
-                     else tour * laps)
-            post = 0
-            if place is not None:
-                place.begin(whole, posts, len(tour))
-                place.failed = failed
+        posts = ([p for _ in range(laps) for p in chooser.order(tour)] if chooser is not None
+                 else tour * laps)
+        post = 0
         dry = 0
         stood = False
         close = False                # a lone spawn looked for from its own spot (V221)
+        # Stations whose walk failed, not walked to again this hunt (V334), and the ends of
+        # the death camps such walks were refused through.
+        failed: set[tuple] = set()
         walks_failed = planned = 0
         refused: list[float] = []
 
@@ -435,9 +334,7 @@ class Hunt:
             if not stood:
                 # A station whose walk failed is passed on the next lap (V334): bot 224 asked
                 # for the same 12 refused walks lap after lap, 4,879 in one session.
-                # A resumed hunt's posts were drawn before the camps it now sees (V343).
-                while post < len(posts) and (tuple(posts[post]) in failed
-                                             or tuple(posts[post]) not in clear):
+                while post < len(posts) and tuple(posts[post]) in failed:
                     post += 1
                 if post >= len(posts):
                     if not self.arrived and refused and len(refused) == walks_failed:
@@ -454,8 +351,6 @@ class Hunt:
                         name_id = wider
                         posts += ([p for _ in range(laps) for p in chooser.order(tour)]
                                   if chooser is not None else tour * laps)
-                        if place is not None:
-                            place.name, place.widened = wider, True
                         continue
                     # Not a yard walked: no route to any station could be planned (V335).
                     self.stuck = not self.arrived and walks_failed > 0 and not planned
@@ -463,8 +358,6 @@ class Hunt:
                                    else "walked the whole disk and found nothing to fight")
                     return Hunted.UNREACHABLE
                 target = posts[post]
-                if place is not None:
-                    place.post = post                # walked to, then stood at (V343)
                 post += 1
                 self.moves += 1
                 if chooser is not None:

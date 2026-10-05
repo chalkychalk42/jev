@@ -239,10 +239,6 @@ class ClientRuntime:
     _leaving: str | None = field(default=None, init=False)
     # The step a look for a rib to wait on found none for, and when (`_wait_elsewhere`).
     _elsewhere_looked: tuple = field(default=(None, -math.inf), init=False)
-    # The character's level at the last tick, and whether a ding on a rib that goes on past it
-    # waits for its rib to be chosen again (`_ding_rib`, V345).
-    _rib_level: int | None = field(default=None, init=False)
-    _ding_due: bool = field(default=False, init=False)
     # The steps by id and the grind ribs, looked up on every tick by the walk along the spine.
     _nodes: dict = field(default_factory=dict, init=False)
     _ribs_all: tuple = field(default=(), init=False)
@@ -369,8 +365,6 @@ class ClientRuntime:
         if self._leave_camp(state):
             self._tracker_event = "rejoin_or_skip"
         if self._wait_elsewhere(state):
-            self._tracker_event = "rejoin_or_skip"
-        if self._ding_rib(state):
             self._tracker_event = "rejoin_or_skip"
         # Every tick that stays on the step, arriving included: standing at the quest giver
         # re-reports ARRIVED, never NONE; and the tick a step is reached.
@@ -634,59 +628,6 @@ class ClientRuntime:
         else:
             self.tracker.enter(rib.id, state, rejoin_to=step)
             self.tracker.memory.until = state.t + left
-        return True
-
-    def _ding_rib(self, state: State) -> bool:
-        """At a ding on a rib that goes on past it - one ending at an accept's level, a guide's
-        own grind past its end, a camp hop or a wait carrying its level - the rib is chosen
-        again for the new level, as one entered then would be (V345): of the ribs that suit it
-        (`rib_fits`), do not wait and lie not wholly in a death camp, as `_wait_elsewhere`
-        takes them, by `_rib`. Between skills only (nothing armed, or a step's wait), up and
-        out of a fight, and not on the way out of a death camp: the ding waits for it. A rib
-        that ends at the ding has its way back chosen at the new level already. Another rib
-        is entered with the way back, the level it grinds to and the end of the one it
-        replaces. `True` when the playhead moved.
-
-        A rib was chosen once and kept across dings (`_below_level` ends one at the accept's
-        level; camp leaves and waits carry it): in the hive's 4 Oct 16:26-18:30, 16 of 98 dings
-        on a rib were still on it two minutes on; hive-524, a troll shaman, ground the Barrens'
-        1-3 rib eight minutes at level 7, 16 experience a kill where Durotar's 7-9 paid 82."""
-        level = state.char.level
-        if level is None:
-            return False
-        if self._rib_level is not None and level > self._rib_level:
-            self._ding_due = True
-        self._rib_level = level
-        if not self._ding_due:
-            return False
-        node = self._nodes.get(self.tracker.step_id)
-        if node is None or node.kind is not StepKind.GRIND or self.finished:
-            self._ding_due = False          # off the rib: the next is chosen at the level
-            return False
-        v, context = state.vitals, self.policy_context
-        if v.dead is not False or v.ghost is not False or v.combat is True:
-            return False
-        if (self.armed is not None
-                and not scripted.own_rule(self.armed.rule).startswith("wait.step")):
-            return False                    # a hunt, a meal or a service finishes first
-        if self._leaving == node.id and context.leaving(state.t):
-            return False
-        self._ding_due = False
-        camped = getattr(context, "camped", None)
-        free = [r for r in self._ribs_all if rib_fits(r, level)
-                and (r.id == node.id or context.step_waiting(r.id, state.t) is None)
-                and not (camped is not None and camped(r, level))]
-        here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
-                and state.pos.my is not None else None)
-        memory = self.tracker.memory
-        # A short rib is a wait for a respawn, chosen near (V330), and stays so.
-        rib = (self._rib(level, here, short=memory.until is not None, among=free)
-               if free else None)
-        if rib is None or rib.id == node.id:
-            return False
-        back, until, target = memory.rejoin_to, memory.until, memory.level_at_entry
-        self.tracker.enter(rib.id, state, rejoin_to=back)
-        self.tracker.memory.level_at_entry, self.tracker.memory.until = target, until
         return True
 
     def _past_abandoned_quest(self, verdict) -> str | None:
