@@ -90,25 +90,7 @@ SPOT_MIN_KEEP = 10.0
 # kept from every walk alike. A camp is made of one character's own deaths (`Danger.who`), as
 # the evidence is: in the hive's shared memory two bots of a level dying apart within 100
 # yards and ten minutes, on a starting valley's one road, would refuse every walk along it
-# for an hour (review of 28 Sep).
-#
-# A camp bars only the character whose deaths made it (`Danger.camp_for`, V339); to the others
-# its deaths are deaths, kept clear of as any is (`DANGER_YARDS`, `DANGER_DETOUR`). Held for every
-# character of its levels, as it was from 28 Sep, one character's two deaths shut a rib and the
-# walks through it to the hive's whole level band for the hour: on 4 Oct 16:26-18:30, 47 of the
-# 64 hours the hive's characters stood waiting on a step (7.4% of 639 played hours) were on
-# camps other characters made, 12.5 on their own. Alive, the hive's characters died 1.96 times
-# an hour with no other character's death counting at their level within 100 yards in two
-# hours, and 2.8 to 4.8 within 100 yards of one 5 to 120 minutes old: what any rib with deaths
-# on it costs. A hunt still leaves another's camp's stations out while it has others (`Hunt`).
-#
-# The hour (`CAMP_S`) is the dying character's, from the same runs: within 100 yards of one
-# death of its own, alive, it died 15.5 times an hour in the first five minutes, 8.3 in the
-# next five, 6.6 to 7.0 at 10 to 20 minutes, 4.2 to 4.7 at 20 to 60 and 5.2 to 5.9 at 60 to
-# 120, against 2.76 away from its deaths; back at a camp of its own in the hour after the camp
-# ended, 12.5 an hour (39 deaths in 3.1 h).
-# Fifteen minutes would send it back while the spot still killed it at two and a half times
-# the rate elsewhere, and a camp costs its own character a rib, not a stand (V340).
+# for an hour (review of 28 Sep). A camp made holds for every character it counts for.
 CAMP_YARDS = 100.0
 CAMP_WINDOW_S = 600.0
 CAMP_S = 3600.0
@@ -207,12 +189,6 @@ class Danger:
     def camp(self, now: float) -> bool:
         """Is this death part of a death camp at `now` (V307)?"""
         return self.camp_until is not None and now < self.camp_until
-
-    def camp_for(self, now: float, who: int | None) -> bool:
-        """Is this death part of a death camp at `now` that bars the character `who` (V339):
-        one of its own deaths'. With `who` unknown, or a death kept with no key, every camp
-        bars, as before."""
-        return self.camp(now) and (who is None or self.who is None or self.who == who)
 
 
 def counts_for(died_at: int | None, level: int | None) -> bool:
@@ -398,12 +374,11 @@ class RouteMemory:
         return list(kept)
 
     def camp_at(self, map_id: int, point: tuple[float, float], now: float | None = None,
-                level: int | None = None, who: int | None = None) -> Danger | None:
+                level: int | None = None) -> Danger | None:
         """A death of a death camp within `CAMP_YARDS` of `point` that counts at `level`, the
-        nearest; `None` when the point lies in none (V307). With `who`, only a camp that bars
-        that character (`Danger.camp_for`, V339)."""
+        nearest; `None` when the point lies in none (V307)."""
         now = time.time() if now is None else now
-        camps = [d for d in self.dangers_on(map_id, now, level) if d.camp_for(now, who)
+        camps = [d for d in self.dangers_on(map_id, now, level) if d.camp(now)
                  and math.dist((d.x, d.y), point[:2]) <= CAMP_YARDS]
         return min(camps, key=lambda d: math.dist((d.x, d.y), point[:2]), default=None)
 
@@ -637,23 +612,19 @@ class DangerAvoidingQuery:
     hunts. One that starts or ends inside its reach keeps the distance it has
     (`SPOT_TURN_YARDS`). A death camp (V307) is kept `CAMP_YARDS` off however long the way
     round, and a walk with none is refused. The deaths kept are those that count at the
-    character's level (`level`, read once a plan); a camp is one only to the character whose
-    deaths made it (`who`, its key, read with the level; `Danger.camp_for`, V339), and to any
-    other its deaths are kept clear of as any death is. A ghost (`ghost`) keeps clear of none,
-    as it passes hostile spawns unharmed (V248), and a corpse run is not refused its way.
-    Anything that goes wrong here plans as before."""
+    character's level (`level`, read once a plan); a ghost (`ghost`) keeps clear of none, as
+    it passes hostile spawns unharmed (V248), and a corpse run is not refused its way. Anything
+    that goes wrong here plans as before."""
 
     def __init__(self, inner, memory: RouteMemory, clock: Callable[[], float] = time.time,
                  hot: Callable[[int], list] | None = None,
                  level: Callable[[], int | None] | None = None,
                  ghost: Callable[[], bool] | None = None,
-                 timer: Callable[[], float] = time.monotonic,
-                 who: Callable[[], int | None] | None = None):
+                 timer: Callable[[], float] = time.monotonic):
         self.inner, self.memory, self.clock = inner, memory, clock
         self.hot = hot
         self.level = level
         self.ghost = ghost
-        self.who = who
         self.timer = timer                  # the search's budget (`ROUND_BUDGET_S`, V336)
         # (when, map, start, end, camp) of each walk refused through a camp (`REFUSAL_S`).
         self._refused: list[tuple[float, int, tuple, tuple, tuple]] = []
@@ -672,9 +643,7 @@ class DangerAvoidingQuery:
         now = self.clock()
         level = self.level() if self.level is not None else None
         level = level if isinstance(level, int) else None
-        who = self.who() if self.who is not None else None
-        who = who if isinstance(who, int) else None
-        spots = [(d.x, d.y, CAMP_YARDS, "a death camp", True) if d.camp_for(now, who)
+        spots = [(d.x, d.y, CAMP_YARDS, "a death camp", True) if d.camp(now)
                  else (d.x, d.y, DANGER_YARDS, "where the character died", False)
                  for d in self.memory.dangers_on(map_id, now, level)]
         if self.hot is not None:

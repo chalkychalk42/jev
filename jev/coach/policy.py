@@ -210,12 +210,6 @@ class Context:
         self.step_wait_until[step_id], self.step_wait_why[step_id] = until, why
         self._save()
 
-    def end_wait(self, step_id: str | None) -> None:
-        """`step_id`'s wait is cut short: it is armed again at once (V340)."""
-        if step_id and self.step_wait_until.pop(step_id, None) is not None:
-            self.step_wait_why.pop(step_id, None)
-            self._save()
-
     def step_waiting(self, step_id: str | None, now: float) -> float | None:
         """Seconds `step_id` still waits at `now`, or `None`; a wait that would end further
         off than `STEP_WAIT_MAX_S` is a clock set back, and none."""
@@ -832,8 +826,7 @@ def _derate(plan: Plan) -> Plan:
 
 def step_wait(state: State, context: Context | None) -> Plan | None:
     """The guide step waits (`Context.step_waits`, V334): nothing is armed for it, and the
-    character stands where it is, a fight or a service still taken as they come; a minute at
-    most, then on another rib or the step armed again (`ClientRuntime._wait_elsewhere`, V340)."""
+    character stands where it is, a fight or a service still taken as they come."""
     if context is None or state.guide.step_id is None:
         return None
     left = context.step_waiting(state.guide.step_id, state.t)

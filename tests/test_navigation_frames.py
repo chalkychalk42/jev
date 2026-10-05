@@ -432,7 +432,6 @@ def test_the_ways_round_spawns_keep_what_the_layer_below_went_round():
 
     client, values = client_in("Elwynn", (0.5, 0.5))
     values["char.level"] = 12
-    values["char.key"] = 1234
     memory = RouteMemory()
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=memory,
                 teleports=())
@@ -440,7 +439,6 @@ def test_the_ways_round_spawns_keep_what_the_layer_below_went_round():
     assert isinstance(deaths, DangerAvoidingQuery)
     assert client.query.keep == deaths.keeper
     assert deaths.level() == 12
-    assert deaths.who() == 1234, "a camp bars the character whose deaths made it (V339)"
 
 
 def test_a_walks_cost_is_planned_without_the_search_for_a_way_round():

@@ -111,16 +111,7 @@ LEAVE_S = 600.0
 # detour shorter than a short rib's five minutes (`SHORT_RIB_S`) is mostly its walk. Replayed
 # on the hive's 03:00-09:30 of 29 Sep, the recorded playheads came back to a step its camp still
 # held 7,067 times, 413 h before the camps ended, and the live mage's 48 hours 138 times, 4.8 h.
-#
-# No wait is stood longer than `STAND_S` (V340): one of a minute or more is waited out on a free
-# rib, and with none free it is stood that long and then cut short, the step armed again. Waits
-# under five minutes were stood, and those with no free rib stood to their end or the watchdog's
-# five minutes, and then the session's ten: on 4 Oct 16:26-18:30 the hive's characters stood
-# 64 h of 639 played (10%) on steps that waited, 47 h of it with five minutes or more left and no
-# free rib, 17 h on waits under five minutes. A rib's walk under five minutes is mostly walking,
-# but walking where the character may fight, where standing is nothing.
-STAND_S = 60.0
-WAIT_ELSEWHERE_S = STAND_S
+WAIT_ELSEWHERE_S = SHORT_RIB_S
 # With no such rib, the ribs are looked through again no sooner than this: a wait ends when a
 # camp does, and a look is every rib's stations against every camp.
 WAIT_LOOK_S = 30.0
@@ -246,14 +237,12 @@ class ClientRuntime:
     _retried: set[str] = field(default_factory=set, init=False)
     # The grind a leave from a death camp walks to, while services wait for it (V307).
     _leaving: str | None = field(default=None, init=False)
-    # The step a look for a rib to wait on found none for, and when (`_wait_elsewhere`); and
-    # the step stood with no rib free, since when (V340).
+    # The step a look for a rib to wait on found none for, and when (`_wait_elsewhere`).
     _elsewhere_looked: tuple = field(default=(None, -math.inf), init=False)
     # The character's level at the last tick, and whether a ding on a rib that goes on past it
     # waits for its rib to be chosen again (`_ding_rib`, V345).
     _rib_level: int | None = field(default=None, init=False)
     _ding_due: bool = field(default=False, init=False)
-    _stood: tuple = field(default=(None, -math.inf), init=False)
     # The steps by id and the grind ribs, looked up on every tick by the walk along the spine.
     _nodes: dict = field(default_factory=dict, init=False)
     _ribs_all: tuple = field(default=(), init=False)
@@ -599,8 +588,7 @@ class ClientRuntime:
         return True
 
     def _wait_elsewhere(self, state: State) -> bool:
-        """A step that waits `WAIT_ELSEWHERE_S` (a minute, V340) or more is waited out on
-        another rib (V334):
+        """A step that waits `WAIT_ELSEWHERE_S` or more is waited out on another rib (V334):
         the grind of the character's level (`_rib`: of the ribs not barred, then barred, spread
         by the character, V329-V332) among those that suit it (`rib_fits`: none above
         `RIB_LEVELS_ABOVE` over it, some worth experience, a rib the route leaves out none,
@@ -608,18 +596,13 @@ class ClientRuntime:
         camp. A quest step is rejoined
         when its wait ends, as a short rib rejoins; a rib that waits hands its way back, its
         level and its end to the rib that replaces it, as a leave from a camp does. With no
-        such rib the step is stood where it is, the body having walked clear of the camp, for
-        `STAND_S` at most, and then its wait is cut short and the step armed again (V340).
+        such rib the step is stood out where it is, the body having walked clear of the camp.
         It cannot loop: each rib the character is sent to and finds camped or out of reach
         waits in its turn, and no rib that waits is chosen, so the detours are fewer than the
-        ribs until a wait ends; a step armed again whose stations still lie in the character's
-        own camp waits again, and is armed again a `STAND_S` later, its walks' refusals held as
-        long (`route_memory.REFUSAL_S`). `True` when the playhead moved."""
+        ribs until a wait ends. `True` when the playhead moved."""
         context = self.policy_context
         step = self.tracker.step_id
         left = context.step_waiting(step, state.t)
-        if left is None and self._stood[0] == step:
-            self._stood = (None, -math.inf)     # its wait is over: a later one stands afresh
         v = state.vitals
         if (left is None or left < WAIT_ELSEWHERE_S or self.finished or v.dead is not False
                 or v.ghost is not False or v.combat is True):
@@ -641,16 +624,8 @@ class ClientRuntime:
                 and state.pos.my is not None else None)
         rib = self._rib(level, here, among=free) if free else None
         if rib is None:
-            stood = self._stood if self._stood[0] == step else (step, state.t)
-            if state.t - stood[1] >= STAND_S:
-                # Stood its minute with nowhere to go: the wait is cut short (V340).
-                context.end_wait(step)
-                self._stood = self._elsewhere_looked = (None, -math.inf)
-                return False
-            self._stood = stood
             self._elsewhere_looked = (step, state.t)
             return False
-        self._stood = (None, -math.inf)
         node, memory = self._nodes.get(step), self.tracker.memory
         if node is not None and node.kind is StepKind.GRIND:
             back, until, target = memory.rejoin_to, memory.until, memory.level_at_entry

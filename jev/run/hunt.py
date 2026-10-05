@@ -272,10 +272,6 @@ class Hunt:
     # When the death camp a station lies in ends, as wall time, `None` for one in none
     # (`RouteMemory.camp_at`, V307): such a station is not walked to (V334).
     camp_until: Callable[[tuple], float | None] | None = None
-    # Whether a station out of the character's own camps lies in a death camp another's
-    # deaths made (V339): not a bar, a danger; such stations are left out of the tour while it
-    # has one out of every camp, and walked when it has none.
-    others_camp: Callable[[tuple], bool] | None = None
     # How the last walk that did not arrive went: whether a route was planned for it, and the
     # end of the death camp it was refused through, if it was (V334); `None`, not known.
     walk_note: Callable[[], tuple[bool, float | None]] | None = None
@@ -582,28 +578,19 @@ class Hunt:
         """The tour without its stations in a death camp, and when each such camp ends (V334).
         A camp is where the character died twice in ten minutes at its level, and of the
         hive's walks that arrived at a station inside one, 6.1% ended in a death near it
-        within three minutes, 1.0% elsewhere (03:00-09:30 on 29 Sep).
-
-        A camp another character's deaths made bars nothing (V339): its stations are left out
-        while the tour has one out of every camp, and kept when it has none, for a camp is where
-        its kind kills at the character's level too. In the hive's 4 Oct 16:26-18:30, inside
-        another's camp once it no longer barred, characters of its levels died 8.0 times an
-        alive hour, against 1.96 with no death within 100 yards in two hours."""
+        within three minutes, 1.0% elsewhere (03:00-09:30 on 29 Sep)."""
+        if self.camp_until is None:
+            return list(tour), []
         kept, camps = [], []
         for point in tour:
-            until = self.camp_until(tuple(point)) if self.camp_until is not None else None
+            until = self.camp_until(tuple(point))
             if until is None:
                 kept.append(point)
             else:
                 camps.append(until)
-        clear = ([p for p in kept if not self.others_camp(tuple(p))]
-                 if self.others_camp is not None and kept else kept)
-        others = len(kept) - len(clear)
-        if clear:
-            kept = clear
         if camps:
             event("hunt.camped", data={"stations": len(camps), "kept": len(kept),
-                                       "until": min(camps), "others": others})
+                                       "until": min(camps)})
         return kept, camps
 
     def _loot(self) -> Hunted | None:

@@ -1018,12 +1018,9 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
             return danger.hot(map_id, values().get("char.level"))
     deaths = None
     if route_memory is not None:
-        # A camp bars only the character whose deaths made it (V339): who it is, read with
-        # its level.
         deaths = DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory, hot=hot,
                                      level=lambda: values().get("char.level"),
-                                     ghost=lambda: values().get("vitals.ghost") is True,
-                                     who=lambda: values().get("char.key"))
+                                     ghost=lambda: values().get("vitals.ghost") is True)
     client.query = query if deaths is None else deaths
     if route_memory is not None:
         # ...and of the spawns of units that attack it on sight, where a way round costs less
