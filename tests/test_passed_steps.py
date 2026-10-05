@@ -191,3 +191,44 @@ def test_combat_on_the_way_to_a_return_is_no_attempt_and_no_return_starts_in_com
     rt.armed = Armed(walk, ArmedBy.POLICY, 1.0, "guide.travel", step_id="boar")
     rt.finish(SkillOutcome.PREEMPTED, "combat interrupted the leg or service")
     assert rt.tracker.memory.attempts == 0 and rt.tracker.step_id == "boar"
+
+
+def test_a_failed_quest_step_goes_forward_to_the_next_doable_and_back_at_the_next_level(tmp_path):
+    """V364: every quest step failed over to a rib (of 1,895 objective visits in the hive's 4 Oct
+    20:30-23:00, 721 left for one), though quest steps earned 2,401 experience an hour against a
+    rib's 1,283. A step that stalls, kills the character or loses its quest goes forward to the
+    next quest step doable now in its zone, passed for the level and returned to at the next
+    (V342); with none doable, the rib as before."""
+    boar = Quest(quest_id=183, complete=False)
+    for reason in ("timeout_s=10", "deaths_on_step=3.0"):
+        rt = runtime(tmp_path, [state(0, 7, boar)], start_step="boar_do")
+        rt.tick(choose=False)
+        rt._apply(TrackVerdict(Event.FAIL, goto="rib", reason=reason), state(1, 7, boar))
+        assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("recombobulation", None)
+        assert {"boar_do", "journal"} <= rt._retried, "passed, the accept on the way too (V308)"
+    rt.tick(choose=False)
+    assert "passed:boar_do@7" in rt._retried
+    rt.tracker.enter("gate", state(2, 8, boar))
+    rt.source = ScriptedSource([state(3, 8, boar)])
+    rt.tick(choose=False)
+    assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("boar_do", "gate"), \
+        "the next level goes back to it (V342)"
+    done = runtime(tmp_path, [state(0, 7, boar)], start_step="boar_do", completed={412})
+    done.tick(choose=False)
+    done._apply(TrackVerdict(Event.FAIL, goto="rib", reason="timeout_s=10"), state(1, 7, boar))
+    assert (done.tracker.step_id, done.tracker.memory.rejoin_to) == ("rib", "boar_do"), \
+        "nothing doable: The Stolen Journal waits on The Boar Hunter's hand-in; the rib, as before"
+
+
+def test_a_failed_step_goes_back_to_one_behind_it_doable_now_before_a_rib(tmp_path):
+    """V364: with nothing doable ahead, a step behind it the character can go back to now (the
+    look-back's `_returnable`, V342) comes before a rib: Operation Recombobulation's giver not
+    reached at level 7, The Boar Hunter's objective, passed over at 6, is gone back to."""
+    boar = Quest(quest_id=183, complete=False)
+    rt = runtime(tmp_path, [state(0, 7, boar)], start_step="recombobulation",
+                 start_retried=frozenset({"boar_do", "passed:boar_do@6"}))
+    rt.tick(choose=False)
+    assert rt.tracker.step_id == "recombobulation"
+    rt._apply(TrackVerdict(Event.FAIL, goto="rib", reason="timeout_s=10"), state(1, 7, boar))
+    assert rt.tracker.step_id == "boar_do"
+    assert "recombobulation" in rt._retried and "returned:boar_do@7" in rt._retried

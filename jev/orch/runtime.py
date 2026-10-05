@@ -919,7 +919,8 @@ class ClientRuntime:
         self.tracker.memory.level_at_entry = accept.level[0] - 1   # ends at the accept's level
         return True
 
-    def _ahead(self, state: State, accept) -> tuple[str, tuple[str, ...]] | None:
+    def _ahead(self, state: State, accept,
+               strict: bool = False) -> tuple[str, tuple[str, ...]] | None:
         """The first step past `accept` on the spine the character can work at its level now
         (`_doable`), and the accepts on the way to it, `accept` first, to be passed over; with
         none, the first step before it of a quest in the log (an objective not complete, a
@@ -933,7 +934,7 @@ class ClientRuntime:
         level = state.char.level
         held = {q.quest_id: q for q in state.quests}
         key = (accept.id, level, frozenset(self._retried), frozenset(self.completed),
-               tuple(sorted((q, held[q].complete) for q in held)))
+               tuple(sorted((q, held[q].complete) for q in held)), strict)
         if self._ahead_seen and self._ahead_seen[0] == key:
             return self._ahead_seen[1]
         lost = self._lost_quests(state)
@@ -944,7 +945,7 @@ class ClientRuntime:
             node = self._nodes.get(cursor)
             if node is None:
                 break
-            if self._doable(node, level, held, lost):
+            if self._doable(node, level, held, lost, strict):
                 found = (node.id, tuple(passed))
                 break
             if (node.kind is StepKind.QUEST_ACCEPT and node.quest_id not in held
@@ -961,15 +962,48 @@ class ClientRuntime:
         self._ahead_seen = (key, found)
         return found
 
-    def _doable(self, node, level: int, held: dict, lost: set[int]) -> bool:
+    def _fail_forward(self, state: State, verdict) -> tuple[str, tuple[str, ...]] | None:
+        """Where a quest step failing to a rib - stalled, killing the character, its quest
+        lost - goes instead (V364): the next step on the spine doable now (`_ahead`, the
+        failed step first among those passed over), or with none a step behind it the
+        character can go back to now, in the failed step's zone and not waiting; `None`, and
+        the rib as before, when no quest step is doable at the level.
+
+        In the hive's 4 Oct 20:30-23:00 quest steps earned 2,401 experience an hour and grind
+        ribs 1,283, and grinding took 68% of the time: of 1,895 objective visits 721 left to
+        a rib, of 1,475 accepts 280 and of 780 hand-ins 104."""
+        node = self.graph.get(self.tracker.step_id)
+        target = self.graph.get(verdict.goto) if verdict.goto else None
+        if (node is None or node.quest_id is None or target is None
+                or target.kind is not StepKind.GRIND
+                or node.kind not in (StepKind.QUEST_ACCEPT, StepKind.QUEST_OBJECTIVE,
+                                     StepKind.QUEST_TURNIN)):
+            return None
+        found = self._ahead(state, node, strict=True)
+        if found is None:
+            return None
+        step = self._nodes.get(found[0])
+        if (step is None or step.id == node.id or step.zone_id != node.zone_id
+                or self.policy_context.step_waiting(step.id, state.t) is not None):
+            return None
+        return found
+
+    def _doable(self, node, level: int, held: dict, lost: set[int],
+                strict: bool = False) -> bool:
         """Can the character work this step of the spine at its level now: an accept of a quest
         not taken, done, lost or above it; an objective of a quest in the log not complete; a
-        hand-in of one complete. Level gates and the rest are passed by: a gate is a grind too."""
+        hand-in of one complete. Level gates and the rest are passed by: a gate is a grind too.
+        `strict`, an accept only with its prerequisites handed in, as the server gives it
+        (`_returnable`): a step failed forward from (V364) leaves the spine's order behind."""
         if node.quest_id is None or node.quest_id in self.completed or node.id in self._retried:
             return False
         quest = held.get(node.quest_id)
         match node.kind:
             case StepKind.QUEST_ACCEPT:
+                if strict and node.quest_prerequisites and not any(
+                        all(q in self.completed for q in group)
+                        for group in node.quest_prerequisites):
+                    return False
                 return (quest is None and node.quest_id not in lost and level >= node.level[0]
                         and not (node.quest_prerequisites
                                  and all(any(q in lost for q in group)
@@ -1265,6 +1299,18 @@ class ClientRuntime:
                     # Quest 16's accept failed twice, and its objective then stopped a
                     # session and would have cost two ribs and a walk to its hand-in.
                     self.tracker.enter(beyond, state)
+                elif (forward := self._fail_forward(state, verdict)) is not None:
+                    # Forward to the next quest step doable now in its zone, not to a rib
+                    # (V364); the failed step is passed for the level, gone back to at the
+                    # next (`_look_back`, V342).
+                    failed = self.graph.get(self.tracker.step_id)
+                    step, passed = forward
+                    if passed:
+                        self._retried.update(passed)
+                        self.tracker.enter(step, state)
+                    else:
+                        self._retried.add(failed.id)
+                        self._return_to(step, state, failed.next[0] if failed.next else None)
                 elif verdict.goto:
                     # Remember where to come back to. A rib is shared by every step in its
                     # zone, so the graph cannot name the way back — only the caller knows.

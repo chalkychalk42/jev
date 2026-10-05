@@ -270,8 +270,10 @@ def rib_graph():
         Node(id="turnin", kind=StepKind.QUEST_TURNIN, quest_id=1, next=("after",),
              skills=("TRAVEL_TO", "TURNIN_QUEST"), timeout_s=10.0,
              on_fail=(FailEdge(when=FailWhen.TIMEOUT, value=10, goto="rib"),), **base),
+        # In the next zone: a failure here has no quest step doable in its own zone to go
+        # forward to, and fails into the rib (V364).
         Node(id="after", kind=StepKind.QUEST_ACCEPT, quest_id=2,
-             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **base),
+             skills=("TRAVEL_TO", "ACCEPT_QUEST"), **{**base, "zone_id": 2}),
         # Its creatures suit levels 3 to 5 (`rib_fits`): a rib above the character is none
         # to fail into (V329).
         Node(id="rib", kind=StepKind.GRIND, level=(1, 10), skills=("TRAVEL_TO", "GRIND_UNTIL"),
