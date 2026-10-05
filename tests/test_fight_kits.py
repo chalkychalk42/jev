@@ -124,3 +124,128 @@ def test_the_reach_generator_reads_a_negative_cast_time_as_instant():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module._signed(4293967296) == -1_000_000 and module._signed(1500) == 1500
+
+
+# -- attacks by value, damage over time once a unit (V360) ---------------------------------
+
+from jev.clients.fight import Fight  # noqa: E402
+from jev.world.combat import by_value, instant_blow, lingers, per_s  # noqa: E402
+
+SMITE = Ability(slot=2, role=Role.ATTACK, name="Smite", mana=20, spell_id=585)
+MIND_BLAST = Ability(slot=5, role=Role.ATTACK, name="Mind Blast", mana=50, spell_id=8092)
+SHADOW_BOLT = Ability(slot=2, role=Role.ATTACK, name="Shadow Bolt", mana=25, spell_id=686)
+IMMOLATE = Ability(slot=4, role=Role.ATTACK, name="Immolate", mana=25, spell_id=348)
+ATTACK = Ability(slot=1, role=Role.ATTACK, name="Attack", toggle=True, spell_id=6603)
+CASTING = {**ALIVE, "char.class_id": 5, "char.race_id": 1, "target.in_melee": False,
+           "target.melee_range": False, "target.attacking_me": True, "vitals.combat": True,
+           "vitals.power": 1.0, "vitals.power_max": 300, "target.guid": 7,
+           "bars.ready": 0b11111, "bars.usable": 0b11111}
+
+
+def _caster(abilities, hid):
+    f = _fight([CASTING], hid=hid)
+    f.profile = CombatProfile(name="caster", abilities=abilities, caster=True)
+    return f
+
+
+def test_damage_a_second_is_read_from_the_spells_own_data():
+    """Smite 13-17 in 1.5 s, Mind Blast 39-43 in 1.5 s; Immolate 8 at once and 20 over 15 s
+    in 2 s, most of it over time; a weapon blow's and a finisher's are not read."""
+    assert per_s(SMITE) == 10.0 and round(per_s(MIND_BLAST), 1) == 27.3
+    assert per_s(IMMOLATE) == 14.0 and lingers(IMMOLATE) and not lingers(SHADOW_BOLT)
+    raptor = Ability(slot=2, role=Role.ATTACK, name="Raptor Strike", spell_id=2973)
+    eviscerate = Ability(slot=3, role=Role.ATTACK, name="Eviscerate", spell_id=2098)
+    assert per_s(raptor) is None and per_s(eviscerate) is None and per_s(ATTACK) is None
+
+
+def test_attacks_take_one_anothers_places_by_damage_a_second():
+    """A weapon blow keeps its place; those the data says take each other's."""
+    sinister = Ability(slot=3, role=Role.ATTACK, name="Sinister Strike", spell_id=1752)
+    order = by_value((ATTACK, SMITE, sinister, MIND_BLAST))
+    assert [a.name for a in order] == ["Attack", "Mind Blast", "Sinister Strike", "Smite"]
+
+
+def test_mind_blast_is_not_starved_by_smite():
+    """The priests pressed Mind Blast in 1% of their kills: Smite, slot 2, was always ready."""
+    hid = _Hid()
+    f = _caster((ATTACK, SMITE, MIND_BLAST), hid)
+    _rotate_answered(f, CASTING)
+    assert hid.taps == ["5"], hid.taps
+    f._gcd_from = None
+    _rotate_answered(f, {**CASTING, "bars.ready": 0b01111})   # Mind Blast cooling
+    assert hid.taps == ["5", "2"], hid.taps
+
+
+def test_damage_over_time_goes_on_a_unit_once_while_it_lasts(combat_clock):
+    """Immolate once, then Shadow Bolt; again once it has run out, and at once on another unit.
+    The warlocks pressed Immolate in 3-4% of their kills, Shadow Bolt in slot 2 first."""
+    hid = _Hid()
+    f = _caster((ATTACK, SHADOW_BOLT, IMMOLATE), hid)
+    f._dotted = {}
+
+    def look(values):
+        f._gcd_from = None
+        _rotate_answered(f, values)
+
+    look(CASTING)
+    look(CASTING)
+    assert hid.taps == ["4", "2"], hid.taps
+    combat_clock[0] += 15.5
+    look(CASTING)
+    look({**CASTING, "target.guid": 8})
+    assert hid.taps == ["4", "2", "4", "4"], hid.taps
+
+
+def test_damage_over_time_the_client_never_answered_is_not_taken_as_on(combat_clock):
+    hid = _Hid()
+    f = _caster((ATTACK, SHADOW_BOLT, IMMOLATE), hid)
+    f._rotate(CASTING)                                   # Immolate pressed, no answer
+    combat_clock[0] += 0.9                               # past PRESS_ANSWER_S, no answer
+    assert f._press_answered(CASTING)                    # unanswered: undone
+    assert not f._dotted_now(IMMOLATE, combat_clock[0])
+
+
+def test_a_next_swing_blow_keeps_its_rage_from_hamstring(combat_clock):
+    """Hamstring, slot 3, ate the rage Heroic Strike, slot 2, had been pressed to spend at its
+    swing: 3.09 Hamstrings a warrior's kill. With the blow pressed, another attack leaves its
+    cost."""
+    heroic = Ability(slot=2, role=Role.ATTACK, name="Heroic Strike", mana=150, spell_id=78)
+    hamstring = Ability(slot=3, role=Role.ATTACK, name="Hamstring", mana=100, spell_id=1715)
+    warrior = CombatProfile(name="warrior", abilities=(ATTACK, heroic, hamstring))
+    rage = {**ALIVE, "char.class_id": 1, "target.in_melee": True, "vitals.combat": True,
+            "vitals.power": 0.2, "vitals.power_max": 1000, "bars.attacking": True,
+            "bars.ready": 0b111, "bars.usable": 0b111}
+    hid = _Hid()
+    f = _fight([rage], hid=hid)
+    f.profile = warrior
+    f._rotate(rage)
+    assert hid.taps == ["2"]
+    combat_clock[0] += 0.3
+    f._rotate(rage)
+    assert hid.taps == ["2"], "200 rage less 100 would leave under Heroic Strike's 150"
+    f._rotate({**rage, "vitals.power": 0.3})
+    assert hid.taps == ["2", "3"], hid.taps
+
+
+def test_the_mages_order_is_its_own_at_its_bar():
+    """V165 stays: the mage's bars (Fireball, Frostbolt, Fire Blast, Arcane Missiles, at 16
+    ranks 3, 3, 2 and 1; at 8 ranks 2, 2, 1 and 1) are ordered exactly as before, at contact,
+    opening and while the unit comes on: its instant blow keeps its place for contact, the
+    channel its own, and Fireball outdoes Frostbolt rank for rank."""
+    for ranks in ((145, 837, 2137, 5143), (143, 205, 2136, 5143), (133, 116, 2136, 5143)):
+        fireball, frostbolt, fire_blast, missiles = (
+            Ability(slot=slot, role=Role.ATTACK, name=name, spell_id=spell_id)
+            for slot, name, spell_id in zip((2, 6, 7, 8), ("Fireball", "Frostbolt", "Fire Blast",
+                                                           "Arcane Missiles"), ranks, strict=True))
+        attacks = (fireball, frostbolt, fire_blast, missiles)
+
+        def order(values, attacks=attacks):
+            return [a.name for a in Fight._caster_order(by_value(attacks, keep=instant_blow),
+                                                        values)]
+
+        near = {"target.in_melee": True, "target.attacking_me": True}
+        opening = {"target.in_melee": False, "target.attacking_me": False}
+        coming = {"target.in_melee": False, "target.attacking_me": True}
+        assert order(near) == ["Fire Blast", "Fireball", "Frostbolt", "Arcane Missiles"], ranks
+        assert order(opening) == ["Frostbolt", "Fireball", "Fire Blast", "Arcane Missiles"]
+        assert order(coming) == ["Fireball", "Frostbolt", "Fire Blast", "Arcane Missiles"]

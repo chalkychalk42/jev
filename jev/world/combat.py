@@ -101,6 +101,9 @@ melee with (V164). A nameplate proves a unit within about 20 yards (V45), so suc
 reaches whatever a fight can select: Fireball 35 yards, Frostbolt 30. Judgement's 10
 does not."""
 
+GCD_S = 1.5
+"""The global cooldown of a spell, the least of the character's time any press takes (V360)."""
+
 LASTING_S = 60.0
 """A starting buff that lasts this long or longer outlasts a fight, and its clock is kept
 between fights: Frost Armor, thirty minutes, was cast again at every pull, 60 of a level-1
@@ -186,10 +189,36 @@ class Reach(NamedTuple):
     # Repeats until stopped (V358): Auto Shot, a wand's Shoot. Pressed once it shoots on every
     # ranged swing; pressed again while it repeats, the client stops it.
     repeats: bool = False
+    # What a cast deals (V360, `tools/gen_spell_reach.py`): at once, over time and for how
+    # long; a weapon blow's, a finisher's by its combo points and a script's are not read.
+    dmg: float = 0.0
+    dot: float = 0.0
+    dot_s: float = 0.0
+    weapon: bool = False
+    combo: bool = False
+    unread: bool = False
+    gcd_s: float = 0.0
 
     @property
     def instant(self) -> bool:
         return self.cast_s == 0 and not self.channel
+
+    @property
+    def per_s(self) -> float | None:
+        """Damage a second of the character's time (V360): a cast's at once and over time over
+        its cast, or its global cooldown for an instant. `None` for damage the data does not
+        say: a weapon blow's, a finisher's, a script's, and a channel's, which every hit taken
+        cuts short (Arcane Missiles)."""
+        if self.weapon or self.combo or self.unread or self.repeats or self.channel:
+            return None
+        return (self.dmg + self.dot) / max(self.cast_s, self.gcd_s or GCD_S, GCD_S)
+
+    @property
+    def lingers(self) -> bool:
+        """Damage over time that is most of the cast's (V360): Immolate, Moonfire, Flame Shock,
+        Corruption, Serpent Sting - on a unit once, not again while it lasts. Not Fireball's
+        burn, nor a channel."""
+        return not self.channel and self.dot > 0 and self.dot >= self.dmg and self.dot_s > 0
 
 
 @cache
@@ -199,7 +228,11 @@ def _reaches() -> dict[int, Reach]:
     except (OSError, ValueError):
         return {}
     return {int(k): Reach(v["min_yd"], v["max_yd"], v["cast_s"], bool(v.get("channel")),
-                          bool(v.get("next_swing")), bool(v.get("repeats")))
+                          bool(v.get("next_swing")), bool(v.get("repeats")),
+                          float(v.get("dmg", 0.0)), float(v.get("dot", 0.0)),
+                          float(v.get("dot_s", 0.0)), bool(v.get("weapon")),
+                          bool(v.get("combo")), bool(v.get("unread")),
+                          float(v.get("gcd_s", 0.0)))
             for k, v in (raw.get("spells") or {}).items()}
 
 
@@ -219,6 +252,43 @@ def repeats(ability: Ability) -> bool:
     """A ranged attack that repeats until stopped (`Reach.repeats`): Auto Shot (V358)."""
     facts = reach(ability.spell_id)
     return ranged(ability) and facts is not None and facts.repeats
+
+
+def per_s(ability: Ability) -> float | None:
+    """An attack's damage a second of the character's time (`Reach.per_s`, V360); `None` for
+    melee's toggle, a repeating shot, and damage the data does not say."""
+    facts = reach(ability.spell_id)
+    if ability.toggle or facts is None:
+        return None
+    return facts.per_s
+
+
+def lingers(ability: Ability) -> bool:
+    """An attack whose damage is mostly over time (`Reach.lingers`, V360)."""
+    facts = reach(ability.spell_id)
+    return ability.role is Role.ATTACK and facts is not None and facts.lingers
+
+
+def instant_blow(ability: Ability) -> bool:
+    """An instant of damage at once, not over time (Fire Blast, Arcane Shot): what a caster
+    keeps for contact, where nothing can push it back (V165)."""
+    facts = reach(ability.spell_id)
+    return facts is not None and facts.instant and not facts.lingers
+
+
+def by_value(attacks: tuple[Ability, ...], keep=None) -> tuple[Ability, ...]:
+    """The attacks in the bar's order, those whose damage the data says (`per_s`) taking one
+    another's places by damage a second, the most first (V360). Mind Blast before Smite,
+    Immolate before Shadow Bolt; a weapon blow, a finisher, a script and a channel keep their
+    places, their damage being the weapon's, the combo points', the server's or the hits
+    taken's; so does any attack `keep` names (a caster's instant blows, `instant_blow`)."""
+    valued = [i for i, a in enumerate(attacks)
+              if per_s(a) is not None and not (keep is not None and keep(a))]
+    ranked = sorted((attacks[i] for i in valued), key=lambda a: -per_s(a))
+    out = list(attacks)
+    for i, attack in zip(valued, ranked, strict=True):
+        out[i] = attack
+    return tuple(out)
 
 
 def _nuke(ability: Ability) -> bool:
