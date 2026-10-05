@@ -52,8 +52,8 @@ TRAINER_REACH_SPELLS = 2
 
 # Roles worth a new bar slot, in the order free slots are handed out.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
-NEW_LINE_ROLES = ("aura", "long_buff", "strike", "save", "stun", "last_resort", "conjure",
-                  "root", "cc", "area")
+NEW_LINE_ROLES = ("aura", "long_buff", "strike", "dot", "save", "stun", "last_resort",
+                  "conjure", "root", "cc", "area")
 BAR_SLOTS = 12
 
 # The roles the fight code presses (`jev.world.combat.TRAINED_ROLES`), in the order a spell
@@ -64,8 +64,9 @@ BAR_SLOTS = 12
 # nothing. Polymorph is pressed since V287 (`cc`): it holds one of two attackers out of the
 # fight. The mage with a spell's money a visit bought Conjure Water before Frostbolt at
 # level 5 and Conjure Food before Fire Blast at 6, in the stock window's order.
-FIGHT_ROLES = ("strike", "short_buff", "root", "stun", "cc", "area", "save", "last_resort",
-               "heal", "aura", "attack")
+# Damage over time is damage (V361): Corruption, Shadow Word: Pain, Serpent Sting, Rend.
+FIGHT_ROLES = ("strike", "dot", "short_buff", "root", "stun", "cc", "area", "save",
+               "last_resort", "heal", "aura", "attack")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
 # What holds more than one attacker, bought before the oldest gap (V242). Polymorph holds
@@ -393,6 +394,19 @@ def training_cost(class_id: int | None, race_id: int | None, level: int | None,
         cost = sum(costs[:spells])
         least = cost if least is None else min(least, cost)
     return least or 0
+
+
+def unpressed(known: Iterable[int], *, facts: dict | None = None) -> tuple[list[str], list[int]]:
+    """What the character knows that nothing presses (V361), for the session's one line: the
+    spell lines whose role the fight has no use for (`utility`: Charge, Life Tap, Hunter's
+    Mark, a totem), by name, passives left out; and the spell ids the catalog does not know
+    at all (a pet's, Tame Beast, a racial's)."""
+    known = set(known)
+    lines = _lines(known, facts)
+    names = sorted(f.name for f in lines.values()
+                   if f.role not in BUY_ORDER and f.role != "passive")
+    unknown = sorted(s for s in known if spell(s, facts) is None)
+    return names, unknown
 
 
 def _lines(spells: Iterable[int], facts: dict | None) -> dict[str, SpellFacts]:

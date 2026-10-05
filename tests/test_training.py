@@ -394,3 +394,50 @@ def test_every_trainer_s_offers_are_told_apart_by_name_and_rank():
     assert len(alike) == 3
     assert all(len({spell(s).name for s in ids}) == 1 for ids in alike), "a hash collision"
     assert all(spell(s).role == "utility" for ids in alike for s in ids)
+
+
+# -- the classifier reads damage over time, shouts, shields and aspects (V361) ------------
+
+def test_damage_over_time_shouts_shields_and_aspects_have_their_roles():
+    """Read from the spell's own data, never its name: periodic damage on the enemy is a dot,
+    damage beside an interrupt cast with mana a strike, Battle Shout a long buff on the party
+    round the warrior, Power Word: Shield a save, the hunter's aspects kept auras."""
+    roles = {sid: spell(sid).role for sid in (172, 589, 1978, 772, 980, 8042, 6673, 17,
+                                              13163, 13165)}
+    assert roles == {172: "dot", 589: "dot", 1978: "dot", 772: "dot", 980: "dot",
+                     8042: "strike", 6673: "long_buff", 17: "save", 13163: "aura",
+                     13165: "aura"}
+    assert spell(17).every_s == 25.0 and spell(17).self_cast
+
+
+def test_what_the_fight_cannot_press_stays_utility():
+    """A form, stealth, speed, tracking, a one-school ward, a stealth opener, a finisher, a
+    channel, a rage or energy interrupt, Charge and Life Tap: nothing presses them yet."""
+    for sid in (1784, 5118, 1494, 703, 1943, 689, 1766, 72, 100, 1454, 1130):
+        assert spell(sid).role == "utility", (sid, spell(sid).name, spell(sid).role)
+    assert spell(543).role == "short_buff"                       # Fire Ward: one school
+
+
+def test_a_priest_buys_and_places_its_shield_and_shadow_word_pain():
+    """Power Word: Shield was a new short buff, never placed nor bought; Shadow Word: Pain
+    utility. A level 6 priest's trainer has both."""
+    bar = training.starting_bar(5, 1)
+    known = {6603, 585, 2050}
+    for sid in (589, 17):
+        assert worth_buying(sid, known, bar), sid
+    plan = {p.spell_id for p in placements(bar, known | {589, 17})}
+    assert plan == {589, 17}
+
+
+def test_a_warrior_buys_and_places_battle_shout_and_rend():
+    bar = training.starting_bar(1, 1)
+    known = {6603, 78}
+    for sid in (6673, 772):
+        assert worth_buying(sid, known, bar), sid
+    assert {p.spell_id for p in placements(bar, known | {6673, 772})} == {6673, 772}
+
+
+def test_what_nothing_presses_is_said():
+    """V361: a spell nobody classified was a spell nobody pressed, and nothing said so."""
+    names, unknown = training.unpressed({6603, 78, 100, 6673, 772, 2687, 999999})
+    assert names == ["Bloodrage", "Charge"] and unknown == [999999]

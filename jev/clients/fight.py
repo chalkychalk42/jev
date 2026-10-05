@@ -2261,11 +2261,19 @@ class Fight:
             # way is clear already.
             for guard in () if saved else (*profile.by_role(Role.SAVE),
                                            *profile.by_role(Role.STUN)):
+                # A shield that lasts (Power Word: Shield, V361) is not pressed again while it
+                # does, across fights: its Weakened Soul refuses it for 15 s.
+                lasts = guard.role is Role.SAVE and guard.every_s > 0
+                if (lasts and time.monotonic() - self._lasting.get(guard.name, -math.inf)
+                        < guard.every_s):
+                    continue
                 if (pressable(guard) and self._has_mana_for(guard, values)
                         and (guard.role is Role.SAVE
                              or values.get("target.attacking_me") is True)):
                     if self._press(guard) and guard.role is Role.SAVE:
                         self._saved_at = time.monotonic()
+                        if lasts:
+                            self._lasting[guard.name] = self._saved_at
                     return
             if self._press(heal):
                 self._pending_heal = (hp, time.monotonic())

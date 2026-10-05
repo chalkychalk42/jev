@@ -367,7 +367,9 @@ TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL
                  "conjure": Role.CONJURE, "root": Role.ROOT, "cc": Role.CC,
                  # Damage to every enemy round the character: an attack the fight presses with
                  # more than one at hand (V277).
-                 "area": Role.ATTACK}
+                 "area": Role.ATTACK,
+                 # Damage over time: an attack put on a unit once while it lasts (V361, V360).
+                 "dot": Role.ATTACK}
 
 
 def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatProfile:

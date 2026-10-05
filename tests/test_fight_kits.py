@@ -249,3 +249,55 @@ def test_the_mages_order_is_its_own_at_its_bar():
         assert order(near) == ["Fire Blast", "Fireball", "Frostbolt", "Arcane Missiles"], ranks
         assert order(opening) == ["Frostbolt", "Fireball", "Fire Blast", "Arcane Missiles"]
         assert order(coming) == ["Fireball", "Frostbolt", "Fire Blast", "Arcane Missiles"]
+
+
+# -- the kit's new roles in the fight (V361) ----------------------------------------------
+
+from jev.world.combat import from_bar  # noqa: E402
+
+
+def test_a_dot_on_the_bar_is_an_attack_put_on_once():
+    """Corruption, utility before, is an attack on the bar, and one that lingers."""
+    warlock = from_bar({1: 6603, 2: 686, 3: 687, 4: 172}, for_class(9, 1))
+    corruption = next(a for a in warlock.abilities if a.name == "Corruption")
+    assert corruption.role is Role.ATTACK and lingers(corruption) and not corruption.toggle
+
+
+def test_a_shield_that_lasts_is_not_pressed_again_while_it_does(combat_clock):
+    """Power Word: Shield before the heal, then not again for its 25 s, across fights: its
+    Weakened Soul would refuse it for 15."""
+    priest = from_bar({1: 6603, 2: 585, 3: 2050, 4: 17}, for_class(5, 1))
+    shield = next(a for a in priest.abilities if a.name == "Power Word: Shield")
+    assert shield.role is Role.SAVE and shield.friendly and shield.every_s == 25.0
+    low = {**CASTING, "vitals.hp": 0.2, "target.in_melee": True, "bars.ready": 0b1111,
+           "bars.usable": 0b1111}
+    hid = _Hid()
+    f = _fight([low], hid=hid)
+    f.profile = priest
+    _rotate_answered(f, low)
+    assert hid.taps == ["4"], "the shield before the heal"
+    f._saved_at = None
+    f._pending_heal = None
+    combat_clock[0] += 10.0
+    f._gcd_from = None
+    _rotate_answered(f, low)
+    assert hid.taps == ["4", "3"], "within its 25 s, the heal without another shield"
+
+
+def test_the_kit_line_is_said_once_for_a_spellbook():
+    from jev.run.body import LiveBody
+
+    said = []
+
+    class Stub:
+        _kit_said = None
+
+        def say(self, text):
+            said.append(text)
+
+    stub = Stub()
+    LiveBody._say_kit(stub, {6603, 78, 100})
+    LiveBody._say_kit(stub, {6603, 78, 100})
+    assert said == ["  kit: not pressed - Charge"]
+    LiveBody._say_kit(stub, {6603, 78, 100, 1454})
+    assert len(said) == 2 and "Life Tap" in said[1]

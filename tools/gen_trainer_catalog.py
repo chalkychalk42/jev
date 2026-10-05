@@ -21,14 +21,21 @@ Roles, from the spell's own data, never from its name:
 
     heal         first effect heals (10)
     last_resort  heals to full (67), or a heal on a cooldown of ten minutes or more
-    aura         an area aura on the party that never lapses (35, infinite duration)
-    long_buff    an aura on a friend or the caster lasting a minute or more (not threat)
+    aura         an area aura on the party that never lapses (35, infinite duration), or one
+                 on the caster alone that never lapses and raises what it fights with
+                 (dodge, attack power, ranged attack power: Aspect of the Monkey, V361)
+    long_buff    an aura on a friend, the caster or the party round it (a shout, V361)
+                 lasting a minute or more (not threat)
     short_buff   an aura on the caster lasting under a minute (a seal)
-    save         the caster or a friend made immune to damage (aura 39 or 40, any effect)
+    save         the caster or a friend made immune to damage (aura 39 or 40, any effect),
+                 or shielded from damage of every school (aura 69: Power Word: Shield, V361)
     stun         the enemy stunned (aura 12)
     strike       damage, a weapon blow or a drain on the enemy target, on a cooldown or not;
                  or an aura on the enemy with damage beside it (Frostbolt's slow) or a
-                 periodic missile (Arcane Missiles)
+                 periodic missile (Arcane Missiles); or, cast with mana, damage to the enemy
+                 beside a first effect of another kind (Earth Shock's interrupt, V361)
+    dot          damage over time on the enemy (aura 3), not channelled, no combo point
+                 given or spent: Corruption, Shadow Word: Pain, Serpent Sting, Rend (V361)
     root         everything round the caster held in place (aura 26: Frost Nova)
     cc           the enemy transformed (aura 56: Polymorph)
     conjure      an item made for the caster (effect 24: Conjure Water, Conjure Food), and
@@ -73,6 +80,17 @@ AURA_PERIODIC_TRIGGER = 4
 AURA_ROOT = 26
 AURA_SLOW = 33
 AURA_TRANSFORM = 56
+AURA_PERIODIC_DAMAGE = 3
+AURA_SCHOOL_ABSORB = 69
+SCHOOLS_ALL = 127
+EFFECT_ADD_COMBO_POINTS = 80
+POWER_MANA = 0
+# Auras on the caster alone, never lapsing, that raise what it fights with (V361): dodge,
+# melee and ranged attack power, damage done, armour and resistances. Not a form or stance
+# (36), stealth (16), speed (31, 129) or tracking (44, 45).
+AURAS_KEPT = (13, 22, 49, 99, 124)
+# Every party member round the caster: Battle Shout (V361).
+TARGET_PARTY_AROUND = 20
 EFFECT_CREATE_ITEM = 24
 # Threat (Righteous Fury): a tank's buff, of no use to a character fighting alone.
 AURA_THREAT = 10
@@ -104,13 +122,15 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         "EffectImplicitTargetA1, DurationIndex, RecoveryTime, CategoryRecoveryTime, "
         "ManaCost, ManaCostPercentage, CasterAuraState, TargetCreatureType, "
         "EffectApplyAuraName2, EffectApplyAuraName3, Effect2, Effect3, EffectItemType1, "
-        "EffectImplicitTargetB1, CastingTimeIndex "
+        "EffectImplicitTargetB1, CastingTimeIndex, ChannelInterruptFlags, PowerType, "
+        "EffectMiscValue1, EffectPointsPerComboPoint1 "
         "from world_spell_template where Id=?", (spell_id,)).fetchone()
     if row is None:
         return None
     (name, rank, attributes, effect, aura, target, duration_index, recovery, category,
      mana, mana_pct, caster_state, creature_type, aura2, aura3, effect2, effect3,
-     item, target_b, cast_index) = row
+     item, target_b, cast_index, channel, power_type, misc, per_combo) = row
+    combo = bool(per_combo) or EFFECT_ADD_COMBO_POINTS in (effect, effect2, effect3)
     # Divine Protection pacifies first and makes immune second: any effect's aura counts.
     auras = {aura, aura2, aura3} - {0, None}
     duration_ms = None
@@ -144,12 +164,22 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
     elif effect == EFFECT_AREA_AURA_PARTY and lasting and target == TARGET_SELF:
         facts["role"] = "aura"
         facts["aura"] = aura
+    elif (effect == EFFECT_APPLY_AURA and lasting and target == TARGET_SELF
+          and aura in AURAS_KEPT):
+        facts["role"] = "aura"
+        facts["aura"] = aura
+    elif (effect == EFFECT_APPLY_AURA and aura == AURA_SCHOOL_ABSORB and misc == SCHOOLS_ALL
+          and (target == TARGET_SELF or target in TARGETS_FRIEND) and duration_s):
+        # Shielded from every school (Power Word: Shield): pressed before a heal as a save
+        # is, not again while it lasts (V361). Fire Ward's one school is not.
+        facts["role"] = "save"
+        facts["every_s"] = max(1.0, duration_s - BUFF_MARGIN_S)
     elif effect == EFFECT_APPLY_AURA and auras & set(AURAS_IMMUNE):
         facts["role"] = "save"
     elif effect == EFFECT_APPLY_AURA and aura == AURA_STUN and target == TARGET_ENEMY:
         facts["role"] = "stun"
     elif (effect in (EFFECT_APPLY_AURA, EFFECT_AREA_AURA_PARTY) and duration_s
-          and (target == TARGET_SELF or target in TARGETS_FRIEND)
+          and (target in (TARGET_SELF, TARGET_PARTY_AROUND) or target in TARGETS_FRIEND)
           and aura != AURA_THREAT):
         facts["role"] = "long_buff" if duration_s >= LONG_BUFF_S else "short_buff"
         facts["aura"] = aura
@@ -163,6 +193,15 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
           and (EFFECT_SCHOOL_DAMAGE in (effect2, effect3) or aura == AURA_PERIODIC_TRIGGER)):
         # Damage whose first effect is its rider: Frostbolt's slow, Arcane Missiles'
         # periodic missile (V165).
+        facts["role"] = "strike"
+    elif (effect == EFFECT_APPLY_AURA and aura == AURA_PERIODIC_DAMAGE and target == TARGET_ENEMY
+          and not creature_type and not channel and not combo):
+        # Damage over time: put on a unit once and not again while it lasts (V361, V360).
+        facts["role"] = "dot"
+    elif (target == TARGET_ENEMY and not creature_type and power_type == POWER_MANA
+          and EFFECT_SCHOOL_DAMAGE in (effect2, effect3) and not channel and not combo):
+        # Damage beside a first effect of another kind, cast with mana: Earth Shock (V361).
+        # A rage or energy interrupt (Kick, Shield Bash) is the interrupt's, not damage's.
         facts["role"] = "strike"
     elif AURA_ROOT in auras and target != TARGET_ENEMY:
         facts["role"] = "root"
