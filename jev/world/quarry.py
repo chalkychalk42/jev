@@ -148,25 +148,31 @@ def _droppers(db, item: int) -> list[int]:
 
 
 def _kinds(db, name_id, entries: list[int]) -> tuple[Kind, ...]:
-    """Each template of `entries` of normal rank, with its spawns, fixed and random."""
-    kinds = []
-    for entry in entries:
-        template = db.execute("select Name, MinLevel, MaxLevel, Rank from "
-                              "world_creature_template where Entry = ?", (entry,)).fetchone()
-        if template is None or template[3] != 0 or not template[0]:
-            continue                         # an elite or a rare is no solo fight
-        points = db.execute(
-            "select map, cast(position_x as real), cast(position_y as real), "
-            "cast(position_z as real) from world_creature where id = ? union all "
-            "select c.map, cast(c.position_x as real), cast(c.position_y as real), "
+    """Each template of `entries` of normal rank, with its spawns, fixed and random: one read
+    of the spawns for them all (`world_creature` has no index on its template, and the live
+    session reads the snapshot over the WSL share)."""
+    if not entries:
+        return ()
+    marks = ",".join("?" * len(entries))
+    templates = {r[0]: r[1:] for r in db.execute(
+        "select Entry, Name, MinLevel, MaxLevel, Rank from world_creature_template "
+        f"where Entry in ({marks})", entries)}
+    normal = [e for e in entries if e in templates and templates[e][3] == 0 and templates[e][0]]
+    if not normal:
+        return ()                            # an elite or a rare is no solo fight
+    marks = ",".join("?" * len(normal))
+    points: dict[int, list] = {}
+    for entry, m, x, y, z in db.execute(
+            "select id, map, cast(position_x as real), cast(position_y as real), "
+            f"cast(position_z as real) from world_creature where id in ({marks}) union all "
+            "select e.entry, c.map, cast(c.position_x as real), cast(c.position_y as real), "
             "cast(c.position_z as real) from world_creature_spawn_entry e "
-            "join world_creature c on c.guid = e.guid where e.entry = ?",
-            (entry, entry)).fetchall()
-        if points:
-            kinds.append(Kind(entry, name_id(template[0]), int(template[1]), int(template[2]),
-                              tuple((int(m), float(x), float(y), float(z))
-                                    for m, x, y, z in points)))
-    return tuple(kinds)
+            f"join world_creature c on c.guid = e.guid where e.entry in ({marks})",
+            (*normal, *normal)):
+        points.setdefault(entry, []).append((int(m), float(x), float(y), float(z)))
+    return tuple(Kind(entry, name_id(templates[entry][0]), int(templates[entry][1]),
+                      int(templates[entry][2]), tuple(points[entry]))
+                 for entry in normal if points.get(entry))
 
 
 def open_counter(quest, want: Want) -> bool:
