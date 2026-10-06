@@ -41,7 +41,6 @@ from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
-from jev.guide.path import Path as Route
 from jev.guide.path import PathStatus
 from jev.guide.route_memory import CAMP_REFUSED, CAMP_YARDS, RECORD_FLUSH_S
 from jev.guide.spawns import around as spawn_around
@@ -266,18 +265,6 @@ FIRST_AID = {3273: 75, 3274: 150, 7924: 225, 10846: 300, 27028: 375}
 # How long a potion or bandage in a fight may take to find and use: the live bags' census and
 # click; the hive's is the server's, at once.
 USE_IN_COMBAT_S = 6.0
-# A losing fight's retreat (V369): back along the way walked in, at most `RETREAT_YARDS` - the
-# server's threat radius, past which a unit chasing from where its fight began goes home - and
-# only on a way walked in the last `RETREAT_TRAIL_S`. It stops short of a point within
-# `RETREAT_CLEAR_YARDS` (and its unit's extra reach) of a spawn of another camp, one more than
-# `RETREAT_CAMP_YARDS` from where the fight is, and is not walked shorter than
-# `RETREAT_MIN_YARDS`. It ends when combat does, or after `RETREAT_S`.
-RETREAT_YARDS = 60.0
-RETREAT_TRAIL_S = 180.0
-RETREAT_CLEAR_YARDS = 15.0
-RETREAT_CAMP_YARDS = 30.0
-RETREAT_MIN_YARDS = 20.0
-RETREAT_S = 15.0
 
 # After buying spells, the spellbook census is rebuilt under its new revision (about 2.5 s
 # at ten paints a second) before anything is put on the bar from it.
@@ -414,7 +401,7 @@ class LiveBody:
                            targeting=self.targeting, bounds=client.bounds)
         self.rest = Rest(hid=client.hid, read=self._read, use_item=self._use_consumable,
                          bandage=lambda: self._use_kind("bandage") is not None)
-        self._wire_fight()
+        self.fight.use_item = self._use_kind
         self.loot = Loot(hid=client.hid, read=self._read, read_frame=self._frame,
                          window_origin=client.origin, targeting=self.targeting)
         self.gather = Gather(hid=client.hid, read=self._read, targeting=self.targeting,
@@ -480,18 +467,8 @@ class LiveBody:
         self.checkpoint()
         return self.client.quest_ids(tries=1)
 
-    def _wire_fight(self) -> None:
-        """The fight's potions, bandages and retreat (V368, V369), on whichever fight the body
-        holds now: a body built on this one (the hive's) puts a fight of its own in its place
-        after this one's construction, so they are wired again at every skill."""
-        self.fight.use_item = self._use_kind
-        self.fight.retreat = self._retreat
-        if getattr(self.rest, "bandage", None) is None:
-            self.rest.bandage = lambda: self._use_kind("bandage") is not None
-
     def execute(self, arm: Armed, state: State, checkpoint: Callable[[], None]) -> Result:
         self.arm = arm
-        self._wire_fight()
         faction = getattr(state.char, "faction", None) if state is not None else None
         self._side = getattr(faction, "value", faction) or self._side
         def focused_checkpoint():
@@ -1318,66 +1295,6 @@ class LiveBody:
         self.say(f"    {kind} from the bags: {used}" if used is not None
                  else f"    no {kind} used - {user.detail}")
         return used
-
-    def _retreat_route(self, level: int | None = None) -> Route | None:
-        """The way out of a losing fight (V369): from where the character stands back along
-        the way it walked in (`Client.walked`), at most `RETREAT_YARDS`, cut short of another
-        camp's reach by the hostile index; `None` with under `RETREAT_MIN_YARDS` of it."""
-        walked = getattr(self.client, "walked", None)
-        here, bounds = self._world_position(), self.client.bounds
-        if walked is None or here is None or bounds is None:
-            return None
-        now = time.monotonic()
-        trail = [p for p in walked() if now - p[0] <= RETREAT_TRAIL_S]
-        ground = getattr(self.client, "_ground", None)
-        height = ground[2] if ground else 0.0
-        points, yards, last = [], 0.0, here[:2]
-        for _, x, y, z in reversed(trail):
-            step = math.dist(last, (x, y))
-            if yards + step > RETREAT_YARDS:
-                break
-            others = [h for h in hostiles.near(bounds.map_id, x, y, RETREAT_CLEAR_YARDS
-                                               + hostiles.MAX_WANDER_YARDS
-                                               + hostiles.MAX_LEVEL_YARDS,
-                                               side=self._side, level=level)
-                      if math.dist(h[:2], here[:2]) > RETREAT_CAMP_YARDS
-                      and math.dist(h[:2], (x, y)) <= RETREAT_CLEAR_YARDS + h[3]]
-            if others:
-                break                        # another camp's reach: no further
-            yards += step
-            height = z if z is not None else height
-            points.append((x, y, height))
-            last = (x, y)
-        if yards < RETREAT_MIN_YARDS:
-            return None
-        start = (here[0], here[1], points[0][2])
-        return Route(PathStatus.COMPLETE, (start, *points), source="retreat")
-
-    def _retreat(self) -> bool | None:
-        """Walk out of a losing fight the way the character came in (V369), until combat ends:
-        the units chasing go home past their threat radius. `True` out of combat, `False` still
-        in it after the walk, `None` with no way out known."""
-        values = self._read() or {}
-        route = self._retreat_route(values.get("char.level"))
-        if route is None:
-            event("fight.retreat", code="no_way", data={})
-            return None
-
-        def over() -> bool:
-            v = self._read()
-            return (v is None or v.get("vitals.combat") is not True
-                    or v.get("vitals.dead") is True)
-
-        result = self.client.travel.follow(route, timeout_s=RETREAT_S, abort=over)
-        after = self._read() or {}
-        out = after.get("vitals.combat") is False and after.get("vitals.dead") is not True
-        event("fight.retreat", code="out" if out else "caught",
-              data={"yards": round(route.length_yards(), 1),
-                    "walk": getattr(getattr(result, "outcome", None), "value", None),
-                    "hp": after.get("vitals.hp"), "attackers": after.get("combat.attackers")})
-        self.say(f"    retreated {route.length_yards():.0f} yards the way it came: "
-                 + ("out of combat" if out else "still in combat"))
-        return out
 
     def _conjure(self) -> None:
         """After a meal, out of combat: a caster makes its water and food when the bags hold

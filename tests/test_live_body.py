@@ -2473,12 +2473,6 @@ def test_the_fight_and_the_rest_take_potions_and_bandages_from_the_bags(monkeypa
 
     b = body()
     assert b.fight.use_item == b._use_kind and b.rest.bandage is not None
-    # A body built on this one (the hive's) puts its own fight in place after construction:
-    # wired again at every skill.
-    from jev.clients.fight import Fight
-    b.fight = Fight(hid=b.client.hid, read=b._read, read_frame=b._frame)
-    b._wire_fight()
-    assert b.fight.use_item == b._use_kind and b.fight.retreat == b._retreat
     used = []
 
     class _Bags:
@@ -2497,53 +2491,3 @@ def test_the_fight_and_the_rest_take_potions_and_bandages_from_the_bags(monkeypa
     assert b._use_kind("bandage") is None, "no First Aid, no bandage"
     b.client.spells = SimpleNamespace(bar={}, known=[6603, 78, 3273])
     assert b._use_kind("bandage") == 3531, "Heavy Wool, the best Apprentice First Aid binds"
-
-
-def _retreating(monkeypatch, trail, spawns=()):
-    import jev.run.body as live
-
-    b = body()
-    b.client.walked = lambda: [(0.0, x, y, 5.0) for x, y in trail]
-    b._world_position = lambda: (0.0, 0.0)
-    monkeypatch.setattr(live.time, "monotonic", lambda: 10.0)
-    monkeypatch.setattr(live.hostiles, "near", lambda *a, **kw: list(spawns))
-    b._side = "alliance"
-    return b
-
-
-def test_a_retreat_walks_back_the_last_sixty_yards_the_way_it_came(monkeypatch):
-    """V369: the way walked in is known clear; past the threat radius a unit chasing goes home."""
-    trail = [(-3.0 * i, 0.0) for i in range(40, 0, -1)]          # walked east to (−3, 0)
-    b = _retreating(monkeypatch, trail)
-    route = b._retreat_route(10)
-    xs = [round(p[0]) for p in route.points]
-    assert xs[0] == 0 and xs[1] == -3 and xs[-1] == -60, "sixty yards back, newest first"
-    assert route.source == "retreat" and all(p[2] == 5.0 for p in route.points)
-
-
-def test_a_retreat_stops_short_of_another_camps_reach_and_is_not_walked_short(monkeypatch):
-    trail = [(-3.0 * i, 0.0) for i in range(40, 0, -1)]
-    # A spawn 45 yards back, 10 yards off the way: another camp. One beside the fight is its own.
-    b = _retreating(monkeypatch, trail, spawns=[(-45.0, 10.0, 0.0, 0.0), (5.0, 5.0, 0.0, 0.0)])
-    route = b._retreat_route(10)
-    assert min(p[0] for p in route.points) > -45.0 + 15.0 - 10.0, "cut short of its reach"
-    near = _retreating(monkeypatch, trail, spawns=[(-12.0, 0.0, 0.0, 0.0)])
-    near._world_position = lambda: (0.0, 40.0)                  # the fight 40 yards on
-    assert near._retreat_route(10) is None, "under twenty yards of clear way"
-
-
-def test_a_retreat_ends_when_combat_does(monkeypatch):
-    trail = [(-3.0 * i, 0.0) for i in range(40, 0, -1)]
-    b = _retreating(monkeypatch, trail)
-    reads = iter([{"vitals.combat": True, "char.level": 10}, {"vitals.combat": False},
-                  {"vitals.combat": False, "vitals.hp": 0.3}])
-    b._read = lambda: next(reads)
-    walks = []
-
-    def follow(route, *, timeout_s, abort):
-        walks.append((route.source, timeout_s))
-        assert abort() is True, "combat over: the walk stops"
-        return SimpleNamespace(outcome=None)
-
-    b.client.travel.follow = follow
-    assert b._retreat() is True and walks == [("retreat", 15.0)]
