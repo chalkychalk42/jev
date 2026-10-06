@@ -421,6 +421,7 @@ class Fought(StrEnum):
     REFUSED = "refused"
     INTERRUPTED = "interrupted"
     HELD = "held"                    # the selected unit held out of it (Polymorph): the other next
+    USED = "used"                    # a quest's item used on it, and the quest complete (V387)
 
     @property
     def ok(self) -> bool:

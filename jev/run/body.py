@@ -33,6 +33,7 @@ from jev.clients.talents import TALENTS_SCHEMA, TalentDesk, build_for
 from jev.clients.targeting import FaceCode, Targeting
 from jev.clients.taxi import TaxiDesk
 from jev.clients.trainer import TrainerDesk
+from jev.clients.use import UseOn
 from jev.clients.vendor import Vended, Vendor
 from jev.clients.windows import close_observed
 from jev.coach.policy import BAGS_LOW, Context, service
@@ -841,6 +842,9 @@ class LiveBody:
                                                     destination))
         if isinstance(destination, ObjectiveTarget) and destination.kind == "explore":
             return self._explore(destination, complete_reader)
+        # The quest's item used on its creature: a hunt whose pulls are uses (V387).
+        use = (self._use_on(destination.required_id, complete_reader)
+               if isinstance(destination, ObjectiveTarget) and destination.uses_item else None)
         if (isinstance(destination, ObjectiveTarget) and destination.kind == "loot"
                 and destination.target_kind == "gameobject"):
             return self._gather(node, destination, progress_reader, complete_reader)
@@ -867,7 +871,7 @@ class LiveBody:
         # hunter walked into melee pressed it 0.06 times a kill.
         caster = profile.caster or profile.shooter
         level = values.get("char.level") if isinstance(values.get("char.level"), int) else None
-        hunt = Hunt(fight=self.fight, rest=self.rest, read=self._read,
+        hunt = Hunt(fight=use or self.fight, rest=self.rest, read=self._read,
                     approach=self._approach, progress=progress_reader, loot=self.loot, say=self.say,
                     is_complete=complete_reader, service_needed=self._service_needed,
                     stations=self._stations("hunt.station", objective_key(wanted, node.id)),
@@ -880,8 +884,10 @@ class LiveBody:
                     where=self._world_position)
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
         grind = node.kind in (StepKind.GRIND, StepKind.DING_GATE)
-        # Every held quest's creatures round the hunt are its quarry too (V363).
-        held = self._held(destination.world, yards, wanted, level, grind)
+        # Every held quest's creatures round the hunt are its quarry too (V363); not a use's,
+        # whose pulls are its own creature (V387).
+        held = Held() if use is not None else self._held(destination.world, yards, wanted,
+                                                          level, grind)
 
         def quarry(own):
             return Quarry(own, held.names, held.high) if held else own
@@ -935,6 +941,16 @@ class LiveBody:
                      f"{len(found.names)} kind(s), {len(found.points)} spawn(s) "
                      f"(quests {', '.join(str(q) for q in found.quests)})")
         return found
+
+    def _use_on(self, item_id: int, complete: Callable[[], bool | None]) -> UseOn:
+        """What an item-use objective's hunt pulls with (`jev.clients.use`, V387): the item
+        used on the step's creature, the character's fight for anything else. The creatures
+        the guide's items are used on are those a charm of the character's may be."""
+        charms = frozenset(name_id(t.target_name) for n in self.graph.nodes
+                           for t in n.objective_targets if t.uses_item)
+        return UseOn(fight=self.fight, read=self._read, item_id=item_id, complete=complete,
+                     hid=self.client.hid, charms=charms, window_origin=self.client.origin,
+                     window_size=self.client.size)
 
     def _hunt_place(self, key) -> Place:
         """Where the last hunt of this step and objective got to (`Place`, V343), kept while

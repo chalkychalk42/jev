@@ -59,6 +59,15 @@ class ObjectiveTarget(BaseModel):
     hunt_yards: float | None = None
     blocked_reason: str | None = None
 
+    @property
+    def uses_item(self) -> bool:
+        """Is this the event a quest's own item makes on a creature (V387): `required_id` the
+        item, the target the living creature it is used on, done by the quest's positive
+        complete flag alone? Written as an `event`, which a Jev from before it leaves off the
+        route as it always has, so a guide made with it loads in either."""
+        return (self.kind == "event" and self.required_id is not None
+                and self.target_kind == "creature" and bool(self.target_name))
+
 
 class FailWhen(StrEnum):
     """Why a step gives up. Closed set, dispatched on by the tracker."""
