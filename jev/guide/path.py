@@ -24,7 +24,9 @@ If neither has an answer the result is `NOPATH` and the caller fails with the se
 
 Over them all, **`TeleportQuery`** (V305): where walking does not get there, a route may walk
 into a teleport's trigger and on from where it puts the character - the Darnassus portal down
-to Rut'theran, which no walk on the tree reaches.
+to Rut'theran, which no walk on the tree reaches. And through lifts (V382): a platform that goes
+up and down between two stops, Thunder Bluff's between its mesas and the ground, ridden by a
+follower that can ride one.
 
 Measured on the first real query, Northshire courtyard to Marshal McBride — the leg that
 defeated straight-line travel nine times:
@@ -165,6 +167,224 @@ def load_teleports(db_path: str) -> tuple[Teleport, ...]:
     return tuple(out)
 
 
+# Decks beside lifts' stops, found once a process (`TeleportQuery._decks`): (map, stop) -> spots.
+_DECKS: dict[tuple, list] = {}
+
+
+# Lifts (V382): a platform that goes straight up and down between two stops, a `gameobject` of
+# type 11 (GAMEOBJECT_TYPE_TRANSPORT) whose path is its rows of `TransportAnimation.dbc`. Thunder
+# Bluff's four Mesa Elevators are the only way between its mesas and the ground, as the
+# Undercity's three are between its city and the ruins over it; the navmesh has neither, and
+# 27 of the hive's 315 bots stood on the mesas at once with no way down (6 Oct). Its stops are
+# at least this far apart in height...
+LIFT_RISE_YARDS = 10.0
+# ...and the platform moves no more than this in x and y: a tram or a cart is no lift.
+LIFT_FLAT_YARDS = 1.0
+# A stop is where the platform stands this long at least; it leaves once a cycle.
+LIFT_DWELL_MS = 1000
+# The decks beside a stop: the navmesh's floors within these heights of it, looked for on
+# rings round the shaft. The shaft has no floor of its own; at the foot of Thunder Bluff's
+# lifts the ground under the platform's bottom stop is 9 yards below it (measured on the map 1
+# tiles, 6 Oct), and the deck round it a small island of its own.
+LIFT_DECK_ABOVE = 3.0
+LIFT_DECK_BELOW = 10.0
+LIFT_DECK_RINGS = (0.0, 3.0, 6.0, 9.0, 12.0)
+LIFT_DECK_BEARINGS = 12
+LIFT_DECKS = 3                     # floors tried at a stop, nearest its height first
+LIFT_SAME_FLOOR = 2.0              # two decks closer than this in height are one floor
+# A walk to a lift ends this near its deck spot, in x and y.
+LIFT_BOARD_YARDS = 1.5
+# What a ride costs a plan, in yards: its wait and the ride itself, at running pace.
+LIFT_YARDS_PER_S = 7.0
+# Of two platforms in one shaft the one that goes farther is the lift (the Gnomeregan Vator's
+# Plunger rides 12 yards over it).
+LIFT_SHAFT_YARDS = 3.0
+
+
+@dataclass(frozen=True)
+class LiftStop:
+    """Where a lift's platform stands, and when in its cycle it comes and goes."""
+
+    z: float
+    arrives_ms: int
+    leaves_ms: int
+
+
+@dataclass(frozen=True)
+class Lift:
+    """One platform (V382): its shaft at (`x`, `y`) on `map_id`, its two stops, lowest first,
+    and its cycle. The server moves it by the time of day alone (`ElevatorTransport::Update`:
+    the server's clock modulo the cycle), which nothing a client reads shows."""
+
+    guid: int
+    entry: int
+    name: str
+    map_id: int
+    x: float
+    y: float
+    period_ms: int
+    stops: tuple[LiftStop, LiftStop]
+
+    def ride_s(self, frm: int, to: int) -> float:
+        """From leaving stop `frm` to standing at stop `to`."""
+        return ((self.stops[to].arrives_ms - self.stops[frm].leaves_ms) % self.period_ms) / 1000.0
+
+    def wait_s(self) -> float:
+        """The wait at a stop for the platform to leave it, on the average: it leaves once a
+        cycle, and a character comes to the stop at any moment of it."""
+        return self.period_ms / 2000.0
+
+    def legs(self) -> tuple[LiftLeg, LiftLeg]:
+        return (LiftLeg(self, 0, 1), LiftLeg(self, 1, 0))
+
+
+@dataclass(frozen=True)
+class LiftLeg:
+    """A ride on `lift` from stop `frm` to stop `to`: walked in to `at`, a deck beside the shaft
+    at `frm`'s height, and walked on from `exit`, beside it at `to`'s. A plan's own leg has
+    them; the leg `Lift.legs` gives has its stops' middles."""
+
+    lift: Lift
+    frm: int
+    to: int
+    at: Point | None = None
+    exit: Point | None = None
+
+    @property
+    def board(self) -> Point:
+        """The platform's middle at the stop it is boarded at."""
+        return (self.lift.x, self.lift.y, self.lift.stops[self.frm].z)
+
+    @property
+    def alight(self) -> Point:
+        """...and at the stop it is left at."""
+        return (self.lift.x, self.lift.y, self.lift.stops[self.to].z)
+
+    @property
+    def up(self) -> bool:
+        return self.to > self.frm
+
+    @property
+    def wait_s(self) -> float:
+        return self.lift.wait_s()
+
+    @property
+    def ride_s(self) -> float:
+        return self.lift.ride_s(self.frm, self.to)
+
+    @property
+    def label(self) -> str:
+        return (f"the {self.lift.name} {'up' if self.up else 'down'} at "
+                f"({self.lift.x:.0f}, {self.lift.y:.0f})")
+
+    def cost_yards(self) -> float:
+        return (self.wait_s + self.ride_s) * LIFT_YARDS_PER_S
+
+    def placed(self, at: Point, exit: Point) -> LiftLeg:
+        return LiftLeg(self.lift, self.frm, self.to, tuple(at), tuple(exit))
+
+
+def lift_stops(nodes: Iterable[tuple[int, float]]) -> tuple[int, list[LiftStop]] | None:
+    """A platform's cycle and its stops from its path's (time, height) nodes: where it stands
+    `LIFT_DWELL_MS` or more, the stand that ends the cycle and the one that begins it being one
+    (the server moves it by its clock modulo the last node's time)."""
+    nodes = sorted(nodes)
+    if len(nodes) < 2 or nodes[-1][0] <= 0:
+        return None
+    period = nodes[-1][0]
+    runs: list[list[float]] = []                 # [arrives, leaves, z]
+    for t, z in nodes:
+        if runs and abs(runs[-1][2] - z) < 0.05:
+            runs[-1][1] = t
+        else:
+            runs.append([t, t, z])
+    if (len(runs) > 1 and abs(runs[0][2] - runs[-1][2]) < 0.05 and runs[0][0] == 0
+            and runs[-1][1] == period):
+        first, last = runs.pop(0), runs.pop()
+        runs.append([last[0], first[1] + period, first[2]])
+    stops = [LiftStop(z=r[2], arrives_ms=int(r[0]) % period, leaves_ms=int(r[1]) % period)
+             for r in runs if r[1] - r[0] >= LIFT_DWELL_MS]
+    return period, stops
+
+
+@lru_cache(maxsize=4)
+def load_lifts(db_path: str) -> tuple[Lift, ...]:
+    """The lifts a walk may ride (V382), from the world database: every spawned `gameobject`
+    of type 11 whose path in `TransportAnimation.dbc` goes straight up and down (`LIFT_FLAT_
+    YARDS`) between two stops `LIFT_RISE_YARDS` apart or more. Thunder Bluff's four Mesa
+    Elevators and the Undercity's three Undervators among them; the doors of the Undercity's
+    lift shafts move 5 and 8 yards and are none. None when the database cannot be read."""
+    from jev.play.world_knowledge import readonly_uri
+
+    try:
+        con = sqlite3.connect(readonly_uri(pathlib.Path(db_path)), uri=True, timeout=1)
+        try:
+            spawns = con.execute(
+                "select g.guid, g.id, t.name, g.map, g.position_x, g.position_y, g.position_z"
+                " from world_gameobject g join world_gameobject_template t on t.entry = g.id"
+                " where t.type = 11 order by g.guid").fetchall()
+            paths: dict[int, list] = {}
+            for entry, t, x, y, z in con.execute(
+                    "select c1, c2, c3, c4, c5 from dbc_TransportAnimation order by c1, c2"):
+                paths.setdefault(entry, []).append((t, _as_float(x), _as_float(y), _as_float(z)))
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return ()
+    found = []
+    for guid, entry, name, map_id, x, y, z in spawns:
+        path = paths.get(entry)
+        if not path or max(math.hypot(px, py) for _, px, py, _ in path) > LIFT_FLAT_YARDS:
+            continue
+        cycle = lift_stops((t, pz) for t, _, _, pz in path)
+        if cycle is None:
+            continue
+        period, stops = cycle
+        if len(stops) != 2:
+            continue
+        stops.sort(key=lambda s: s.z)
+        if stops[1].z - stops[0].z < LIFT_RISE_YARDS:
+            continue
+        z0 = float(z)
+        found.append(Lift(guid=guid, entry=entry, name=name or "lift", map_id=map_id,
+                          x=float(x), y=float(y), period_ms=period,
+                          stops=tuple(LiftStop(z0 + s.z, s.arrives_ms, s.leaves_ms)
+                                      for s in stops)))
+    rise = {lift.guid: lift.stops[1].z - lift.stops[0].z for lift in found}
+    return tuple(lift for lift in found
+                 if not any(other.guid != lift.guid and other.map_id == lift.map_id
+                            and math.dist((other.x, other.y), (lift.x, lift.y)) <= LIFT_SHAFT_YARDS
+                            and rise[other.guid] > rise[lift.guid] for other in found))
+
+
+def lift_decks(query: PathQuery, map_id: int, stop: Point) -> list[Point]:
+    """The navmesh's floors beside a lift's stop (`LIFT_DECK_ABOVE`, `LIFT_DECK_BELOW`), the
+    nearest the shaft on each, nearest the stop's height first, `LIFT_DECKS` at most."""
+    x, y, z = stop
+    floors: list[tuple[float, float, Point]] = []        # (|dz|, distance, spot)
+    for radius in LIFT_DECK_RINGS:
+        for k in range(LIFT_DECK_BEARINGS if radius else 1):
+            angle = 2 * math.pi * k / LIFT_DECK_BEARINGS
+            probe = (x + radius * math.cos(angle), y + radius * math.sin(angle))
+            for height in (z, z - LIFT_DECK_BELOW / 2, z - LIFT_DECK_BELOW):
+                snapped = query.path(map_id, (*probe, height), (*probe, height))
+                if (snapped.status not in (PathStatus.COMPLETE, PathStatus.PARTIAL)
+                        or not snapped.points):
+                    continue
+                spot = tuple(snapped.points[0])
+                if (math.dist(spot[:2], probe) > 1.0
+                        or not -LIFT_DECK_BELOW <= spot[2] - z <= LIFT_DECK_ABOVE):
+                    continue
+                gap = math.dist(spot[:2], (x, y))
+                same = [i for i, f in enumerate(floors) if abs(f[2][2] - spot[2]) < LIFT_SAME_FLOOR]
+                if not same:
+                    floors.append((abs(spot[2] - z), gap, spot))
+                elif gap < floors[same[0]][1]:
+                    floors[same[0]] = (abs(spot[2] - z), gap, spot)
+    floors.sort(key=lambda f: f[0])
+    return [f[2] for f in floors[:LIFT_DECKS]]
+
+
 @dataclass(frozen=True)
 class Path:
     """Waypoints in **world yards**, start first, destination last.
@@ -176,7 +396,7 @@ class Path:
     points: tuple[Point, ...] = ()
     source: str = ""
     detail: str = ""
-    teleport: Teleport | None = None
+    teleport: Teleport | LiftLeg | None = None   # or a lift's ride (V382)
     jump: int = 0
     # A walk refused through a death camp (`route_memory.CAMP_REFUSED`): where the camp's
     # death lies, (x, y), for whoever waits for it to end (V334).
@@ -481,25 +701,39 @@ class TeleportQuery:
     portal and 97 on from where it puts the character to Nessa Shadowsong (28 Sep).
     """
 
-    def __init__(self, inner: PathQuery, teleports: Iterable[Teleport]) -> None:
+    def __init__(self, inner: PathQuery, teleports: Iterable[Teleport],
+                 lifts: Iterable[Lift] = (), can_ride: Callable[[], bool] | None = None) -> None:
         self.inner = inner
         self.teleports = tuple(teleports)
         self.on_map: dict[int, tuple[Teleport, ...]] = {}
         for teleport in self.teleports:
             self.on_map[teleport.map_id] = (*self.on_map.get(teleport.map_id, ()), teleport)
+        # Lifts (V382), ridden only where the walk's follower can ride one (`can_ride`): the
+        # live client's keys cannot see a platform, and its radio paints no height.
+        self.lifts = tuple(lifts)
+        self.can_ride = can_ride
+        self.legs_on_map: dict[int, tuple[LiftLeg, ...]] = {}
+        for lift in self.lifts:
+            self.legs_on_map[lift.map_id] = (*self.legs_on_map.get(lift.map_id, ()), *lift.legs())
         self._walks_on: dict[tuple, tuple[float, Path]] = {}    # (map, trigger, end) -> kept
 
     def estimate(self):
         """The planner for a walk's cost (`jev.run.client.Client.plan_to`): the one below's
-        estimate, through the same teleports."""
+        estimate, through the same teleports and lifts."""
         estimate = getattr(self.inner, "estimate", None)
-        return TeleportQuery(estimate(), self.teleports) if callable(estimate) else self
+        return (TeleportQuery(estimate(), self.teleports, self.lifts, self.can_ride)
+                if callable(estimate) else self)
+
+    def _legs(self, map_id: int) -> tuple[LiftLeg, ...]:
+        legs = self.legs_on_map.get(map_id, ())
+        return legs if legs and self.can_ride is not None and self.can_ride() else ()
 
     def path(self, map_id: int, start: Point, end: Point) -> Path:
         direct = self.inner.path(map_id, start, end)
         teleports = self.on_map.get(map_id, ())
+        legs = self._legs(map_id)
         # A point asked for itself is a floor looked for, not a walk.
-        if not teleports or math.dist(start, end) < LINK_ROOM_YARDS:
+        if (not teleports and not legs) or math.dist(start, end) < LINK_ROOM_YARDS:
             return direct
         origin = direct.points[0] if direct.points else start
         straight = math.dist(origin, end)
@@ -525,22 +759,66 @@ class TeleportQuery:
                 continue
             length = walk_in.length_yards() + walk_on.length_yards() + LINK_COST_YARDS
             if (limit is None or length < limit) and (best is None or length < best[0]):
-                best = (length, teleport, walk_in, walk_on)
+                best = (length, teleport, walk_in.points, walk_on)
+        for leg in legs:
+            least = math.dist(origin, leg.board) + math.dist(leg.alight, end) + leg.cost_yards()
+            if (least >= limit if limit is not None
+                    else least > LINK_REACH * straight + LINK_SLACK_YARDS + leg.cost_yards()):
+                continue
+            ridden = self._ride(map_id, leg, start, end)
+            if ridden is None:
+                continue
+            placed, walk_in, walk_on = ridden
+            length = Path(PathStatus.COMPLETE, walk_in).length_yards() + walk_on.length_yards() \
+                + leg.cost_yards()
+            if (limit is None or length < limit) and (best is None or length < best[0]):
+                best = (length, placed, walk_in, walk_on)
         if best is None:
             return direct
-        _, teleport, walk_in, walk_on = best
-        return Path(PathStatus.COMPLETE, walk_in.points + walk_on.points, walk_in.source,
-                    f"through areatrigger {teleport.trigger_id} ({teleport.name})",
-                    teleport=teleport, jump=len(walk_in.points))
+        _, link, walk_in, walk_on = best
+        label = (link.label if isinstance(link, LiftLeg)
+                 else f"areatrigger {link.trigger_id} ({link.name})")
+        return Path(PathStatus.COMPLETE, tuple(walk_in) + walk_on.points, walk_on.source,
+                    f"through {label}", teleport=link, jump=len(walk_in))
 
-    def _walk_on(self, map_id: int, teleport: Teleport, end: Point) -> Path:
-        """The walk on from `teleport`'s exit to `end`, kept `WALK_ON_KEEP_S`."""
+    def _ride(self, map_id: int, leg: LiftLeg, start: Point, end: Point):
+        """The way through a lift (V382): a walk to a deck at the stop it is boarded at and a
+        walk on from one at the stop it is left at, both complete; the deck nearest each stop's
+        height first (`lift_decks`). `None` when there is no such way."""
+        walk_on = None
+        for exit in self._decks(map_id, leg.alight):
+            walk_on = self._walk_on(map_id, (leg.lift.guid, leg.to, exit), end, exit)
+            if walk_on.status is PathStatus.COMPLETE and walk_on.points:
+                break
+            walk_on = None
+        if walk_on is None:
+            return None
+        for at in self._decks(map_id, leg.board):
+            walk_in = self.inner.path(map_id, start, at)
+            if walk_in.status is not PathStatus.COMPLETE or not walk_in.points:
+                continue
+            last = walk_in.points[-1]
+            if math.dist(last[:2], at[:2]) > LIFT_BOARD_YARDS or abs(last[2] - at[2]) > LIFT_DECK_ABOVE:
+                continue
+            points = walk_in.points if len(walk_in.points) >= 2 else (last, last)
+            return leg.placed(at, exit), points, walk_on
+        return None
+
+    def _decks(self, map_id: int, stop: Point) -> list[Point]:
+        key = (map_id, tuple(round(v, 1) for v in stop))
+        decks = _DECKS.get(key)
+        if decks is None:
+            decks = _DECKS[key] = lift_decks(self.inner, map_id, stop)
+        return decks
+
+    def _walk_on(self, map_id: int, teleport, end: Point, start: Point | None = None) -> Path:
+        """The walk on from `teleport`'s exit (or `start`) to `end`, kept `WALK_ON_KEEP_S`."""
         now = time.monotonic()
-        key = (map_id, teleport.trigger_id, tuple(end))
+        key = (map_id, getattr(teleport, "trigger_id", teleport), tuple(end))
         kept = self._walks_on.get(key)
         if kept is not None and now - kept[0] <= WALK_ON_KEEP_S:
             return kept[1]
-        walk_on = self.inner.path(map_id, teleport.exit, end)
+        walk_on = self.inner.path(map_id, teleport.exit if start is None else start, end)
         self._walks_on = {k: v for k, v in self._walks_on.items()
                           if now - v[0] <= WALK_ON_KEEP_S}
         self._walks_on[key] = (now, walk_on)

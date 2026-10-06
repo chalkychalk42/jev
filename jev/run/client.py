@@ -40,7 +40,8 @@ from jev.guide.coords import (
 )
 from jev.guide.exposure import ExposureQuery
 from jev.guide.path import Path as Route
-from jev.guide.path import PathQuery, PathStatus, TeleportQuery, load_teleports, stop_short_of
+from jev.guide.path import (LIFT_BOARD_YARDS, LiftLeg, PathQuery, PathStatus, TeleportQuery,
+                            load_lifts, load_teleports, stop_short_of)
 from jev.guide.route_memory import CAMP_REFUSED, AvoidingQuery, DangerAvoidingQuery
 from jev.perceive import radio_frame
 from jev.perceive.questlog import QuestLog
@@ -387,6 +388,24 @@ class Client:
             landed = self._landed(teleport, since)
         return landed
 
+    def _ride(self, lift: LiftLeg) -> tuple[float, float, float] | None:
+        """Ride `lift` from its deck (V382): where the follower's ride left the character, or
+        `None` - not at the deck the walk was to end at, or no ride. The follower stands and
+        waits for the platform, as a player does, and rides it (`travel.ride`)."""
+        self.ride_detail = None
+        ride = getattr(self.travel, "ride", None)
+        here = self.travel.position()
+        at = map_to_world(here[0], here[1], self.bounds) if here is not None else None
+        arrival = getattr(self.travel, "arrival_yards", None)
+        near = LIFT_BOARD_YARDS + (arrival if isinstance(arrival, float | int) else 0.0)
+        if ride is None or at is None or math.dist(at[:2], lift.at[:2]) > near:
+            return None
+        self._say(f"  at {lift.label}: waiting for it (about {lift.wait_s:.0f} s), then "
+                  f"{lift.ride_s:.0f} s aboard")
+        landed = ride(lift)
+        self.ride_detail = getattr(self.travel, "ride_detail", None)
+        return tuple(landed) if landed is not None else None
+
     def _on_foot(self):
         """The planner without its teleports (V305): a re-plan and an early arrival's walk are
         walked by the follower, which knows nothing of a jump."""
@@ -617,6 +636,11 @@ class Client:
         gone off its route. From where the character lands the rest is planned again and
         walked, `TELEPORTS_MAX` teleports at most. A teleport that does not move it ends the
         walk short of the destination, said so.
+
+        A route through a lift (V382) is walked to the deck beside it, and the follower rides
+        it (`travel.ride`, which only a follower that can ride one has: the planner offers no
+        lift to any other); from where the ride leaves the character the rest is planned
+        again, as from a teleport's exit. A ride that does not happen ends the walk short.
         """
         self.last_plan = None
         if self.travel is None or self.query is None or self.bounds is None:
@@ -631,9 +655,11 @@ class Client:
         teleports = 0
         while True:
             teleport = path.teleport if path.usable else None
+            lift = teleport if isinstance(teleport, LiftLeg) else None
             if teleport is not None and teleports >= TELEPORTS_MAX:
                 self._say(f"  {teleports} teleports on this walk already: not through "
-                          f"areatrigger {teleport.trigger_id}")
+                          + (lift.label if lift is not None
+                             else f"areatrigger {teleport.trigger_id}"))
                 return False
             if teleport is not None:
                 path = path.walk_in()
@@ -708,12 +734,13 @@ class Client:
 
             # Into a trigger the walk stops well inside it, and a jump to its exit ends it.
             since = time.monotonic()
-            abort = None if teleport is None else (
+            abort = None if teleport is None or lift is not None else (
                 lambda teleport=teleport, since=since: self._landed(teleport, since) is not None)
             arrival = getattr(self.travel, "arrival_yards", None)
             tighten = teleport is not None and isinstance(arrival, float | int)
             if tighten:
-                self.travel.arrival_yards = max(1.0, min(arrival, teleport.room(world) / 2))
+                self.travel.arrival_yards = max(1.0, min(
+                    arrival, LIFT_BOARD_YARDS if lift is not None else teleport.room(world) / 2))
             try:
                 result = self.travel.follow(path, timeout_s=walk_s, replan=replan,
                                             memory=self.route_memory, reach=reach, abort=abort)
@@ -728,7 +755,9 @@ class Client:
                         result = self.travel.follow(path, timeout_s=walk_s, replan=replan,
                                                     memory=self.route_memory, reach=reach,
                                                     abort=abort)
-                landed = None if teleport is None else self._through(teleport, since, world)
+                landed = (None if teleport is None
+                          else self._ride(lift) if lift is not None
+                          else self._through(teleport, since, world))
             except BaseException:
                 self._following = ()             # a walk given up is no route to track against
                 raise
@@ -740,8 +769,10 @@ class Client:
             teleports += 1
             hw = landed[:2]
             self._ground = landed                 # where the teleport put it, height and all
-            self._say(f"  through areatrigger {teleport.trigger_id}: landed at "
-                      f"({landed[0]:.1f}, {landed[1]:.1f}), planning on from there")
+            self._say(f"  through {lift.label if lift is not None else 'areatrigger %d' % teleport.trigger_id}"
+                      f": landed at ({landed[0]:.1f}, {landed[1]:.1f}"
+                      + (f", {landed[2]:.1f}" if lift is not None else "")
+                      + "), planning on from there")
             world = destination
             if math.dist(hw, destination[:2]) <= max(stop_short, arrival or 0.0):
                 self._following = ()
@@ -755,7 +786,10 @@ class Client:
         arrived = result.outcome.value == "arrived" and teleport is None
         self.last_headway = None
         self.last_distance = math.dist(began[:2], world[:2])
-        if teleport is not None:
+        if lift is not None:
+            # A ride that did not happen: short of where it was going, and no wedge either.
+            self._say(f"  {lift.label}: no ride ({getattr(self, 'ride_detail', None) or 'not at its deck'})")
+        elif teleport is not None:
             # Walked into a teleport that did not move the character: short of where it was
             # going, and no wedge for `LiveBody._note_wedged` to count.
             self._say(f"  areatrigger {teleport.trigger_id} ({teleport.name}) did not move "
@@ -986,11 +1020,12 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                 arrival_yards: float, say: Callable[[str], None] | None = None,
                 zones: dict[int, ZoneBounds] | None = None,
                 zone_names: dict[int, str] | None = None,
-                route_memory=None, danger=None, teleports=None) -> Client:
+                route_memory=None, danger=None, teleports=None, lifts=None) -> Client:
     """Give a client the ability to walk. Separate because reading needs no planner.
 
     `teleports`, the ones a walk may go through (V305): by default the world database's
-    (`load_teleports`); none, planning on foot alone."""
+    (`load_teleports`); none, planning on foot alone. `lifts`, the ones it may ride (V382), the
+    same; ridden only while the client's follower can ride one (`travel.ride`)."""
     client.bounds = bounds
     client.route_memory = route_memory
     root = Path(__file__).resolve().parents[2]
@@ -1042,8 +1077,12 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     # walks is planned by the layers below, clear of all they keep clear of.
     if teleports is None:
         teleports = load_teleports(str(root / "data/knowledge/tbc-243.sqlite"))
-    if teleports:
-        client.query = TeleportQuery(client.query, teleports)
+    if lifts is None:
+        lifts = load_lifts(str(root / "data/knowledge/tbc-243.sqlite"))
+    if teleports or lifts:
+        client.query = TeleportQuery(
+            client.query, teleports, lifts,
+            can_ride=lambda: callable(getattr(client.travel, "ride", None)))
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards,
