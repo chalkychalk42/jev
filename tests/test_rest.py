@@ -97,28 +97,3 @@ def test_nothing_to_drink_and_no_regeneration_is_a_timeout_not_a_stop(clock):
                 use_item=lambda role: False)
     assert rest.until(0.95, role=Role.DRINK) is Rested.TIMEOUT
     assert "no longer rising" in rest.detail
-
-
-def test_a_bandage_goes_on_before_a_meal_for_health_and_the_meal_waits_for_it(clock):
-    """V368: a bandage heals in six seconds what food takes twenty for; eating at once would
-    break its channel."""
-    hurt = {"vitals.hp": 0.5, "vitals.power": 1.0, "vitals.combat": False,
-            "bars.usable": 0b100000000000, "char.class_id": 2, "char.race_id": 1}
-    looks = iter([hurt, *[{**hurt, "vitals.hp": 0.5 + 0.04 * i} for i in range(1, 8)],
-                  {**hurt, "vitals.hp": 0.96}])
-    bandaged, hid = [], _Hid()
-    rest = Rest(hid=hid, read=lambda: next(looks), profile=for_class(2, 1),
-                bandage=lambda: bandaged.append(clock[0]) or True)
-    assert rest.until(0.95) is Rested.HEALTHY
-    assert bandaged == [0.0]
-    assert hid.taps == ["equals"], "the food after the bandage's seven seconds"
-
-
-def test_without_a_bandage_the_meal_is_as_before(clock):
-    hurt = {"vitals.hp": 0.5, "vitals.power": 1.0, "vitals.combat": False,
-            "bars.usable": 0b100000000000, "char.class_id": 2, "char.race_id": 1}
-    looks = iter([hurt, {**hurt, "vitals.hp": 0.96}])
-    hid = _Hid()
-    rest = Rest(hid=hid, read=lambda: next(looks), profile=for_class(2, 1),
-                bandage=lambda: False)
-    assert rest.until(0.95) is Rested.HEALTHY and hid.taps == ["equals"]

@@ -18,7 +18,6 @@ button and waiting for health that is never coming.
 
 from __future__ import annotations
 
-import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -41,8 +40,6 @@ RISE = 0.005
 STALL_S = 5.0
 TAKES = 3
 REGEN_STALL_S = 10.0
-# A bandage channels for six seconds (Linen: 66 health); the meal waits this long after one.
-BANDAGE_S = 7.0
 
 
 class Rested(StrEnum):
@@ -65,9 +62,6 @@ class Rest:
     # When the bar's slot for the role is empty: eat or drink from the bags instead, `True`
     # if something was taken (a caster's conjured water, V166).
     use_item: Callable[[Role], bool] | None = None
-    # A bandage from the bags before a meal for health (V368), `True` if one was put on: it
-    # heals in six seconds what food takes twenty for, and the meal waits for it.
-    bandage: Callable[[], bool] | None = None
 
     slot: int | None = field(default=None, init=False)
     started_at: float | None = field(default=None, init=False)
@@ -124,7 +118,6 @@ class Rest:
         regen = dict.fromkeys(marks, False)      # nothing left to take for this role
         best: dict[Role, float | None] = dict.fromkeys(marks)
         rose_at = dict.fromkeys(marks, time.monotonic())
-        bandaged_at = None if Role.FOOD in marks and self.bandage is not None else -math.inf
         event("rest.request", data={"marks": {r.value: f for r, f in marks.items()},
                                     "timeout_s": timeout_s})
         while time.monotonic() < deadline:
@@ -142,13 +135,6 @@ class Rest:
                 self.detail = "in combat; not a moment to eat"
                 return Rested.INTERRUPTED
             now = time.monotonic()
-            if Role.FOOD in short and bandaged_at is None:
-                bandaged_at = now if self.bandage() else -math.inf
-                if bandaged_at > -math.inf:
-                    event("rest.bandage", data={"hp": v.get("vitals.hp")})
-            if now - bandaged_at < BANDAGE_S:
-                time.sleep(1.0)              # eating would break the bandage's channel
-                continue
             for role in short:
                 level = v.get(gauges[role])
                 if best[role] is None or level > best[role] + RISE:

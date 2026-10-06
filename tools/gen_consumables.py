@@ -9,11 +9,6 @@ or 85 (mana: drink), or both.
 Each row: `role` ("food", "drink" or "both"), `level` (required to use it), `item_level`
 (the better food of two is the higher) and `conjured` (the item vanishes on logout).
 
-And what a losing fight drinks or a rest binds (V368): a healing potion (class 0, subclass 1,
-whose spell heals at once: effect 10, the potions' shared cooldown category 4), role "potion";
-a bandage (subclass 7, a periodic heal, aura 8, needing First Aid: skill 129 at `skill`), role
-"bandage". Each with `heals`, the health it restores at the mean roll.
-
 Usage: .venv/bin/python tools/gen_consumables.py
 """
 
@@ -29,10 +24,6 @@ DB = ROOT / "data/knowledge/tbc-243.sqlite"
 OUT = ROOT / "content/tbc/consumables.json"
 AURA_FOOD, AURA_DRINK = 84, 85
 ITEM_FLAG_CONJURED = 0x2
-SUBCLASS_POTION, SUBCLASS_BANDAGE = 1, 7
-EFFECT_HEAL, AURA_PERIODIC_HEAL = 10, 8
-CATEGORY_POTION = 4
-SKILL_FIRST_AID = 129
 
 
 def generate(db: sqlite3.Connection) -> dict:
@@ -50,25 +41,6 @@ def generate(db: sqlite3.Connection) -> dict:
         out[str(entry)] = {"role": "both" if food and drink else "food" if food else "drink",
                            "level": level or 0, "item_level": item_level or 0,
                            "conjured": bool((flags or 0) & ITEM_FLAG_CONJURED)}
-    for (entry, subclass, level, item_level, flags, skill, rank, category, effect, aura, points,
-         sides, amplitude, duration) in db.execute(
-            "SELECT i.entry, i.subclass, i.RequiredLevel, i.ItemLevel, i.Flags, i.RequiredSkill, "
-            "i.RequiredSkillRank, i.spellcategory_1, s.Effect1, s.EffectApplyAuraName1, "
-            "s.EffectBasePoints1, s.EffectDieSides1, s.EffectAmplitude1, d.c1 "
-            "FROM world_item_template i JOIN world_spell_template s ON s.Id = i.spellid_1 "
-            "LEFT JOIN dbc_SpellDuration d ON d.id = s.DurationIndex "
-            "WHERE i.class = 0 AND i.subclass IN (?, ?) AND i.spellid_1 > 0 ORDER BY i.entry",
-            (SUBCLASS_POTION, SUBCLASS_BANDAGE)):
-        if subclass == SUBCLASS_POTION and effect == EFFECT_HEAL and category == CATEGORY_POTION:
-            row = {"role": "potion", "heals": (points or 0) + 1 + ((sides or 1) - 1) / 2}
-        elif (subclass == SUBCLASS_BANDAGE and aura == AURA_PERIODIC_HEAL
-              and skill == SKILL_FIRST_AID and amplitude and duration):
-            row = {"role": "bandage", "skill": rank or 0,
-                   "heals": ((points or 0) + 1) * (duration // amplitude)}
-        else:
-            continue
-        out[str(entry)] = {**row, "level": level or 0, "item_level": item_level or 0,
-                           "conjured": bool((flags or 0) & ITEM_FLAG_CONJURED)}
     return out
 
 
@@ -81,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     table = generate(db)
     args.out.write_text(json.dumps({"format": 1, "items": table}, indent=1) + "\n",
                         encoding="utf-8")
-    print(f"{len(table)} foods, drinks, potions and bandages -> {args.out}")
+    print(f"{len(table)} foods and drinks -> {args.out}")
     return 0
 
 

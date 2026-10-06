@@ -7,7 +7,6 @@ the runtime's arm, using the existing planner, locator, quest UI, Fight, Loot an
 from __future__ import annotations
 
 import contextlib
-import inspect
 import json
 import math
 import threading
@@ -259,13 +258,6 @@ REST_BEARINGS = 16
 # A step back, about two yards, before a second look at a spawn point that showed nothing.
 GATHER_STEP_BACK_S = 0.6
 MERCHANT_UNREACHABLE = frozenset({"not_visible", "no_target", "no_window", "approach_failed"})
-# First Aid in the spellbook, by rank (Apprentice to Master), and the most skill each allows:
-# what a bandage needs, and which (V368).
-FIRST_AID = {3273: 75, 3274: 150, 7924: 225, 10846: 300, 27028: 375}
-# How long a potion or bandage in a fight may take to find and use: the live bags' census and
-# click; the hive's is the server's, at once.
-USE_IN_COMBAT_S = 6.0
-
 # After buying spells, the spellbook census is rebuilt under its new revision (about 2.5 s
 # at ten paints a second) before anything is put on the bar from it.
 CENSUS_S = 8.0
@@ -399,9 +391,7 @@ class LiveBody:
         self.fight = Fight(hid=client.hid, read=self._read, read_frame=self._frame,
                            window_origin=client.origin, window_centre_x=w // 2,
                            targeting=self.targeting, bounds=client.bounds)
-        self.rest = Rest(hid=client.hid, read=self._read, use_item=self._use_consumable,
-                         bandage=lambda: self._use_kind("bandage") is not None)
-        self.fight.use_item = self._use_kind
+        self.rest = Rest(hid=client.hid, read=self._read, use_item=self._use_consumable)
         self.loot = Loot(hid=client.hid, read=self._read, read_frame=self._frame,
                          window_origin=client.origin, targeting=self.targeting)
         self.gather = Gather(hid=client.hid, read=self._read, targeting=self.targeting,
@@ -1270,31 +1260,6 @@ class LiveBody:
         self.say(f"    {kind} from the bags: {used}" if used is not None
                  else f"    no {kind} in the bags - {user.detail}")
         return used is not None
-
-    def _use_kind(self, kind: str) -> int | None:
-        """Use the best healing potion ("potion") or bandage ("bandage") the bags hold, in a
-        fight or out of one (V368): the item used, or `None`. A bandage only with First Aid in
-        the spellbook (`FIRST_AID`): without it the client refuses one."""
-        values = self._read() or {}
-        skill = None
-        if kind == "bandage":
-            _, known = self._census(seconds=0.0)
-            skill = max((FIRST_AID[s] for s in known or () if s in FIRST_AID), default=None)
-            if skill is None:
-                return None
-        items = consumables(kind, values.get("char.level"), skill)
-        if not items:
-            return None
-        user = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
-                      self.client.size)
-        combat = values.get("vitals.combat") is True
-        # The hive's server desk takes no `in_combat`: its use is the server's, combat or not.
-        extra = ({"in_combat": combat}
-                 if "in_combat" in inspect.signature(user.use_item).parameters else {})
-        used = user.use_item(items, timeout_s=USE_IN_COMBAT_S if combat else 30.0, **extra)
-        self.say(f"    {kind} from the bags: {used}" if used is not None
-                 else f"    no {kind} used - {user.detail}")
-        return used
 
     def _conjure(self) -> None:
         """After a meal, out of combat: a caster makes its water and food when the bags hold

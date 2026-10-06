@@ -528,17 +528,3 @@ def test_conjured_drinks_come_first_then_the_better_ones():
     assert drinks[0] in (5350, 2288) and drinks.index(2288) < drinks.index(5350)
     assert drinks.index(5350) < drinks.index(159), "free, and gone at logout"
     assert 2288 not in consumables("drink", 4), "Conjured Fresh Water needs level 5"
-
-
-def test_healing_potions_and_bandages_are_consumables_best_heal_first():
-    """V368: of 735 bag censuses in the hive on 5 Oct, 655 held Minor Healing Potions and 473
-    Lesser ones, and nothing drank one."""
-    from jev.world.vendor import consumable_role, consumables
-
-    assert consumable_role(118) == "potion" and consumable_role(1251) == "bandage"
-    potions = consumables("potion", 5)
-    assert potions.index(858) < potions.index(118), "Lesser (140-180) before Minor (70-90)"
-    assert 929 not in potions, "Healing Potion needs level 12"
-    bandages = consumables("bandage", 1)
-    assert bandages.index(2581) < bandages.index(1251), "Heavy Linen heals 114, Linen 66"
-    assert 118 not in consumables("food", 60) and 1251 not in consumables("food", 60)

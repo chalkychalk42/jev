@@ -126,22 +126,18 @@ def _consumables() -> dict[int, dict]:
 
 
 def consumable_role(item_id: int | None) -> str | None:
-    """"food", "drink" or "both" for a food or drink, "potion" or "bandage" for a healing potion
-    or a bandage (V368); `None` for anything else."""
+    """"food", "drink" or "both" for a food or drink; `None` for anything else."""
     row = _consumables().get(item_id) if item_id is not None else None
     return row["role"] if row else None
 
 
-def consumables(role: str, level: int | None, skill: int | None = None) -> tuple[int, ...]:
+def consumables(role: str, level: int | None) -> tuple[int, ...]:
     """The foods (`role` "food") or drinks ("drink") a character of `level` can use, best
     first: conjured before bought (it is free, and gone at logout), then the higher item
     level (`tools/gen_consumables.py`, V166)."""
     usable = [(item, row) for item, row in _consumables().items()
-              if row["role"] in (role, "both") and (level is None or row["level"] <= level)
-              and (skill is None or row.get("skill", 0) <= skill)]
-    # A potion or bandage by what it heals (V368): Heavy Linen's item level is Linen's.
-    usable.sort(key=lambda pair: (not pair[1]["conjured"], -pair[1].get("heals", 0),
-                                  -pair[1]["item_level"], pair[0]))
+              if row["role"] in (role, "both") and (level is None or row["level"] <= level)]
+    usable.sort(key=lambda pair: (not pair[1]["conjured"], -pair[1]["item_level"], pair[0]))
     return tuple(item for item, _ in usable)
 
 
