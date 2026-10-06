@@ -37,7 +37,7 @@ def client_in(region, raw, corpse=None):
     client = Client(hwnd=1, hid=Mock(), cap=Mock(), origin=(0, 0), size=(1600, 900))
     client.reading = lambda: RadioReading(values=values, ok=True, fault=SenseFault.NONE, seq=1)
     # On foot alone: the query is the fake itself, which the tests below ask about (V305).
-    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, teleports=())
+    with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, teleports=(), lifts=())
     return client, values
 
 
@@ -417,7 +417,7 @@ def test_walks_are_planned_clear_of_the_learned_danger_at_the_characters_level()
     danger = Mock()
     danger.hot.return_value = [(1.0, 2.0, 0.9)]
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES,
-                route_memory=RouteMemory(), danger=danger, teleports=())
+                route_memory=RouteMemory(), danger=danger, teleports=(), lifts=())
     assert isinstance(client.query, ExposureQuery), "and round hostile spawns (V248)"
     assert isinstance(client.query.inner, DangerAvoidingQuery)
     assert client.query.inner.hot(0) == [(1.0, 2.0, 0.9)]
@@ -434,7 +434,7 @@ def test_the_ways_round_spawns_keep_what_the_layer_below_went_round():
     values["char.level"] = 12
     memory = RouteMemory()
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=memory,
-                teleports=())
+                teleports=(), lifts=())
     deaths = client.query.inner
     assert isinstance(deaths, DangerAvoidingQuery)
     assert client.query.keep == deaths.keeper
@@ -450,7 +450,7 @@ def test_a_walks_cost_is_planned_without_the_search_for_a_way_round():
 
     client, values = client_in("Elwynn", (0.5, 0.5))
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory(),
-                teleports=())
+                teleports=(), lifts=())
     asked = []
 
     class Estimate:
@@ -480,7 +480,7 @@ def test_the_planner_asks_for_the_spawns_that_attack_this_character(monkeypatch)
     monkeypatch.setattr("jev.run.client.hostiles.near",
                         lambda *a, **k: asked.append((a, k)) or [(1.0, 2.0, 3.0)])
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES, route_memory=RouteMemory(),
-                teleports=())
+                teleports=(), lifts=())
     for _ in range(20):
         assert client.query.hostile(0, 10.0, 20.0, 50.0) == [(1.0, 2.0, 3.0)]
     assert len(reads) == 1, "twenty points looked along, one read"
@@ -767,7 +767,7 @@ def test_the_hot_cells_are_asked_for_at_the_level_kept_for_the_plan_not_read_afr
     danger = Mock()
     danger.hot.return_value = []
     with_travel(client, ELWYNN, Mock(), arrival_yards=5, zones=ZONES,
-                route_memory=RouteMemory(), danger=danger, teleports=())
+                route_memory=RouteMemory(), danger=danger, teleports=(), lifts=())
     for _ in range(10):
         client.query.inner.hot(0)
     assert len(reads) == 1 and danger.hot.call_args_list[-1].args == (0, 12)
