@@ -823,7 +823,7 @@ class LiveBody:
                 # session 67 stopped on quest 16's objective with its accept passed over.
                 # Nor is an objective of a quest in the log that cannot be worked: a delivery
                 # whose item is gone, or counters full whose completion never shows. Each is a
-                # failed attempt, failed over at the step's attempts (V383): stopped, the next
+                # failed attempt, failed over at the step's attempts (V385): stopped, the next
                 # session met the same step and stopped again, every fifteen minutes for good
                 # (Scalding Mornbrew cools in five minutes; nine dwarves and gnomes stood on its
                 # delivery for days, 6 Oct).
