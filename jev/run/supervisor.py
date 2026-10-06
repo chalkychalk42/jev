@@ -389,10 +389,13 @@ class Supervisor:
                       # did not answer from inside Goldshire's smithy stopped session 66.
                       # A meal that runs out of time is armed again while the character is
                       # still low: one drink too many for its budget stopped session 107.
+                      # Nor a pet's care (V389): a beast not found to tame is the pet's
+                      # wait, not the step's failure.
                       and worker.arm.decision.skill not in ("TRAIN_CLASS", "BIND_HEARTH",
                                                             "DISCOVER_FLIGHT", "EAT_DRINK",
                                                             "BUY_AMMO_REAGENT_FOOD",
-                                                            "VENDOR_REPAIR", "BAG_MAKE_SPACE")
+                                                            "VENDOR_REPAIR", "BAG_MAKE_SPACE",
+                                                            "TEND_PET")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if result.code == "camp":

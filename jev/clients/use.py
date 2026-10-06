@@ -16,8 +16,9 @@ fights what attacks it. Nor with the character's own charm from the last such qu
 by it: the server holds one charm at a time, and the next quest's spell fails at the channel's
 end while the first is held (SPELL_FAILED_ALREADY_HAVE_CHARM, `Spell::CheckCast`, reported to
 nobody since the spell is the aura's), a rod's charge spent for nothing - each rod has three.
-The charm is fought beside until it goes, as the quest says to practise with it. Below
-`BREAK_HP` in the channel the character steps out of it and fights the creature instead.
+A body that can let the charm go does (`dismiss`, V389), and fights it as it turns; one that
+cannot fights beside it until it goes, as the quest says to practise with it. Below `BREAK_HP`
+in the channel the character steps out of it and fights the creature instead.
 
 The item is found and used the way the hearthstone is (`jev.clients.hearth`): its slot from the
 strip's bag census, right-clicked with the creature selected. A server body uses it by its id
@@ -96,6 +97,12 @@ class UseOn:
         if values.get("vitals.combat") is True or self.charmed():
             why = ("something is fighting the character" if values.get("vitals.combat") is True
                    else "its own charm from the last use stands by")
+            if values.get("vitals.combat") is not True and self.dismiss():
+                # Let go, as the pet bar's Dismiss lets a charm go (V389): it turns on the
+                # character as when its charm ends, and is fought as what attacks it, and the
+                # next use is not spent at its channel's end while the charm holds, nor its
+                # fifteen minutes waited out beside it (from Thotar, about nine).
+                why = "its own charm from the last use let go"
             event("use.fight", data={"why": why, "item": self.item_id})
             outcome = self.fight.run(name_id, timeout_s=timeout_s)
             self.detail = f"{why}: {self.fight.detail}" if self.fight.detail else why
@@ -167,6 +174,11 @@ class UseOn:
     def charmed(self) -> bool:
         """Does the character's own charm from the last use stand by it? The live strip paints
         no pet, so the live client cannot tell and uses on; a server body can (the hive's)."""
+        return False
+
+    def dismiss(self) -> bool:
+        """Let the character's charm go, as the pet bar's Dismiss does (V389): `True` when it
+        went. The live client has no pet bar read, and lets none go; a server body does."""
         return False
 
     def _too_far(self, values: dict, errors) -> bool:

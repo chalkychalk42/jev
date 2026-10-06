@@ -66,7 +66,10 @@ def reflex(rule: str) -> bool:
 # sessions), its choices do not separate in any state a student sees (it ate at a median
 # 57% health and walked about at 71-80%), and walking about took it off its route - session
 # 93's walk back from a mine grew from 1,070 yards to 1,169 and its hand-in failed over.
-ROUTINE_RULES = ("service.train", "service.bind", "service.discover", "recover.eat")
+# A hunter's pet is the routine's too (V389): the tutor has no control for a pet spell, and
+# sees no pet.
+ROUTINE_RULES = ("service.train", "service.bind", "service.discover", "service.pet",
+                 "recover.eat")
 
 
 def routine_only(rule: str) -> bool:
@@ -543,6 +546,25 @@ class Context:
     def leaving(self, now: float) -> bool:
         return self.leaving_until is not None and now < self.leaving_until
 
+    # What a hunter's pet needs now (`LiveBody.pet_due`, V389): "revive", "call", "feed",
+    # "dismiss" (a charm held where a pet would be) or "tame", or `None`; and the food a merchant
+    # would sell it while the bags hold none it eats in full (`LiveBody.pet_food`). Absent, or
+    # with no pet read (the live strip paints none), no pet is ever tended.
+    pet_due: Callable[[State], str | None] | None = None
+    pet_food: Callable[[State], int | None] | None = None
+
+    def pet_need(self, state: State) -> str | None:
+        try:
+            return self.pet_due(state) if self.pet_due is not None else None
+        except Exception:
+            return None
+
+    def pet_food_wanted(self, state: State) -> int | None:
+        try:
+            return self.pet_food(state) if self.pet_food is not None else None
+        except Exception:
+            return None
+
 
 def _d(intent: Intent, skill: str | None, why: str, confidence: float,
        abort_if: tuple[str, ...] = ("dead",), goal: str = "", **params) -> Decision:
@@ -624,9 +646,20 @@ FIGHT_PAUSE_S = 30.0
 def _affordable(item_id: int, money: int | None) -> bool:
     """Is one purchase of this food or drink in the purse? A purse or price not known is not
     a reason to stay (V195). A level 2 mage with 10 copper and water at 25 walked from
-    Northshire to Goldshire's merchants and on for it, 2,000 yards (the mage's third check)."""
+    Northshire to Goldshire's merchants and on for it, 2,000 yards (the mage's third check).
+    A pet's food is priced by the world snapshot (V389)."""
     price = supply_prices().get(item_id)
+    if price is None:
+        from jev.world.pets import price as pet_food_price
+
+        price = pet_food_price(item_id)
     return money is None or not price or money >= price
+
+
+# Why each of a pet's needs is served (`Context.pet_need`, V389).
+PET_WHY = {"revive": "the pet is dead", "call": "no pet is out", "feed": "the pet is unhappy",
+           "dismiss": "a charm is held where the pet would be",
+           "tame": "no pet, and a beast to tame of the character's level is near"}
 
 
 def service(state: State, *, context: Context | None = None) -> Plan | None:
@@ -673,6 +706,15 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
         due(Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are nearly full",
                        0.75, ("dead", "combat"), service="bags"), True, "service.bags_full"))
 
+    # A hunter's pet (V389), before the walks to trainers and merchants: a pet doubles what
+    # fights for the character and takes the blows. A call, a feed or letting a charm go is a
+    # moment where it stands, and a revive drinks for its mana first; a taming walks to its
+    # beast and stands twenty seconds under it, and waits for a meal as every walk does (V259).
+    need = context.pet_need(state) if context is not None else None
+    if need in PET_WHY and (need != "tame" or not hurt):
+        due(Plan(_d(Intent.SERVICE, "TEND_PET", PET_WHY[need], 0.7, ("dead", "combat"),
+                    service="pet", pet=need), True, "service.pet"))
+
     # A spell the purse can pay for comes before a repair of gear not yet broken (V240): a
     # repair at a third of the durability buys no armour back, and the level 7 mage's
     # repairs took the copper Frostbolt waited for, 77 of 137 in session 208, while it died
@@ -693,15 +735,19 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     empty = [item for item, count in kept if count == 0]
     stranded = (bool(empty) and len(empty) == len(kept) and b.durability_min is not None
                 and b.durability_min <= 0.05)
-    if empty and (context is None or context.can_restock(b.money_copper, state.guide.step_id,
-                                                         stranded=stranded, now=state.t)):
+    # And a pet's food, bought with them (V389): the bags hold none it eats in full.
+    pet_food = context.pet_food_wanted(state) if context is not None else None
+    wanted = empty + ([pet_food] if pet_food is not None else [])
+    if wanted and (context is None or context.can_restock(b.money_copper, state.guide.step_id,
+                                                          stranded=stranded, now=state.t)):
         # What is above the trainer's due (V215), asked only with something to buy: the
         # spellbook's census is shared with the capture thread.
         spare = (b.money_copper - context.kept(state)
                  if context is not None and b.money_copper is not None else b.money_copper)
-        if any(_affordable(item, spare) for item in empty):
+        if any(_affordable(item, spare) for item in wanted):
             due(Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD",
-                           "confirmed food or drink is empty", 0.8, ("dead", "combat"),
+                           "confirmed food or drink is empty" if empty
+                           else "the pet's food is out", 0.8, ("dead", "combat"),
                            service="supplies"), True, "service.supplies"))
 
     # Last: spells a trainer would teach now. A paladin that never trained fought to level
