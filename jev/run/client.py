@@ -1020,7 +1020,8 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     if route_memory is not None:
         deaths = DangerAvoidingQuery(AvoidingQuery(query, route_memory), route_memory, hot=hot,
                                      level=lambda: values().get("char.level"),
-                                     ghost=lambda: values().get("vitals.ghost") is True)
+                                     ghost=lambda: values().get("vitals.ghost") is True,
+                                     who=lambda: values().get("char.key"))
     client.query = query if deaths is None else deaths
     if route_memory is not None:
         # ...and of the spawns of units that attack it on sight, where a way round costs less

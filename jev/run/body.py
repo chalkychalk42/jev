@@ -973,7 +973,8 @@ class LiveBody:
         if memory is None or bounds is None or here is None:
             return False
         at = map_to_world(*here, bounds)
-        camp = memory.camp_at(bounds.map_id, at[:2], time.time(), level) if at else None
+        camp = (memory.camp_at(bounds.map_id, at[:2], time.time(), level, who=self._who())
+                if at else None)
         if camp is None:
             return False
         reach = CAMP_YARDS + CAMP_CLEAR_YARDS
@@ -1024,8 +1025,9 @@ class LiveBody:
         memory, bounds = getattr(self.client, "route_memory", None), self.client.bounds
         if memory is None or bounds is None or world is None:
             return None
-        camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level)
-        return camp.camp_until if camp is not None else None
+        who = self._who()
+        camp = memory.camp_at(bounds.map_id, tuple(world[:2]), time.time(), level, who=who)
+        return camp.until_for(who) if camp is not None else None
 
     def _walk_note(self, level: int | None) -> tuple[bool, float | None] | None:
         """How the last walk that did not arrive went (`Hunt.walk_note`, V334): whether its
@@ -2292,9 +2294,16 @@ class LiveBody:
         at = map_to_world(*point, bounds)
         if at is None:
             return False
-        level = (self._read() or {}).get("char.level")
+        values = self._read() or {}
+        level, who = values.get("char.level"), values.get("char.key")
         return memory.camp_at(bounds.map_id, at, time.time(),
-                              level if isinstance(level, int) else None) is not None
+                              level if isinstance(level, int) else None,
+                              who=who if isinstance(who, int) else None) is not None
+
+    def _who(self) -> int | None:
+        """The character's key (`char.key`), whose own camps hold their hour (V381)."""
+        key = (self._read() or {}).get("char.key")
+        return key if isinstance(key, int) else None
 
     def _talk_to(self, name: str):
         """Right-click a named unit: by its nameplate, or where a fresh hover finds it."""

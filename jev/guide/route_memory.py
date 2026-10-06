@@ -94,6 +94,14 @@ SPOT_MIN_KEEP = 10.0
 CAMP_YARDS = 100.0
 CAMP_WINDOW_S = 600.0
 CAMP_S = 3600.0
+# A camp holds its hour for the character whose deaths made it, and `OTHERS_CAMP_S` from when it
+# was made for every other character it counts for (V381). Held the hour for all, a camp stood
+# the hive's grind and level-gate steps 14.2% of all played time (6 Oct 13:00-17:00); barring only
+# its maker (V339) sent others back into it and deaths doubled. Near another's death the hazard
+# was 2.8-4.8 deaths an alive hour against 1.96 with none near, and near one's own 15.5 in the
+# first five minutes, 6.6-7.0 at 10-20 and 4.2-4.7 at 20-60 (4 Oct, the V339 row's runs): twenty
+# minutes keeps others off the spot while it is worst and gives it back for the rest of the hour.
+OTHERS_CAMP_S = 1200.0
 # A walk refused through a death camp (`CAMP_REFUSED`) is refused again without a search for
 # `REFUSAL_S`, asked from and to within `REFUSAL_YARDS` of where it was with the same camp on
 # its way through (review of 28 Sep). A refusal is two ring searches, up to 144 planner
@@ -185,6 +193,19 @@ class Danger:
     # Who died: the character's key (`char.key`), a camp being one character's own deaths.
     # None, unread or kept before the key was: such a death makes a camp only with another.
     who: int | None = None
+
+    def until_for(self, who: int | None) -> float | None:
+        """When this death's camp stops barring the character `who` (V381): the hour for its own
+        deaths, `OTHERS_CAMP_S` from the camp's making for another's; the hour with `who` unknown
+        or a death kept with no key, as before."""
+        if self.camp_until is None or who is None or self.who is None or self.who == who:
+            return self.camp_until
+        return min(self.camp_until, self.camp_until - CAMP_S + OTHERS_CAMP_S)
+
+    def camp_for(self, now: float, who: int | None) -> bool:
+        """Is this death part of a death camp at `now` that bars the character `who` (V381)?"""
+        until = self.until_for(who)
+        return until is not None and now < until
 
     def camp(self, now: float) -> bool:
         """Is this death part of a death camp at `now` (V307)?"""
@@ -374,11 +395,12 @@ class RouteMemory:
         return list(kept)
 
     def camp_at(self, map_id: int, point: tuple[float, float], now: float | None = None,
-                level: int | None = None) -> Danger | None:
+                level: int | None = None, who: int | None = None) -> Danger | None:
         """A death of a death camp within `CAMP_YARDS` of `point` that counts at `level`, the
-        nearest; `None` when the point lies in none (V307)."""
+        nearest; `None` when the point lies in none (V307). With `who`, a camp barring that
+        character (`Danger.camp_for`: another's for `OTHERS_CAMP_S` only, V381)."""
         now = time.time() if now is None else now
-        camps = [d for d in self.dangers_on(map_id, now, level) if d.camp(now)
+        camps = [d for d in self.dangers_on(map_id, now, level) if d.camp_for(now, who)
                  and math.dist((d.x, d.y), point[:2]) <= CAMP_YARDS]
         return min(camps, key=lambda d: math.dist((d.x, d.y), point[:2]), default=None)
 
@@ -620,7 +642,9 @@ class DangerAvoidingQuery:
                  hot: Callable[[int], list] | None = None,
                  level: Callable[[], int | None] | None = None,
                  ghost: Callable[[], bool] | None = None,
-                 timer: Callable[[], float] = time.monotonic):
+                 timer: Callable[[], float] = time.monotonic,
+                 who: Callable[[], int | None] | None = None):
+        self.who = who                      # the asking character's key (V381)
         self.inner, self.memory, self.clock = inner, memory, clock
         self.hot = hot
         self.level = level
@@ -643,7 +667,9 @@ class DangerAvoidingQuery:
         now = self.clock()
         level = self.level() if self.level is not None else None
         level = level if isinstance(level, int) else None
-        spots = [(d.x, d.y, CAMP_YARDS, "a death camp", True) if d.camp(now)
+        who = self.who() if self.who is not None else None
+        who = who if isinstance(who, int) else None
+        spots = [(d.x, d.y, CAMP_YARDS, "a death camp", True) if d.camp_for(now, who)
                  else (d.x, d.y, DANGER_YARDS, "where the character died", False)
                  for d in self.memory.dangers_on(map_id, now, level)]
         if self.hot is not None:
