@@ -196,6 +196,11 @@ LIFT_SAME_FLOOR = 2.0              # two decks closer than this in height are on
 LIFT_BOARD_YARDS = 1.5
 # What a ride costs a plan, in yards: its wait and the ride itself, at running pace.
 LIFT_YARDS_PER_S = 7.0
+# A failed plan tries only the lifts whose boarding stop is this near its start, in x and y, or
+# whose other stop is this near its end: a lift helps a walk that begins or ends by the cliff it
+# climbs, and each one tried is a planner ask at every start height (`START_HEIGHTS`). Elder
+# Rise's south edge, where 14 of the hive's bots stood, is 310 yards from the nearest.
+LIFT_NEAR_YARDS = 600.0
 # Of two platforms in one shaft the one that goes farther is the lift (the Gnomeregan Vator's
 # Plunger rides 12 yards over it).
 LIFT_SHAFT_YARDS = 3.0
@@ -761,6 +766,9 @@ class TeleportQuery:
             if (limit is None or length < limit) and (best is None or length < best[0]):
                 best = (length, teleport, walk_in.points, walk_on)
         for leg in legs:
+            if (math.dist(origin[:2], leg.board[:2]) > LIFT_NEAR_YARDS
+                    and math.dist(end[:2], leg.alight[:2]) > LIFT_NEAR_YARDS):
+                continue
             least = math.dist(origin, leg.board) + math.dist(leg.alight, end) + leg.cost_yards()
             if (least >= limit if limit is not None
                     else least > LINK_REACH * straight + LINK_SLACK_YARDS + leg.cost_yards()):

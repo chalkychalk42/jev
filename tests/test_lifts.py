@@ -133,6 +133,15 @@ def test_no_lift_is_offered_to_a_follower_that_cannot_ride_one(decks):
         assert route is EDGE
 
 
+def test_a_lift_far_from_both_ends_of_a_walk_is_not_tried(decks):
+    """A lift helps a walk that begins or ends by its cliff: a failed walk in the Barrens asks
+    nothing of Thunder Bluff's."""
+    far, farther = (-400.0, -2600.0, 92.0), (-900.0, -3200.0, 92.0)
+    planner = Mesh({(far, farther): Path(PathStatus.PARTIAL, (far, (-500.0, -2700.0, 92.0)))})
+    route = TeleportQuery(planner, (), [LIFT], can_ride=lambda: True).path(1, far, farther)
+    assert route.status is PathStatus.PARTIAL and planner.asked == [(far, farther)]
+
+
 def test_a_way_on_foot_is_kept_where_there_is_one(decks):
     near = (PALA[0] - 40.0, PALA[1] + 30.0, 129.0)
     direct = Path(PathStatus.COMPLETE, (PALA, near), "mmap")
