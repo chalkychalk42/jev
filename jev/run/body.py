@@ -821,8 +821,14 @@ class LiveBody:
                 # A quest not in the log is the route's to resolve (its accept was passed
                 # over, or never reached), not a configuration fault that stops the run:
                 # session 67 stopped on quest 16's objective with its accept passed over.
+                # Nor is an objective of a quest in the log that cannot be worked: a delivery
+                # whose item is gone, or counters full whose completion never shows. Each is a
+                # failed attempt, failed over at the step's attempts (V383): stopped, the next
+                # session met the same step and stopped again, every fifteen minutes for good
+                # (Scalding Mornbrew cools in five minutes; nine dwarves and gnomes stood on its
+                # delivery for days, 6 Oct).
                 code = ("blind" if log is None else
-                        "quest_absent" if selection.reason == QUEST_ABSENT else "unsupported")
+                        "quest_absent" if selection.reason == QUEST_ABSENT else "unworkable")
                 return Result(SkillOutcome.PREEMPTED if log is None else SkillOutcome.ABORTED,
                               selection.reason or "objective unavailable", code)
             destination = selection.target

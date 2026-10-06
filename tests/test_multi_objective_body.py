@@ -79,6 +79,28 @@ def test_complete_delivery_never_constructs_hunt_or_walks(monkeypatch):
     b.client.approach.assert_not_called()
 
 
+def test_a_delivery_whose_item_is_gone_fails_its_attempt_and_never_stops_the_run(monkeypatch):
+    """V383: Scalding Mornbrew cools in five minutes; the delivery with no brew in the bags is
+    an attempt failed, which the supervisor counts and fails over, not "unsupported", which
+    stopped every session on the same step."""
+    from jev.run import supervisor
+
+    quest = Quest(quest_id=1, complete=False, objectives=(
+        Objective(text="Scalding Mornbrew", have=0, need=1, counter_index=0),))
+    b = body(StepKind.QUEST_OBJECTIVE, log=(quest,))
+    target = ObjectiveTarget(kind="delivery", required_id=10439, required_count=1, counter_index=0)
+    node = b.graph.nodes[0].model_copy(update={"objective_targets": (target,)})
+    b.graph = b.graph.model_copy(update={"nodes": (node,)})
+    monkeypatch.setattr("jev.run.body.Hunt", lambda **kw: (_ for _ in ()).throw(
+        AssertionError("a missing delivery hunted")))
+    result = b._hunt(seen(quests=b.client.log.complete))
+    assert result.outcome is SkillOutcome.ABORTED and "10439 is missing" in result.detail
+    assert result.code == "unworkable"
+    source = open(supervisor.__file__, encoding="utf-8").read()
+    stops = source[source.index('if (result.code in {"error", "unsupported"'):]
+    assert '"unworkable"' not in stops[:stops.index("}")], "an unworkable objective stops no run"
+
+
 def test_tracker_changes_route_pin_without_penalizing_the_second_hunt():
     targets = tuple(ObjectiveTarget(kind="kill", required_id=i + 1, required_count=5,
                                     counter_index=i, pos=pos)
