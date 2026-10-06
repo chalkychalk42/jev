@@ -217,6 +217,13 @@ HOME_FAR_YARDS = 900.0
 # 22 of the 27 hive bots on the mesas on 6 Oct were bound there and hearthed back up. A home
 # no walk leads from to the work is as far as one 900 yards off. Walks are kept this long.
 WALKS_KEEP_S = 600.0
+# A walk whose plan ended this far short of where it was going, height and all, found no way
+# from where the character stands (V384): with home a walk from there and this far from here,
+# the hearthstone takes it home and it walks on from there. The hive's bots on Thunder Bluff's
+# mesas planned 140 to 2,300 yards short of Mulgore's and the Barrens' steps for hours, five of
+# them bound elsewhere (hive-609 at the Crossroads, from 6 Oct 08:49).
+ISLAND_SHORT_YARDS = 50.0
+HOME_LEAVE_YARDS = 50.0
 # An inn this close to the remembered home is home already.
 SAME_INN_YARDS = 40.0
 # The innkeeper's line for it, the same on all 58 of this server's innkeepers who have one.
@@ -616,10 +623,43 @@ class LiveBody:
                     and (self._read() or {}).get("pos.indoors") is True and back_out()):
                 self.say("  backed out: outdoors, walking on")
                 arrived = self._walk(world, stop_short)
+            # No way from here at all: home, if a walk leads from there (V384).
+            if not arrived and not ghost and self._off_island(world):
+                self._wedged = 0
+                arrived = self._walk(world, stop_short)
         finally:
             self.travelling = False
         self._note_wedged(arrived)
         return arrived
+
+    def _off_island(self, world) -> bool:
+        """Home by hearthstone when the walk's plan ended `ISLAND_SHORT_YARDS` short of `world`
+        and home, `HOME_LEAVE_YARDS` off, is a walk from it (V384): somewhere no route leads
+        out of to where the character is going, as Thunder Bluff's mesas are for a follower
+        that rides no lift. Whether it went home."""
+        plan = getattr(self.client, "last_plan", None)
+        bounds = getattr(self.client, "bounds", None)
+        if (plan is None or bounds is None or not getattr(plan, "points", None)
+                or getattr(plan, "status", None) is PathStatus.COMPLETE or len(world) < 3):
+            return False
+        end = plan.points[-1]
+        short = math.dist(end[:3], world[:3]) if len(end) >= 3 else math.dist(end[:2], world[:2])
+        home = load_home(self.home_memory)
+        here = self._position()
+        if short <= ISLAND_SHORT_YARDS or home is None or here is None:
+            return False
+        at = map_to_world(*here, bounds)
+        if math.dist(home[:2], at[:2]) <= HOME_LEAVE_YARDS:
+            return False
+        start = home if home[2] != 0.0 else (home[0], home[1], world[2])
+        walk = self._walk_between(start, world)
+        if walk is None or walk is False:
+            return False
+        went = self._go_home()
+        self.say(f"  no walk from here to ({world[0]:.0f}, {world[1]:.0f}): its plan ended "
+                 f"{short:.0f} yards short, and home is a {walk:.0f}-yard walk from it: "
+                 f"hearthstone {went.value} {self.hearth.detail}".rstrip())
+        return went.ok
 
     def _walk(self, world, stop_short: float = 0.0) -> bool:
         return (self.client.approach(world, timeout_s=self.travel_timeout, stop_short=stop_short)
@@ -1604,7 +1644,11 @@ class LiveBody:
         here = self._position() if home.ok else None
         world = map_to_world(*here, self.client.bounds) if here is not None else None
         if world is not None:
-            save_home(self.home_memory, (world[0], world[1], 0.0), name="hearthstone arrival")
+            # The inn's height, where it set the character down at the inn remembered (V384).
+            before = load_home(self.home_memory)
+            z = (before[2] if before is not None
+                 and math.dist(before[:2], world[:2]) <= SAME_INN_YARDS else 0.0)
+            save_home(self.home_memory, (world[0], world[1], z), name="hearthstone arrival")
         return home
 
     def _inn(self, state: State | None = None):
