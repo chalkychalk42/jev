@@ -97,3 +97,63 @@ def test_a_hearthstone_arrival_is_remembered_as_home(monkeypatch, tmp_path):
     assert b._go_home() is Hearthed.HOME
     home = load_home(b.home_memory)
     assert home is not None and home[2] == 0.0
+
+
+# -- V383: only an inn a walk leads from to the work ------------------------------------------
+
+from jev.guide.path import Path, PathStatus  # noqa: E402
+from jev.run.body import walk_cost  # noqa: E402
+
+# Thunder Bluff's inn on its mesa, nearer the step in a straight line than the village's.
+MESA = Innkeeper(6746, "Innkeeper Pala", 0, (55.0, 50.0, 129.3))
+VILLAGE = Innkeeper(6747, "Innkeeper Kauth", 0, (100.0, 50.0, 0.0))
+
+
+class Planner:
+    """A planner where nothing on the mesa (height over 100) walks to the ground."""
+
+    def __init__(self):
+        self.asked = []
+
+    def path(self, map_id, start, end):
+        self.asked.append((start, end))
+        if (start[2] > 100) != (end[2] > 100):
+            return Path(PathStatus.PARTIAL, (start, (start[0], start[1] - 3.0, start[2])), "mmap")
+        return Path(PathStatus.COMPLETE, (start, end), "mmap")
+
+
+def test_the_inn_bound_is_one_a_walk_leads_from_to_the_work(monkeypatch, tmp_path):
+    """22 of the 27 hive bots on Thunder Bluff's mesas on 6 Oct were bound at Innkeeper Pala's
+    inn there, the nearest to Mulgore's steps in a straight line, and hearthed back up."""
+    b = _body(monkeypatch, tmp_path, inns=(MESA, VILLAGE))
+    assert b._inn(_state()) is MESA, "no planner to ask: the nearest, as before"
+    b.client.query = Planner()
+    assert b._inn(_state()) is VILLAGE
+    asked = len(b.client.query.asked)
+    assert b._inn(_state()) is VILLAGE and len(b.client.query.asked) == asked, "walks kept"
+    b = _body(monkeypatch, tmp_path, inns=(MESA,))
+    b.client.query = Planner()
+    assert b._inn(_state()) is None and not b.bindable(_state()), "no inn a walk reaches"
+
+
+def test_a_home_no_walk_leads_from_to_the_work_is_far(monkeypatch, tmp_path):
+    b = _body(monkeypatch, tmp_path, inns=(MESA, VILLAGE))
+    b.client.query = Planner()
+    save_home(b.home_memory, MESA.world, name=MESA.name)
+    assert b.bindable(_state()), "home on the mesa, 5 yards from the work and no walk to it"
+    save_home(b.home_memory, VILLAGE.world, name=VILLAGE.name)
+    assert not b.bindable(_state())
+    save_home(b.home_memory, (55.0, 52.0, 0.0), name="where the character began")
+    assert not b.bindable(_state()), "a home of unknown height is not asked"
+
+
+def test_a_walk_that_ends_short_of_a_merchant_is_no_walk_there():
+    there = (100.0, 0.0, 129.0)
+    short = Path(PathStatus.PARTIAL, ((0.0, 0.0, 60.0), (2.2, 0.0, 60.0)), "mmap")
+    assert walk_cost(short, there) is False, "a lift's foot is not the merchant on the mesa"
+    near = Path(PathStatus.PARTIAL, ((0.0, 0.0, 129.0), (90.0, 0.0, 129.0)), "mmap")
+    assert walk_cost(near, there) == 90.0, "ten yards short is at its counter"
+    under = Path(PathStatus.PARTIAL, ((0.0, 0.0, 60.0), (100.0, 0.0, 60.0)), "mmap")
+    assert walk_cost(under, there) is False, "under it is not at it"
+    assert walk_cost(None, there) is False
+    assert walk_cost(Path(PathStatus.COMPLETE, ((0.0, 0.0, 129.0), there)), there) == 100.0
