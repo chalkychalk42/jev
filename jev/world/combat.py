@@ -44,7 +44,6 @@ class Role(StrEnum):
     CONJURE = "conjure"            # makes an item: pressed out of combat, never in a fight
     ROOT = "root"                  # holds what is round the caster: then a step clear
     CC = "cc"                      # holds the selected unit out of the fight: Polymorph (V287)
-    ESCAPE = "escape"              # spent in a losing fight: Fear, Evasion, Sprint (V366)
 
 
 # -- policy -------------------------------------------------------------------------
@@ -370,9 +369,7 @@ TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL
                  # more than one at hand (V277).
                  "area": Role.ATTACK,
                  # Damage over time: an attack put on a unit once while it lasts (V361, V360).
-                 "dot": Role.ATTACK,
-                 # What a losing fight spends (V366), and nothing else presses.
-                 "escape": Role.ESCAPE}
+                 "dot": Role.ATTACK}
 
 
 def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatProfile:

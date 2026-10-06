@@ -18,7 +18,6 @@ here, by role, so a class needs no list of its own:
 - one long buff per kind of aura it applies (a blessing of attack power, one of mana);
 - every strike;
 - every conjure (a caster's water and food, V166), and a root (Frost Nova, V169);
-- every escape: what a losing fight spends (Fear, Evasion, Sprint, Entangling Roots, V366);
 - no new heal and no new short buff: the starting bar has its heal and its seal already,
   and a second seal would only replace the first.
 
@@ -54,7 +53,7 @@ TRAINER_REACH_SPELLS = 2
 # Roles worth a new bar slot, in the order free slots are handed out.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
 NEW_LINE_ROLES = ("aura", "long_buff", "strike", "dot", "save", "stun", "last_resort",
-                  "conjure", "root", "cc", "escape", "area")
+                  "conjure", "root", "cc", "area")
 BAR_SLOTS = 12
 
 # The roles the fight code presses (`jev.world.combat.TRAINED_ROLES`), in the order a spell
@@ -66,9 +65,7 @@ BAR_SLOTS = 12
 # fight. The mage with a spell's money a visit bought Conjure Water before Frostbolt at
 # level 5 and Conjure Food before Fire Blast at 6, in the stock window's order.
 # Damage over time is damage (V361): Corruption, Shadow Word: Pain, Serpent Sting, Rend.
-# What a losing fight spends is a fight role too (V366): Fear, Psychic Scream, Evasion, Sprint,
-# Entangling Roots, Concussive Shot.
-FIGHT_ROLES = ("strike", "dot", "short_buff", "root", "stun", "cc", "escape", "area", "save",
+FIGHT_ROLES = ("strike", "dot", "short_buff", "root", "stun", "cc", "area", "save",
                "last_resort", "heal", "aura", "attack")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
@@ -93,10 +90,6 @@ class SpellFacts:
     aura: int | None = None
     # A spell that slows the enemy it hits (Frostbolt): a caster's opener (V165).
     slows: bool = False
-    # A spell that holds the enemy where it stands or out of the fight - a stun, fear, root,
-    # disorientation or transform (Gouge, Hammer of Justice, Frost Nova): what a losing fight
-    # spends before it bandages or retreats (V366).
-    holds: bool = False
     # The item a conjure makes (V166).
     creates: int | None = None
     # A trainer's spell that teaches others (V359): Judgement is sold as 10321, which teaches
@@ -156,7 +149,6 @@ def spell(spell_id: int | None, facts: dict | None = None) -> SpellFacts | None:
                       cooldown_s=float(raw.get("cooldown_s", 0.0)),
                       target=raw.get("target", "other"), spends=bool(raw.get("spends")),
                       aura=raw.get("aura"), slows=bool(raw.get("slows")),
-                      holds=bool(raw.get("holds")),
                       creates=raw.get("creates"), teaches=tuple(raw.get("teaches") or ()))
 
 

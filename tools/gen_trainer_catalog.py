@@ -38,22 +38,11 @@ Roles, from the spell's own data, never from its name:
                  given or spent: Corruption, Shadow Word: Pain, Serpent Sting, Rend (V361)
     root         everything round the caster held in place (aura 26: Frost Nova)
     cc           the enemy transformed (aura 56: Polymorph)
-    escape       what a losing fight spends (V366): the enemy or every enemy round the caster
-                 feared, disoriented or rooted (auras 7, 5, 26: Fear, Psychic Scream,
-                 Intimidating Shout, Death Coil, Blind, Entangling Roots) or only slowed
-                 (aura 33 first: Concussive Shot); or the caster's own dodge, speed or damage
-                 taken raised for under a minute on a cooldown of a minute or more (Evasion,
-                 Sprint, Barkskin)
     conjure      an item made for the caster (effect 24: Conjure Water, Conjure Food), and
                  which item (`creates`)
     attack       melee auto-attack (78), a toggle
     passive      a passive spell: nothing to press
     utility      anything else (dispels, resurrection, a strike only some creatures take)
-
-Any spell that holds the enemy where it stands or takes it out of the fight (a stun, fear,
-disorientation, root or transform on the enemy or round the caster) is marked `holds`, and one
-that slows it `slows`, whatever its role: Gouge and Hammer of Justice hold, Hamstring and Wing
-Clip slow (V366).
 
 Usage: .venv/bin/python tools/gen_trainer_catalog.py
 """
@@ -106,15 +95,6 @@ EFFECT_CREATE_ITEM = 24
 # Threat (Righteous Fury): a tank's buff, of no use to a character fighting alone.
 AURA_THREAT = 10
 AURAS_IMMUNE = (39, 40)
-# What holds an enemy (V366): fear, disorientation, root, stun, a transform.
-AURA_FEAR = 7
-AURA_CONFUSE = 5
-AURAS_HOLD = (AURA_FEAR, AURA_CONFUSE, AURA_ROOT, AURA_STUN, AURA_TRANSFORM)
-AURAS_ESCAPE = (AURA_FEAR, AURA_CONFUSE, AURA_ROOT)
-# The caster's own defence for a losing fight (V366): dodge, run speed, damage taken.
-AURA_DAMAGE_TAKEN = 87
-AURAS_DEFENSIVE = (49, 31, AURA_DAMAGE_TAKEN)
-ESCAPE_COOLDOWN_S = 60.0
 TARGET_SELF = 1
 TARGET_ENEMY = 6
 # Round the caster (A), every enemy in the area (B): Arcane Explosion, Thunder Clap, Frost Nova.
@@ -136,15 +116,6 @@ def _rank(text: str | None) -> int:
     return int(match.group(1)) if match else 0
 
 
-def _defence(auras: tuple, points: list) -> int | None:
-    """The first of a spell's auras that defends the caster (`AURAS_DEFENSIVE`): damage taken
-    only lowered (Barkskin's -20%, not Recklessness's +20%)."""
-    for aura, base in zip(auras, points, strict=False):
-        if aura in AURAS_DEFENSIVE and not (aura == AURA_DAMAGE_TAKEN and (base or 0) >= 0):
-            return aura
-    return None
-
-
 def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
     row = db.execute(
         "select SpellName, Rank1, Attributes, Effect1, EffectApplyAuraName1, "
@@ -152,13 +123,13 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         "ManaCost, ManaCostPercentage, CasterAuraState, TargetCreatureType, "
         "EffectApplyAuraName2, EffectApplyAuraName3, Effect2, Effect3, EffectItemType1, "
         "EffectImplicitTargetB1, CastingTimeIndex, ChannelInterruptFlags, PowerType, "
-        "EffectMiscValue1, EffectPointsPerComboPoint1, EffectBasePoints1, EffectBasePoints2, "
-        "EffectBasePoints3 from world_spell_template where Id=?", (spell_id,)).fetchone()
+        "EffectMiscValue1, EffectPointsPerComboPoint1 "
+        "from world_spell_template where Id=?", (spell_id,)).fetchone()
     if row is None:
         return None
     (name, rank, attributes, effect, aura, target, duration_index, recovery, category,
      mana, mana_pct, caster_state, creature_type, aura2, aura3, effect2, effect3,
-     item, target_b, cast_index, channel, power_type, misc, per_combo, *points) = row
+     item, target_b, cast_index, channel, power_type, misc, per_combo) = row
     combo = bool(per_combo) or EFFECT_ADD_COMBO_POINTS in (effect, effect2, effect3)
     # Divine Protection pacifies first and makes immune second: any effect's aura counts.
     auras = {aura, aura2, aura3} - {0, None}
@@ -207,13 +178,6 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         facts["role"] = "save"
     elif effect == EFFECT_APPLY_AURA and aura == AURA_STUN and target == TARGET_ENEMY:
         facts["role"] = "stun"
-    elif (effect == EFFECT_APPLY_AURA and target == TARGET_SELF and duration_s
-          and duration_s < LONG_BUFF_S and cooldown_s >= ESCAPE_COOLDOWN_S
-          and (defence := _defence((aura, aura2, aura3), points))):
-        # The caster's own defence on a long cooldown (V366): Evasion, Sprint, Barkskin, kept
-        # for a losing fight, where pressed as a buff it went at every pull.
-        facts["role"] = "escape"
-        facts["aura"] = defence
     elif (effect in (EFFECT_APPLY_AURA, EFFECT_AREA_AURA_PARTY) and duration_s
           and (target in (TARGET_SELF, TARGET_PARTY_AROUND) or target in TARGETS_FRIEND)
           and aura != AURA_THREAT):
@@ -250,24 +214,10 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
     elif effect == EFFECT_CREATE_ITEM and target == TARGET_SELF:
         facts["role"] = "conjure"
         facts["creates"] = item
-    elif (auras & set(AURAS_ESCAPE) and not creature_type
-          and target in (TARGET_ENEMY, TARGET_CASTER_AREA)):
-        # The enemy, or every enemy round the caster, feared, disoriented or rooted (V366):
-        # Fear, Psychic Scream, Intimidating Shout, Death Coil, Blind, Entangling Roots.
-        facts["role"] = "escape"
-        facts["aura"] = next(a for a in (aura, aura2, aura3) if a in AURAS_ESCAPE)
-    elif (effect == EFFECT_APPLY_AURA and aura == AURA_SLOW and target == TARGET_ENEMY
-          and not creature_type):
-        # Only slowed (V366): Concussive Shot, for a retreat.
-        facts["role"] = "escape"
-        facts["aura"] = AURA_SLOW
     else:
         facts["role"] = "utility"
     if AURA_SLOW in auras and target == TARGET_ENEMY:
         facts["slows"] = True
-    if (auras & set(AURAS_HOLD) and not creature_type
-            and target in (TARGET_ENEMY, TARGET_CASTER_AREA)):
-        facts["holds"] = True
     return facts
 
 
