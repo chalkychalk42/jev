@@ -609,7 +609,7 @@ def test_a_body_no_corpse_run_gets_up_at_is_left_for_the_spirit_healer(tmp_path,
     b.purse_memory = tmp_path / "character-1.purse.json"
     b.policy_context = Context()
     b._over_body = lambda: None
-    b._wait_out_sickness = lambda: 0.0
+    b._note_sick = lambda: 0.0
     calls = []
     b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
 
@@ -627,7 +627,7 @@ def test_a_body_no_corpse_run_gets_up_at_is_left_for_the_spirit_healer(tmp_path,
     later = body()                                   # the next session, begun as a ghost
     later.purse_memory = b.purse_memory
     later.policy_context = Context()
-    later._wait_out_sickness = lambda: 0.0
+    later._note_sick = lambda: 0.0
     assert later.recover.graveyard is None
     seen_at = []
     later.recover.run_spirit_healer = lambda: (seen_at.append(later.recover.graveyard)
@@ -659,7 +659,7 @@ def test_a_ghost_twice_over_its_body_on_another_floor_finds_a_spirit_healer(monk
     b = body()
     b.client.bounds, b.client.coordinate_zones = zones[842], zones   # Durotar's map frame
     b._side, b._revived_at = "horde", None
-    b._wait_out_sickness = lambda: 0.0
+    b._note_sick = lambda: 0.0
     body_at = (0.37330690473368977, 0.8115300286572622)             # Bildo's, in the Barrens
     world = {"at": body_at, "gossip": False, "modal": False, "alive": False}
 
@@ -786,7 +786,7 @@ def test_a_revival_is_remembered_by_the_next_session(tmp_path, monkeypatch):
     from jev.clients.hearth import Hearthed
 
     later.hearth.run = lambda: calls.append("hearth") or Hearthed.HOME
-    later._wait_out_sickness = lambda: 0.0
+    later._note_sick = lambda: 0.0
     later._recover(seen())
     assert calls[0] == "healer", "died again inside the trap's minutes: not at the body"
 
@@ -819,7 +819,7 @@ def test_a_body_in_a_camp_is_got_up_from_at_the_spirit_healer(monkeypatch, camp,
     corpse = (-9000.0, 100.0)
     spawns = [(corpse[0] + dx, corpse[1] + dy, 60.0) for dx, dy in camp]
     monkeypatch.setattr("jev.run.body.hostiles.near", lambda *a, **k: list(spawns))
-    b._wait_out_sickness = lambda: 0.0
+    b._note_sick = lambda: 0.0
     calls = []
     b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
     b.recover.run = lambda corpse: calls.append("corpse") or Recovered.ALIVE
@@ -908,7 +908,7 @@ def test_a_character_killed_by_a_far_stronger_unit_gets_up_at_the_spirit_healer(
     b = body()
     b._revived_at = None
     b.fight._target_level = killer
-    b._wait_out_sickness = lambda: 0.0
+    b._note_sick = lambda: 0.0
     calls = []
     b.recover.run_spirit_healer = lambda: calls.append("healer") or Recovered.ALIVE
     b.recover.run = lambda corpse: calls.append("corpse") or Recovered.ALIVE
@@ -951,7 +951,7 @@ def test_the_spirit_healer_is_no_way_out_from_a_graveyard_in_a_camp(monkeypatch,
     b = body()
     b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
     b._side = "alliance"
-    b._wait_out_sickness = lambda: 0.0
+    b._note_sick = lambda: 0.0
     now = 10_000.0
     monkeypatch.setattr("jev.run.body.time.time", lambda: now)
     trapped = why.startswith("a body that killed it again")
@@ -996,7 +996,7 @@ def test_of_two_camps_the_ghost_gets_up_in_the_roomier(monkeypatch):
     b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
     b._side = "alliance"
     b._revived_at = None
-    b._wait_out_sickness = lambda: 0.0
+    b._note_sick = lambda: 0.0
     corpse = (-9000.0, 100.0)
     camp = [(corpse[0] + dx, corpse[1] + dy, 60.0, 0.0) for dx, dy in (
         (0.0, 0.0), (20.0, 0.0), (-20.0, 0.0), (0.0, 20.0), (0.0, -20.0), (18.0, 18.0),
@@ -1017,24 +1017,28 @@ def test_of_two_camps_the_ghost_gets_up_in_the_roomier(monkeypatch):
         assert calls == [expected], "a graveyard 4 yards from a spawn is the smaller camp"
 
 
-def test_resurrection_sickness_is_waited_out_before_going_on(monkeypatch):
-    """V189: walking out under the sickness, a level 13 paladin met a Dust Devil 90 s
-    after getting up at the Spirit Healer and died (session 150)."""
-    from jev.run.body import SICKNESS_WAIT_MAX_S
+def test_resurrection_sickness_is_kept_and_not_stood_out():
+    """V379: after the Spirit Healer the sickness's end is kept in the policy's context (and the
+    purse file), and the corpse run returns at once: no minutes stood still."""
+    import time as clock
 
     b = body()
-    clock = {"t": 1000.0}
-    monkeypatch.setattr("jev.run.body.time.monotonic", lambda: clock["t"])
-    monkeypatch.setattr("jev.run.body.time.sleep", lambda s: clock.update(t=clock["t"] + s))
-    readings = {"char.level": 13, "vitals.combat": False}
-    b._read = lambda: dict(readings)
-    assert 180.0 <= b._wait_out_sickness() < 182.0, "a minute a level above ten"
-    readings["char.level"] = 25
-    assert b._wait_out_sickness() < SICKNESS_WAIT_MAX_S + 2.0, "inside the corpse run's time"
-    readings["char.level"] = 9
-    assert b._wait_out_sickness() == 0.0, "no sickness at level 10 and below"
-    readings.update({"char.level": 13, "vitals.combat": True})
-    assert b._wait_out_sickness() < 2.0, "an attack ends the wait"
+    b._read = lambda: {"char.level": 13}
+    saved = []
+    b._save_purse = lambda: saved.append(True)
+    before = clock.time()
+    assert b._note_sick() == 180.0, "a minute a level above ten"
+    assert 179.0 <= b.policy_context.sick_until - before <= 182.0 and saved
+    b._read = lambda: {"char.level": 10}
+    assert b._note_sick() == 0.0, "no sickness at level 10 and below"
+
+def test_the_sickness_is_the_servers_minute_a_level_above_ten():
+    """V379's sickness (`sickness_s`): mangos-tbc `Player::ResurrectPlayer`,
+    `Death.SicknessLevel` 11: none to 10, a minute a level above, ten minutes from 20."""
+    from jev.run.body import sickness_s
+
+    assert [sickness_s(level) for level in (None, True, 1, 10, 11, 15, 16, 19, 20, 70)] == [
+        0.0, 0.0, 0.0, 0.0, 60.0, 300.0, 360.0, 540.0, 600.0, 600.0]
 
 
 def test_a_unit_with_no_nameplate_on_show_is_talked_to_where_a_hover_finds_it():
@@ -1970,7 +1974,7 @@ def test_a_body_in_a_death_camp_is_got_up_from_at_the_spirit_healer(monkeypatch,
     b.client.bounds = ZoneBounds(12, 0, 1535.4, -1935.4, -7939.6, -10254.2)
     b._side = "alliance"
     b._revived_at = None
-    b._wait_out_sickness = lambda: 0.0
+    b._note_sick = lambda: 0.0
     monkeypatch.setattr("jev.run.body.hostiles.near", lambda *a, **k: [])
     corpse = (-9000.0, 100.0)
     b.client.route_memory = RouteMemory()
@@ -2261,7 +2265,7 @@ def _tirisfal_body(tmp_path=None):
     if tmp_path is not None:
         b.purse_memory = tmp_path / "character-0b15a092.purse.json"
     b.policy_context = Context()
-    b._wait_out_sickness = lambda: 0.0
+    b._note_sick = lambda: 0.0
     return b
 
 
