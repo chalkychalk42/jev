@@ -523,10 +523,7 @@ class Hunt:
             event("fight.summary", code=outcome.value, detail=self.fight.detail,
                   data={"pressed_slots": self.fight.pressed, "closed": self.fight.closed,
                         "heals_landed": self.fight.heals_landed,
-                        "heals_ignored": self.fight.heals_ignored,
-                        # What a losing fight spent, and whether it was being lost (V367).
-                        "escapes": list(getattr(self.fight, "escapes", ()) or ()),
-                        "losing": getattr(self.fight, "losing_at", None) is not None})
+                        "heals_ignored": self.fight.heals_ignored})
             self.say(f"    {outcome.value} ({have}/{need}) "
                      f"pressed {self.fight.pressed} closed {self.fight.closed} "
                      f"heals {self.fight.heals_landed}/{self.fight.heals_ignored}"
