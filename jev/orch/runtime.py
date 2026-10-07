@@ -35,7 +35,7 @@ from jev.coach import policy as scripted
 from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
-from jev.guide.graph import Graph, frame_yards, rib_fits, rib_for, rib_pays
+from jev.guide.graph import Graph, frame_yards, rib_fits, rib_for, rib_levels, rib_pays
 from jev.guide.objectives import progress
 from jev.guide.route_memory import CAMP_S, CAMP_YARDS
 from jev.guide.tracker import SHORT_RIB_S, Event, Tracker, waits_for_level
@@ -270,6 +270,11 @@ class ClientRuntime:
     # many play one world, as in the hive. Alone, the live bot takes the nearest rib paying near
     # the best (V323): a spread there costs about 5% of a kill's experience and gains nothing.
     spread_ribs: bool = False
+    # The hive's yield table (`jev.learn.yields.Yields`, V392): with it, a rib is valued by the
+    # experience an hour, net of death time, a kill of its creatures makes for the character's
+    # class at its level (`rib_pays`); without it - the live bot, or no file - by a kill's
+    # experience, as before.
+    yields: object | None = None
     # The level this guide is outgrown at (`jev.run.cli.OUTGROWN_AT`): from it, between two
     # quests, the complete quests' hand-ins nearby are made and the guide is done (V162).
     outgrown_at: int | None = None
@@ -298,6 +303,8 @@ class ClientRuntime:
     # last tick (`Context.step_waits`): a bar's or a wait's end chooses the rib again (V391).
     _now: float = field(default=0.0, init=False)
     _ribs_waiting: frozenset = field(default=frozenset(), init=False)
+    # The character's class, which the yield table is read for (V392).
+    _cls: str | None = field(default=None, init=False)
     # The steps by id and the grind ribs, looked up on every tick by the walk along the spine.
     _nodes: dict = field(default_factory=dict, init=False)
     _ribs_all: tuple = field(default=(), init=False)
@@ -353,6 +360,7 @@ class ClientRuntime:
         """
         state = self.source.read() if state is None else state
         self._now = state.t
+        self._cls = state.char.cls or self._cls
         if state.client_id != self.client_id:
             raise ValueError(f"source client {state.client_id!r} != runtime {self.client_id!r}")
         if (self.character_key is not None and state.char.key is not None
@@ -704,7 +712,8 @@ class ClientRuntime:
                 and not (camped is not None and camped(r, level))]
         node, memory = self._nodes.get(step), self.tracker.memory
         if free and node is not None and node.kind is StepKind.GRIND:
-            pays = rib_pays([r for r in self._ribs_all if rib_fits(r, level)], level)
+            pays = rib_pays([r for r in self._ribs_all if rib_fits(r, level)], level,
+                            self._rate())
             least = RIB_WAIT_SHARE * max(pays.values())
             free = [r for r in free if pays[r.id] >= least]
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
@@ -1279,7 +1288,15 @@ class ClientRuntime:
         barred = frozenset() if level is None else self._barred(level)
         return rib_for(ribs, level, preferred, near, short, barred=barred,
                        key=self.character_key if self.spread_ribs else None,
-                       scale=self._frame)
+                       scale=self._frame, rate=self._rate())
+
+    def _rate(self):
+        """A rib's worth to this character by the yield table (V392), or `None` without one."""
+        yields = self.yields
+        if yields is None:
+            return None
+        cls = self._cls
+        return lambda rib, level: yields.rib_rate(*rib_levels(rib), level, cls)
 
     def _barred(self, level: int) -> frozenset[str]:
         """The ribs barred at `level` now (V391)."""
