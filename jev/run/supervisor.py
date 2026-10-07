@@ -392,7 +392,8 @@ class Supervisor:
                       and worker.arm.decision.skill not in ("TRAIN_CLASS", "BIND_HEARTH",
                                                             "DISCOVER_FLIGHT", "EAT_DRINK",
                                                             "BUY_AMMO_REAGENT_FOOD",
-                                                            "VENDOR_REPAIR", "BAG_MAKE_SPACE")
+                                                            "VENDOR_REPAIR", "BAG_MAKE_SPACE",
+                                                            "BUY_WAND")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if result.code == "camp":

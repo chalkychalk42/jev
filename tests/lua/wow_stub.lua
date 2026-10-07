@@ -192,8 +192,23 @@ function GetContainerItemInfo(bag, slot)
     return nil
 end
 function GetItemInfo(item)
+    -- A reward's link (`GetQuestItemLink`): its equip slot, the ninth value.
+    local choice = type(item) == "string" and tonumber(string.match(item, "^choice:(%d+)$"))
+    if choice then
+        local c = STATE.choices and STATE.choices[choice]
+        return "Reward", item, c and c.quality, 10, 0, "Weapon", "Wands", 1, c and c.equip or ""
+    end
     if STATE.itemRarity == nil then return nil end
     return "item", "link", STATE.itemRarity
+end
+function GetQuestItemLink(kind, i)
+    if kind ~= "choice" or STATE.choices == nil or STATE.choices[i] == nil then return nil end
+    return "choice:" .. i
+end
+-- What the ranged slot holds (18): STATE.rangedLink, nothing by default.
+function GetInventoryItemLink(unit, slot)
+    if unit == "player" and slot == 18 then return STATE.rangedLink end
+    return nil
 end
 function GetContainerItemLink(bag, slot)
     if STATE.inventoryFixture and bag == 0 then

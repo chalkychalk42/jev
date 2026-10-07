@@ -1844,6 +1844,13 @@
    "max_yd": 40.0,
    "cast_s": 0.0
   },
+  "5019": {
+   "min_yd": 0.0,
+   "max_yd": 30.0,
+   "cast_s": 0.0,
+   "repeats": true,
+   "weapon": true
+  },
   "5116": {
    "min_yd": 0.0,
    "max_yd": 35.0,

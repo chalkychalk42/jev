@@ -5,8 +5,9 @@ item the strip cannot give: the slot it goes in, whether this character can use 
 good it is. They come from this server's world database, like the vendor catalog:
 
 - `items`: every armour piece and one-handed weapon up to level 30 in a slot the bot fills,
-  with its armour type or weapon type, required level, class and race masks, and a score -
-  armour plus weighted primary stats for armour, damage per second for a weapon;
+  and every wand (V397: the ranged slot, shot with `Shoot`), with its armour type or weapon
+  type, required level, class and race masks, and a score - armour plus weighted primary
+  stats for armour, damage per second for a weapon;
 - `proficiencies`: per `race:class`, the armour and weapon types its starting spells teach
   (Mail, One-Handed Maces, Shield...). A fresh character can use nothing else, and a weapon
   skill it lacks makes the client refuse the item.
@@ -27,12 +28,16 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # two-handers would take the shield off: left out.
 SLOTS = {1: "head", 2: "neck", 3: "shoulders", 5: "chest", 20: "chest", 6: "waist",
          7: "legs", 8: "feet", 9: "wrists", 10: "hands", 16: "back",
-         13: "main_hand", 21: "main_hand", 14: "off_hand"}
+         13: "main_hand", 21: "main_hand", 14: "off_hand", 26: "ranged"}
+# In the ranged slot, a wand alone (V397): a caster's shot when its mana is spent. A gun or a
+# crossbow would be a warrior's or a rogue's, and needs ammunition no one buys them.
+RANGED = 26
+WAND = (2, 19)
 
 # Proficiency spells -> (item class, subclass). Armour is class 4, weapons class 2.
 PROFICIENCIES = {
     9078: (4, 1), 9077: (4, 2), 8737: (4, 3), 750: (4, 4), 9116: (4, 6),
-    196: (2, 0), 198: (2, 4), 201: (2, 7), 1180: (2, 15), 15590: (2, 13),
+    196: (2, 0), 198: (2, 4), 201: (2, 7), 1180: (2, 15), 15590: (2, 13), 5009: WAND,
 }
 # Armour subclass 0 (cloaks, necks, rings) is miscellaneous and needs no proficiency.
 MISC_ARMOUR = (4, 0)
@@ -61,6 +66,8 @@ def generate(db: sqlite3.Connection) -> dict:
             f"select * from world_item_template where RequiredLevel <= ? and class in (2, 4) "
             f"and InventoryType in ({wanted})", (MAX_LEVEL,)):
         row = dict(row)
+        if row["InventoryType"] == RANGED and (row["class"], row["subclass"]) != WAND:
+            continue
         items[str(row["entry"])] = {
             "slot": SLOTS[row["InventoryType"]], "kind": [row["class"], row["subclass"]],
             "level": row["RequiredLevel"], "classes": row["AllowableClass"],

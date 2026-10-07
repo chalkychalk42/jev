@@ -450,6 +450,26 @@ def test_equal_choices_take_the_earlier_item_and_a_pick_is_reported():
     assert _choices({"choices": both, "itemChoice": 2})["ui.choice_made"] is True
 
 
+def test_a_caster_with_its_ranged_slot_empty_takes_the_wand_first():
+    """V397: The People's Militia (quest 14) offers the human priest a two-handed sword, a mace
+    and a wand, all green, and the earlier usable item was the mace. A priest, mage or warlock
+    with nothing in its ranged slot takes the wand; one with a wand, or a warrior, the mace."""
+    choices = [{"quality": 2, "usable": False, "equip": "INVTYPE_2HWEAPON"},
+               {"quality": 2, "usable": True, "equip": "INVTYPE_WEAPON"},
+               {"quality": 2, "usable": True, "equip": "INVTYPE_RANGEDRIGHT"}]
+    wand = _choices({"choices": choices, "class": "PRIEST"})
+    # QuestRewardItem3: column 0, row 1 -> (100, 550); QuestRewardItem2: (250, 600).
+    assert wand["ui.choice_x"] == pytest.approx(100 / 1600, abs=0.002)
+    assert wand["ui.choice_y"] == pytest.approx(1 - 550 / 900, abs=0.002)
+    for state in ({"class": "PRIEST", "rangedLink": "|Hitem:5208|h[Smoldering Wand]|h"},
+                  {"class": "WARRIOR"}):
+        mace = _choices({"choices": choices, **state})
+        assert mace["ui.choice_x"] == pytest.approx(250 / 1600, abs=0.002), state
+    unusable = [{**choices[2], "usable": False}, choices[1]]
+    assert _choices({"choices": unusable, "class": "MAGE"})["ui.choice_x"] == pytest.approx(
+        250 / 1600, abs=0.002), "a wand it cannot use is not taken"
+
+
 @pytest.mark.parametrize(("targeting", "expected"), [(1, True), (None, False)])
 def test_a_spell_waiting_for_a_target_is_painted(targeting, expected):
     values = radio.unpack(payload(paint({"spellTargeting": targeting}))[:PAYLOAD_CELLS])

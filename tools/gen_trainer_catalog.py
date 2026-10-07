@@ -12,8 +12,9 @@ database, like the vendor and gear catalogs:
   its trigger spells: Judgement is sold as 10321, which teaches 20271 and a Seal of
   Righteousness), the level and the price;
 - `spells`: for every spell taught (all of a trainer spell's "learn spell" effects), every
-  spell a class starts with on its bar, and every spell that replaces one of those on the
-  bar when learned, what it is: its name and rank, and a **role** read from what it does;
+  spell a class starts with on its bar, a wand's shot a class starts knowing (V397), and
+  every spell that replaces one of those on the bar when learned, what it is: its name and
+  rank, and a **role** read from what it does;
   and for a trainer spell that teaches others, the facts of the first it teaches with
   `teaches`, the spells it teaches (V359).
 
@@ -29,7 +30,28 @@ Roles, from the spell's own data, never from its name:
     short_buff   an aura on the caster lasting under a minute (a seal)
     save         the caster or a friend made immune to damage (aura 39 or 40, any effect),
                  or shielded from damage of every school (aura 69: Power Word: Shield, V361)
+    cc           one enemy held out of the fight (V395): its first effect confuses (aura 5:
+                 Polymorph), fears (7: Fear, Scare Beast) or roots (26: Entangling Roots) it,
+                 or transforms it (56), or any effect stuns it with a stun that damage breaks
+                 (aura 12 and the damage interrupt flag: Gouge, Hibernate, Shackle Undead,
+                 Sap); with how long it holds (`holds_s`), the creature types it takes
+                 (`creatures`, the spell's TargetCreatureType mask: Hibernate's beasts and
+                 dragonkin) and whether it only pins the unit where it stands (`pins`, a
+                 root: one already at hand strikes on)
+    guard        a crowd's blows held off for a few seconds (V396): the enemies round the
+                 caster feared (aura 7 round it: Psychic Scream, Howl of Terror), or a short
+                 aura on the caster that turns blows aside - dodge, parry, block, damage
+                 taken made less (auras 49, 47, 51, 87: Evasion, Shield Block, Shield Wall) -
+                 or a short dummy aura on it that answers the melee blows it takes
+                 (Retaliation);
+                 with how long it lasts (`holds_s`) and whether it reaches round the caster
+                 (`around`)
+
+and, whatever the role, `form` for a spell cast only in a form or stance the character does
+not take (V394: a druid's Claw, a rogue's Sap, a warrior's Shield Block).
     stun         the enemy stunned (aura 12)
+    wand         a wand's shot, repeating (`Shoot`, V397): a weapon blow that asks for a wand;
+                 known from the start by every priest, mage and warlock
     strike       damage, a weapon blow or a drain on the enemy target, on a cooldown or not;
                  or an aura on the enemy with damage beside it (Frostbolt's slow) or a
                  periodic missile (Arcane Missiles); or, cast with mana, damage to the enemy
@@ -37,7 +59,6 @@ Roles, from the spell's own data, never from its name:
     dot          damage over time on the enemy (aura 3), not channelled, no combo point
                  given or spent: Corruption, Shadow Word: Pain, Serpent Sting, Rend (V361)
     root         everything round the caster held in place (aura 26: Frost Nova)
-    cc           the enemy transformed (aura 56: Polymorph)
     conjure      an item made for the caster (effect 24: Conjure Water, Conjure Food), and
                  which item (`creates`)
     attack       melee auto-attack (78), a toggle
@@ -104,6 +125,32 @@ CAST_INSTANT = 1
 TARGETS_FRIEND = (21, 57)
 DURATION_INFINITE = 21
 ATTR_PASSIVE = 0x40
+# What holds one enemy out of the fight (V395): confused, feared, rooted, transformed, and a
+# stun that damage breaks (`AURA_INTERRUPT_FLAG_DAMAGE`).
+AURA_CONFUSE = 5
+AURA_FEAR = 7
+AURAS_HOLD = (AURA_CONFUSE, AURA_FEAR, AURA_ROOT, AURA_TRANSFORM)
+INTERRUPT_ON_DAMAGE = 0x2
+# Auras on the caster that turn a crowd's blows aside for a few seconds (V396): parry, dodge,
+# block, and damage taken made less (not Recklessness's more); and a dummy aura that answers
+# the melee blows it takes, whose effect the server scripts (Retaliation's counterstrike; a
+# seal's answers blows dealt).
+AURAS_GUARD = (47, 49, 51)
+AURA_DAMAGE_TAKEN = 87
+AURA_DUMMY = 4
+PROC_TAKEN_MELEE = 0x8 | 0x20
+# A wand's shot (V397): a weapon blow that asks for a wand (item class 2, subclass 19) and
+# repeats until stopped (the server's `SPELL_ATTR_EX2_AUTOREPEAT_FLAG`).
+ITEM_CLASS_WEAPON = 2
+WAND_SUBCLASS_MASK = 1 << 19
+AUTO_REPEAT = 0x20
+# A spell cast only in a form or stance the character does not take (V394): its `Stances`
+# mask set, without the attribute that lets it be cast unshifted - a druid's Claw and Maul, a
+# rogue's Sap, a warrior's Revenge and Shield Block (Defensive Stance). A warrior lives in
+# Battle Stance, the stance it starts in and the only one taken, and what that allows is
+# its own (Overpower, Retaliation).
+NOT_NEED_SHAPESHIFT = 0x80000
+BATTLE_STANCE = 1 << 16
 
 LONG_BUFF_S = 60.0
 LAST_RESORT_COOLDOWN_S = 600.0
@@ -123,13 +170,18 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         "ManaCost, ManaCostPercentage, CasterAuraState, TargetCreatureType, "
         "EffectApplyAuraName2, EffectApplyAuraName3, Effect2, Effect3, EffectItemType1, "
         "EffectImplicitTargetB1, CastingTimeIndex, ChannelInterruptFlags, PowerType, "
-        "EffectMiscValue1, EffectPointsPerComboPoint1 "
+        "EffectMiscValue1, EffectPointsPerComboPoint1, EffectImplicitTargetA2, "
+        "EffectImplicitTargetA3, AuraInterruptFlags, EquippedItemClass, "
+        "EquippedItemSubClassMask, AttributesEx2, EffectBasePoints1, EffectBasePoints2, "
+        "EffectBasePoints3, ProcFlags, Stances "
         "from world_spell_template where Id=?", (spell_id,)).fetchone()
     if row is None:
         return None
     (name, rank, attributes, effect, aura, target, duration_index, recovery, category,
      mana, mana_pct, caster_state, creature_type, aura2, aura3, effect2, effect3,
-     item, target_b, cast_index, channel, power_type, misc, per_combo) = row
+     item, target_b, cast_index, channel, power_type, misc, per_combo, target2, target3,
+     interrupts, item_class, item_subclasses, attributes_ex2, points, points2, points3,
+     procs, stances) = row
     combo = bool(per_combo) or EFFECT_ADD_COMBO_POINTS in (effect, effect2, effect3)
     # Divine Protection pacifies first and makes immune second: any effect's aura counts.
     auras = {aura, aura2, aura3} - {0, None}
@@ -148,14 +200,52 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
                                                   "other")}
     if mana_pct:
         facts["mana_pct"] = mana_pct
+    if (stances and not (attributes_ex2 or 0) & NOT_NEED_SHAPESHIFT
+            and not stances & BATTLE_STANCE):
+        facts["form"] = True
     if caster_state:
         # Usable only in a state another spell sets, and spent by it: Judgement needs a
         # seal and releases it.
         facts["spends"] = True
+    # Each effect's aura and its target, for what holds an enemy or guards the caster (V395).
+    effects = ((effect, aura, target), (effect2, aura2, target2), (effect3, aura3, target3))
+    lessened = any(a == AURA_DAMAGE_TAKEN and (p or 0) < 0
+                   for a, p in ((aura, points), (aura2, points2), (aura3, points3)))
+    holds = ((effect == EFFECT_APPLY_AURA and aura in AURAS_HOLD and target == TARGET_ENEMY)
+             or (bool((interrupts or 0) & INTERRUPT_ON_DAMAGE)
+                 and any(e == EFFECT_APPLY_AURA and a == AURA_STUN and t == TARGET_ENEMY
+                         for e, a, t in effects)))
+    scatters = any(e == EFFECT_APPLY_AURA and a == AURA_FEAR and t == TARGET_CASTER_AREA
+                   for e, a, t in effects)
+    short_on_self = (effect == EFFECT_APPLY_AURA and target == TARGET_SELF and duration_s
+                     and duration_s < LONG_BUFF_S)
     if attributes & ATTR_PASSIVE:
         facts["role"] = "passive"
     elif effect == EFFECT_ATTACK:
         facts["role"] = "attack"
+    elif (item_class == ITEM_CLASS_WEAPON and item_subclasses == WAND_SUBCLASS_MASK
+          and (attributes_ex2 or 0) & AUTO_REPEAT and effect in EFFECTS_WEAPON):
+        # A wand's shot (V397): no mana, no global cooldown, a caster's damage when its mana
+        # is spent or its unit nearly dead.
+        facts["role"] = "wand"
+    elif holds and not auras & set(AURAS_IMMUNE):
+        # One enemy out of the fight while it lasts (V395), before a stun and a strike: Gouge
+        # does a little damage first, Hibernate is a stun that damage breaks. Not Banish,
+        # which makes its unit immune too (a save, below).
+        facts["role"] = "cc"
+        facts["holds_s"] = duration_s or 0.0
+        if creature_type:
+            facts["creatures"] = creature_type
+        if effect == EFFECT_APPLY_AURA and aura == AURA_ROOT:
+            facts["pins"] = True
+    elif scatters or (short_on_self and (auras & set(AURAS_GUARD) or lessened
+                                         or (auras == {AURA_DUMMY}
+                                             and (procs or 0) & PROC_TAKEN_MELEE))):
+        # A crowd held off (V396): before the buffs, which these were (Evasion, Shield Block).
+        facts["role"] = "guard"
+        facts["holds_s"] = duration_s or 0.0
+        if scatters:
+            facts["around"] = True
     elif effect == EFFECT_HEAL_MAX_HEALTH or (effect == EFFECT_HEAL
                                               and cooldown_s >= LAST_RESORT_COOLDOWN_S):
         facts["role"] = "last_resort"
@@ -316,6 +406,13 @@ def generate(db: sqlite3.Connection) -> dict:
     for spell_id in sorted(_successors(db, taught | starting)):
         facts = spell_facts(db, spell_id)
         if facts is not None:
+            spells[str(spell_id)] = facts
+    # A wand's shot, which a priest, a mage and a warlock know from the start and nothing puts
+    # on a bar (V397): Shoot, 5019.
+    for (spell_id,) in db.execute("select distinct Spell from world_playercreateinfo_spell "
+                                  "order by Spell"):
+        facts = spell_facts(db, spell_id) if str(spell_id) not in spells else None
+        if facts is not None and facts["role"] == "wand":
             spells[str(spell_id)] = facts
     for spell_id, learned in sorted(wrappers.items()):
         facts = spells.get(str(learned[0]))

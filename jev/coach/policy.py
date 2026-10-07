@@ -630,6 +630,17 @@ class Context:
             return False
         return self.discoverable(state)
 
+    # Whether a wand better than the one worn is for sale within a trainer's walk, and the
+    # purse spares it above what it keeps (`kept`): a priest's, a mage's or a warlock's
+    # (`LiveBody.wand_due`, V398). Absent, none is ever bought.
+    wand: Callable[[State], bool] | None = None
+
+    def can_buy_wand(self, state: State) -> bool:
+        try:
+            return self.wand is not None and bool(self.wand(state))
+        except Exception:
+            return False
+
     # A death that made or fell in a death camp (V307), as (map, world x, world y): the runtime
     # leaves it for the grind of the character's level once it is up (`ClientRuntime`), and no
     # service is armed until the walk there is made (`leaving_until`, wall time). After each of
@@ -863,6 +874,13 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     if context is not None and _recover(state, context) is None and context.can_discover(state):
         due(Plan(_d(Intent.SERVICE, "DISCOVER_FLIGHT", "an unvisited flight master is near",
                        0.5, ("dead", "combat"), service="discover"), True, "service.discover"))
+
+    # Last, a wand (V398): a caster's shot where it would stand out of mana, sold from level
+    # 15 at a wand merchant in a capital, bought when one stands within a trainer's walk and
+    # the purse spares it.
+    if context is not None and _recover(state, context) is None and context.can_buy_wand(state):
+        due(Plan(_d(Intent.SERVICE, "BUY_WAND", "a wand the purse spares is for sale near",
+                    0.5, ("dead", "combat"), service="wand"), True, "service.wand"))
 
     return plans
 

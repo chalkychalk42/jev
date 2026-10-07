@@ -129,6 +129,25 @@ def generate(db: sqlite3.Connection, profiles: dict, guide_quests: set[int] | No
     bag_prices = {str(row[0]): int(row[1]) for row in db.execute(
         "select entry,BuyPrice from world_item_template where class=1 and subclass=0 "
         "and InventoryType=18 and ContainerSlots>0 and BagFamily=0 and BuyPrice>0 order by entry")}
+    # Wands (V398): what a merchant sells, by the level that may shoot one and its price, and
+    # the sides each merchant who sells one serves. A priest, mage or warlock buys the best
+    # its level allows with what the purse spares (`LiveBody.wand_due`): sold only from
+    # level 15, by a wand merchant in six capitals. None from a snapshot without the columns.
+    sold_items = {item for v in vendors for item in v["items"]}
+    try:
+        wand_rows = db.execute("select entry, RequiredLevel, BuyPrice from world_item_template "
+                               "where class=2 and subclass=19 and BuyPrice>0 order by entry"
+                               ).fetchall()
+    except sqlite3.OperationalError:
+        wand_rows = []
+    wand_items = {str(entry): {"level": int(level or 0), "price": int(price)}
+                  for entry, level, price in wand_rows if entry in sold_items}
+    wand_sides = {}
+    for v in vendors:
+        if any(str(item) in wand_items for item in v["items"]):
+            faction = db.execute("select Faction from world_creature_template where Entry=?",
+                                 (v["entry"],)).fetchone()
+            wand_sides[str(v["entry"])] = _sides(db, faction[0]) if faction else []
     # Innkeepers, where the hearthstone is bound: the one nearest the guide's work becomes
     # home (`LiveBody._bind`). A game event's spawns stand there only while it runs.
     innkeepers = []
@@ -164,7 +183,8 @@ def generate(db: sqlite3.Connection, profiles: dict, guide_quests: set[int] | No
                               "gossip": line[0] if line else None})
     return {"schema": 1, "junk": sorted(set(junk)), "junk_prices": prices, "supplies": supplies,
             "vendors": vendors, "bags": bags, "bag_prices": bag_prices, "surplus_prices": surplus,
-            "innkeepers": innkeepers, "flightmasters": flightmasters}
+            "innkeepers": innkeepers, "flightmasters": flightmasters,
+            "wands": {"items": wand_items, "sides": wand_sides}}
 
 
 def guide_quests(folder: pathlib.Path) -> set[int]:

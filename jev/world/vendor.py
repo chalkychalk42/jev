@@ -272,3 +272,64 @@ def note_merchant(path: pathlib.Path | None, entry: int, *, failed: bool,
     with suppress(OSError):
         atomic_json(pathlib.Path(path), {"format": MEMORY_FORMAT,
                                          "failures": {str(k): v for k, v in sorted(failures.items())}})
+
+
+# -- wands (V398) ----------------------------------------------------------------------
+#
+# A priest, mage or warlock shoots a wand where it would stand out of mana (V397), and the
+# world sells wands only from level 15 (the Smoldering Wand, 33 silver 40), at a wand merchant
+# in six capitals - Stormwind, Ironforge, the Undercity, Orgrimmar, the Exodar, Silvermoon -
+# none in Darnassus or Thunder Bluff. Below 15 a wand is a quest's reward or a drop. One is
+# worth a trainer's walk (`jev.world.training.MAX_TRAINER_YARDS`).
+WAND_YARDS = 1500.0
+
+
+def wand_for_sale(class_id: int | None, race_id: int | None, level: int | None,
+                  spare: int | None, worn: float, map_id: int | None,
+                  here: tuple[float, float] | None, side: str | None, *,
+                  yards: float = WAND_YARDS) -> tuple[Merchant, int, int] | None:
+    """The wand to buy (V398) as (merchant, item, price): the best its level allows by its
+    gear score (`jev.world.gear.usable`, damage a second) and better than `worn`, the ranged
+    slot's, that a merchant of its side within `yards` of `here` sells for no more than
+    `spare` copper; the nearer of two merchants. `None` for anything unknown."""
+    import math
+
+    from jev.world.gear import usable
+
+    if None in (class_id, race_id, level, spare, map_id, here, side):
+        return None
+    items, sold = _wands(), _wand_merchants(map_id, side)
+    if not sold or not items or level < min(level_ for level_, _ in items.values()):
+        return None                                  # asked at every policy look: cheap first
+    best, best_key = None, None
+    for merchant in sold:
+        yards_off = math.dist(merchant.world[:2], here[:2])
+        if yards_off > yards:
+            continue
+        for item in sorted(merchant.items & items.keys()):
+            need, price = items[item]
+            if need > level or price > spare:
+                continue
+            piece = usable(item, class_id, race_id, level)
+            if piece is None or piece.score <= worn:
+                continue
+            key = (piece.score, -yards_off)
+            if best_key is None or key > best_key:
+                best, best_key = (merchant, item, price), key
+    return best
+
+
+@lru_cache(maxsize=1)
+def _wands() -> dict[int, tuple[int, int]]:
+    """Each wand a merchant sells: (the level that may use it, its price)."""
+    raw = (catalog().get("wands") or {}).get("items") or {}
+    return {int(k): (int(v["level"]), int(v["price"])) for k, v in raw.items()}
+
+
+@lru_cache(maxsize=16)
+def _wand_merchants(map_id: int, side: str) -> tuple[Merchant, ...]:
+    """The merchants on this map who sell a wand and serve this side."""
+    sides = (catalog().get("wands") or {}).get("sides") or {}
+    wands = set(_wands())
+    return tuple(m for m in merchants(map_id)
+                 if m.items & wands and side in sides.get(str(m.entry), ()))
