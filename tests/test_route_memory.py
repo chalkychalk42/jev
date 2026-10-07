@@ -659,3 +659,22 @@ def test_a_death_still_being_saved_when_the_process_exits_is_saved(tmp_path):
     assert done.returncode == 0
     kept = RouteMemory(file).dangers
     assert [(d.x, d.y, d.who) for d in kept] == [(10.0, 20.0, 576)]
+
+
+def test_a_camp_holds_its_hour_for_its_maker_and_twenty_minutes_for_others():
+    """V381: one character's camp bars the others `OTHERS_CAMP_S` from its making, itself the
+    hour; with no key known, the hour for all as before."""
+    from jev.guide.route_memory import CAMP_S, OTHERS_CAMP_S, RouteMemory
+
+    memory = RouteMemory()
+    t = 1_000_000.0
+    memory.died(0, (100.0, 100.0), now=t, level=10, who=7)
+    memory.died(0, (110.0, 100.0), now=t + 120.0, level=10, who=7)        # a camp, made at +120
+    made = t + 120.0
+    assert memory.camp_at(0, (105.0, 100.0), made + 60.0, 10, who=8) is not None
+    assert memory.camp_at(0, (105.0, 100.0), made + OTHERS_CAMP_S + 1.0, 10, who=8) is None
+    assert memory.camp_at(0, (105.0, 100.0), made + OTHERS_CAMP_S + 1.0, 10, who=7) is not None
+    assert memory.camp_at(0, (105.0, 100.0), made + OTHERS_CAMP_S + 1.0, 10) is not None
+    camp = memory.camp_at(0, (105.0, 100.0), made + 60.0, 10, who=8)
+    assert camp.until_for(8) == camp.camp_until - CAMP_S + OTHERS_CAMP_S
+    assert camp.until_for(7) == camp.camp_until
