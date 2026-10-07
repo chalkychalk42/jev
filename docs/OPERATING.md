@@ -77,8 +77,8 @@ completed quests. Alongside it:
 - `.home.json`: where the hearthstone goes.
 - `.equipped.json`: what it has been given to wear.
 - `.purse.json`: what it could not pay for (V206), the conjures on its bar (V244), when it last
-  got up after a death (V247), when its hearthstone is ready (V253) and the trainer visit it
-  failed (V254).
+  got up after a death (V247), when its hearthstone is ready (V253), the trainer visit it
+  failed (V254), and while dead the last corpse point the strip painted (V410).
 - `.taxi.json`: the flight points it knows.
 - `.trail.json`: the way in from the door when a session ends indoors (V232), and the height it
   was tracked at (V267).
@@ -87,6 +87,37 @@ A character plays its guide's quests in order, with grinds ("ribs") as the failo
 guide is finished below the next guide's start, it grinds the finished guide's last grind until
 two levels past the next guide's lowest grind (V262, V276, V280: the 12-20 guide at 14), then the
 next guide takes over at a session's start.
+
+### A character of any race and class (V406-V412)
+
+Every race and class pair has a route, the hive's (`hive.routes`, its authors' Guidelime
+routes on this server's world database). They are not in git: `data/` holds them.
+1. With the loop held, from the live checkout after the merge: `.venv/bin/python
+   tools/install_routes.py`. It copies the 52 routes and their spawns from
+   `/home/ash/JevHive/content/routes` into `data/routes` and prints what each needs (the
+   table: loads, supported steps, frame, needs). `--check` prints it and copies nothing.
+2. The addon again (`tools/gen_addon_fields.py --install`, then the client restarted, as
+   below): V409 paints the quest log's slots on the golden ratio's turn. The schema stays 22;
+   the old addon still reads, its log just slower to be whole.
+3. Add `"--route", "auto"` to the `args` of `var/teaching-launch.json`: each session plays the
+   logged-in character's race and class's route (its supported quests, as the hive does). A
+   character whose playhead names the human guides stays on them. `--route tauren_druid` plays
+   one by name.
+4. Make the character and play its first session supervised (`tools/visit.sh NAME LOG 1`).
+   Watch `captures/live-N.log` for: `no height known here: planned from the floor at` (V406, a
+   first plan after a jump), `no walk finishes at ... flying from` (V408: a night elf's
+   Darkshore from Rut'theran), `found by a hover at its spawn` (V411), and corpse runs that
+   walk to the painted body (V410).
+
+What the live client still lacks, by route (`tools/install_routes.py --check`): no route leaves
+its race's continent. The tauren (17 to 19 steps) and the orcs and trolls (2) have steps on
+Thunder Bluff's mesas, islands on the navmesh: a lift is ridden by keys only by its platform's
+times (`var/lift-clock.json`, V407), and none are known until a sighting gives them, so the
+mesas are reached by a flight (a tauren knows Thunder Bluff's node from its creation) or the
+hearthstone, else the steps fail over. A night elf's Darkshore (109 steps) is flown to from
+Rut'theran; Darnassus (5 to 9) is walked to through its portal. A druid's Moonglade quests (3)
+need Teleport: Moonglade, which Jev does not cast. The Undercity is walked into through its
+sewers.
 
 To play another character between the loop's sessions, hold the loop, then run
 `tools/visit.sh NAME LOG [N]`. It plays N sessions on NAME and returns to the active
@@ -103,6 +134,7 @@ These files are read at each session's start. Each prints a proof line in `live-
 | `var/choices.json` | Outcome-learned choices: which hunt stations pay, and when to heal. |
 | `var/merchant-memory.json` | Merchants that could not be reached or clicked, with when (format 2). Each failure costs 250 yards in the ranking; a sale clears it, and it is forgotten after two hours (V321). |
 | `var/radio-grid.json` | Where the strip was last read whole. |
+| `var/lift-clock.json` | When each lift's platform stands at its stops, from a sighting, kept by the rides it foretold (V407). Empty, no lift is ridden. Forgotten at a reconnect. |
 
 ## Making a change
 
