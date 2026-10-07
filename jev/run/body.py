@@ -40,7 +40,7 @@ from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
 from jev.guide.objectives import QUEST_ABSENT, progress, select_objective, target_progress
-from jev.guide.path import PathStatus
+from jev.guide.path import LiftLeg, PathStatus
 from jev.guide.route_memory import CAMP_REFUSED, CAMP_YARDS, RECORD_FLUSH_S
 from jev.guide.spawns import around as spawn_around
 from jev.guide.spawns import lookup as spawn_points
@@ -48,7 +48,7 @@ from jev.learn.choices import Choice, Stations, objective_key
 from jev.learn.episode import SkillOutcome
 from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
-from jev.run.client import FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
+from jev.run.client import ARRIVED_NEAR_YARDS, FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
 from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, Place, spawn_tour
 from jev.run.hunt import stations as hunt_stations
@@ -225,6 +225,18 @@ SUPPLY_WALK_MAX_YARDS = 400.0
 # yards from Northshire's quests, which bind nowhere, and 360 from Fargodeep Mine's.
 INN_NEAR_YARDS = 500.0
 HOME_FAR_YARDS = 900.0
+# ...and only an inn a walk leads from to the guide's work, the shortest walk first (V383):
+# Thunder Bluff's inn, on a mesa, was the nearest to Mulgore's steps in a straight line, and
+# 22 of the 27 hive bots on the mesas on 6 Oct were bound there and hearthed back up. A home
+# no walk leads from to the work is as far as one 900 yards off. Walks are kept this long.
+WALKS_KEEP_S = 600.0
+# A walk whose plan ended this far short of where it was going, height and all, found no way
+# from where the character stands (V384): with home a walk from there and this far from here,
+# the hearthstone takes it home and it walks on from there. The hive's bots on Thunder Bluff's
+# mesas planned 140 to 2,300 yards short of Mulgore's and the Barrens' steps for hours, five of
+# them bound elsewhere (hive-609 at the Crossroads, from 6 Oct 08:49).
+ISLAND_SHORT_YARDS = 50.0
+HOME_LEAVE_YARDS = 50.0
 # An inn this close to the remembered home is home already.
 SAME_INN_YARDS = 40.0
 # The innkeeper's line for it, the same on all 58 of this server's innkeepers who have one.
@@ -328,6 +340,24 @@ CAMP_CLEAR_BEARINGS = 16
 # A dry rib's wider prey is at most this many levels above the character (V337), as a rib's
 # creatures are (`graph.RIB_LEVELS_ABOVE`, V323).
 WIDEN_LEVELS_ABOVE = 1
+
+
+def walk_cost(planned, world) -> float | bool:
+    """A plan's cost in yards to `world` (V383): its length and corners, and a lift's wait and
+    ride; `False` when it does not get there - no plan, or one ending more than
+    `ARRIVED_NEAR_YARDS` short of it, as a walk's arrival is judged, height and all: the mesh's
+    way from the foot of Thunder Bluff's lifts to the inn on the mesa ends under it."""
+    if planned is None or not planned.usable:
+        return False
+    end = planned.points[-1]
+    dims = 3 if len(end) >= 3 and len(world) >= 3 else 2
+    if (getattr(planned, "status", PathStatus.COMPLETE) is not PathStatus.COMPLETE
+            and math.dist(end[:dims], world[:dims]) > ARRIVED_NEAR_YARDS):
+        return False
+    link = getattr(planned, "teleport", None)
+    ride = link.cost_yards() if isinstance(link, LiftLeg) else 0.0
+    return planned.length_yards() + CORNER_YARDS * max(0, len(planned.points) - 2) + ride
+
 
 class LiveBody:
     # Purse saves, one at a time (V328); a body made without `__init__` shares this one.
@@ -440,6 +470,7 @@ class LiveBody:
         self._talents_failed: int | None = None           # the level a visit failed at (V261)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
         self._wedged = 0
+        self._walks_between: dict[tuple, tuple[float, float | bool]] = {}   # V383
         self._walks: dict[int, float] = {}          # the last ranking's planned walks (V309)
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
@@ -616,10 +647,43 @@ class LiveBody:
                     and (self._read() or {}).get("pos.indoors") is True and back_out()):
                 self.say("  backed out: outdoors, walking on")
                 arrived = self._walk(world, stop_short)
+            # No way from here at all: home, if a walk leads from there (V384).
+            if not arrived and not ghost and self._off_island(world):
+                self._wedged = 0
+                arrived = self._walk(world, stop_short)
         finally:
             self.travelling = False
         self._note_wedged(arrived)
         return arrived
+
+    def _off_island(self, world) -> bool:
+        """Home by hearthstone when the walk's plan ended `ISLAND_SHORT_YARDS` short of `world`
+        and home, `HOME_LEAVE_YARDS` off, is a walk from it (V384): somewhere no route leads
+        out of to where the character is going, as Thunder Bluff's mesas are for a follower
+        that rides no lift. Whether it went home."""
+        plan = getattr(self.client, "last_plan", None)
+        bounds = getattr(self.client, "bounds", None)
+        if (plan is None or bounds is None or not getattr(plan, "points", None)
+                or getattr(plan, "status", None) is PathStatus.COMPLETE or len(world) < 3):
+            return False
+        end = plan.points[-1]
+        short = math.dist(end[:3], world[:3]) if len(end) >= 3 else math.dist(end[:2], world[:2])
+        home = load_home(self.home_memory)
+        here = self._position()
+        if short <= ISLAND_SHORT_YARDS or home is None or here is None:
+            return False
+        at = map_to_world(*here, bounds)
+        if math.dist(home[:2], at[:2]) <= HOME_LEAVE_YARDS:
+            return False
+        start = home if home[2] != 0.0 else (home[0], home[1], world[2])
+        walk = self._walk_between(start, world)
+        if walk is None or walk is False:
+            return False
+        went = self._go_home()
+        self.say(f"  no walk from here to ({world[0]:.0f}, {world[1]:.0f}): its plan ended "
+                 f"{short:.0f} yards short, and home is a {walk:.0f}-yard walk from it: "
+                 f"hearthstone {went.value} {self.hearth.detail}".rstrip())
+        return went.ok
 
     def _walk(self, world, stop_short: float = 0.0) -> bool:
         return (self.client.approach(world, timeout_s=self.travel_timeout, stop_short=stop_short)
@@ -1611,14 +1675,19 @@ class LiveBody:
         here = self._position() if home.ok else None
         world = map_to_world(*here, self.client.bounds) if here is not None else None
         if world is not None:
-            save_home(self.home_memory, (world[0], world[1], 0.0), name="hearthstone arrival")
+            # The inn's height, where it set the character down at the inn remembered (V384).
+            before = load_home(self.home_memory)
+            z = (before[2] if before is not None
+                 and math.dist(before[:2], world[:2]) <= SAME_INN_YARDS else 0.0)
+            save_home(self.home_memory, (world[0], world[1], z), name="hearthstone arrival")
         return home
 
     def _inn(self, state: State | None = None):
-        """The innkeeper nearest the guide's current step, within `INN_NEAR_YARDS` of it."""
-        node = self.graph.get(state.guide.step_id) if state is not None and state.guide.step_id \
-            else self._node()
-        if node is not None and node.world is not None and node.map_id == self.client.bounds.map_id:
+        """The innkeeper nearest the guide's current step, within `INN_NEAR_YARDS` of it: of
+        those a walk leads from to the step, the shortest walk (V383; through a lift where the
+        follower rides one), where the step's place is known and a planner is there to ask."""
+        node = self._work_node(state)
+        if node is not None:
             at = node.world[:2]
         else:
             here = self._position()
@@ -1627,10 +1696,47 @@ class LiveBody:
             at = map_to_world(*here, self.client.bounds)
         side = getattr(state.char, "faction", None) if state is not None else None
         side = getattr(side, "value", side)
-        near = [(math.dist(i.world[:2], at), i)
-                for i in innkeepers(self.client.bounds.map_id, side)]
-        near = [(d, i) for d, i in near if d <= INN_NEAR_YARDS]
-        return min(near, key=lambda pair: pair[0])[1] if near else None
+        near = sorted(((math.dist(i.world[:2], at), i)
+                       for i in innkeepers(self.client.bounds.map_id, side)),
+                      key=lambda pair: pair[0])
+        near = [i for d, i in near if d <= INN_NEAR_YARDS]
+        if node is None or not near:
+            return near[0] if near else None
+        walks = [(self._walk_between(i.world, node.world), i) for i in near]
+        if all(w is None for w, _ in walks) and self._walk_between(near[0].world, node.world,
+                                                                    asked=True) is None:
+            return near[0]                       # no planner to ask: the nearest, as before
+        walked = [(w, i) for w, i in walks if w is not None and w is not False]
+        return min(walked, key=lambda pair: pair[0])[1] if walked else None
+
+    def _work_node(self, state: State | None):
+        """The guide's current step, when it has a place on this map."""
+        node = self.graph.get(state.guide.step_id) if state is not None and state.guide.step_id \
+            else self._node()
+        if node is not None and node.world is not None and node.map_id == self.client.bounds.map_id:
+            return node
+        return None
+
+    def _walk_between(self, a, b, *, asked: bool = False):
+        """What the walk from `a` to `b` costs in yards, a ride counted (V383): `False` when no
+        walk leads there, `None` with no planner to ask (with `asked`, whether one was). Kept
+        `WALKS_KEEP_S`, a plan between two fixed places being the same plan."""
+        query = getattr(self.client, "query", None)
+        bounds = getattr(self.client, "bounds", None)
+        if query is None or bounds is None or len(a) < 3 or len(b) < 3:
+            return None
+        key = (bounds.map_id, tuple(round(v) for v in a), tuple(round(v) for v in b))
+        kept = self._walks_between.get(key)
+        now = time.monotonic()
+        if kept is not None and now - kept[0] <= WALKS_KEEP_S:
+            return kept[1]
+        try:
+            planned = query.path(bounds.map_id, tuple(a), tuple(b))
+        except Exception:
+            return None
+        cost = walk_cost(planned, b)
+        self._walks_between[key] = (now, cost)
+        return cost
 
     def bindable(self, state: State) -> bool:
         """An inn near the guide's work while home is far from it, or unknown.
@@ -1655,8 +1761,15 @@ class LiveBody:
                 return True
             node = self.graph.get(state.guide.step_id or "")
             at = node.world[:2] if node is not None and node.world is not None else inn.world[:2]
-            return (math.dist(home[:2], inn.world[:2]) > SAME_INN_YARDS
-                    and math.dist(home[:2], at) > HOME_FAR_YARDS)
+            if math.dist(home[:2], inn.world[:2]) <= SAME_INN_YARDS:
+                return False
+            if math.dist(home[:2], at) > HOME_FAR_YARDS:
+                return True
+            # Near in a straight line, and no walk leads from it to the work (V383): far.
+            work = self._work_node(state)
+            # A home of unknown height (where the character began) is not asked.
+            return (work is not None and len(home) >= 3 and home[2] != 0.0
+                    and self._walk_between(home, work.world) is False)
         except Exception:
             return False
 
@@ -2398,14 +2511,18 @@ class LiveBody:
         return self._in_zone(m for m in merchants(self.client.bounds.map_id) if m.repairs)
 
     def _walk_yards(self, world, straight: float) -> float:
-        """What walking to `world` costs, in yards: its plan's length and corners."""
+        """What walking to `world` costs, in yards: its plan's length and corners, and a lift's
+        wait and ride. A plan that ends short of it is no walk there (V383): from the foot of
+        Thunder Bluff's mesas the plans to the merchants over them ended at a lift's foot, a few
+        yards long, and ranked first."""
         plan_to = getattr(self.client, "plan_to", None)
         planned = plan_to(world) if plan_to is not None else None
         if planned is None:
             return straight                      # no planner to ask: distance as before
-        if not planned.usable:
+        cost = walk_cost(planned, world)
+        if cost is False:
             return straight * UNPLANNED_FACTOR
-        return planned.length_yards() + CORNER_YARDS * max(0, len(planned.points) - 2)
+        return cost
 
     def _open_merchant(self, name, world, point) -> bool:
         opened = self.interact.open_on(name, node_world=world, node_map=point)

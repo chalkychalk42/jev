@@ -133,6 +133,12 @@ REPLAN_SPOT_YARDS = 8.0
 # a storey away: the inn's floors are seven yards apart, and from the mine's tunnels the
 # floor 25 yards up is the hill over them (session 117).
 FLOOR_SWITCH_YARDS = 10.0
+# A plan is begun on the floor the character was tracked on, or on one within this of it
+# (V384): a complete plan from a floor farther off is a plan for somewhere else. At the foot of
+# Thunder Bluff's lifts, tracked on the ground at 70, the plan to a merchant on the mesa began on
+# the mesa 71 yards over it (the destination's height snapped there) and was walked up the cliff
+# by the hive's straight moves; the live client's keys would only walk into the rock.
+START_FLOOR_YARDS = 20.0
 # An arrival is within this of the destination. A partial plan ends where the mesh does,
 # and from somewhere no route leaves that is a few yards away: "arrived" there began a
 # grind inside the inn and kept the hearthstone rule from counting the walk (session 110).
@@ -832,12 +838,19 @@ class Client:
         """The first complete plan over `START_HEIGHTS`, else the partial one ending nearest."""
         query = query or self.query
         heights = [world[2] + dz for dz in START_HEIGHTS]
+        tracked = None
         if (self._ground is not None
                 and math.dist(self._ground[:2], here[:2]) <= GROUND_MEMORY_YARDS):
-            heights.insert(0, self._ground[2])
+            tracked = self._ground[2]
+            heights.insert(0, tracked)
         best = None
-        for z in heights:
+        for i, z in enumerate(heights):
             path = query.path(self.bounds.map_id, (here[0], here[1], z), world)
+            if tracked is not None and i == 0 and not path.usable:
+                tracked = None                   # no floor there to plan from: any height
+            if (tracked is not None and i > 0 and path.points
+                    and abs(path.points[0][2] - tracked) > START_FLOOR_YARDS):
+                continue                         # begun on another floor than the one it is on
             if path.usable and path.status is PathStatus.COMPLETE:
                 return path
             if path.status is PathStatus.NOPATH and path.detail == CAMP_REFUSED:
