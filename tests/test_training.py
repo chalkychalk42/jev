@@ -81,8 +81,9 @@ def test_a_new_rank_goes_where_the_old_one_is_and_new_spells_on_free_slots():
     known = {6603, 20154, 635, 639, 465, 20271, 19740, 498, 21082, 853, 1152, 3127, 20600}
     plan = placements(STARTING_BAR, known)
     assert plan[0] == Placement(639, 3, 635)
+    # What a fight presses before the blessing kept up between fights (V394).
     assert [(p.spell_id, p.slot) for p in plan[1:]] == [
-        (465, 4), (19740, 5), (20271, 6), (498, 7), (853, 8)]
+        (465, 4), (20271, 5), (498, 6), (853, 7), (19740, 8)]
     # Nothing for Purify, Parry, a second seal or a racial: no role worth a slot.
     assert not {1152, 3127, 21082, 20600} & {p.spell_id for p in plan}
 
@@ -363,19 +364,24 @@ def test_a_mage_with_one_spell_s_money_buys_what_it_fights_with():
     assert (_names(bought), left) == (["Frostbolt 1", "Fireball 2"], 0)
 
 
-def test_a_full_bar_gives_polymorphs_place_to_a_new_fight_line_and_nothing_else_moves():
-    """V287: a new mage's bar took Polymorph at 8 into its last free slot; at 10 Frost Nova
-    goes over it. A long buff ranked above a root for a free slot does not push one off
-    (V237), nor does anything push off a line that is not Polymorph's."""
+def test_a_full_bar_gives_a_conjures_place_to_a_new_fight_line_and_keeps_water():
+    """V394: a new mage's bar took Polymorph at 8 into its last free slot; at 10 Frost Nova
+    goes over Conjure Food, where since V287 it went over Polymorph, and none of the 30 hive
+    mages at 12 and over kept Polymorph (7 Oct). A long buff does not push a fight line off
+    (V237); Conjure Water gives way to nothing."""
     full = {1: 6603, 2: 143, 3: 168, 4: 1459, 5: 116, 6: 5504, 7: 2136, 8: 587, 9: 5143,
             10: 118, 11: None, 12: None}
     known = {i for i in full.values() if i}
     placed = training.placements(full, known | {122})
-    assert [(p.spell_id, p.slot, p.replaces) for p in placed] == [(122, 10, 118)]
-    assert worth_buying(122, known, full), "Frost Nova, over Polymorph"
-    with_nova = {**full, 10: 122}
-    assert training.placements(with_nova, (known - {118}) | {122, 604}) == [], \
-        "Dampen Magic does not push Frost Nova off"
+    assert [(p.spell_id, p.slot, p.replaces) for p in placed] == [(122, 8, 587)]
+    assert worth_buying(122, known, full), "Frost Nova, over Conjure Food"
+    with_nova = {**full, 8: 122}
+    assert training.placements(with_nova, known | {122, 604}) == [], \
+        "Dampen Magic pushes no fight line off"
+    # At 14 Arcane Explosion: the newest long buff next - Arcane Intellect, taught at 1, over
+    # Frost Armor, which a mage starts with - never the water.
+    more = training.placements(with_nova, known | {122, 1449})
+    assert [(p.spell_id, p.slot, p.replaces) for p in more] == [(1449, 4, 1459)]
 
 
 def test_every_trainer_s_offers_are_told_apart_by_name_and_rank():

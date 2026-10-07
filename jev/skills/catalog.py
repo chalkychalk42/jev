@@ -188,6 +188,11 @@ _SKILLS: tuple[Skill, ...] = (
     Skill("TEND_PET", "call, revive, feed or tame the hunter's pet", 420.0,
           success=JUDGED_ELSEWHERE, pre=lambda s: _alive(s) and s.vitals.combat is not True),
 
+    # A walk to a wand merchant, up to a trainer's, and the purchase; the wand goes on at once
+    # (`LiveBody._buy_wand`, V398).
+    Skill("BUY_WAND", "buy the best wand the purse spares from a wand merchant", 600.0,
+          success=JUDGED_ELSEWHERE, pre=_alive),
+
     Skill("MOUNT_UP", "mount, if we have one and may use it", 15.0,
           success=lambda s: s.flags.mounted is True,
           pre=lambda s: _alive(s) and s.vitals.combat is not True

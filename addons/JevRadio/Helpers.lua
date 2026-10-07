@@ -448,6 +448,27 @@ end
 -- Complete Quest does nothing until one is chosen. The default is usable by this
 -- character first, then higher quality, then the earlier item: a fixed rule, painted as a
 -- position, so whoever clicks can still choose another. Reads the stock reward panel.
+--
+-- A priest, mage or warlock with nothing in its ranged slot takes a wand it can use before
+-- any other reward (V397): its shot where it would stand out of mana, and below level 15 a
+-- quest's reward or a drop is the only wand there is. Not localized: the class's file name
+-- and the item's equip slot, a wand's INVTYPE_RANGEDRIGHT.
+local WAND_CLASSES = { PRIEST = true, MAGE = true, WARLOCK = true }
+local RANGED_SLOT = 18
+
+local function wandless()
+    if UnitClass == nil or GetInventoryItemLink == nil then return false end
+    local _, classFile = UnitClass("player")
+    return WAND_CLASSES[classFile or ""] == true and GetInventoryItemLink("player", RANGED_SLOT) == nil
+end
+
+local function choiceIsWand(i)
+    if GetQuestItemLink == nil or GetItemInfo == nil then return false end
+    local link = GetQuestItemLink("choice", i)
+    if link == nil then return false end
+    return select(9, GetItemInfo(link)) == "INVTYPE_RANGEDRIGHT"
+end
+
 local function questChoiceShown()
     local panel = QuestFrameRewardPanel
     return panel ~= nil and panel.IsVisible ~= nil and panel:IsVisible() and panel or nil
@@ -460,9 +481,11 @@ local function QUEST_CHOICE(what)
     if panel == nil or n < 1 then return nil end
     if what == "made" then return (panel.itemChoice or 0) > 0 end
     local best, bestUsable, bestQuality = nil, -1, -1
+    local wanting = wandless()
     for i = 1, n do
         local _, _, _, quality, usable = GetQuestItemInfo("choice", i)
         usable = usable and 1 or 0
+        if usable == 1 and wanting and choiceIsWand(i) then usable = 2 end
         quality = quality or 0
         if usable > bestUsable or (usable == bestUsable and quality > bestQuality) then
             best, bestUsable, bestQuality = i, usable, quality

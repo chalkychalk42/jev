@@ -395,7 +395,7 @@ class Supervisor:
                                                             "DISCOVER_FLIGHT", "EAT_DRINK",
                                                             "BUY_AMMO_REAGENT_FOOD",
                                                             "VENDOR_REPAIR", "BAG_MAKE_SPACE",
-                                                            "TEND_PET")
+                                                            "TEND_PET", "BUY_WAND")
                       and not reflex(worker.arm.rule)):
                     self.failures[key] = self.failures.get(key, 0) + 1
                     if result.code == "camp":

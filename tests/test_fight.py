@@ -2832,32 +2832,36 @@ PAIR = {**AT_RANGE, "target.in_melee": True, "target.attacking_me": True, "targe
         "vitals.power_max": 600, "bars.ready": 0b111111111111, "bars.usable": 0b111111111111}
 
 
-def test_with_a_second_attacker_the_selected_unit_is_held_and_the_other_fought(combat_clock):
+def test_with_a_second_attacker_the_other_one_is_held_and_the_selected_fought(combat_clock):
     """V287: fights with two attackers or more cost the level 12-13 mage 0.35 of its health
-    against 0.21 for one, and were most of its deaths (sessions 246-285); Polymorph was never
-    bought. Held once its mana is gone - a cast's mana goes as it lands - the fight ends, and
-    the held unit is left while it is held and not attacking."""
+    against 0.21 for one, and were most of its deaths (sessions 246-285). V395: the one held
+    is the other attacker, found by Tab - the selected one carries the fight's burns, which
+    break a Polymorph at the next tick. Held once its mana is gone - a cast's mana goes as it
+    lands - the fight ends, and the held unit is left while it is held, attacking or not (the
+    server keeps a sheep's victim)."""
     mage = _mage_with_polymorph()
-    casting = {**PAIR, "bars.casting": True}
-    landed = {**PAIR, "vitals.power": 0.9}
+    other = {**PAIR, "target.guid": "prowler-2", "target.hp": 1.0}
+    casting = {**other, "bars.casting": True}
+    landed = {**other, "vitals.power": 0.9}
     hid = _Hid()
-    f = _fight([casting, casting, landed], hid=hid)
+    f = _fight([other, casting, landed], hid=hid)
     f.profile = mage
     assert f._hold_wanted(mage, PAIR)
     assert f._hold(mage, PAIR) is Fought.HELD
-    assert hid.taps == ["minus"] and f._holding_now(combat_clock[0])
-    left = {**PAIR, "target.attacking_me": False}
-    assert f._acceptable(None, defend=True, values=left) is False, "left while held"
-    assert f._acceptable(None, defend=True, values=PAIR) is True, "fought if it attacks"
+    assert hid.taps == ["tab", "minus"] and f._holding_now(combat_clock[0])
+    assert set(f._holding) == {"prowler-2"}
+    assert f._acceptable(None, defend=True, values=other) is False, "left while held"
+    assert f._acceptable(None, defend=True, values=PAIR) is True, "the one fought, next"
     assert not f._hold_wanted(mage, PAIR), "one held at a time"
 
 
-def test_no_hold_against_one_attacker_or_a_hurt_one(combat_clock):
+def test_no_hold_against_one_attacker_or_one_about_to_die(combat_clock):
     mage = _mage_with_polymorph()
     f = _fight([PAIR])
     f.profile = mage
     assert not f._hold_wanted(mage, {**PAIR, "combat.attackers": 1})
-    assert not f._hold_wanted(mage, {**PAIR, "target.hp": 0.4}), "quicker to finish it"
+    assert not f._hold_wanted(mage, {**PAIR, "target.hp": 0.15}), "quicker to finish it"
+    assert f._hold_wanted(mage, {**PAIR, "target.hp": 0.4}), "the other held, not this one"
     assert not f._hold_wanted(mage, {**PAIR, "target.attacking_me": False})
     assert not f._hold_wanted(MAGE, PAIR), "no Polymorph on the bar"
 
