@@ -91,6 +91,7 @@ from jev.world.vendor import (
     note_merchant,
     supplies_for,
     surplus_prices,
+    wand_for_sale,
 )
 
 # Dying again this soon after getting up at the body means the body lies where something
@@ -239,6 +240,8 @@ SALE_WORTH_COPPER = 30
 # pouch at 500 at Eastvale's general goods.
 BAG_ROOM_SLOTS = 28
 BAG_SPARE_COPPER = 100
+# A wand merchant's visit that bought none is not made again for this long (V398).
+WAND_RETRY_S = 3600.0
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
 # Walks in a row that ended with the character wedged before it goes home by hearthstone.
@@ -328,6 +331,7 @@ class LiveBody:
         "TRAIN_CLASS": "_train",
         "BIND_HEARTH": "_bind",
         "DISCOVER_FLIGHT": "_discover",
+        "BUY_WAND": "_buy_wand",
     }
     available = frozenset(HANDLERS)
 
@@ -528,6 +532,8 @@ class LiveBody:
             expected["service"] = "bind"
         if decision.skill == "DISCOVER_FLIGHT":
             expected["service"] = "discover"
+        if decision.skill == "BUY_WAND":
+            expected["service"] = "wand"
         for key, value in decision.params.items():
             if key == "profile" and decision.skill == "COMBAT_PROFILE" and value in ("default", "panic"):
                 continue  # Fight's measured health branch owns panic within the rotation.
@@ -1483,6 +1489,7 @@ class LiveBody:
         context.discoverable = self.discoverable
         context.conjures = self.conjured_roles
         context.mana_line = self.measured_mana_line
+        context.wand = self.wand_due
 
     def measured_mana_line(self) -> float | None:
         """A caster's mana line from its kills (`Fight.mana_line`, V170), when there is one."""
@@ -1747,12 +1754,13 @@ class LiveBody:
                 or values.get("vitals.dead") is not False or values.get("vitals.ghost") is not False):
             return "no spells placed"
         bar, known = self._census()
-        mark = (values.get("bars.revision"), values.get("spells.revision"))
+        wand = self._wand_worn()
+        mark = (values.get("bars.revision"), values.get("spells.revision"), wand)
         if bar is None or known is None or (not force and mark == self._placing_checked):
             return "no spells placed"
         self._placing_checked = mark
         self._say_kit(known)
-        plan = spell_placements(bar, known)
+        plan = spell_placements(bar, known, wand=wand)
         if not plan:
             return "nothing to place"
         book = Spellbook(self.client.hid, self._read, self.client.origin, self.client.size)
@@ -1763,6 +1771,83 @@ class LiveBody:
         self.say(f"  spells on the bar: {outcome.value} {len(book.placed)}/{len(plan)}"
                  + (f" [{done}]" if done else "") + (f" ({book.detail})" if book.detail else ""))
         return f"placed {len(book.placed)} of {len(plan)} spells ({outcome.value})"
+
+    def _wand_worn(self) -> bool:
+        """A wand is worn, as the bot remembers putting one on (V397)."""
+        return load_worn(self.gear_memory).get("ranged", 0.0) > 0.0
+
+    # -- a wand (V398) ---------------------------------------------------------------------
+
+    def wand_due(self, state: State) -> bool:
+        """Whether a wand is worth a walk now (`Context.wand`, V398): `_wand_offer`. From the
+        state alone, in the supervisor's thread."""
+        try:
+            return self._wand_offer(state) is not None
+        except Exception:
+            return False
+
+    def _wand_offer(self, state: State):
+        """The wand to buy as (merchant, item, price), or `None` (`jev.world.vendor.
+        wand_for_sale`): for this character's class, race and level, with what the purse holds
+        above what it keeps (`Context.kept`) and `BAG_SPARE_COPPER`, better than the one
+        remembered worn, from where the state says it stands; not again within
+        `WAND_RETRY_S` of a visit that bought none."""
+        if time.time() < getattr(self, "_wand_retry_at", 0.0):
+            return None
+        bounds = self.client.bounds
+        money = state.bags.money_copper
+        if bounds is None or state.pos.mx is None or state.pos.my is None or money is None:
+            return None
+        here = map_to_world(state.pos.mx, state.pos.my, bounds)[:2]
+        ask = dict(class_id=CLASS_IDS.get(state.char.cls), race_id=RACE_IDS.get(state.char.race),
+                   level=state.char.level, map_id=bounds.map_id, here=here,
+                   side=self._side or state.char.faction)
+        # The whole purse and nothing worn first: asked at every policy look, and most looks
+        # end there, far from a capital or below level 15.
+        if wand_for_sale(spare=money, worn=0.0, **ask) is None:
+            return None
+        spare = money - self.policy_context.kept(state) - BAG_SPARE_COPPER
+        return wand_for_sale(spare=spare, worn=load_worn(self.gear_memory).get("ranged", 0.0),
+                             **ask)
+
+    def _buy_wand(self, state) -> Result:
+        """Walk to the wand merchant `_wand_offer` names, buy the wand with what the purse
+        keeps kept, and put it on, its shot on the bar over the melee toggle (V397, V398). A
+        visit that buys none is not made again for `WAND_RETRY_S`."""
+        offer = self._wand_offer(state) if state is not None else None
+        if offer is None:
+            return Result(SkillOutcome.ABORTED, "no wand worth buying in reach", "nothing")
+        merchant, item, price = offer
+        self._wand_retry_at = time.time() + WAND_RETRY_S     # cleared by a purchase
+        point = world_to_map(*merchant.world[:2], self.client.bounds)
+
+        def visit():
+            return self._open_merchant(merchant.name, merchant.world, point)
+
+        vendor = Vendor(self.client.hid, self._read, visit, self.client.origin, self.client.size,
+                        eligible=junk_prices())
+        try:
+            outcome = vendor.run(expected_name=merchant.name,
+                                 supplies=(Supply(item_id=item, name=f"wand {item}", role="wand",
+                                                  desired=1),),
+                                 min_free=1, reserve_copper=self.policy_context.kept(state),
+                                 timeout_s=self.travel_timeout + 180)
+        except BodyFailure as failure:
+            if failure.result.code in MERCHANT_UNREACHABLE:
+                note_merchant(self.merchant_memory, merchant.entry, failed=True)
+            raise
+        put_on = ""
+        if vendor.bought_units:
+            self._wand_retry_at = 0.0
+            note_merchant(self.merchant_memory, merchant.entry, failed=False)
+            self._gear_checked = object()          # looked through again, the wand put on
+            self._wear_upgrades()
+            put_on = "on" if self._wand_worn() else "not on"
+            self._place_spells(force=True)
+        self.say(f"  {merchant.name}: wand {item} for {price} copper: {outcome.value}"
+                 + (f", {put_on}" if put_on else "") + (f" ({vendor.detail})" if vendor.detail
+                                                        else ""))
+        return self._result(outcome, vendor.detail or f"bought {vendor.bought_units} wand")
 
     def _say_kit(self, known) -> None:
         """One line when the spellbook is first read, and again when it changes: the spells
