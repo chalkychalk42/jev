@@ -623,6 +623,17 @@ class Context:
         except Exception:
             return False
 
+    # Whether the weapon the class fights with, better than the one worn, is for sale within a
+    # trainer's walk and the purse spares it above what it keeps (`kept`): a hunter's bow or gun
+    # (`LiveBody.weapon_due`, V403). Absent, none is ever bought.
+    weapon: Callable[[State], bool] | None = None
+
+    def can_buy_weapon(self, state: State) -> bool:
+        try:
+            return self.weapon is not None and bool(self.weapon(state))
+        except Exception:
+            return False
+
     # A death that made or fell in a death camp (V307), as (map, world x, world y): the runtime
     # leaves it for the grind of the character's level once it is up (`ClientRuntime`), and no
     # service is armed until the walk there is made (`leaving_until`, wall time). After each of
@@ -795,15 +806,6 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
         due(Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are nearly full",
                        0.75, ("dead", "combat"), service="bags"), True, "service.bags_full"))
 
-    # A hunter's pet (V389), before the walks to trainers and merchants: a pet doubles what
-    # fights for the character and takes the blows. A call, a feed or letting a charm go is a
-    # moment where it stands, and a revive drinks for its mana first; a taming walks to its
-    # beast and stands twenty seconds under it, and waits for a meal as every walk does (V259).
-    need = context.pet_need(state) if context is not None else None
-    if need in PET_WHY and (need != "tame" or not hurt):
-        due(Plan(_d(Intent.SERVICE, "TEND_PET", PET_WHY[need], 0.7, ("dead", "combat"),
-                    service="pet", pet=need), True, "service.pet"))
-
     # A spell the purse can pay for comes before a repair of gear not yet broken (V240): a
     # repair at a third of the durability buys no armour back, and the level 7 mage's
     # repairs took the copper Frostbolt waited for, 77 of 137 in session 208, while it died
@@ -834,6 +836,21 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
                     "is near", 0.6, ("dead", "combat"), service="repair"), True,
                  "service.repair_near"))
 
+    # A hunter's pet (V389), after the repairs (V405) and before the walks to trainers and
+    # merchants: a pet doubles what fights for the character and takes the blows. A call, a
+    # feed or letting a charm go is a moment where it stands, and a revive drinks for its mana
+    # first. A taming walks to its beast and stands twenty seconds under it, waits for a meal
+    # as every walk does (V259), and is armed only with nothing else due: its hunt hands back
+    # to any other service (`LiveBody._tame`), and armed before one it was handed back at once
+    # and armed again - hive-544 armed it 2,286 times in 8.7 hours, 2,241 of them ended within
+    # 0.3 s by "durability is low" (7 Oct).
+    need = context.pet_need(state) if context is not None else None
+    repairing = any(p.decision.skill == "VENDOR_REPAIR" for p in plans)
+    if need in PET_WHY and need != "tame" and not repairing:
+        due(Plan(_d(Intent.SERVICE, "TEND_PET", PET_WHY[need], 0.7, ("dead", "combat"),
+                    service="pet", pet=need), True, "service.pet"))
+    tame = need == "tame" and not hurt
+
     conjured = context.conjured() if context is not None else frozenset()
     kept = [(item, count) for item, count, kind in ((b.food_id, b.food_count, "food"),
                                                     (b.drink_id, b.drink_count, "drink"))
@@ -856,15 +873,16 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
                            else "the pet's food is out", 0.8, ("dead", "combat"),
                            service="supplies"), True, "service.supplies"))
 
-    # A hunter's ammunition running low, bought with what is above the repair reserve (V393):
-    # a shot is a hunter's weapon as its blade is, before the trainer's due. 22 of the hive's
-    # 50 hunters carried none on 7 Oct (04:40): Jev never bought it.
+    # A hunter's ammunition running low (V393): a shot is a hunter's weapon as its blade is,
+    # before the trainer's due. 22 of the hive's 50 hunters carried none on 7 Oct (04:40): Jev
+    # never bought it. What the floor's rounds need, less what the bags' junk fetches, is paid
+    # from the whole purse (V401): the reserve keeps the weapon mended, and the rounds are its
+    # other half - 24 of the hive's 42 hunters were dry at 1 p.m., with 0-60 copper and reserves
+    # of 65-135. The rest to the fill keeps the reserve (`LiveBody._ammo_supply`).
     price = context._asked("ammo_low", state, None) if context is not None else None
     if (price is not None and not hurt
             and not context._barred("supplies", state.guide.step_id, state.t)
-            and (b.money_copper is None
-                 or b.money_copper - repair_reserve(state.char.level, state.char.cls)
-                 >= price)):
+            and (b.money_copper is None or b.money_copper >= price)):
         due(Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD", "ammunition is running low", 0.8,
                     ("dead", "combat"), service="supplies"), True, "service.ammo"))
 
@@ -892,6 +910,18 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     if context is not None and _recover(state, context) is None and context.can_buy_wand(state):
         due(Plan(_d(Intent.SERVICE, "BUY_WAND", "a wand the purse spares is for sale near",
                     0.5, ("dead", "combat"), service="wand"), True, "service.wand"))
+
+    # And the weapon the class fights with (V403): a hunter's bow or gun, sold from level 3 and
+    # 4, better ones from 9 and 11, bought when a merchant with one stands within a trainer's
+    # walk and the purse spares it.
+    if context is not None and _recover(state, context) is None and context.can_buy_weapon(state):
+        due(Plan(_d(Intent.SERVICE, "BUY_WEAPON", "a better weapon the purse spares is for sale "
+                    "near", 0.5, ("dead", "combat"), service="weapon"), True, "service.weapon"))
+
+    # A taming, with nothing else due (V405).
+    if tame and not plans:
+        due(Plan(_d(Intent.SERVICE, "TEND_PET", PET_WHY["tame"], 0.7, ("dead", "combat"),
+                    service="pet", pet="tame"), True, "service.pet"))
 
     return plans
 

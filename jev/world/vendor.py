@@ -128,17 +128,39 @@ AMMO = {"arrow": ((1, 2512, 10), (10, 2515, 50), (25, 3030, 300), (40, 11285, 10
         "bullet": ((1, 2516, 10), (10, 2519, 50), (25, 3033, 300), (40, 11284, 1000),
                    (55, 28060, 1600), (65, 28061, 3000))}
 AMMO_KIND = {item: kind for kind, rows in AMMO.items() for _, item, _ in rows}
+AMMO_STACK = 200                     # the rounds a purchase brings (BuyCount)
 GUN_RACES = frozenset({3, 6})
 HUNTER = 3
+# What a ranged weapon fires, by its kind (item subclass, V401): a bow (2) or a crossbow (18)
+# arrows, a gun (3) bullets, as the server checks the ammunition loaded against the weapon
+# (`Spell::CheckItems`: SPELL_FAILED_NO_AMMO otherwise).
+FIRES = {2: "arrow", 18: "arrow", 3: "bullet"}
+# The ammunition a hunter is created with loaded (CharStartOutfit): every one of the hive's 50
+# hunters had 2512 or 2516 in its ammo slot on 7 Oct, whatever it carried, for nothing but the
+# client's control or the server's own (`CMSG_SET_AMMO`) loads another, and running out leaves
+# it loaded (`Spell::TakeAmmo` takes rounds, not the slot). Two of them, Zhudea and Kosdothyt,
+# carried 600 Sharp Arrows each (2515, bought by V393 from level 10) and no Rough Arrow: every
+# shot "no ammo".
+AMMO_STARTING = {"arrow": 2512, "bullet": 2516}
 
 
-def ammo_kind(race_id: int | None, carried=()) -> str:
-    """What a hunter shoots: the kind of ammunition it carries (`carried`, item ids), else what
-    its race's starting weapon takes."""
+def ammo_kind(race_id: int | None, carried=(), weapon: int | None = None) -> str:
+    """What a hunter shoots: what its ranged weapon fires (`weapon`, the worn one's item
+    subclass, V401), else the kind of ammunition it carries (`carried`, item ids), else what its
+    race's starting weapon takes."""
+    if weapon in FIRES:
+        return FIRES[weapon]
     for item in carried:
         if item in AMMO_KIND:
             return AMMO_KIND[item]
     return "bullet" if race_id in GUN_RACES else "arrow"
+
+
+def ammo_rank(item: int | None) -> int:
+    """How good a round is among its kind's (`AMMO`, the level that may use it rising with its
+    damage): -1 for what is not ammunition."""
+    kind = AMMO_KIND.get(item)
+    return -1 if kind is None else next(i for i, row in enumerate(AMMO[kind]) if row[1] == item)
 
 
 def ammo_for(kind: str, level: int | None) -> tuple[tuple[int, int], ...]:
@@ -298,7 +320,20 @@ def wand_for_sale(class_id: int | None, race_id: int | None, level: int | None,
 
     if None in (class_id, race_id, level, spare, map_id, here, side):
         return None
-    items, sold = _wands(), _wand_merchants(map_id, side)
+    return _for_sale(_wands(), _wand_merchants(map_id, side), class_id, race_id, level, spare,
+                     worn, here, yards)
+
+
+def _for_sale(items: dict[int, tuple[int, int]], sold: tuple[Merchant, ...], class_id: int,
+              race_id: int, level: int, spare: int, worn: float, here: tuple[float, float],
+              yards: float) -> tuple[Merchant, int, int] | None:
+    """Of `items` (item: (level, price)) as `sold` sells them, the best by gear score the
+    character can use at its level and pay with `spare`, better than `worn`, from a merchant
+    within `yards` of `here`, the nearer of two (V398, V403)."""
+    import math
+
+    from jev.world.gear import usable
+
     if not sold or not items or level < min(level_ for level_, _ in items.values()):
         return None                                  # asked at every policy look: cheap first
     best, best_key = None, None
@@ -333,3 +368,45 @@ def _wand_merchants(map_id: int, side: str) -> tuple[Merchant, ...]:
     wands = set(_wands())
     return tuple(m for m in merchants(map_id)
                  if m.items & wands and side in sides.get(str(m.entry), ()))
+
+
+# -- the weapon the class fights with (V403) ---------------------------------------------
+#
+# A hunter's bow, gun or crossbow is its weapon, and every one of the hive's 42 hunters at 9-13
+# still had the one it was created with (7 Oct). Merchants sell bows from level 3 (Hornwood
+# Recurve Bow, 4.5 damage a second, 2 silver 85) and 11 (Laminated Recurve Bow, 8.5, 17s 52c;
+# Fine Shortbow, 8.8, 31s 85c), guns from 4 (Ornate Blunderbuss, 5.0, 4s 14c) and 9 (Hunter's
+# Boomstick, 7.6, 13s 24c), against the starting ones' 3.3; no merchant sells a crossbow below
+# level 21 (a draenei's comes from a quest). Worth a trainer's walk, as a wand is.
+WEAPON_YARDS = WAND_YARDS
+
+
+def weapon_for_sale(class_id: int | None, race_id: int | None, level: int | None,
+                    spare: int | None, worn: float, map_id: int | None,
+                    here: tuple[float, float] | None, side: str | None, *,
+                    yards: float = WEAPON_YARDS) -> tuple[Merchant, int, int] | None:
+    """The weapon to buy for the ranged slot (V403) as (merchant, item, price), as a wand is
+    (`wand_for_sale`): a bow, a gun or a crossbow the character can use (its race's starting
+    proficiency, `jev.world.gear.usable`), the best its level allows by damage a second and
+    better than `worn`, sold within `yards` of `here` by a merchant of its side for no more
+    than `spare` copper. `None` for anything unknown."""
+    if None in (class_id, race_id, level, spare, map_id, here, side):
+        return None
+    return _for_sale(_weapons(), _weapon_merchants(map_id, side), class_id, race_id, level,
+                     spare, worn, here, yards)
+
+
+@lru_cache(maxsize=1)
+def _weapons() -> dict[int, tuple[int, int]]:
+    """Each bow, gun and crossbow a merchant sells: (the level that may use it, its price)."""
+    raw = (catalog().get("weapons") or {}).get("items") or {}
+    return {int(k): (int(v["level"]), int(v["price"])) for k, v in raw.items()}
+
+
+@lru_cache(maxsize=16)
+def _weapon_merchants(map_id: int, side: str) -> tuple[Merchant, ...]:
+    """The merchants on this map who sell such a weapon and serve this side."""
+    sides = (catalog().get("weapons") or {}).get("sides") or {}
+    weapons = set(_weapons())
+    return tuple(m for m in merchants(map_id)
+                 if m.items & weapons and side in sides.get(str(m.entry), ()))

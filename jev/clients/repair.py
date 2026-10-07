@@ -53,6 +53,11 @@ BROKEN = 0.0
 OPEN_S = 4.0
 SETTLE_S = 1.5
 
+# The equipment slots (the server's numbering) of the weapons a class fights with (V402): the
+# main hand, and a hunter's ranged weapon. Repair All mends item by item in slot order as the
+# purse pays (`Player::DurabilityRepairAll`): the main hand sixteenth, the ranged weapon last.
+MAIN_HAND, RANGED = 15, 17
+
 
 class Repaired(StrEnum):
     DONE = "done"                # durability came back up
@@ -77,6 +82,11 @@ class Repair:
     visit: Callable[[], bool]
     window_origin: tuple[int, int] = (0, 0)
     window_size: tuple[int, int] = (1600, 900)
+    # The slot whose item is mended before Repair All (`MAIN_HAND`, `RANGED`, V402), the weapon
+    # the class fights with, set by the body before each repair; `None`, Repair All alone. The
+    # live client mends one item only through the repair cursor, which Jev has no control for,
+    # and presses Repair All; the hive's bridge mends the one item first (`repair <npc> <item>`).
+    first_slot: int | None = None
 
     before: float | None = field(default=None, init=False)
     after: float | None = field(default=None, init=False)

@@ -40,6 +40,42 @@ class Piece:
 # Past any item's required level: `keep` asks whether a piece will ever be worth wearing.
 MAX_LEVEL = 255
 
+# What a character is created wearing in a slot the bot fills, by "race:class", where it is
+# worth more than nothing (V403): a hunter's ranged weapon - the Worn Shortbow (2504) for an
+# orc, a troll or a night elf, the Old Blunderbuss (2508) for a dwarf or a tauren, the Warder's
+# Shortbow (20980) for a blood elf and the Weathered Crossbow (23347) for a draenei, as every
+# one of the hive's 50 hunters still wore at levels 1-13 on 7 Oct (the character DB). A slot
+# the bot never filled holds it (`with_starting`): 86 bows, guns and crossbows of the catalog,
+# most grey drops, score below them.
+STARTING = {"2:3": {"ranged": 2504}, "4:3": {"ranged": 2504}, "8:3": {"ranged": 2504},
+            "3:3": {"ranged": 2508}, "6:3": {"ranged": 2508}, "10:3": {"ranged": 20980},
+            "11:3": {"ranged": 23347}}
+
+
+def starting_item(class_id: int | None, race_id: int | None, slot: str) -> int | None:
+    """The item the character was created wearing in `slot` (`STARTING`), or `None`."""
+    return STARTING.get(f"{race_id}:{class_id}", {}).get(slot)
+
+
+def with_starting(worn: Mapping[str, float], class_id: int | None, race_id: int | None,
+                  facts: dict | None = None) -> dict[str, float]:
+    """What is remembered worn, a slot never filled holding what the character was created
+    wearing there (`STARTING`, V403)."""
+    facts = facts if facts is not None else catalog()
+    out = dict(worn)
+    for slot, item in STARTING.get(f"{race_id}:{class_id}", {}).items():
+        known = facts["items"].get(str(item))
+        if slot not in out and known is not None:
+            out[slot] = float(known["score"])
+    return out
+
+
+def kind_of(item_id: int | None, facts: dict | None = None) -> tuple[int, int] | None:
+    """An item's (class, subclass) by the catalog, or `None`."""
+    facts = facts if facts is not None else catalog()
+    item = facts["items"].get(str(item_id)) if item_id is not None else None
+    return tuple(item["kind"]) if item is not None else None
+
 
 @cache
 def catalog(path: pathlib.Path = CATALOG) -> dict:
@@ -104,6 +140,19 @@ def load_worn(path: pathlib.Path | None) -> dict[str, float]:
     slots = data.get("slots") if isinstance(data, dict) else None
     return {k: float(v["score"]) for k, v in (slots or {}).items()
             if isinstance(v, dict) and isinstance(v.get("score"), (int, float))}
+
+
+def worn_item(path: pathlib.Path | None, slot: str) -> int | None:
+    """The item the bot remembers putting on in `slot` (or loading, `ammo`, V401), or `None`."""
+    if path is None:
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    entry = ((data.get("slots") if isinstance(data, dict) else None) or {}).get(slot)
+    item = entry.get("item_id") if isinstance(entry, dict) else None
+    return item if isinstance(item, int) and not isinstance(item, bool) else None
 
 
 def save_worn(path: pathlib.Path | None, pieces: Iterable[Piece]) -> None:

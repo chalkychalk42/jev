@@ -193,6 +193,11 @@ _SKILLS: tuple[Skill, ...] = (
     Skill("BUY_WAND", "buy the best wand the purse spares from a wand merchant", 600.0,
           success=JUDGED_ELSEWHERE, pre=_alive),
 
+    # A walk to a merchant who sells the weapon the class fights with, a shooter's bow or gun,
+    # up to a trainer's, and the purchase; it goes on at once (`LiveBody._buy_weapon`, V403).
+    Skill("BUY_WEAPON", "buy the best weapon the class fights with that the purse spares",
+          600.0, success=JUDGED_ELSEWHERE, pre=_alive),
+
     Skill("MOUNT_UP", "mount, if we have one and may use it", 15.0,
           success=lambda s: s.flags.mounted is True,
           pre=lambda s: _alive(s) and s.vitals.combat is not True

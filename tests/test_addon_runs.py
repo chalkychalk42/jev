@@ -470,6 +470,24 @@ def test_a_caster_with_its_ranged_slot_empty_takes_the_wand_first():
         250 / 1600, abs=0.002), "a wand it cannot use is not taken"
 
 
+def test_a_hunter_takes_the_ranged_weapon_it_can_use_first():
+    """V403: Securing the Lines offers an orc or troll hunter the Hickory Shortbow beside two
+    other rewards; a hunter takes a bow, gun or crossbow it can use first, a warrior the
+    earlier, and a hunter's unusable wand is no ranged weapon of its."""
+    choices = [{"quality": 2, "usable": True, "equip": "INVTYPE_CHEST"},
+               {"quality": 2, "usable": True, "equip": "INVTYPE_RANGED"}]
+    bow = _choices({"choices": choices, "class": "HUNTER"})
+    assert bow["ui.choice_x"] == pytest.approx(250 / 1600, abs=0.002)    # QuestRewardItem2
+    chest = _choices({"choices": choices, "class": "WARRIOR"})
+    assert chest["ui.choice_x"] == pytest.approx(100 / 1600, abs=0.002)
+    wand = [choices[0], {"quality": 2, "usable": False, "equip": "INVTYPE_RANGEDRIGHT"}]
+    assert _choices({"choices": wand, "class": "HUNTER"})["ui.choice_x"] == pytest.approx(
+        100 / 1600, abs=0.002)
+    gun = [choices[0], {"quality": 1, "usable": True, "equip": "INVTYPE_RANGEDRIGHT"}]
+    assert _choices({"choices": gun, "class": "HUNTER"})["ui.choice_x"] == pytest.approx(
+        250 / 1600, abs=0.002), "a gun or crossbow, white or not"
+
+
 @pytest.mark.parametrize(("targeting", "expected"), [(1, True), (None, False)])
 def test_a_spell_waiting_for_a_target_is_painted(targeting, expected):
     values = radio.unpack(payload(paint({"spellTargeting": targeting}))[:PAYLOAD_CELLS])

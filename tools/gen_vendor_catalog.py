@@ -148,6 +148,23 @@ def generate(db: sqlite3.Connection, profiles: dict, guide_quests: set[int] | No
             faction = db.execute("select Faction from world_creature_template where Entry=?",
                                  (v["entry"],)).fetchone()
             wand_sides[str(v["entry"])] = _sides(db, faction[0]) if faction else []
+    # The weapons a class fights with from its ranged slot (V403): every bow, gun and crossbow
+    # a merchant sells, as the wands are, and the sides each such merchant serves. A hunter buys
+    # the best its level allows with what the purse spares (`LiveBody.weapon_due`).
+    try:
+        weapon_rows = db.execute("select entry, RequiredLevel, BuyPrice from world_item_template "
+                                 "where class=2 and subclass in (2, 3, 18) and BuyPrice>0 "
+                                 "order by entry").fetchall()
+    except sqlite3.OperationalError:
+        weapon_rows = []
+    weapon_items = {str(entry): {"level": int(level or 0), "price": int(price)}
+                    for entry, level, price in weapon_rows if entry in sold_items}
+    weapon_sides = {}
+    for v in vendors:
+        if any(str(item) in weapon_items for item in v["items"]):
+            faction = db.execute("select Faction from world_creature_template where Entry=?",
+                                 (v["entry"],)).fetchone()
+            weapon_sides[str(v["entry"])] = _sides(db, faction[0]) if faction else []
     # Innkeepers, where the hearthstone is bound: the one nearest the guide's work becomes
     # home (`LiveBody._bind`). A game event's spawns stand there only while it runs.
     innkeepers = []
@@ -184,7 +201,8 @@ def generate(db: sqlite3.Connection, profiles: dict, guide_quests: set[int] | No
     return {"schema": 1, "junk": sorted(set(junk)), "junk_prices": prices, "supplies": supplies,
             "vendors": vendors, "bags": bags, "bag_prices": bag_prices, "surplus_prices": surplus,
             "innkeepers": innkeepers, "flightmasters": flightmasters,
-            "wands": {"items": wand_items, "sides": wand_sides}}
+            "wands": {"items": wand_items, "sides": wand_sides},
+            "weapons": {"items": weapon_items, "sides": weapon_sides}}
 
 
 def guide_quests(folder: pathlib.Path) -> set[int]:

@@ -5,9 +5,10 @@ item the strip cannot give: the slot it goes in, whether this character can use 
 good it is. They come from this server's world database, like the vendor catalog:
 
 - `items`: every armour piece and one-handed weapon up to level 30 in a slot the bot fills,
-  and every wand (V397: the ranged slot, shot with `Shoot`), with its armour type or weapon
-  type, required level, class and race masks, and a score - armour plus weighted primary
-  stats for armour, damage per second for a weapon;
+  and in the ranged slot every wand (V397, shot with `Shoot`) and every bow, gun and crossbow
+  (V403, shot with Auto Shot), with its armour type or weapon type, required level, class and
+  race masks, and a score - armour plus weighted primary stats for armour, damage per second
+  for a weapon;
 - `proficiencies`: per `race:class`, the armour and weapon types its starting spells teach
   (Mail, One-Handed Maces, Shield...). A fresh character can use nothing else, and a weapon
   skill it lacks makes the client refuse the item.
@@ -28,16 +29,23 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # two-handers would take the shield off: left out.
 SLOTS = {1: "head", 2: "neck", 3: "shoulders", 5: "chest", 20: "chest", 6: "waist",
          7: "legs", 8: "feet", 9: "wrists", 10: "hands", 16: "back",
-         13: "main_hand", 21: "main_hand", 14: "off_hand", 26: "ranged"}
-# In the ranged slot, a wand alone (V397): a caster's shot when its mana is spent. A gun or a
-# crossbow would be a warrior's or a rogue's, and needs ammunition no one buys them.
-RANGED = 26
+         13: "main_hand", 21: "main_hand", 14: "off_hand", 15: "ranged", 26: "ranged"}
+# In the ranged slot (a bow's InventoryType 15, a gun's, a crossbow's and a wand's 26), what a
+# class's shot fires: a wand (V397), a caster's shot when its mana is spent, and a bow, a gun
+# or a crossbow (V403), a hunter's Auto Shot, its weapon. Only a class whose starting spells
+# teach the weapon can use it (`proficiencies`): every priest, mage and warlock Wands, every
+# hunter one of Bows, Guns or Crossbows by its race, and no other class any of the four - a
+# warrior's or a rogue's would need ammunition no one buys them. Thrown weapons are left out.
+RANGED = (15, 26)
 WAND = (2, 19)
+BOW, GUN, CROSSBOW = (2, 2), (2, 3), (2, 18)
+RANGED_KINDS = (WAND, BOW, GUN, CROSSBOW)
 
 # Proficiency spells -> (item class, subclass). Armour is class 4, weapons class 2.
 PROFICIENCIES = {
     9078: (4, 1), 9077: (4, 2), 8737: (4, 3), 750: (4, 4), 9116: (4, 6),
     196: (2, 0), 198: (2, 4), 201: (2, 7), 1180: (2, 15), 15590: (2, 13), 5009: WAND,
+    264: BOW, 266: GUN, 5011: CROSSBOW,
 }
 # Armour subclass 0 (cloaks, necks, rings) is miscellaneous and needs no proficiency.
 MISC_ARMOUR = (4, 0)
@@ -66,7 +74,7 @@ def generate(db: sqlite3.Connection) -> dict:
             f"select * from world_item_template where RequiredLevel <= ? and class in (2, 4) "
             f"and InventoryType in ({wanted})", (MAX_LEVEL,)):
         row = dict(row)
-        if row["InventoryType"] == RANGED and (row["class"], row["subclass"]) != WAND:
+        if row["InventoryType"] in RANGED and (row["class"], row["subclass"]) not in RANGED_KINDS:
             continue
         items[str(row["entry"])] = {
             "slot": SLOTS[row["InventoryType"]], "kind": [row["class"], row["subclass"]],

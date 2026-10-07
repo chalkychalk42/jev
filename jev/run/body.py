@@ -36,6 +36,8 @@ from jev.clients.pet import (
     TameOn,
 )
 from jev.clients.recover import Recover, Recovered
+from jev.clients.repair import MAIN_HAND as MAIN_HAND_SLOT
+from jev.clients.repair import RANGED as RANGED_SLOT
 from jev.clients.repair import Repair
 from jev.clients.rest import SLOT_KEYS as REST_KEYS
 from jev.clients.rest import Rest
@@ -76,8 +78,8 @@ from jev.world.combat import (
     rest_mana,
 )
 from jev.world.combat import from_bar as profile_from_bar
+from jev.world.gear import Piece, kind_of, load_worn, save_worn, starting_item, with_starting, worn_item
 from jev.world.gear import keep as gear_keep
-from jev.world.gear import load_worn, save_worn
 from jev.world.gear import upgrades as gear_upgrades
 from jev.world.home import load_home, save_home
 from jev.world.quarry import NEAR_YARDS, Held
@@ -91,10 +93,12 @@ from jev.world.training import spell as spell_facts
 from jev.world.training import trainer_due, training_cost, unpressed
 from jev.world.vendor import (
     AMMO_KIND,
-    HUNTER,
+    AMMO_STACK,
+    AMMO_STARTING,
     Supply,
     ammo_for,
     ammo_kind,
+    ammo_rank,
     bag_prices,
     bag_slots,
     consumable_role,
@@ -108,6 +112,7 @@ from jev.world.vendor import (
     supplies_for,
     surplus_prices,
     wand_for_sale,
+    weapon_for_sale,
 )
 
 # Dying again this soon after getting up at the body means the body lies where something
@@ -172,10 +177,16 @@ HEARTH_TO_REPAIR_YARDS = 150.0
 # most this to the straight way to the guide's step, or, with no step to walk to, stands half
 # this from the character: a flight master's visit's there and back (`DISCOVER_YARDS`).
 REPAIR_DETOUR_YARDS = 300.0
-# A hunter's ammunition is bought under `AMMO_LOW` rounds, to `AMMO_DESIRED`: three of a
-# merchant's 200 (V393).
-AMMO_LOW = 200
-AMMO_DESIRED = 600
+# A hunter's ammunition (V393, V401): the rounds its weapon fires are bought under `AMMO_LOW`,
+# a floor sized to an hour's shooting - some 25 kills at a dozen rounds each, a starting bow's
+# 2.3 s Auto Shot through a 25-30 s fight, Arcane Shot and Serpent Sting each a round too - and
+# four of the hive's fifteen-minute sessions; to `AMMO_DESIRED`, five of a merchant's stacks of
+# 200, which the starting quiver's or ammunition pouch's six slots hold beside a part stack.
+# The floor is bought with the whole purse, what keeps the weapon firing as a repair keeps it
+# whole (200 Rough Arrows are 10 copper); the rest to the fill with what is above the repair
+# reserve, as V393 bought all of it.
+AMMO_LOW = 300
+AMMO_DESIRED = 1000
 # Where to hover for a unit too close and tall for its nameplate to show, as fractions of
 # the client: down the middle first. The Spirit Healer stands over a fresh ghost and fills
 # the centre of the screen, with its plate drawn behind the strip at the top.
@@ -264,7 +275,8 @@ SALE_WORTH_COPPER = 30
 # pouch at 500 at Eastvale's general goods.
 BAG_ROOM_SLOTS = 28
 BAG_SPARE_COPPER = 100
-# A wand merchant's visit that bought none is not made again for this long (V398).
+# A wand merchant's visit that bought none is not made again for this long (V398), nor a
+# weapon merchant's (V403).
 WAND_RETRY_S = 3600.0
 # Every spawn point of a quest's world object, twice round: taken crates respawn.
 GATHER_LAPS = 2
@@ -378,6 +390,7 @@ class LiveBody:
         "DISCOVER_FLIGHT": "_discover",
         "TEND_PET": "_pet",
         "BUY_WAND": "_buy_wand",
+        "BUY_WEAPON": "_buy_weapon",
     }
     available = frozenset(HANDLERS)
 
@@ -425,6 +438,12 @@ class LiveBody:
         self._repairer_at: tuple | None = None
         self._ammo_count: int | None = None
         self._ammo_carried: tuple[int, ...] = ()
+        # Every round the bags held at that census, by item (V401): `_ammo_count` is the rounds
+        # of the one loaded alone, what the weapon fires.
+        self._ammo_rows: dict[int, int] = {}
+        # What the bags' goods would fetch at a merchant at that census (V401): a purchase of
+        # the floor's rounds the purse is short of sells them first.
+        self._junk_worth = 0
         self.travelling = False
         self.policy_context = Context()
         self.checkpoint: Callable[[], None] = lambda: None
@@ -590,6 +609,8 @@ class LiveBody:
             expected["service"] = "pet"
         if decision.skill == "BUY_WAND":
             expected["service"] = "wand"
+        if decision.skill == "BUY_WEAPON":
+            expected["service"] = "weapon"
         for key, value in decision.params.items():
             if key == "pet" and decision.skill == "TEND_PET" and value in PET_WHY:
                 continue  # what the pet needs, as the policy found it (V389)
@@ -1428,9 +1449,12 @@ class LiveBody:
         if items is None:
             return
         self._gear_checked = revision
-        self._count_ammo(getattr(wearer, "last_census", None))     # a hunter's rounds (V393)
-        chosen = gear_upgrades(items, load_worn(self.gear_memory),
-                               class_id=values.get("char.class_id"),
+        # A shooter's rounds, and better ones loaded where the body can (V393, V401).
+        self._count_ammo(getattr(wearer, "last_census", None), values)
+        self._load_best_ammo(values)
+        # A slot never filled holds what the character was created wearing (V403): a grey bow
+        # is no upgrade on a hunter's starting one.
+        chosen = gear_upgrades(items, self._worn(values), class_id=values.get("char.class_id"),
                                race_id=values.get("char.race_id"), level=values.get("char.level"))
         if not chosen:
             return
@@ -1443,6 +1467,12 @@ class LiveBody:
         after = self._read()
         if after and after.get("inventory.revision") is not None:
             self._gear_checked = after.get("inventory.revision")
+
+    def _worn(self, values: dict) -> dict[str, float]:
+        """What the bot remembers wearing, slot to score, a slot never filled holding what the
+        character was created wearing there (`jev.world.gear.with_starting`, V403)."""
+        return with_starting(load_worn(self.gear_memory), values.get("char.class_id"),
+                             values.get("char.race_id"))
 
     def _census(self, *, seconds: float = CENSUS_LOOK_S):
         """The bar and the spellbook, whole: read every paint until both censuses are.
@@ -1576,6 +1606,7 @@ class LiveBody:
         context.pet_due = self.pet_due
         context.pet_food = self.pet_food
         context.wand = self.wand_due
+        context.weapon = self.weapon_due
 
     def measured_mana_line(self) -> float | None:
         """A caster's mana line from its kills (`Fight.mana_line`, V170), when there is one."""
@@ -1935,6 +1966,82 @@ class LiveBody:
                                                         else ""))
         return self._result(outcome, vendor.detail or f"bought {vendor.bought_units} wand")
 
+    # -- the weapon the class fights with (V403) -----------------------------------------
+
+    def weapon_due(self, state: State) -> bool:
+        """Whether the weapon the class fights with, better than the one worn, is worth a walk
+        now (`Context.weapon`, V403): `_weapon_offer`. From the state alone, in the
+        supervisor's thread."""
+        try:
+            return self._weapon_offer(state) is not None
+        except Exception:
+            return False
+
+    def _weapon_offer(self, state: State):
+        """The weapon to buy as (merchant, item, price), or `None` (`jev.world.vendor.
+        weapon_for_sale`): a shooter's (`_shoots`) for its ranged slot, by its class, race and
+        level, with what the purse holds above what it keeps (`Context.kept`) and
+        `BAG_SPARE_COPPER`, better than the one worn there (or the one it was created with,
+        `_worn`), from where the state says it stands; not again within `WAND_RETRY_S` of a
+        visit that bought none. A melee class's main hand is not bought: which blade its
+        blows ask for (a rogue's dagger) the gear score does not know."""
+        if time.time() < getattr(self, "_weapon_retry_at", 0.0):
+            return None
+        cls, race = CLASS_IDS.get(state.char.cls), RACE_IDS.get(state.char.race)
+        if not self._shoots(cls, race):
+            return None
+        bounds = self.client.bounds
+        money = state.bags.money_copper
+        if bounds is None or state.pos.mx is None or state.pos.my is None or money is None:
+            return None
+        here = map_to_world(state.pos.mx, state.pos.my, bounds)[:2]
+        worn = self._worn({"char.class_id": cls, "char.race_id": race}).get("ranged", 0.0)
+        ask = dict(class_id=cls, race_id=race, level=state.char.level, map_id=bounds.map_id,
+                   here=here, side=self._side or state.char.faction, worn=worn)
+        # The whole purse first: asked at every policy look, and most looks end there.
+        if weapon_for_sale(spare=money, **ask) is None:
+            return None
+        spare = money - self.policy_context.kept(state) - BAG_SPARE_COPPER
+        return weapon_for_sale(spare=spare, **ask)
+
+    def _buy_weapon(self, state) -> Result:
+        """Walk to the merchant `_weapon_offer` names, buy the weapon with what the purse keeps
+        kept, and put it on (V403), as a wand is bought (`_buy_wand`, V398). A visit that buys
+        none is not made again for `WAND_RETRY_S`."""
+        offer = self._weapon_offer(state) if state is not None else None
+        if offer is None:
+            return Result(SkillOutcome.ABORTED, "no weapon worth buying in reach", "nothing")
+        merchant, item, price = offer
+        self._weapon_retry_at = time.time() + WAND_RETRY_S     # cleared by a purchase
+        point = world_to_map(*merchant.world[:2], self.client.bounds)
+
+        def visit():
+            return self._open_merchant(merchant.name, merchant.world, point)
+
+        vendor = Vendor(self.client.hid, self._read, visit, self.client.origin, self.client.size,
+                        eligible=junk_prices())
+        try:
+            outcome = vendor.run(expected_name=merchant.name,
+                                 supplies=(Supply(item_id=item, name=f"weapon {item}",
+                                                  role="weapon", desired=1),),
+                                 min_free=1, reserve_copper=self.policy_context.kept(state),
+                                 timeout_s=self.travel_timeout + 180)
+        except BodyFailure as failure:
+            if failure.result.code in MERCHANT_UNREACHABLE:
+                note_merchant(self.merchant_memory, merchant.entry, failed=True)
+            raise
+        put_on = ""
+        if vendor.bought_units:
+            self._weapon_retry_at = 0.0
+            note_merchant(self.merchant_memory, merchant.entry, failed=False)
+            self._gear_checked = object()          # looked through again, the weapon put on
+            self._wear_upgrades()
+            put_on = "on" if worn_item(self.gear_memory, "ranged") == item else "not on"
+        self.say(f"  {merchant.name}: weapon {item} for {price} copper: {outcome.value}"
+                 + (f", {put_on}" if put_on else "") + (f" ({vendor.detail})" if vendor.detail
+                                                        else ""))
+        return self._result(outcome, vendor.detail or f"bought {vendor.bought_units} weapon")
+
     def _say_kit(self, known) -> None:
         """One line when the spellbook is first read, and again when it changes: the spells
         it holds that nothing presses (`jev.world.training.unpressed`, V361). A spell nobody
@@ -2260,6 +2367,13 @@ class LiveBody:
             self.say(f"  broken gear and the nearest repairer {distance:.0f} yards off: "
                      f"hearthstone {home.value} {self.hearth.detail}".rstrip())
         self._repairer_at = None
+        # The weapon the class fights with first (V402): a shooter's ranged one, a melee class's
+        # main hand; a caster's Repair All alone.
+        cls, race = (CLASS_IDS.get(state.char.cls), RACE_IDS.get(state.char.race)) \
+            if state is not None else (None, None)
+        self.repair.first_slot = (RANGED_SLOT if self._shoots(cls, race)
+                                  else None if cls is None or is_caster(state.char.cls)
+                                  else MAIN_HAND_SLOT)
         repaired = self.repair.run()
         if repaired.value == "too_poor" and self._sell_for_repair():
             repaired = self.repair.run()           # with what the sale fetched (V393)
@@ -2290,7 +2404,7 @@ class LiveBody:
             return False
         durability = values.get("bags.durability_min")
         broken = isinstance(durability, (int, float)) and durability <= BROKEN_DURABILITY
-        keep = set() if broken else gear_keep(items, load_worn(self.gear_memory),
+        keep = set() if broken else gear_keep(items, self._worn(values),
                                               class_id=values.get("char.class_id"),
                                               race_id=values.get("char.race_id"))
         surplus = surplus_prices()
@@ -2400,11 +2514,15 @@ class LiveBody:
         return kept[1]
 
     def disarmed(self, state: State) -> bool:
-        """Whether the character's weapon is broken (V393), as the policy asks it
-        (`Context.disarmed`): as the fight last read it (`Fight.disarmed`: a plain weapon blow
-        greyed out with its cost paid); where no reading has told, a class that fights with
-        its weapon - not a caster - with something at zero durability: of the hive's 98
-        broken characters of levels 6-20 on 7 Oct, 87 had the main hand broken."""
+        """Whether the weapon the character fights with cannot be used (V393, V402), as the
+        policy asks it (`Context.disarmed`): as the fight last read it (`Fight.disarmed`: the
+        blow or the shot of that weapon greyed out with its cost paid); where no reading has
+        told, a class that fights with its weapon - not a caster - with something at zero
+        durability: of the hive's 98 broken characters of levels 6-20 on 7 Oct, 87 had the main
+        hand broken. And a class whose weapon fires ammunition with none of what it has loaded
+        at the last census (`_dry`, V402): 24 of the hive's 42 hunters carried none (7 Oct)."""
+        if self._dry(CLASS_IDS.get(state.char.cls), RACE_IDS.get(state.char.race)):
+            return True
         durability = state.bags.durability_min
         if durability is None or durability > 0.0:
             return False
@@ -2413,14 +2531,22 @@ class LiveBody:
             return bool(seen)
         return state.char.cls is not None and not is_caster(state.char.cls)
 
+    # The services that put the weapon the character fights with back in its hands (V402): the
+    # repair, and ammunition while it runs low.
+    REARMING = ("service.broken", "service.durability", "service.repair_near", "service.ammo")
+
     def _pull_refused(self, values: dict | None = None) -> str | None:
-        """Why the hunt's next pull waits for the gear's repair (V393), or `None`: a repair due
-        now, the meal it waited for (V259) eaten; or, the weapon broken, one a moment off
-        (`policy.broken_wait`). Read afresh only with the gear worn under 60%."""
+        """Why the hunt's next pull waits for the weapon (V393, V402), or `None`: its repair or
+        its ammunition due now, the meal it waited for (V259) eaten; or, the weapon broken, a
+        repair a moment off (`policy.broken_wait`). Read afresh only with the gear worn under
+        60% or the ammunition loaded under its floor."""
         from jev.coach.policy import REPAIR_NEAR_BELOW, broken_wait, services
 
         worn = (values or {}).get("bags.durability_min")
-        if values is not None and (worn is None or worn >= REPAIR_NEAR_BELOW):
+        rounds = getattr(self, "_ammo_count", None)
+        short = isinstance(rounds, int) and rounds < AMMO_LOW
+        if (values is not None and (worn is None or worn >= REPAIR_NEAR_BELOW)
+                and not short):
             return None
         fresh = self._read()
         if not fresh:
@@ -2435,53 +2561,176 @@ class LiveBody:
         if self.arm is not None and self.arm.step_id:
             state = state.model_copy(update={"guide": state.guide.model_copy(
                 update={"step_id": self.arm.step_id})})
-        repair = next((p for p in services(state, context=self.policy_context)
-                       if p.decision.skill == "VENDOR_REPAIR"), None)
-        if repair is not None:
-            return repair.decision.why
+        rearm = next((p for p in services(state, context=self.policy_context)
+                      if p.rule in self.REARMING), None)
+        if rearm is not None:
+            return rearm.decision.why
         wait = broken_wait(state, self._node(), self.policy_context)
         return wait.decision.why if wait is not None else None
 
+    # -- the weapon the class fights with: a shooter's ammunition (V401, V402) -------------
+
+    @staticmethod
+    def _shoots(class_id: int | None, race_id: int | None = None) -> bool:
+        """Whether the class fights with a ranged weapon that fires ammunition (V402): its
+        starting bar's main attack repeats from range at no cost (`CombatProfile.shooter`: a
+        hunter's Auto Shot), and it is no caster, whose wand fires nothing."""
+        if class_id is None:
+            return False
+        profile = for_class(class_id, race_id)
+        return profile.shooter and not profile.caster
+
+    def _ranged_kind(self, class_id: int | None, race_id: int | None) -> int | None:
+        """The kind (item subclass) of the ranged weapon worn (V401): the one the bot remembers
+        putting on (`jev.world.gear`), else the one the character was created wearing; `None`
+        not known."""
+        item = worn_item(self.gear_memory, "ranged") or starting_item(class_id, race_id,
+                                                                       "ranged")
+        kind = kind_of(item)
+        return kind[1] if kind is not None and kind[0] == 2 else None
+
+    def _ammo_loaded(self, class_id: int | None, race_id: int | None) -> int:
+        """The ammunition the ranged weapon fires (V401): the one the bot remembers loading
+        (`jev.world.gear`'s `ammo` slot) while it is of the kind the weapon fires, else the one
+        the character was created with loaded (`AMMO_STARTING`), which stays loaded through
+        every round spent."""
+        kind = ammo_kind(race_id, (), self._ranged_kind(class_id, race_id))
+        loaded = worn_item(self.gear_memory, "ammo")
+        return loaded if AMMO_KIND.get(loaded) == kind else AMMO_STARTING[kind]
+
+    def _ammo_loads(self) -> bool:
+        """Whether the body can load another ammunition and see it loaded (V401). The live
+        client cannot: a right-click on rounds in the bags loads them, and no strip field shows
+        the ammunition slot, so a load is never confirmed; it buys what is loaded."""
+        return False
+
+    def _load_ammo(self, item: int, values: dict | None = None) -> bool:
+        """Load `item` and see it loaded (V401); `False` where the body cannot (`_ammo_loads`)."""
+        return False
+
+    def _dry(self, class_id: int | None, race_id: int | None = None) -> bool:
+        """A shooter with none of what it has loaded at the last census (V402)."""
+        return getattr(self, "_ammo_count", None) == 0 and self._shoots(class_id, race_id)
+
+    def _ammo_to_buy(self, class_id, race_id, level, sold: set[int] | None = None):
+        """The ammunition a purchase buys and its price a stack (V401), or `None`: where the body
+        can load another (`_ammo_loads`), the best of the kind the weapon fires that its level
+        may use (and that `sold` holds, when given); else the one loaded, the only one it fires."""
+        kind = ammo_kind(race_id, getattr(self, "_ammo_carried", ()),
+                         self._ranged_kind(class_id, race_id))
+        offers = ammo_for(kind, level if isinstance(level, int) else None)
+        if not self._ammo_loads():
+            loaded = self._ammo_loaded(class_id, race_id)
+            offers = tuple(o for o in ammo_for(kind, None) if o[0] == loaded)
+        return next(((item, price) for item, price in offers if sold is None or item in sold),
+                    None)
+
     def ammo_low(self, state: State) -> int | None:
-        """What a purchase of a hunter's ammunition costs while it runs low (V393), as the
-        policy asks it (`Context.ammo_low`): under `AMMO_LOW` rounds at the last bag census, the
-        best its level may use; `None` for another class, a count not taken since the last
-        purchase, or enough."""
-        if CLASS_IDS.get(state.char.cls) != HUNTER:
+        """The copper a purchase of the floor's rounds needs (V393, V401), as the policy asks
+        it (`Context.ammo_low`), while a shooter's loaded ammunition is under `AMMO_LOW` at the
+        last census: its stacks less what the bags' goods would fetch first, nothing below
+        nothing; `None` for another class, a count not taken since the last purchase, or
+        enough."""
+        cls, race = CLASS_IDS.get(state.char.cls), RACE_IDS.get(state.char.race)
+        if not self._shoots(cls, race):
             return None
         count = getattr(self, "_ammo_count", None)
         if count is None or count >= AMMO_LOW:
             return None
-        best = ammo_for(ammo_kind(RACE_IDS.get(state.char.race),
-                                  getattr(self, "_ammo_carried", ())), state.char.level)
-        return best[0][1] if best else None
+        offer = self._ammo_to_buy(cls, race, state.char.level)
+        if offer is None:
+            return None
+        stacks = -(-(AMMO_LOW - count) // AMMO_STACK)
+        return max(0, stacks * offer[1] - getattr(self, "_junk_worth", 0))
 
-    def _ammo_supply(self, state, values: dict) -> Supply | None:
-        """The hunter's ammunition a restock buys (V393), while it runs low (`ammo_low`): the
-        best of its kind its level may use that a merchant in the zone sells, bought with what
-        is above the repair reserve (`Supply.reserve`), to `AMMO_DESIRED` rounds."""
+    def _ammo_supply(self, state, values: dict) -> tuple[Supply, ...]:
+        """What a restock buys of a shooter's ammunition (V393, V401), while its loaded rounds
+        run low (`ammo_low`): the one `_ammo_to_buy` names that a merchant in the zone sells,
+        to the floor (`AMMO_LOW`) with the whole purse, then on towards `AMMO_DESIRED` with what
+        the purse holds above the repair reserve (`Supply.reserve`); nothing else."""
         from jev.coach.policy import repair_reserve
 
-        if values.get("char.class_id") != HUNTER or self.ammo_low(state) is None:
-            return None
+        cls, race = values.get("char.class_id"), values.get("char.race_id")
+        if self.ammo_low(state) is None:
+            return ()
         level = values.get("char.level")
         sold = {item for m in self._in_zone(merchants(self.client.bounds.map_id))
                 for item in m.items}
-        kind = ammo_kind(values.get("char.race_id"), getattr(self, "_ammo_carried", ()))
-        for item, _ in ammo_for(kind, level if isinstance(level, int) else None):
-            if item in sold:
-                return Supply(item_id=item, name=f"ammunition {item}", role="ammo",
-                              desired=AMMO_DESIRED, reserve=repair_reserve(level, "hunter"))
-        return None
+        offer = self._ammo_to_buy(cls, race, level, sold)
+        if offer is None:
+            return ()
+        item, price = offer
+        owned = getattr(self, "_ammo_rows", {}).get(item, 0)
+        floor = max(owned, AMMO_LOW)
+        floor = owned + -(-(floor - owned) // AMMO_STACK) * AMMO_STACK
+        reserve = repair_reserve(level if isinstance(level, int) else None,
+                                 CLASS_BY_ID.get(cls))
+        money = values.get("bags.money_copper")
+        spare = (money - (floor - owned) // AMMO_STACK * price - reserve
+                 if isinstance(money, int) else 0)
+        fill = min(AMMO_DESIRED, floor + max(0, spare // price) * AMMO_STACK)
+        name = f"ammunition {item}"
+        out = [Supply(item_id=item, name=name, role="ammo", desired=AMMO_LOW, reserve=0)]
+        if fill > floor:
+            out.append(Supply(item_id=item, name=name, role="ammo", desired=fill,
+                              reserve=reserve))
+        return tuple(out)
 
-    def _count_ammo(self, census: dict | None) -> None:
-        """A hunter's rounds, and the ammunition it carries, from a whole bag census (V393):
-        no strip field paints ammunition."""
+    @staticmethod
+    def _floor_price(floor: Supply) -> int:
+        """What the floor's purchase (`_ammo_supply`'s first) costs at most: its stacks."""
+        price = next((p for kind in ("arrow", "bullet") for p_item, p in ammo_for(kind, None)
+                      if p_item == floor.item_id), 0)
+        return -(-floor.desired // AMMO_STACK) * price
+
+    def _count_ammo(self, census: dict | None, values: dict | None = None) -> None:
+        """A shooter's rounds from a whole bag census (V393, V401): every round it carries
+        (`_ammo_rows`), those of the one loaded (`_ammo_count`), the only ones its weapon fires,
+        and what the bags' goods would fetch (`_junk_worth`). No strip field paints
+        ammunition."""
         if not census:
             return
-        rows = [(item, count) for item, count in census.values() if item in AMMO_KIND]
-        self._ammo_count = sum(count for _, count in rows)
-        self._ammo_carried = tuple(sorted({item for item, _ in rows}))
+        values = values if values is not None else (self._read() or {})
+        rows: dict[int, int] = {}
+        for item, count in census.values():
+            if item in AMMO_KIND:
+                rows[item] = rows.get(item, 0) + count
+        self._ammo_rows = rows
+        self._ammo_carried = tuple(sorted(rows))
+        loaded = self._ammo_loaded(values.get("char.class_id"), values.get("char.race_id"))
+        self._ammo_count = rows.get(loaded, 0)
+        self._tell_dry(values)
+        prices = junk_prices()
+        self._junk_worth = sum(prices.get(item, 0) * count for item, count in census.values())
+
+    def _tell_dry(self, values: dict | None = None) -> None:
+        """Tell the fight whether nothing is loaded to fire (`Fight.dry`, V402)."""
+        values = values or {}
+        if hasattr(self, "fight"):
+            self.fight.dry = self._dry(values.get("char.class_id"), values.get("char.race_id"))
+
+    def _load_best_ammo(self, values: dict) -> None:
+        """Load the best rounds the bags hold of the kind the weapon fires that the level may
+        use, better than the ones loaded (V401), where the body can (`_ammo_loads`): the
+        Sharp Arrows a purchase at level 10 brought, which the server does not load itself."""
+        cls, race, level = (values.get("char.class_id"), values.get("char.race_id"),
+                            values.get("char.level"))
+        if not self._shoots(cls, race) or not self._ammo_loads():
+            return
+        loaded = self._ammo_loaded(cls, race)
+        usable = {item for item, _ in ammo_for(AMMO_KIND[loaded],
+                                               level if isinstance(level, int) else None)}
+        rows = getattr(self, "_ammo_rows", {})
+        best = max((item for item, count in rows.items() if count and item in usable),
+                   key=ammo_rank, default=None)
+        if best is None or ammo_rank(best) <= ammo_rank(loaded):
+            return
+        if self._load_ammo(best, values):
+            save_worn(self.gear_memory, [Piece(best, "ammo", float(ammo_rank(best)))])
+            self._ammo_count = rows.get(best, 0)
+            self._tell_dry(values)
+            self.say(f"  loaded ammunition {best} ({self._ammo_count} rounds)")
+            event("ammo.loaded", data={"item": best, "was": loaded, "rounds": self._ammo_count})
 
     def _kept(self, values: dict) -> int:
         """What a purchase leaves in the purse (`Context.kept`, V215, V393): the trainer's due
@@ -2498,11 +2747,11 @@ class LiveBody:
         if values is None or here is None:
             return Result(SkillOutcome.PREEMPTED, "vendor position or inventory unread", "blind")
         supplies = ()
-        # A hunter's ammunition running low (V393): bought on this visit, with the food and
-        # drink that are out.
+        # A hunter's ammunition running low (V393, V401): bought on this visit, with the food
+        # and drink that are out.
         ammo = (self._ammo_supply(state, values)
-                if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD" else None)
-        if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD" and ammo is None:
+                if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD" else ())
+        if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD" and not ammo:
             supplies = tuple(s for s in supplies_for(values.get("char.class_id"), values.get("char.race_id"))
                              if getattr(state.bags, f"{s.role.lower()}_count", None) == 0
                              and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id)
@@ -2514,13 +2763,20 @@ class LiveBody:
                 return Result(SkillOutcome.ABORTED, "no supply to buy for the pet", "nothing_to_buy")
             if not supplies:
                 return Result(SkillOutcome.ABORTED, "no confirmed empty supported food/drink slot", "unsupported")
-        elif ammo is not None:
+        elif ammo:
             supplies = (*(s for s in supplies_for(values.get("char.class_id"),
                                                   values.get("char.race_id"))
                           if getattr(state.bags, f"{s.role.lower()}_count", None) == 0
                           and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id),
-                        ammo)
+                        *ammo)
         eligible, min_free = junk_prices(), 1 if supplies else 6
+        # The floor's rounds the purse cannot pay are paid by the bags' junk, sold first
+        # (V401), as a repair's are (V393): Wilge, a level 13 tauren with 2 copper, had no
+        # bullet and its Old Blunderbuss broken.
+        money = values.get("bags.money_copper")
+        if (ammo and isinstance(money, int) and getattr(self, "_junk_worth", 0) > 0
+                and money < self._floor_price(ammo[0])):
+            min_free = SELL_ALL
         bag = ()
         if self.arm.decision.skill == "BAG_MAKE_SPACE":
             # A bag lying in the bags is the cheapest room there is: no merchant needed.
@@ -2534,7 +2790,7 @@ class LiveBody:
             # since the character is at a merchant anyway and training wants the silver.
             items = equipper.bag_items()
             if items is not None:
-                keep = gear_keep(items, load_worn(self.gear_memory),
+                keep = gear_keep(items, self._worn(values),
                                  class_id=values.get("char.class_id"),
                                  race_id=values.get("char.race_id"))
                 surplus = surplus_prices()
@@ -2577,7 +2833,9 @@ class LiveBody:
             walk = self._walks.get(ranked[0].entry)          # planned once, by the ranking
             if walk is None:
                 walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
-            if walk > SUPPLY_WALK_MAX_YARDS and not self._stranded(state, values):
+            # Nothing loaded to fire is the weapon gone (V402): no cap, as stranded.
+            dry = bool(ammo) and self._dry(values.get("char.class_id"), values.get("char.race_id"))
+            if walk > SUPPLY_WALK_MAX_YARDS and not self._stranded(state, values) and not dry:
                 self.policy_context.supplies_out_of_reach("too_far")     # this session (V302)
                 return Result(SkillOutcome.ABORTED,
                               f"the nearest merchant with them, {ranked[0].name}, is a "
@@ -2590,9 +2848,9 @@ class LiveBody:
                 # whole gear, most of them at the graveyards of V300 (28 Sep, 09:11-11:11).
                 if self._home_supplies(wanted, walk, world):
                     home = self._go_home()
-                    self.say(f"  out of food and drink with broken gear, the nearest merchant "
-                             f"with them {walk:.0f} yards off: hearthstone {home.value} "
-                             f"{self.hearth.detail}".rstrip())
+                    self.say(f"  {'no rounds to fire' if dry else 'out of food and drink with broken gear'}, "
+                             f"the nearest merchant with them {walk:.0f} yards off: hearthstone "
+                             f"{home.value} {self.hearth.detail}".rstrip())
                     moved = self._position() if home.ok else None
                     if moved is not None:
                         world = map_to_world(*moved, self.client.bounds)
@@ -2600,8 +2858,8 @@ class LiveBody:
                                                 if wanted & m.items)
                         ranked = self._ranked(by_home, world) if by_home else ranked
                 else:
-                    self.say(f"  out of food and drink with broken gear: walking {walk:.0f} "
-                             f"yards to {ranked[0].name}")
+                    self.say(f"  {'no rounds to fire' if dry else 'out of food and drink with broken gear'}: "
+                             f"walking {walk:.0f} yards to {ranked[0].name}")
         for merchant in ranked:
             def visit(merchant=merchant):
                 return self._open_merchant(merchant.name, merchant.world,
@@ -2626,8 +2884,10 @@ class LiveBody:
                 note_merchant(self.merchant_memory, merchant.entry, failed=False)
                 if supplies:
                     self.policy_context.restocked()
-                    if ammo is not None:
+                    if ammo:
                         self._ammo_count = None          # counted again at the next census
+                        self._gear_checked = object()    # which is the next meal's (V401)
+                        self.fight.dry = False
                 elif self.arm.decision.skill == "BAG_MAKE_SPACE":
                     # Sold, and the bags still nearly full: what is left does not sell, and
                     # the service is not asked again until something new is in them (V250).

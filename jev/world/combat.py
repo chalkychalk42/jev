@@ -45,6 +45,8 @@ class Role(StrEnum):
     ROOT = "root"                  # holds what is round the caster: then a step clear
     CC = "cc"                      # holds one attacker out of the fight: Polymorph (V287, V395)
     GUARD = "guard"                # holds off a crowd's blows: Evasion, Psychic Scream (V396)
+    MARK = "mark"                  # the unit marked as a fight opens: Hunter's Mark (V404)
+    SLOW = "slow"                  # a unit coming for the character slowed: Concussive Shot (V404)
 
 
 # -- policy -------------------------------------------------------------------------
@@ -374,6 +376,8 @@ TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL
                  "save": Role.SAVE, "stun": Role.STUN, "last_resort": Role.LAST_RESORT,
                  "conjure": Role.CONJURE, "root": Role.ROOT, "cc": Role.CC,
                  "guard": Role.GUARD,
+                 # A mark as a fight opens and a slow at a unit coming (V404).
+                 "mark": Role.MARK, "slow": Role.SLOW,
                  # A wand's shot: an attack from range that repeats (V397), a caster's when its
                  # mana is spent or its unit nearly dead.
                  "wand": Role.ATTACK,

@@ -310,14 +310,15 @@ def test_a_hunter_shoots_what_it_carries_or_what_its_race_began_with():
     assert ammo_for("arrow", 12)[0] == (2515, 50) and ammo_for("bullet", 9) == ((2516, 10),)
 
 
-def test_a_hunters_ammunition_is_bought_with_what_is_above_the_repair_reserve():
-    """22 of the hive's 50 hunters carried none on 7 Oct; Jev never bought it."""
+def test_a_hunters_ammunition_floor_is_bought_with_the_whole_purse():
+    """22 of the hive's 50 hunters carried none on 7 Oct; Jev never bought it. The floor's
+    rounds are the weapon's other half, paid as a repair is (V401, amending V393's reserve)."""
     context = Context()
     context.ammo_low = lambda state: 50
     context.reserve = lambda state: 10_000                 # a trainer's due does not hold it
     hunter = dict(level=12, cls="hunter", race="orc", durability_min=1.0)
-    assert services(_s(money_copper=165, **hunter), context=context)[0].rule == "service.ammo"
-    assert services(_s(money_copper=164, **hunter), context=context) == [], "R(12) is 115"
+    assert services(_s(money_copper=50, **hunter), context=context)[0].rule == "service.ammo"
+    assert services(_s(money_copper=49, **hunter), context=context) == [], "short of it"
     context.ammo_low = lambda state: None
     assert services(_s(money_copper=10_000, **hunter), context=context) == []
 
@@ -326,11 +327,12 @@ def test_the_body_counts_a_hunters_rounds_at_the_census_and_prices_the_next():
     b = body()
     hunter = _s(level=12, cls="hunter", race="orc")
     assert b.ammo_low(hunter) is None, "not counted"
-    b._count_ammo({(0, 1): (2512, 150), (0, 2): (2512, 30), (0, 3): (117, 5)})
+    b._count_ammo({(0, 1): (2512, 150), (0, 2): (2512, 30), (0, 3): (117, 5)},
+                  {"char.class_id": 3, "char.race_id": 2})
     assert b._ammo_count == 180 and b._ammo_carried == (2512,)
-    assert b.ammo_low(hunter) == 50, "Sharp Arrows at level 12"
+    assert b.ammo_low(hunter) == 10, "a stack of the Rough Arrows loaded, 300 the floor (V401)"
     assert b.ammo_low(_s(level=12)) is None, "a rogue"
-    b._count_ammo({(0, 1): (2512, 400)})
+    b._count_ammo({(0, 1): (2512, 400)}, {"char.class_id": 3, "char.race_id": 2})
     assert b.ammo_low(hunter) is None
 
 
@@ -356,12 +358,13 @@ def test_a_restock_buys_the_ammunition_keeping_the_repair_reserve(monkeypatch):
             calls.append(kw)
             return Vended.DONE
     monkeypatch.setattr("jev.run.body.Vendor", FakeVendor)
-    b._count_ammo({(0, 1): (2512, 40)})
+    b._count_ammo({(0, 1): (2512, 40)}, {"char.class_id": 3, "char.race_id": 2})
     state = seen(char=Char(level=12, cls="hunter", race="orc"),
                  bags=Bags(food_id=117, food_count=5))
     assert b.execute(b.arm, state, lambda: None).outcome.value == "succeeded"
     (ammo,) = calls[0]["supplies"]
-    assert (ammo.item_id, ammo.role, ammo.desired, ammo.reserve) == (2515, "ammo", 600, 115)
+    assert (ammo.item_id, ammo.role, ammo.desired, ammo.reserve) == (2512, "ammo", 300, 0), \
+        "the floor of what is loaded (V401); no purse read, no fill"
     assert b._ammo_count is None, "counted again at the next census"
 
 

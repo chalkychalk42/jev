@@ -64,8 +64,8 @@ TRAINER_REACH_SPELLS = 2
 # first (V394). Of the 30 hive mages at level 12 and over on 7 Oct, 28 had full bars, with
 # Conjure Water, Conjure Food, Frost Armor and Arcane Intellect, and none Polymorph.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
-NEW_LINE_ROLES = ("aura", "strike", "dot", "save", "guard", "stun", "last_resort", "root",
-                  "cc", "area", "wand", "long_buff", "conjure")
+NEW_LINE_ROLES = ("aura", "strike", "dot", "mark", "slow", "save", "guard", "stun",
+                  "last_resort", "root", "cc", "area", "wand", "long_buff", "conjure")
 BAR_SLOTS = 12
 
 # The roles the fight code presses (`jev.world.combat.TRAINED_ROLES`), in the order a spell
@@ -79,8 +79,9 @@ BAR_SLOTS = 12
 # Damage over time is damage (V361): Corruption, Shadow Word: Pain, Serpent Sting, Rend.
 # A guard is pressed in a fight against more than one or one being lost (V396), a wand's shot
 # when the mana is spent or the unit nearly dead (V397).
-FIGHT_ROLES = ("strike", "dot", "short_buff", "root", "stun", "cc", "guard", "area", "save",
-               "last_resort", "heal", "aura", "attack", "wand")
+# A mark as the fight opens and a slow at a unit coming (V404): Hunter's Mark, Concussive Shot.
+FIGHT_ROLES = ("strike", "dot", "mark", "slow", "short_buff", "root", "stun", "cc", "guard",
+               "area", "save", "last_resort", "heal", "aura", "attack", "wand")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
 # What holds off more than one attacker, bought before the oldest gap (V242): a root, a stun,
@@ -91,6 +92,13 @@ CONTROL_ROLES = ("root", "stun", "guard")
 # lasting ten minutes or more, pressed again five seconds before it lapses (Arcane Intellect,
 # Inner Fire). A shorter one is pressed in the fight (Battle Shout, Blessing of Might).
 KEPT_UP_S = 595.0
+# Auras that raise the damage the character deals (V404): damage done (13), attack power (99)
+# and ranged attack power (124). One takes the bar's aura slot from one that only guards - a
+# hunter's Aspect of the Hawk (124, from level 10) from its Aspect of the Monkey (49, dodge,
+# from 4), which held it on every hunter's bar in the hive (7 Oct), none of 42 having bought
+# the Hawk: an aura was worth buying only as the first of its kind. A paladin's auras, armour
+# (22) and Retribution's damage shield (15), raise neither, and keep their slot.
+DAMAGE_AURAS = (13, 99, 124)
 
 
 @dataclass(frozen=True)
@@ -482,6 +490,16 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
         best = lines.get(here.name)
         if best is not None and best.rank > here.rank:
             out.append(Placement(best.spell_id, slot, here.spell_id))
+    # An aura that raises the damage dealt takes the slot of one on the bar that does not
+    # (`DAMAGE_AURAS`, V404): Aspect of the Hawk over Aspect of the Monkey.
+    held = next(((slot, f) for slot, f in _on_bar_slots(bar, facts)
+                 if f.role == "aura" and f.aura not in DAMAGE_AURAS
+                 and not any(p.slot == slot for p in out)), None)
+    hitting = next((f for f in sorted(lines.values(), key=lambda f: f.spell_id)
+                    if f.role == "aura" and f.aura in DAMAGE_AURAS and f.name not in on_bar),
+                   None)
+    if held is not None and hitting is not None:
+        out.append(Placement(hitting.spell_id, held[0], held[1].spell_id))
     roles_on_bar = {f.role for f in on_bar.values()}
     auras_on_bar = {f.aura for f in on_bar.values() if f.role == "long_buff"}
     first = _first_levels(facts)
