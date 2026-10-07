@@ -86,8 +86,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hunt", type=float, default=600)
     parser.add_argument("--mmaps", default="/home/ash/cmangos/run/bin/mmaps")
     parser.add_argument("--jevpath", default="/home/ash/ForeverV2/tools/jevpath/jevpath")
-    parser.add_argument("--route-mode", choices=("full", "supported"), default="full",
-                        help="explicitly select the source guide or its executable subset")
+    parser.add_argument("--route-mode", choices=("full", "supported"), default=None,
+                        help="explicitly select the source guide or its executable subset "
+                             "(full, but supported with --route)")
+    parser.add_argument("--route",
+                        help="a race and class's route (`<race>_<class>`, from data/routes: "
+                             "tools/install_routes.py), or `auto`, the logged-in character's "
+                             "race and class's; a character on the human guides stays on them "
+                             "(V412)")
     parser.add_argument("--learning-store", type=Path)
     parser.add_argument("--teacher", action="store_true", help="enable bounded Claude subscription queue")
     parser.add_argument("--teacher-model", help="defaults to Sonnet for Claude or GLM-4.6V-Flash for GLM")
@@ -144,6 +150,18 @@ def main(argv: list[str] | None = None) -> int:
         args.screenshots = True
     if not re.fullmatch(r"[A-Za-z0-9_-]+", args.client_id):
         parser.error("client-id must contain only letters, numbers, underscores or hyphens")
+    if args.route and args.route != "auto":
+        from jev.guide import live_routes
+
+        found = live_routes.find(args.route)
+        if found is None:
+            parser.error(f"no route {args.route} in "
+                         f"{', '.join(str(d) for d in live_routes.search_path())} "
+                         "(install them with tools/install_routes.py)")
+        args.graph = found
+    if args.route_mode is None:
+        # A route is played as the hive plays it: its supported quests (V412).
+        args.route_mode = "supported" if args.route else "full"
     graph = Graph.load(args.graph)
     if args.check:
         # Offline there is no character, so nothing is taken as done yet.
@@ -339,6 +357,42 @@ def level_start(graph: Graph, level: int | None) -> str | None:
     return None
 
 
+def route_for(args, graph, values: dict):
+    """The logged-in character's race and class's route (`--route auto`, V412), unless its
+    playhead names a guide of the chain `graph` begins (the human guides it already plays),
+    or its pair has none installed: then `graph`, as before."""
+    from jev.guide import live_routes
+
+    name = live_routes.route_name(values.get("char.race_id"), values.get("char.class_id"))
+    found = live_routes.find(name) if name else None
+    if found is None:
+        print(f"route: none installed for race {values.get('char.race_id')} class "
+              f"{values.get('char.class_id')}; playing {graph.graph_id}")
+        return graph
+    key = values.get("char.key")
+    path = args.playhead if args.playhead is not None else (
+        playhead.for_character(key, ROOT / playhead.CHARACTERS) if key is not None else None)
+    named = None
+    if path is not None:
+        try:
+            named = json.loads(Path(path).read_text(encoding="utf-8")).get("graph_id")
+        except (OSError, ValueError, AttributeError):
+            named = None
+    chain, current = {graph.graph_id}, graph.graph_id
+    for _ in range(len(NEXT_GUIDE)):
+        following = NEXT_GUIDE.get(current)
+        if following is None or not following.exists():
+            break
+        current = Graph.load(following).graph_id
+        chain.add(current)
+    if isinstance(named, str) and named.removesuffix(".supported") in chain:
+        print(f"route: this character plays {named}; staying on it")
+        return graph
+    print(f"route: {name} ({found})")
+    args.graph = found
+    return Graph.load(found)
+
+
 def remembered(args, graph, key: int | None, level: int | None = None):
     """This character's playhead and route: its own file, found by the key the strip
     paints, so each character keeps its own place in the guide (`playhead`). A guide run
@@ -477,6 +531,8 @@ def _live(args, graph) -> int:
         # Which character is logged in decides whose playhead this run keeps.
         character = values.get("char.key")
         level = values.get("char.level")
+        if args.route == "auto":
+            graph = route_for(args, graph, values)
         path, memory, route, graph = remembered(args, graph, character,
                                                 level if isinstance(level, int) else None)
         print(f"character {character:08x}: playhead {path}" if character is not None
@@ -507,10 +563,15 @@ def _live(args, graph) -> int:
         if hasattr(client, "restore_trail"):
             client.trail_memory = path.with_name(path.stem + ".trail.json")
             client.restore_trail()
+        # The lifts' platforms' times, which the keys ride by (V407): kept from a sighting and
+        # the rides it foretold; none known, no lift is ridden.
+        from jev.clients.lift import LiftClock
+
         with_travel(client, bounds, MmapQuery(args.jevpath, args.mmaps, launcher=launcher,
                     checkpoint=lambda: client.hid.checkpoint() if client.hid.checkpoint else None),
                     arrival_yards=GOSSIP_YARDS, say=print, zones=zones,
-                    route_memory=route_memory, danger=danger)
+                    route_memory=route_memory, danger=danger,
+                    lift_clock=LiftClock(ROOT / "var" / "lift-clock.json"))
         body = LiveBody(client, graph, travel_timeout=args.timeout, hunt_timeout=args.hunt,
                         record_frame=screenshots.record_frame if screenshots is not None else None,
                         hunt_spawns=spawns.load(args.graph),

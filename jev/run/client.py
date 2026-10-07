@@ -238,6 +238,10 @@ class Client:
     _ground_pending: tuple | None = field(default=None, init=False)
     # Where a wedge with no way in known last moved the height, and the floors tried (V268).
     _floors_tried: tuple = field(default=(None, ()), init=False)
+    # The points the game sets a character down at, height and all (V406): `with_travel` gives
+    # the world database's on the map, the body adds its bind spot and the nodes it knows. A
+    # plan with no floor tracked where it starts begins at the heights of those near it.
+    landings: Callable[[], object] | None = field(default=None, init=False)
     # The last read, as (monotonic, world x, world y), and the last jump between two reads, as
     # (monotonic, from, to): where a teleport put the character (V305).
     _seen: tuple | None = field(default=None, init=False)
@@ -835,7 +839,16 @@ class Client:
 
     def _plan(self, here: tuple[float, float], world: tuple[float, float, float],
               query=None):
-        """The first complete plan over `START_HEIGHTS`, else the partial one ending nearest."""
+        """The first complete plan over the start heights, else the partial one ending nearest.
+
+        The heights: the floor tracked here (V264-V268, V384); with none, the heights of the
+        landing points near here (`landings`, V406: a graveyard, a flight node, the bind spot,
+        a teleport's exit, a creation spot); then the destination's and either side of it
+        (`START_HEIGHTS`); and with no floor tracked here and no complete plan from those,
+        every floor under the start (`surfaces_wide`, V406), the top one first outdoors. From
+        Darnassus, 1,378 yards up the tree, every height round Rut'theran's lies under it, and
+        the walk to Vesprystus was "nopath" where the character's own floor walks through the
+        portal (the hive, 6 Oct)."""
         query = query or self.query
         heights = [world[2] + dz for dz in START_HEIGHTS]
         tracked = None
@@ -843,9 +856,15 @@ class Client:
                 and math.dist(self._ground[:2], here[:2]) <= GROUND_MEMORY_YARDS):
             tracked = self._ground[2]
             heights.insert(0, tracked)
-        best = None
+        unknown = tracked is None
+        if unknown:
+            heights[:0] = self._landing_heights(here)
+        best = path = None
+        starts: list[float] = []
         for i, z in enumerate(heights):
             path = query.path(self.bounds.map_id, (here[0], here[1], z), world)
+            if path.points:
+                starts.append(path.points[0][2])
             if tracked is not None and i == 0 and not path.usable:
                 tracked = None                   # no floor there to plan from: any height
             if (tracked is not None and i > 0 and path.points
@@ -862,7 +881,46 @@ class Client:
             if path.usable and (best is None or math.dist(path.points[-1][:2], world[:2])
                                 < math.dist(best.points[-1][:2], world[:2])):
                 best = path
+        if unknown:
+            floors = surfaces_wide(query, self.bounds.map_id, here[0], here[1])
+            if self._outdoors() is not False:
+                floors.reverse()                 # outdoors the top floor is the one stood on
+            for z in floors:
+                if any(abs(z - start) <= FLOOR_GAP for start in starts):
+                    continue                     # planned from already
+                path = query.path(self.bounds.map_id, (here[0], here[1], z), world)
+                if path.points:
+                    starts.append(path.points[0][2])
+                if path.usable and path.status is PathStatus.COMPLETE:
+                    self._say(f"  no height known here: planned from the floor at {z:.1f}")
+                    return path
+                if path.status is PathStatus.NOPATH and path.detail == CAMP_REFUSED:
+                    return best if best is not None else path
+                if path.usable and (best is None or math.dist(path.points[-1][:2], world[:2])
+                                    < math.dist(best.points[-1][:2], world[:2])):
+                    best = path
         return best if best is not None else path
+
+    def _landing_heights(self, here: tuple[float, float]) -> list[float]:
+        """The heights of the landing points near `here` (`jev.world.landings`, V406)."""
+        from jev.world.landings import near
+
+        landings = getattr(self, "landings", None)
+        if not callable(landings):
+            return []
+        try:
+            points = list(landings() or ())
+        except Exception:
+            return []
+        return near(points, here[0], here[1], gap=FLOOR_GAP)
+
+    def _outdoors(self) -> bool | None:
+        """Whether the last read was outdoors (`pos.indoors`), `None` unread or stale."""
+        kept = getattr(self, "_last_reading", None)
+        if kept is None or time.monotonic() - kept[0] > OUTDOORS_READ_S:
+            return None
+        indoors = getattr(kept[2], "values", {}).get("pos.indoors")
+        return None if indoors is None else not indoors
 
     def focused(self, patience_s: float = FOCUS_PATIENCE_S, *,
                 checkpoint: Callable[[], None] | None = None) -> bool:
@@ -932,8 +990,9 @@ class Client:
             self.cap.close()
 
     def _say(self, line: str) -> None:
-        if self.on_path is not None:
-            self.on_path(line)
+        say = getattr(self, "on_path", None)
+        if say is not None:
+            say(line)
 
 
 def attach(client_id: str = "run", *, title: str = "World of Warcraft",
@@ -986,6 +1045,13 @@ PROBE_AROUND = tuple(float(dz) for dz in range(-150, 151, 5))
 # (V264): the navmesh stops short of walls and furniture, and a character stands there.
 AROUND_YARDS = 3.0
 AROUND_BEARINGS = 8
+# Every floor under a spot with no height known there (V406): the planner answers the floor
+# nearest the asked height within 200 yards up or down (jevpath's `EXTENT_Y`), so asks 300
+# apart from under the Undercity to over Teldrassil's crown find each stack of floors, and the
+# floors of each are looked for round it (`PROBE_AROUND`).
+PROBE_WIDE = tuple(float(z) for z in range(-600, 2101, 300))
+# How fresh a read says outdoors or in, for which of those floors a plan tries first.
+OUTDOORS_READ_S = 5.0
 
 
 def surfaces_under(query: PathQuery, map_id: int, x: float, y: float,
@@ -1004,6 +1070,31 @@ def surfaces_under(query: PathQuery, map_id: int, x: float, y: float,
                 if all(abs(height - known) > FLOOR_GAP for known in found):
                     found.append(height)
     return sorted(found)
+
+
+def surfaces_wide(query: PathQuery, map_id: int, x: float, y: float) -> list[float]:
+    """Every navmesh floor under a spot, lowest first, with no height known there (V406): the
+    floors `PROBE_WIDE` finds, and round each of those every 5 yards (`PROBE_AROUND`), as on
+    a hillside or in an inn one ask is answered by the floor nearest it."""
+    found = _floors_at(query, map_id, x, y, PROBE_WIDE)
+    out = list(found)
+    for height in found:
+        for z in _floors_at(query, map_id, x, y, tuple(height + dz for dz in PROBE_AROUND)):
+            if all(abs(z - known) > FLOOR_GAP for known in out):
+                out.append(z)
+    return sorted(out)
+
+
+def _floors_at(query: PathQuery, map_id: int, x: float, y: float, heights) -> list[float]:
+    found: list[float] = []
+    for z in heights:
+        snapped = query.path(map_id, (x, y, z), (x, y, z))
+        if (snapped.status in (PathStatus.COMPLETE, PathStatus.PARTIAL) and snapped.points
+                and math.dist(snapped.points[0][:2], (x, y)) <= UNDER_YARDS):
+            height = snapped.points[0][2]
+            if all(abs(height - known) > FLOOR_GAP for known in found):
+                found.append(height)
+    return found
 
 
 def _floors(query: PathQuery, map_id: int, x: float, y: float,
@@ -1033,12 +1124,16 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
                 arrival_yards: float, say: Callable[[str], None] | None = None,
                 zones: dict[int, ZoneBounds] | None = None,
                 zone_names: dict[int, str] | None = None,
-                route_memory=None, danger=None, teleports=None, lifts=None) -> Client:
+                route_memory=None, danger=None, teleports=None, lifts=None,
+                lift_clock=None) -> Client:
     """Give a client the ability to walk. Separate because reading needs no planner.
 
     `teleports`, the ones a walk may go through (V305): by default the world database's
     (`load_teleports`); none, planning on foot alone. `lifts`, the ones it may ride (V382), the
-    same; ridden only while the client's follower can ride one (`travel.ride`)."""
+    same; ridden only while the client's follower can ride one (`travel.ride`), and only the
+    legs it can (`travel.rideable`, V407). `lift_clock`, the platforms' times
+    (`jev.clients.lift.LiftClock`): with it the live follower rides by keys where they are
+    known; without, it rides no lift."""
     client.bounds = bounds
     client.route_memory = route_memory
     root = Path(__file__).resolve().parents[2]
@@ -1096,12 +1191,32 @@ def with_travel(client: Client, bounds: ZoneBounds, query: PathQuery, *,
     if teleports or lifts:
         client.query = TeleportQuery(
             client.query, teleports, lifts,
-            can_ride=lambda: callable(getattr(client.travel, "ride", None)))
+            can_ride=lambda: callable(getattr(client.travel, "ride", None)),
+            rideable=lambda leg: _rideable(client.travel, leg))
+    # Where the game sets a character down on this map, for a plan with no floor tracked (V406).
+    from jev.world.landings import world_points
+
+    client.landings = lambda: world_points(bounds.map_id)
     client.on_path = say
     client.travel = Travel(hid=client.hid, bounds=bounds,
                            read_pos=client.position, arrival_yards=arrival_yards,
                            indoors=client.near_indoors)
+    if lift_clock is not None:
+        from jev.clients.lift import LiftRide
+
+        travel = client.travel
+        travel.lifts = LiftRide(hid=client.hid, bounds=bounds, read=client.read,
+                                read_pos=lambda: travel.read_pos(), heading=travel._heading_now,
+                                turn_rate=lambda: travel.turn_rate, clock=lift_clock)
     return client
+
+
+def _rideable(travel, leg) -> bool:
+    """Whether the follower rides `leg` (V407): its own word where it has one (the live
+    follower's keys, `Travel.rideable`), else every leg (the hive's server rides)."""
+    rideable = getattr(travel, "rideable", None)
+    return True if not callable(rideable) else bool(rideable(leg))
+
 
 
 @dataclass

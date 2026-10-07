@@ -139,3 +139,78 @@ def test_an_assembled_log_beats_the_single_frame_answer_in_to_state():
 
     with_log = radio_frame.to_state(reading, t=0.0, client_id="c", quests=log.complete)
     assert tuple(q.quest_id for q in with_log.quests) == (783,)
+
+
+# -- V409: the last whole log patched slot by slot ----------------------------------------
+
+GOLDEN = 0.6180339887498949
+
+
+def _whole(log, quests, log_hash=7385, have=None):
+    for slot, quest_id in enumerate(quests):
+        log.observe(frame(len(quests), slot=slot, quest_id=quest_id, log_hash=log_hash,
+                          have=have, need=10 if have is not None else None))
+    assert log.complete is not None
+    return log
+
+
+def test_a_ticked_counter_patches_the_last_whole_log_and_never_unreads_it():
+    """A kill ticks a counter, which changes the hash: the whole log stays read, and the slot
+    painted under the new hash is patched in, where the log used to go unread for a cycle."""
+    log = _whole(QuestLog(), (783, 7, 5261), have=2)
+    ticked = log.observe(frame(3, slot=1, quest_id=7, log_hash=1111, have=3, need=10))
+    assert [q.quest_id for q in ticked] == [783, 7, 5261]
+    assert ticked[1].objectives[0].have == 3, "the slot painted is patched in"
+    assert ticked[0].objectives[0].have == 2, "the others as last read"
+    assert log.patched == 1
+    # Another tick before the cycle is whole: the patches made so far are kept.
+    again = log.observe(frame(3, slot=0, quest_id=783, log_hash=2222, have=5, need=10))
+    assert [(q.quest_id, q.objectives[0].have) for q in again] == [(783, 5), (7, 3), (5261, 2)]
+
+
+def test_another_quest_in_a_slot_is_another_log_read_whole_first():
+    """A hand-in and an accept between two reads leave as many entries, the slots holding other
+    quests: the first slot that holds another quest drops the patched log."""
+    log = _whole(QuestLog(), (783, 7, 5261))
+    assert log.observe(frame(3, slot=2, quest_id=5261, log_hash=4444)) is not None
+    assert log.observe(frame(3, slot=1, quest_id=33, log_hash=4444)) is None
+    assert log.observe(frame(3, slot=0, quest_id=783, log_hash=4444)) is not None, \
+        "whole again under the new hash"
+    assert [q.quest_id for q in log.complete] == [783, 33, 5261]
+
+
+def test_another_number_of_entries_is_another_log():
+    log = _whole(QuestLog(), (783, 7))
+    assert log.observe(frame(3, slot=0, quest_id=783, log_hash=5555)) is None
+    log.reset()
+    assert log.observe(frame(2, slot=0, quest_id=783, log_hash=7385)) is None, \
+        "a reset log patches nothing"
+
+
+def _golden_slot(tick: int, count: int) -> int:
+    """The slot the addon paints at its `tick`th paint (`advanceQuestSlot`)."""
+    return min(count - 1, int(((tick * GOLDEN) % 1) * count))
+
+
+def test_a_steady_two_hertz_reader_reads_a_log_of_ten_on_the_golden_turn():
+    """Ten paints a second and a read every fifth: a cursor stepping one slot a paint showed
+    two of ten slots for ever (the hive's parity audit, 7 Oct); the golden ratio's turn shows
+    every one within a few seconds, at any steady rate."""
+    quests = tuple(100 + i for i in range(10))
+    for step in (1, 2, 3, 4, 5, 7, 10, 20):
+        for start in range(step):
+            log = QuestLog()
+            reads = 0
+            for tick in range(1 + start, 4000, step):
+                slot = _golden_slot(tick, len(quests))
+                log.observe(frame(10, slot=slot, quest_id=quests[slot]))
+                reads += 1
+                if log.complete is not None:
+                    break
+            assert log.complete is not None, (step, start)
+            assert reads <= 60, (step, start, reads)
+    stepping = QuestLog()
+    for k in range(200):                        # the old cursor at a 2 Hz reader
+        slot = (5 * k) % 10
+        stepping.observe(frame(10, slot=slot, quest_id=quests[slot]))
+    assert stepping.complete is None and len(stepping.slots) == 2

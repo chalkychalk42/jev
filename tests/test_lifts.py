@@ -163,7 +163,10 @@ def mulgore_client(start, *, ride=None):
     with_travel(client, MULGORE, planner, arrival_yards=5.0, zones=ZONES, teleports=(),
                 lifts=(LIFT,), say=lines.append)
     if ride is not None:
+        # A follower that rides any leg, as the hive's does (V382); the live keys ride only
+        # by a platform's times (V407, tests/test_lift_keys.py).
         client.travel.ride = ride
+        client.travel.rideable = lambda leg: True
     client.lines = lines
 
     def stand(world):

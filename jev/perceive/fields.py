@@ -381,11 +381,14 @@ FIELDS: tuple[Field, ...] = (
     # So the addon cycles: each paint describes one log entry, and `slot`/`count` let the
     # decoder assemble the whole log over about two seconds at 10 Hz. `log_hash` says when
     # to throw that assembly away. The addon stays stateless and paint-only; nothing has
-    # to tell it which quest matters.
+    # to tell it which quest matters. Which entry a paint describes follows the golden
+    # ratio's turn, as the trainer's list does (V409): a cursor stepping one entry a paint
+    # showed a steady 2 Hz reader every fifth, two of a log of ten and never the whole.
     Field("quests.count", 5, Kind.UINT, "return QUEST_COUNT()",
           "entries in the log, headers excluded"),
     Field("quests.slot", 5, Kind.UINT, "return QUEST_SLOT()",
-          "which entry the fields below describe; advances once per paint"),
+          "which entry the fields below describe; a new one each paint, on the golden "
+          "ratio's turn (V409)"),
     Field("quests.slot_id", 16, Kind.UINT, "return QUEST_SLOT_ID()",
           "quest id at `slot`, from the hyperlink; unknown rather than a title hash, "
           "which the decoder could not tell apart"),

@@ -180,6 +180,11 @@ class Travel:
     waypoint_arrival_yards: float = 3.0
 
     turn_rate: float = TURN_RATE_SEED
+    # The lifts this follower rides by keys (`jev.clients.lift.LiftRide`, V407): `with_travel`
+    # gives it one with the platforms' times; without one it rides none, and the planner
+    # offers it none (`rideable`).
+    lifts: object | None = None
+    ride_detail: str | None = field(default=None, init=False)
     turns: int = field(default=0, init=False)
     detours: int = field(default=0, init=False)
     closest_yards: float | None = field(default=None, init=False)
@@ -193,6 +198,26 @@ class Travel:
     # Where the last stuck event stopped the character, before anything moved it.
     last_stuck_at: tuple[float, float] | None = field(default=None, init=False)
     _track: deque = field(default_factory=lambda: deque(maxlen=64), init=False)
+
+    # -- lifts ---------------------------------------------------------------
+
+    def rideable(self, leg) -> bool:
+        """Whether this follower rides `leg` by keys (V407): its platform's times known, its
+        decks at its stops' heights."""
+        return self.lifts is not None and bool(self.lifts.rideable(leg))
+
+    def ride(self, leg):
+        """Ride `leg` by keys from its deck (`jev.run.client.Client._ride`, V382, V407): where
+        it left the character, or `None` (`ride_detail`)."""
+        self.ride_detail = None
+        if self.lifts is None:
+            self.ride_detail = "this follower rides no lift"
+            return None
+        try:
+            return self.lifts.ride(leg)
+        finally:
+            self.ride_detail = getattr(self.lifts, "detail", None)
+            self.hid.release_all()
 
     # -- geometry ------------------------------------------------------------
 

@@ -42,8 +42,10 @@ def body(kind=StepKind.QUEST_ACCEPT, *, log=()):
                              reading=lambda: None, read=lambda: {"vitals.hp": 1.0},
                              frame=lambda: None, approach=Mock(return_value=True))
     b = LiveBody(client, graph, say=lambda line: None)
-    # These tests are about skill composition; levelling before a skill has its own.
+    # These tests are about skill composition; levelling before a skill has its own, and so
+    # has the hover sweep for a unit no nameplate shows (V411).
     b.ready_camera = lambda state: None
+    b._hover_sweep = lambda name: False
     skill = "ACCEPT_QUEST" if kind is StepKind.QUEST_ACCEPT else "TURNIN_QUEST"
     d = Decision(goal="g", intent=Intent.ADVANCE, skill=skill, abort_if=["dead"],
                  confidence=1, why="fixture")
@@ -2360,6 +2362,37 @@ def test_a_ghost_read_with_no_death_seen_fell_where_it_last_stood_alive(tmp_path
     assert _tirisfal_body(tmp_path)._fell is None, "and the purse file forgets it"
 
 
+def test_the_last_painted_corpse_point_is_kept_for_a_ghost_whose_map_holds_no_body(tmp_path):
+    """V410: the strip paints the body (`GetCorpseMapPosition`) only on the map of the zone the
+    ghost stands in. Painted while the ghost was in Tirisfal, the point is kept in world yards
+    in the purse file; walked into the Undercity, whose map does not hold the body, the next
+    session's ghost still knows it - before where it last stood alive."""
+    from jev.guide.coords import bounds_by_radio_id
+    from jev.perceive.radio_frame import zone_id
+    from jev.world.state_v1 import Char, Pos, Vitals
+
+    zones = bounds_by_radio_id("data/zones-tbc-243.json")
+    tirisfal = zone_id("Tirisfal")
+    b = _tirisfal_body(tmp_path)
+    b.client.coordinate_zones = zones
+    b.observe(seen(pos=Pos(mx=TIRISFAL_ALIVE[0], my=TIRISFAL_ALIVE[1], zone="Tirisfal",
+                           zone_id=tirisfal)))
+    ghost = Vitals(hp=0.0, dead=False, ghost=True)
+    b.observe(seen(char=Char(level=2, faction="horde"), vitals=ghost,
+                   pos=Pos(mx=0.6, my=0.6, zone="Tirisfal", zone_id=tirisfal,
+                           raw_corpse_mx=TIRISFAL_FELL[0], raw_corpse_my=TIRISFAL_FELL[1])))
+    assert b._corpse is not None and b._corpse[0] == zones[tirisfal].map_id
+    b.observe(_undercity_ghost())                      # no body painted here
+    assert b._known_body() == pytest.approx(TIRISFAL_FELL, abs=1e-6)
+    later = _tirisfal_body(tmp_path)                   # the next session, from the purse file
+    later.client.coordinate_zones = zones
+    later.observe(_undercity_ghost())
+    assert later._known_body() == pytest.approx(TIRISFAL_FELL, abs=1e-6), \
+        "the painted body, not where it last stood alive"
+    later.observe(seen(pos=Pos(mx=0.6, my=0.6, zone="Tirisfal", zone_id=tirisfal)))
+    assert later._corpse is None and _tirisfal_body(tmp_path)._corpse is None, "up: forgotten"
+
+
 def test_a_rib_wholly_in_a_death_camp_is_named_and_one_with_a_station_out_is_not():
     """V334: the runtime waits a step out on no rib whose every station lies in a camp."""
     import time as clock
@@ -2471,3 +2504,29 @@ def test_a_grinds_pulls_are_for_experience_and_a_quests_are_not():
     assert b._objective_name() == Paying(name_id("Wolf"))
     quest = body(StepKind.QUEST_OBJECTIVE)
     assert quest._objective_name() == name_id("NPC"), "a quest's kind, at any level"
+
+
+def test_a_unit_no_nameplate_shows_at_its_spawn_is_found_by_a_hover_sweep_there():
+    """V411: the hive found anyone within 50 yards; live, a unit is found by its plate, and one
+    stood over (its plate behind the strip) or whose plate the client does not draw where it
+    stands is not seen (V63, V221). Where the plates find none, the pointer is swept over the
+    view at the spawn, straight ahead and after each quarter turn, and the window it opens is
+    the answer."""
+    b = body()
+    del b._hover_sweep                                   # the sweep itself, here
+    held, hovered = [], []
+    b.client.hid.hold = lambda key, seconds: held.append(key) or True
+    b.interact.open_on = lambda name, node_world=None, node_map=None: Interacted.NOT_VISIBLE
+    b._hover_interact = lambda name: hovered.append(name) or len(hovered) == 3
+    b.interact._window_open = lambda: Interacted.QUEST
+    assert b._open_unit("Marshal McBride", (1.0, 2.0, 3.0), (0.5, 0.5)) is Interacted.QUEST
+    assert hovered == ["Marshal McBride"] * 3 and len(held) == 2, "two quarter turns, three looks"
+    # Seen by its plate: no sweep. Not found by a hover either: what the plates said.
+    hovered.clear()
+    b.interact.open_on = lambda name, node_world=None, node_map=None: Interacted.GOSSIP
+    assert b._open_unit("Marshal McBride", (1.0, 2.0, 3.0), (0.5, 0.5)) is Interacted.GOSSIP
+    assert hovered == []
+    b.interact.open_on = lambda name, node_world=None, node_map=None: Interacted.NO_TARGET
+    b._hover_interact = lambda name: hovered.append(name) and False
+    assert b._open_unit("Marshal McBride", (1.0, 2.0, 3.0), (0.5, 0.5)) is Interacted.NO_TARGET
+    assert len(hovered) == 4

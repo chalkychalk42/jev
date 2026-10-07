@@ -162,7 +162,10 @@ def test_a_replan_starts_at_the_height_of_the_route_that_got_us_here():
 
     client.travel.follow = follow
     assert client.approach(mcbride)
-    assert asked == [82.0, 80.6], "the re-plan borrowed the destination's height"
+    # The first plan, no floor tracked, starts at the height of the landing point beside the
+    # character, a human's creation spot in front of the Abbey (V406); before it, McBride's.
+    assert asked[0] == pytest.approx(80.4165, abs=0.01)
+    assert asked[1:] == [80.6], "the re-plan borrowed the destination's height"
 
 
 def test_a_start_height_that_snaps_onto_the_wrong_floor_is_not_the_plan():

@@ -728,12 +728,21 @@ local function questIndices()
     return out
 end
 
+-- Which slot a paint describes follows the golden ratio's turn, as the trainer's list does
+-- (V409): a reader at a steady fraction of the paint rate - every fifth paint at 2 Hz - saw
+-- the same few slots of a cursor stepping one a paint, two of a log of ten, and the log was
+-- never whole (the hive's parity audit, 7 Oct). An irrational step lands every reading rate
+-- on every slot in turn.
+local GOLDEN = 0.6180339887498949
+local questTick = 0
+
 local function advanceQuestSlot()
     local count = #questIndices()
     if count == 0 then
         questSlot = 0
     else
-        questSlot = (questSlot + 1) % count
+        questTick = questTick + 1
+        questSlot = math.min(count - 1, math.floor(((questTick * GOLDEN) % 1) * count))
     end
 end
 
@@ -1163,7 +1172,6 @@ local TRAINER_TYPES = { header = 0, available = 1, unavailable = 2, used = 3 }
 local TRAINER_FOLDED = 4
 local TRAINER_ROWS = 11
 local TRAINER_SCROLL = "ClassTrainerListScrollFrameScrollBar"
-local GOLDEN = 0.6180339887498949
 local TRAINER_SHORT_SHARE = 2 / 3
 local trainerRevision = 0
 local trainerTick = 0

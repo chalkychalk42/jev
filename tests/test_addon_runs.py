@@ -207,6 +207,21 @@ def test_the_addon_sets_no_global_through_load_events_and_paints():
         paint(bundle=leaky)
 
 
+def test_the_quest_log_is_painted_on_the_golden_ratios_turn():
+    """V409: the slot each paint describes is the golden ratio's turn of the paints, as the
+    trainer's list is: a cursor stepping one slot a paint showed a steady 2 Hz reader every
+    fifth slot, two of a log of ten (the hive's parity audit, 7 Oct)."""
+    golden = float(re.search(r"^local GOLDEN = ([0-9.]+)$",
+                             (addon_build.SOURCE / "Helpers.lua").read_text(encoding="utf-8"),
+                             re.MULTILINE).group(1))
+    for ticks in (1, 2, 3, 5, 8, 13, 21):
+        values = radio.unpack(payload(paint({"questCount": 10}, ticks=ticks))[:PAYLOAD_CELLS])
+        assert values["quests.count"] == 10
+        assert values["quests.slot"] == min(9, math.floor(((ticks * golden) % 1) * 10)), ticks
+    one = radio.unpack(payload(paint({"questCount": 1}, ticks=7))[:PAYLOAD_CELLS])
+    assert one["quests.slot"] == 0 and one["quests.slot_id"] == 7
+
+
 @pytest.mark.parametrize(("flag", "complete"), [(1, True), (0, False), (-1, False)])
 def test_quest_completion_is_a_positive_one_not_lua_truthiness(flag, complete):
     values = radio.unpack(payload(paint({"questComplete": flag}))[:PAYLOAD_CELLS])

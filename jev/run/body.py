@@ -85,9 +85,11 @@ from jev.world.home import load_home, save_home
 from jev.world.quarry import NEAR_YARDS, Held
 from jev.world.quarry import held as quarry_held
 from jev.world.state_v1 import PowerType, State, StepKind
+from jev.world.taxi import FLY_MIN_YARDS, SAME_PLACE_YARDS
 from jev.world.taxi import Node as TaxiNode
+from jev.world.taxi import beyond as flight_beyond
 from jev.world.taxi import flight as flight_plan
-from jev.world.taxi import load_nodes, save_node, visited
+from jev.world.taxi import load_nodes, save_node, starting_nodes, visited
 from jev.world.training import placements as spell_placements
 from jev.world.training import spell as spell_facts
 from jev.world.training import trainer_due, training_cost, unpressed
@@ -199,6 +201,11 @@ HOVER_STEP_S = 0.35
 # The answer to a click - a popup, or the error - arrives after the server's reply, which
 # is later than the first fresh paint (run 20260923T183537-ee5ef3 read silence and stopped).
 HOVER_ANSWER_S = 1.2
+# Where no nameplate shows the unit wanted, the hover is swept at its spawn (V411): straight
+# ahead and after each of three quarter turns, as the plates were looked for.
+HOVER_LOOKS = 4
+# The windows a right-click on a unit opens: an answer to a hover's click.
+HOVER_WINDOWS = ("ui.modal", "ui.gossip", "ui.quest_frame", "ui.vendor", "ui.trainer", "ui.taxi")
 # An exploration objective is credited by the server once the character is inside its
 # trigger; the quest log shows it a paint or two later.
 EXPLORE_CREDIT_S = 5.0
@@ -269,6 +276,14 @@ POPUP_S = 4.0
 # A flight master this near the character, its node not yet remembered, is visited
 # (`LiveBody.discoverable`): a node can only be flown to once it has been.
 DISCOVER_YARDS = 150.0
+# A flight taken where no walk finishes (V408) that came to nothing - the node not on the
+# flight master's map, the purse short, the map not opened - is not tried again for this long.
+FLIGHT_FAILED_S = 3600.0
+# A walk to a flight master for such a flight is given its own length's time, at a pace under a
+# run's seven yards a second and with a margin: from Dolanaar, Vesprystus is 1,988 yards through
+# the Darnassus portal, about 285 s, where one walk is given 180 (the hive's FINDINGS 15).
+FLIGHT_WALK_YARDS_PER_S = 5.0
+FLIGHT_WALK_SLACK_S = 60.0
 # How long a flight may take: the take-off, then ten yards a second at the least.
 FLIGHT_BASE_S = 90.0
 FLIGHT_YARDS_PER_S = 10.0
@@ -519,6 +534,9 @@ class LiveBody:
         # session ends (V328). A ghost the game paints no body for walks to the first.
         self._fell: tuple[int, float, float] | None = None
         self._alive_at: tuple[int, float, float] | None = None
+        # The last corpse point the strip painted, in world yards as (map, x, y), kept in the
+        # purse file (V410): a ghost whose zone's map does not hold its body is painted none.
+        self._corpse: tuple[int, float, float] | None = None
         self._hearth_ready_at: float | None = None      # wall time, in the purse file (V253)
         self._talents_failed: int | None = None           # the level a visit failed at (V261)
         self._reclaim_yards = TRAP_RECLAIM_YARDS    # how far short of the body a ghost gets up
@@ -531,6 +549,26 @@ class LiveBody:
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
         self.fight.realign = self.camera.face
         client.travel.read_pos = self._position
+        # The character's own landing points beside the world database's, for a plan with no
+        # floor tracked where it starts (V406): its bind spot and the flight nodes it knows.
+        world = getattr(client, "landings", None)
+        world = getattr(world, "world", world)        # an earlier body's keeps the world's
+
+        def landings(world=world):
+            return [*self._own_landings(), *((world() or ()) if callable(world) else ())]
+
+        landings.world = world
+        client.landings = landings
+
+    def _own_landings(self) -> list[tuple[float, float, float]]:
+        """Where this character's own memory says the game sets it down (V406): home, where
+        its hearthstone is bound, when its height is known, and the flight nodes it knows."""
+        out = []
+        home = load_home(self.home_memory)
+        if home is not None and home[2] != 0.0:
+            out.append(home)
+        out.extend(node.world for node in self._taxi_nodes().values())
+        return out
 
     def has_focus(self) -> bool:
         """Observe ownership even between skills, when the supervisor is watching."""
@@ -543,6 +581,10 @@ class LiveBody:
         from jev.run.watchdog import reconnect_client
 
         self.camera.invalidate("session reconnect")
+        # A reconnect may be the server's restart, which moves every lift's clock (V407).
+        clock = getattr(getattr(getattr(self.client, "travel", None), "lifts", None), "clock", None)
+        if clock is not None:
+            clock.forget()
         return reconnect_client(self.client, checkpoint, env_file=env_file)
 
     def _read(self):
@@ -750,22 +792,49 @@ class LiveBody:
         return (self.client.approach(world, timeout_s=self.travel_timeout, stop_short=stop_short)
                 if stop_short else self.client.approach(world, timeout_s=self.travel_timeout))
 
+    def _taxi_nodes(self) -> dict[int, TaxiNode]:
+        """The flight nodes this character knows: those the server gave its race at its
+        creation on this map (`jev.world.taxi.starting_nodes`, V408), and those its memory has
+        seen on a flight master's map, which stand where both have one."""
+        bounds = getattr(self.client, "bounds", None)
+        race = getattr(self, "_race_id", None)
+        if race is None:
+            race = (self.client.read() or {}).get("char.race_id") if hasattr(self.client, "read") else None
+            self._race_id = race if isinstance(race, int) else None
+        seeded = starting_nodes(self._race_id, getattr(bounds, "map_id", None), self._side)
+        return {**seeded, **load_nodes(self.taxi_memory)}
+
     def _fly_toward(self, world) -> bool:
         """Fly the long part of a walk, when a remembered node lands near its end and a
-        flight master stands near its start (`jev.world.taxi.flight`). Anything short of
-        landing leaves the character to walk from wherever it is."""
+        flight master stands near its start (`jev.world.taxi.flight`); and a walk of
+        `FLY_MIN_YARDS` or more no route on foot finishes, from the flight master the planner
+        walks to soonest to the node it walks on from (`jev.world.taxi.beyond`, V408): from
+        Teldrassil every walk to Darkshore ends in the sea. Anything short of landing leaves
+        the character to walk from wherever it is."""
         here = self._position()
         if here is None:
             return False
         at = map_to_world(*here, self.client.bounds)
-        plan = flight_plan(at, world[:2], load_nodes(self.taxi_memory),
-                           flightmasters(self.client.bounds.map_id, self._side))
+        nodes = self._taxi_nodes()
+        masters = flightmasters(self.client.bounds.map_id, self._side)
+        plan = flight_plan(at, world[:2], nodes, masters)
+        walk = None
         if plan is None:
-            return False
-        master, node = plan
+            found = self._flight_beyond(at, world, nodes, masters)
+            if found is None:
+                return False
+            master, node, walk = found
+            self.say(f"  no walk finishes at ({world[0]:.0f}, {world[1]:.0f}): flying from "
+                     f"{master.name} to {node.flightmaster} on the way")
+        else:
+            master, node = plan
         self._flying = True
+        kept = self.travel_timeout
+        if walk is not None:
+            self.travel_timeout = max(kept, walk / FLIGHT_WALK_YARDS_PER_S + FLIGHT_WALK_SLACK_S)
         try:
             if not self._approach(master.world) or not self._open_flightmaster(master):
+                self._flight_failed(master, node, walk)
                 return False
             desk = TaxiDesk(self.client.hid, self._read, self.client.origin, self.client.size)
             try:
@@ -777,14 +846,67 @@ class LiveBody:
                 desk.close()
             self.say(f"  flight from {master.name} to {node.flightmaster}: {flew.value}"
                      + (f" ({desk.detail})" if desk.detail else ""))
+            if not flew.ok:
+                self._flight_failed(master, node, walk)
             return flew.ok
         finally:
             self._flying = False
+            self.travel_timeout = kept
+
+    def _flight_beyond(self, at, world, nodes, masters):
+        """`jev.world.taxi.beyond` for a walk to `world` of `FLY_MIN_YARDS` or more that the
+        planner finds no way for (V408): its flight master, its node and the walk there in
+        yards, or `None`. A flight that came to nothing lately is not tried again."""
+        if (len(world) < 3 or math.dist(at[:2], world[:2]) < FLY_MIN_YARDS or not nodes
+                or self._side is None):
+            return None                          # nor before the side is read: its masters
+        # A landing on this map nearer the end than the character, before any plan is asked.
+        ahead = math.dist(at[:2], world[:2])
+        if not any(math.dist(n.world[:2], world[:2]) < ahead
+                   and any(math.dist(m.world[:2], n.world[:2]) <= SAME_PLACE_YARDS for m in masters)
+                   for n in nodes.values()):
+            return None
+        if self._planned_walk(None, world) is not None:
+            return None
+        failed = getattr(self, "_flights_failed", None) or {}
+        now = time.monotonic()
+
+        def skip(master, node):
+            when = failed.get((master.name, node.name_id))
+            return when is not None and now - when < FLIGHT_FAILED_S
+
+        return flight_beyond(at, world, masters, nodes, self._planned_walk, skip=skip)
+
+    def _flight_failed(self, master, node, walk) -> None:
+        """A flight where no walk finishes that came to nothing (V408), kept `FLIGHT_FAILED_S`."""
+        if walk is None:
+            return
+        failed = getattr(self, "_flights_failed", None)
+        if failed is None:
+            failed = self._flights_failed = {}
+        failed[(master.name, node.name_id)] = time.monotonic()
+
+    def _planned_walk(self, start, end) -> float | None:
+        """The planner's walk from `start` (where the character stands, for `None`) to `end` in
+        yards, through teleports and lifts as a walk goes; `None` where it has no way there
+        (V408): a plan not complete, or ending farther than `ARRIVED_NEAR_YARDS` from `end`."""
+        if len(end) < 3:
+            return None
+        if start is None:
+            planned = self.client.plan_to(tuple(end[:3])) if hasattr(self.client, "plan_to") else None
+            if planned is None or planned.status is not PathStatus.COMPLETE or not planned.points:
+                return None
+            if math.dist(planned.points[-1][:2], end[:2]) > ARRIVED_NEAR_YARDS:
+                return None
+            link = getattr(planned, "teleport", None)
+            return planned.length_yards() + (link.cost_yards() if isinstance(link, LiftLeg) else 0.0)
+        cost = self._walk_between(tuple(start[:3]), tuple(end[:3]))
+        return cost if isinstance(cost, float | int) and not isinstance(cost, bool) else None
 
     def _open_flightmaster(self, master) -> bool:
         """Talk to a flight master until its map is open: by its gossip line, or directly."""
         point = world_to_map(*master.world[:2], self.client.bounds)
-        opened = self.interact.open_on(master.name, node_world=master.world, node_map=point)
+        opened = self._open_unit(master.name, master.world, point)
         if opened is Interacted.TAXI:
             return True
         if opened is not Interacted.GOSSIP or not master.gossip or not self.chooser.run(master.gossip).ok:
@@ -805,7 +927,7 @@ class LiveBody:
         if here is None:
             return None
         at = map_to_world(*here, self.client.bounds)
-        known = load_nodes(self.taxi_memory)
+        known = self._taxi_nodes()
         near = [(math.dist(m.world[:2], at), m)
                 for m in flightmasters(self.client.bounds.map_id, self._side)
                 if not visited(m.world, known)]
@@ -1655,7 +1777,8 @@ class LiveBody:
                     self._graveyard = (int(graveyard[0]), graveyard[1], graveyard[2])
                 # Where it fell and where it last stood alive, for a session begun dead or a
                 # ghost (V328).
-                for name, attr in (("fell", "_fell"), ("alive_at", "_alive_at")):
+                for name, attr in (("fell", "_fell"), ("alive_at", "_alive_at"),
+                                   ("corpse", "_corpse")):
                     kept = _numbers(raw.get(name) if isinstance(raw, dict) else None, 3)
                     if kept is not None:
                         setattr(self, attr, (int(kept[0]), kept[1], kept[2]))
@@ -1741,6 +1864,7 @@ class LiveBody:
             unreached = (None if self._unreached is None
                          else [*self._unreached[0], self._unreached[1]])
             fell, alive = getattr(self, "_fell", None), getattr(self, "_alive_at", None)
+            corpse = getattr(self, "_corpse", None)
             atomic_json(Path(self.purse_memory), {"format": 1, **self.policy_context.purse(),
                                                   "conjured": sorted(self._conjured_last),
                                                   "revived_at": self._revived_at,
@@ -1749,7 +1873,8 @@ class LiveBody:
                                                   "graveyard": (list(self._graveyard)
                                                                 if self._graveyard else None),
                                                   "fell": list(fell) if fell else None,
-                                                  "alive_at": list(alive) if alive else None})
+                                                  "alive_at": list(alive) if alive else None,
+                                                  "corpse": list(corpse) if corpse else None})
 
     def _go_home(self):
         """Home by hearthstone; where it sets the character down is home from then on. Not
@@ -1874,7 +1999,7 @@ class LiveBody:
         if inn is None:
             return Result(SkillOutcome.ABORTED, "no inn near the guide's work", "nothing")
         point = world_to_map(*inn.world[:2], self.client.bounds)
-        opened = self.interact.open_on(inn.name, node_world=inn.world, node_map=point)
+        opened = self._open_unit(inn.name, inn.world, point)
         if not opened.opened:
             return self._result(opened, f"{inn.name}: {self.interact.detail or opened.value}")
         try:
@@ -1927,7 +2052,41 @@ class LiveBody:
         if opened in (Interacted.NOT_VISIBLE, Interacted.NO_TARGET) and self._under(world):
             self.say(f"  {name} was not found here: walking up to the floor above again")
             opened = self.interact.open_on(name, node_world=world, node_map=point)
+        return self._swept(name, opened)
+
+    def _open_unit(self, name: str, world, point):
+        """`Interact.open_on` a unit at its node, and where no nameplate showed it, a hover
+        sweep at its spawn (`_swept`, V411)."""
+        return self._swept(name, self.interact.open_on(name, node_world=world, node_map=point))
+
+    def _swept(self, name: str, opened):
+        """Where no nameplate showed `name` at its spawn (`Interacted.NOT_VISIBLE`, or only
+        others' plates, `NO_TARGET`), the window a hover sweep there opens (`_hover_sweep`,
+        V411), else what the plates found. A unit stood over, its plate drawn behind the
+        strip, or one whose plate the client does not draw where it stands - by a wall, at
+        the screen's edge (V63, V221) - is found where the pointer names it."""
+        if opened not in (Interacted.NOT_VISIBLE, Interacted.NO_TARGET):
+            return opened
+        if not self._hover_sweep(name):
+            return opened
+        window = self.interact._window_open()
+        if window is not None and window.opened:
+            self.say(f"  {name}: no nameplate showed; found by a hover at its spawn")
+            return window
         return opened
+
+    def _hover_sweep(self, name: str) -> bool:
+        """`_hover_interact` straight ahead and after each of three quarter turns
+        (`HOVER_LOOKS`), at the spot the walk to the unit's spawn ended (V411)."""
+        from jev.clients.interact import QUARTER_TURN_S
+
+        turn = getattr(self.client.hid, "TURN_RIGHT", "d")
+        for look in range(HOVER_LOOKS):
+            if look and not self.client.hid.hold(turn, QUARTER_TURN_S):
+                return False
+            if self._hover_interact(name):
+                return True
+        return False
 
     def _under(self, world) -> bool:
         """The character stands under `world`, a floor or more below it: then the tracked
@@ -3136,7 +3295,7 @@ class LiveBody:
         return cost
 
     def _open_merchant(self, name, world, point) -> bool:
-        opened = self.interact.open_on(name, node_world=world, node_map=point)
+        opened = self._open_unit(name, world, point)
         if not opened.opened:
             # Preserve the measured nested failure. Collapsing this to False made a
             # rejected visible ring indistinguishable from a failed merchant journey.
@@ -3384,7 +3543,7 @@ class LiveBody:
             deadline = time.monotonic() + HOVER_ANSWER_S
             while time.monotonic() < deadline:
                 answer = self._read() or {}
-                if answer.get("ui.modal") is True or answer.get("ui.gossip") is True:
+                if any(answer.get(key) is True for key in HOVER_WINDOWS):
                     return True
                 if (answer.get("ui.error_last") == too_far
                         and answer.get("ui.error_count") != errors):
@@ -3607,7 +3766,7 @@ class LiveBody:
         for the next session's recovery. Any get-up leaves no body unreached and no graveyard
         to keep (V301)."""
         self._revived_at = at
-        self._unreached = self._graveyard = self._fell = None
+        self._unreached = self._graveyard = self._fell = self._corpse = None
         self._save_purse()
 
     def _killed_by_stronger(self, state) -> bool:
@@ -3701,10 +3860,17 @@ class LiveBody:
             if here is not None:
                 self._alive_at = here
             self.recover.corpse = None
-            if self._fell is not None:
-                self._fell = None
+            if self._fell is not None or getattr(self, "_corpse", None) is not None:
+                self._fell = self._corpse = None
                 self._save_purse()
-        elif vitals.dead is True and vitals.ghost is not True:
+            return
+        painted = self._painted_corpse(pos)
+        if painted is not None and (getattr(self, "_corpse", None) is None
+                                    or painted[0] != self._corpse[0]
+                                    or math.dist(painted[1:], self._corpse[1:]) > SAME_BODY_YARDS / 5):
+            self._corpse = painted
+            self._save_purse()
+        if vitals.dead is True and vitals.ghost is not True:
             fell = here or self._alive_at              # the body lies where the character does
             if fell is not None and fell != self._fell:
                 self._fell = fell
@@ -3713,10 +3879,25 @@ class LiveBody:
             self._fell = self._alive_at
             self._save_purse()
 
+    def _painted_corpse(self, pos) -> tuple[int, float, float] | None:
+        """The corpse point the strip paints now, in world yards as (map, x, y), by the map of
+        the zone the character stands in (`GetCorpseMapPosition` paints on that map alone);
+        `None` where it paints none (V410)."""
+        x, y = getattr(pos, "raw_corpse_mx", None), getattr(pos, "raw_corpse_my", None)
+        zones = getattr(self.client, "coordinate_zones", None) or {}
+        zone = zones.get(getattr(pos, "zone_id", None))
+        if x is None or y is None or (x, y) == (0, 0) or zone is None or zone.degenerate:
+            return None
+        world = map_to_world(x, y, zone)
+        return None if world is None else (zone.map_id, float(world[0]), float(world[1]))
+
     def _known_body(self) -> tuple[float, float] | None:
         """Where the body lies when the game paints none, as a map point (V328): the server's
         word where the client has one (the hive's `corpse_world`, never the live client's),
-        else where the character was seen to fall (`observe`), on this map."""
+        else the last corpse point the strip painted, kept in world yards (V410: a ghost
+        released to a capital's graveyard, or walked into a zone whose map does not hold its
+        body, is painted none), else where the character was seen to fall (`observe`), on
+        this map."""
         bounds = self.client.bounds
         if bounds is None:
             return None
@@ -3725,7 +3906,7 @@ class LiveBody:
         if callable(server):
             with contextlib.suppress(Exception):
                 found = server()
-        for kept in (found, self._fell):
+        for kept in (found, getattr(self, "_corpse", None), self._fell):
             if kept is not None and kept[0] == bounds.map_id:
                 return world_to_map(kept[1], kept[2], bounds)
         return None

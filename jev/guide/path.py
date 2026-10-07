@@ -707,8 +707,12 @@ class TeleportQuery:
     """
 
     def __init__(self, inner: PathQuery, teleports: Iterable[Teleport],
-                 lifts: Iterable[Lift] = (), can_ride: Callable[[], bool] | None = None) -> None:
+                 lifts: Iterable[Lift] = (), can_ride: Callable[[], bool] | None = None,
+                 rideable: Callable[[LiftLeg], bool] | None = None) -> None:
         self.inner = inner
+        # Which legs the follower rides (V407): the live follower's keys only by a platform's
+        # times and between decks at its stops' heights; `None`, every leg.
+        self.rideable = rideable
         self.teleports = tuple(teleports)
         self.on_map: dict[int, tuple[Teleport, ...]] = {}
         for teleport in self.teleports:
@@ -726,12 +730,15 @@ class TeleportQuery:
         """The planner for a walk's cost (`jev.run.client.Client.plan_to`): the one below's
         estimate, through the same teleports and lifts."""
         estimate = getattr(self.inner, "estimate", None)
-        return (TeleportQuery(estimate(), self.teleports, self.lifts, self.can_ride)
+        return (TeleportQuery(estimate(), self.teleports, self.lifts, self.can_ride,
+                              self.rideable)
                 if callable(estimate) else self)
 
     def _legs(self, map_id: int) -> tuple[LiftLeg, ...]:
         legs = self.legs_on_map.get(map_id, ())
-        return legs if legs and self.can_ride is not None and self.can_ride() else ()
+        if not legs or self.can_ride is None or not self.can_ride():
+            return ()
+        return legs if self.rideable is None else tuple(leg for leg in legs if self.rideable(leg))
 
     def path(self, map_id: int, start: Point, end: Point) -> Path:
         direct = self.inner.path(map_id, start, end)
@@ -793,23 +800,36 @@ class TeleportQuery:
         """The way through a lift (V382): a walk to a deck at the stop it is boarded at and a
         walk on from one at the stop it is left at, both complete; the deck nearest each stop's
         height first (`lift_decks`). `None` when there is no such way."""
-        walk_on = None
+        decks = self._decks(map_id, leg.board)
+        walks_in: list = []                      # each deck's walk in, planned once, lazily
+
+        def walk_in(i: int):
+            while len(walks_in) <= i:
+                at = decks[len(walks_in)]
+                walk = self.inner.path(map_id, start, at)
+                last = walk.points[-1] if walk.points else None
+                ok = (walk.status is PathStatus.COMPLETE and last is not None
+                      and math.dist(last[:2], at[:2]) <= LIFT_BOARD_YARDS
+                      and abs(last[2] - at[2]) <= LIFT_DECK_ABOVE)
+                walks_in.append((walk.points if len(walk.points) >= 2 else (last, last)) if ok
+                                else None)
+            return walks_in[i]
+
         for exit in self._decks(map_id, leg.alight):
             walk_on = self._walk_on(map_id, (leg.lift.guid, leg.to, exit), end, exit)
-            if walk_on.status is PathStatus.COMPLETE and walk_on.points:
-                break
-            walk_on = None
-        if walk_on is None:
-            return None
-        for at in self._decks(map_id, leg.board):
-            walk_in = self.inner.path(map_id, start, at)
-            if walk_in.status is not PathStatus.COMPLETE or not walk_in.points:
+            if walk_on.status is not PathStatus.COMPLETE or not walk_on.points:
                 continue
-            last = walk_in.points[-1]
-            if math.dist(last[:2], at[:2]) > LIFT_BOARD_YARDS or abs(last[2] - at[2]) > LIFT_DECK_ABOVE:
-                continue
-            points = walk_in.points if len(walk_in.points) >= 2 else (last, last)
-            return leg.placed(at, exit), points, walk_on
+            for i, at in enumerate(decks):
+                points = walk_in(i)
+                if points is None:
+                    continue
+                placed = leg.placed(at, exit)
+                if self.rideable is None or self.rideable(placed):
+                    return placed, points, walk_on
+            # Every follower boards and leaves at any deck but the live keys (V407): the first
+            # deck walked on from is the leg's, as before.
+            if self.rideable is None or not any(w is not None for w in walks_in):
+                return None
         return None
 
     def _decks(self, map_id: int, stop: Point) -> list[Point]:
