@@ -1275,6 +1275,231 @@ local function RECENT_ERROR(which)
     return 0
 end
 
+-- --------------------------------------------------------------------- the pet
+--
+-- The pet as the stock pet frame shows it (fields.py, schema 22). A charm - a Taming Rod's
+-- beast, a Mind Control - takes the pet's place and frame, and `UnitIsCharmed` tells it
+-- apart: it is painted as a charm and never as a pet. Only stock reads: UnitExists,
+-- UnitIsCharmed, UnitIsDead, UnitHealth, GetPetHappiness, GetPetLoyalty, UnitLevel and
+-- UnitCreatureFamily, each of which answers about "pet" alone.
+
+local function charmed()
+    if not UnitExists("pet") then return false end
+    if not UnitIsCharmed then return nil end
+    return UnitIsCharmed("pet") and true or false
+end
+
+local function PET(what)
+    local charm = charmed()
+    if what == "charmed" then return charm end
+    if what == "has" then
+        if charm == nil then return nil end
+        return UnitExists("pet") and not charm and true or false
+    end
+    -- Nothing below is observed without a pet of the character's own out: unknown, not
+    -- "alive" or "level 0".
+    if not UnitExists("pet") or charm ~= false then return nil end
+    if what == "dead" then return UnitIsDead("pet") and true or false end
+    if what == "hp" then
+        local m = UnitHealthMax("pet"); if not m or m == 0 then return nil end
+        return frac(UnitHealth("pet") / m)
+    end
+    if what == "level" then
+        local l = UnitLevel("pet"); if not l or l < 1 then return nil end
+        return clamp(l, 126)
+    end
+    if what == "family" then
+        if not UnitCreatureFamily then return nil end
+        return nameid(UnitCreatureFamily("pet"))
+    end
+    -- A hunter's pet only: a demon has no happiness, and the API answers nil for it.
+    if what == "happiness" then
+        if not GetPetHappiness then return nil end
+        local happiness = GetPetHappiness()
+        if not happiness or happiness < 1 then return nil end
+        return clamp(happiness, 3)
+    end
+    if what == "loyalty" then
+        if not GetPetLoyalty then return nil end
+        -- The number in the loyalty text the pet frame shows ("Loyalty Level 3"), or a bare
+        -- number: either way the level, and no number is unknown.
+        local level = tonumber(string.match(tostring(GetPetLoyalty() or ""), "(%d+)"))
+        if not level or level < 1 then return nil end
+        return clamp(level, 6)
+    end
+    return nil
+end
+
+-- --------------------------------------------------------------------- auras and forms
+--
+-- 2.4.3 names an aura and gives no spell id: UnitBuff answers name, rank, icon, stacks and,
+-- for an aura the player cast, its duration and time left; UnitDebuff the same with the
+-- dispel type before those two. So auras are known by name: the character's watched ones
+-- (`fields.SELF_AURAS`, painted as `char.auras`) and the spells on the main bar (by
+-- GetSpellName), up on the character from any caster or on the target as the character's
+-- own debuff - own because only the caster is given a debuff's duration. One snapshot a
+-- paint, as the bags and the bar are read, so every aura field describes one moment.
+-- Only stock reads: UnitBuff, UnitDebuff, GetPlayerBuff, GetPlayerBuffTexture,
+-- GetPlayerBuffTimeLeft, GetActionInfo, GetSpellName, GetShapeshiftFormInfo, GetComboPoints.
+
+local MAX_AURAS = 40
+local auraSnapshot = {}
+local watchLists = {}
+
+-- name -> seconds left, or true where the client gives no time: one unit's buffs or
+-- debuffs, all of them or only those the player cast. nil when the API is missing.
+local function auraNames(unit, harmful, mineOnly)
+    local query = harmful and UnitDebuff or UnitBuff
+    if not query then return nil end
+    local out = {}
+    for i = 1, MAX_AURAS do
+        local name, _, icon, _, a5, a6, a7 = query(unit, i)
+        if not name then break end
+        local duration, left = a5, a6
+        if harmful then duration, left = a6, a7 end
+        if not mineOnly or (duration ~= nil and left ~= nil) then
+            local kept = out[name]
+            if type(left) == "number" then
+                if type(kept) ~= "number" or left < kept then out[name] = left end
+            elseif kept == nil then
+                out[name] = true
+            end
+        end
+    end
+    return out
+end
+
+-- The spell on a main-bar button, by name: the button's paged action, as the bar census
+-- reads it. 2.4.3's GetActionInfo gives a spellbook index, which GetSpellName names.
+local function slotSpellName(slot)
+    local btn = _G["ActionButton" .. slot]
+    local action = (btn and btn.action) or slot
+    if not HasAction(action) or not GetActionInfo or not GetSpellName then return nil end
+    local kind, id, book = GetActionInfo(action)
+    if kind ~= "spell" or id == nil then return nil end
+    return (GetSpellName(id, book or BOOK))
+end
+
+local function snapshotAuras()
+    local snap = { buffs = auraNames("player", false, false),
+                   debuffs = auraNames("player", true, false), bar = {} }
+    if UnitExists("target") then snap.mine = auraNames("target", true, true) end
+    for slot = 1, BAR_SLOTS do
+        local ok, name = pcall(slotSpellName, slot)
+        if ok then snap.bar[slot] = name end
+    end
+    auraSnapshot = snap
+end
+
+local function watchList(spec)
+    local list = watchLists[spec]
+    if list == nil then
+        list = {}
+        for name in string.gmatch(spec, "[^|]+") do list[#list + 1] = name end
+        watchLists[spec] = list
+    end
+    return list
+end
+
+-- Bit i: the i-th watched name is on the character, buff or debuff, from any caster.
+local function SELF_AURAS(spec)
+    local buffs, debuffs = auraSnapshot.buffs, auraSnapshot.debuffs
+    if buffs == nil or debuffs == nil then return nil end
+    local v, place = 0, 1
+    for _, name in ipairs(watchList(spec)) do
+        if buffs[name] or debuffs[name] then v = v + place end
+        place = place * 2
+    end
+    return v
+end
+
+-- Seconds left of the named aura on the character: 0 when it is not on; unknown when it is
+-- on and no clock says for how long. An aura another cast (a Spirit Healer's sickness) has
+-- no time in UnitDebuff, so the buff frame's own clock is read for it, matched by its icon.
+local function AURA_LEFT(name)
+    for pass = 1, 2 do
+        local harmful = pass == 1
+        local query = harmful and UnitDebuff or UnitBuff
+        if not query then return nil end
+        for i = 1, MAX_AURAS do
+            local n, _, icon, _, a5, a6, a7 = query("player", i)
+            if not n then break end
+            if n == name then
+                local left = a6
+                if harmful then left = a7 end
+                if type(left) ~= "number" and GetPlayerBuff and GetPlayerBuffTexture
+                        and GetPlayerBuffTimeLeft then
+                    local filter = harmful and "HARMFUL" or "HELPFUL"
+                    for j = 1, MAX_AURAS do
+                        local index = GetPlayerBuff(j, filter)
+                        if not index or index < 0 then break end
+                        if GetPlayerBuffTexture(index) == icon then
+                            left = GetPlayerBuffTimeLeft(index)
+                            break
+                        end
+                    end
+                end
+                if type(left) ~= "number" then return nil end
+                return clamp(math.floor(left), 1022)
+            end
+        end
+    end
+    return 0
+end
+
+-- The stance bar entry shown active, by name: a druid's form, a warrior's stance, a rogue's
+-- Stealth, a priest's Shadowform, a paladin's aura. 0 with none active. A name hashing to
+-- 0 is moved to 1, as one hashing to the NA code is moved down: 0 means "none".
+local function FORM_ID()
+    if not GetNumShapeshiftForms or not GetShapeshiftFormInfo then return nil end
+    for i = 1, GetNumShapeshiftForms() do
+        local _, name, active = GetShapeshiftFormInfo(i)
+        if active then
+            local h = nameid(name)
+            if h == nil then return nil end
+            if h == 0 then return 1 end
+            return h
+        end
+    end
+    return 0
+end
+
+-- Main-bar slots whose spell is up on the character ("buffs") or on the target as the
+-- character's own debuff ("dots"), and the least whole seconds such a debuff has left
+-- ("dot_s"). The debuffs are unknown without a target.
+local function BAR_AURAS(which)
+    local present = auraSnapshot.buffs
+    if which ~= "buffs" then
+        if not UnitExists("target") then return nil end
+        present = auraSnapshot.mine
+    end
+    if present == nil then return nil end
+    local v, place, least = 0, 1, nil
+    for slot = 1, BAR_SLOTS do
+        local name = auraSnapshot.bar and auraSnapshot.bar[slot]
+        local left = name and present[name]
+        if left then
+            v = v + place
+            if type(left) == "number" and (least == nil or left < least) then least = left end
+        end
+        place = place * 2
+    end
+    if which == "dot_s" then
+        if least == nil then return nil end
+        return clamp(math.floor(least), 254)
+    end
+    return v
+end
+
+-- Combo points on the target. 2.4.3's GetComboPoints takes no arguments and later clients'
+-- take the unit and its target; the extra arguments are ignored where they are not asked.
+local function COMBO()
+    if not GetComboPoints then return nil end
+    local n = GetComboPoints("player", "target")
+    if n == nil then return nil end
+    return clamp(n, 6)
+end
+
 -- --------------------------------------------------------------------- UI
 
 local function MODAL_UP()
@@ -1468,6 +1693,13 @@ return {
     SWINGS = SWINGS,
     ATTACKERS = ATTACKERS,
     MODAL_UP = MODAL_UP,
+    PET = PET,
+    SELF_AURAS = SELF_AURAS,
+    AURA_LEFT = AURA_LEFT,
+    FORM_ID = FORM_ID,
+    BAR_AURAS = BAR_AURAS,
+    COMBO = COMBO,
+    snapshotAuras = snapshotAuras,
     LAST_ERROR = LAST_ERROR,
     CLASS_ID = CLASS_ID,
     RACE_ID = RACE_ID,

@@ -51,7 +51,7 @@ BITS_PER_CELL = BITS_PER_CHANNEL * 3          # 12
 LEVELS = 1 << BITS_PER_CHANNEL                # 16
 GRID_COLS = 12
 CALIBRATION_ROWS = 1
-SCHEMA = 21                                   # bump when the field table changes shape
+SCHEMA = 22                                   # bump when the field table changes shape
 """2: the quest log arrives one entry per paint (`quests.slot`), replacing a watched-
 quest field that was unknown on every live client because nothing sets a watch.
 3: the advance button's screen position, so a stock frame is clicked where it actually is
@@ -80,6 +80,10 @@ and button, the scroll button toward a row out of view, and the row Train buys (
 the button that spends a point in it, or its tab's (V261).
 20: which nameplates the client draws, enemy and friendly (V320).
 21: whether the selected unit is tagged by another, as the target frame greys it (V344).
+22: the class mechanics: the pet as its frame shows it and a charm in its place, the
+character's own watched auras and resurrection sickness's time, its form or stance, which
+main-bar spells are up on it and which are on the target as its own debuffs, and combo
+points (V398).
 Old schemas remain readable, with appended observations unknown: `SCHEMA_FIELDS`."""
 LAST_HEADER_SCHEMA = 14
 EXTENDED = 0
@@ -157,6 +161,21 @@ def _tri(name: str, lua: str, note: str = "") -> Field:
 # 255 decoded as "no sequence" once every 256 paints and an action waiting for fresh paint
 # read that as blindness (measured 23 September, `blind: no paint sequence after action`).
 SEQ_MODULUS = 255
+
+# The character's own auras the strip watches by name (schema 22, `char.auras`), bit 0 the
+# first. 2.4.3 gives an aura's name and no spell id (`UnitBuff`, `UnitDebuff`), so an aura is
+# known by its name as the world database spells it, the same English the name hashes assume.
+# Each is one Jev's play turns on and no bar slot names: up at a Spirit Healer with
+# resurrection sickness; a priest's shield refused while Weakened Soul lasts; a bandage
+# refused while Recently Bandaged does; a paladin's last resorts refused under Forbearance;
+# a meal or drink under way (an attack breaks it); Well Fed; and Dazed, the slow a blow from
+# behind leaves, which turns running away into dying. Appending a name is a schema change
+# (its bit is new), and the list may grow to eight more before the field needs more bits.
+SELF_AURAS: tuple[str, ...] = (
+    "Resurrection Sickness", "Weakened Soul", "Recently Bandaged", "Forbearance",
+    "Drink", "Food", "Well Fed", "Dazed",
+)
+SICKNESS = "Resurrection Sickness"
 
 FIELDS: tuple[Field, ...] = (
     # -- header ------------------------------------------------------------------
@@ -700,6 +719,64 @@ FIELDS: tuple[Field, ...] = (
          "if not UnitExists('target') then return 0 end\n"
          "return tri(UnitIsTapped('target') and not UnitIsTappedByPlayer('target'))",
          "the selected unit is tagged by someone else: its kill pays them, not the character"),
+
+    # -- schema 22: the class mechanics (V398) --------------------------------------------
+    #
+    # What a hunter, a warlock, a druid, a warrior, a rogue and a priest play by and the strip
+    # did not show: the hive's server body has had all of it from the server since 6 Oct, and
+    # a live client nothing, so a rule written on the hive's facts had nothing to read live.
+    #
+    # The pet, as the stock pet frame shows it: out or not, dead, its health, a hunter's
+    # pet's happiness and loyalty, its level and its family (by name, hashed as names are:
+    # 2.4.3 names a family and gives no id). A charm - a Taming Rod's beast, a Mind Control -
+    # stands in the pet's place and its frame, and is told apart by `UnitIsCharmed`; it is no
+    # pet (`pet.has` false) and is painted as `pet.charmed`. A creature's entry, which a
+    # server body knows, no client gives: Jev reads the family instead.
+    _tri("pet.has", "local v = PET('has'); if v == nil then return nil end\nreturn tri(v)",
+         "a pet of the character's own is out, dead or alive; a charm in its place is not one"),
+    _tri("pet.dead", "local v = PET('dead'); if v == nil then return nil end\nreturn tri(v)",
+         "unknown without a pet out"),
+    Field("pet.hp", 10, Kind.FRAC, "return PET('hp')"),
+    Field("pet.happiness", 3, Kind.ENUM, "return PET('happiness')",
+          "GetPetHappiness: 1 unhappy, 2 content, 3 happy; a hunter's pet only"),
+    Field("pet.loyalty", 3, Kind.UINT, "return PET('loyalty')",
+          "the loyalty level, 1-6, the number in GetPetLoyalty's text; a hunter's pet only"),
+    Field("pet.level", 7, Kind.UINT, "return PET('level')"),
+    Field("pet.family_id", 16, Kind.UINT, "return PET('family')",
+          "UnitCreatureFamily('pet') hashed as names are (CreatureFamily.dbc's English name)"),
+    _tri("pet.charmed", "local v = PET('charmed'); if v == nil then return nil end\nreturn tri(v)",
+         "the unit in the pet's place is a charm the character holds (UnitIsCharmed('pet'))"),
+
+    # The character's own auras, by name (`SELF_AURAS`), one bit each and from any caster;
+    # and how long resurrection sickness has left, from the buff frame's own clock, so a wait
+    # for it ends when it does rather than when a level's guess says. 0 is none on.
+    Field("char.auras", len(SELF_AURAS) + 1, Kind.UINT,
+          f'return SELF_AURAS("{"|".join(SELF_AURAS)}")',
+          "bit i: SELF_AURAS[i] is on the character; one bit more so all on is not the NA code"),
+    Field("char.sickness_s", 10, Kind.UINT, f'return AURA_LEFT("{SICKNESS}")',
+          "seconds of resurrection sickness left, 0 when there is none; unknown with no clock"),
+    # The form, stance or aura the stance bar shows active (GetShapeshiftFormInfo): a
+    # druid's forms, a warrior's stances, a rogue's Stealth, a priest's Shadowform, a
+    # paladin's aura. Its name hashed as names are, 0 with none active. An ability a form
+    # forbids is already dimmed in `bars.usable`; this says which form it is.
+    Field("char.form_id", 16, Kind.UINT, "return FORM_ID()",
+          "the active stance bar entry's name, hashed as names are; 0 none active"),
+    # Which main-bar slots' spells are up: as an aura on the character, from any caster (a
+    # seal, an armour, an aspect, a shield, a blessing), and on the target as the character's
+    # own debuff (a dot, a sting, a mark, a curse) - own because 2.4.3 gives a debuff's
+    # duration only to whoever cast it. Matched by the slot's spell name (GetSpellName): a
+    # buff's clock in the rotation is a guess a dispel, a death or a resist breaks, and this
+    # is the client's own answer. And the least time any such debuff has left.
+    Field("bars.buffs", 13, Kind.UINT, "return BAR_AURAS('buffs')",
+          "slots 1-12, bit 0 = slot 1: the slot's spell is an aura on the character"),
+    Field("bars.dots", 13, Kind.UINT, "return BAR_AURAS('dots')",
+          "slots 1-12: the slot's spell is the character's own debuff on the target; NA without one"),
+    Field("target.dot_s", 8, Kind.UINT, "return BAR_AURAS('dot_s')",
+          "the least whole seconds left of those debuffs; NA with none"),
+    # A rogue's and a cat's finishers spend these; the client dims a finisher with none
+    # (`bars.usable`), and this says how many there are.
+    Field("combat.combo", 3, Kind.UINT, "return COMBO()",
+          "combo points on the target, 0-5 (GetComboPoints)"),
 )
 
 # --------------------------------------------------------------------------- layout
@@ -713,7 +790,7 @@ SCHEMA_FIELDS = {6: _LEGACY[:75], 7: _LEGACY[:112], 8: _LEGACY[:117], 9: _LEGACY
                  10: _LEGACY[:125], 11: _LEGACY[:126], 12: _LEGACY[:127], 13: _LEGACY[:128],
                  14: _LEGACY, 15: FIELDS[:147], 16: FIELDS[:154], 17: FIELDS[:157],
                  18: FIELDS[:171], 19: FIELDS[:180], 20: FIELDS[:182],
-                 21: FIELDS}
+                 21: FIELDS[:183], 22: FIELDS}
 # Schema 14 was the last the 4-bit header could name (15 is its not-available code), and
 # was redefined once, within the hour it was installed on one client, to add `target.guid`.
 # From 15 the header says EXTENDED and the number is in `schema_rev`; a new layout appends
@@ -742,6 +819,8 @@ assert sum(f.bits for f in SCHEMA_FIELDS[19]) == 1580
 assert SCHEMA_FIELDS[19][-1].name == "talents.y"
 assert sum(f.bits for f in SCHEMA_FIELDS[20]) == 1584
 assert SCHEMA_FIELDS[20][-1].name == "ui.plates_friendly"
+assert sum(f.bits for f in SCHEMA_FIELDS[21]) == 1586
+assert SCHEMA_FIELDS[21][-1].name == "target.tapped"
 
 PAYLOAD_BITS = sum(f.bits for f in FIELDS)
 CHECKSUM_BITS = 16

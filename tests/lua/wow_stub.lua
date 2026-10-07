@@ -110,16 +110,19 @@ function UnitClass() return "Mage", pick("class", "MAGE") end
 function UnitRace() return "Human", pick("race", "Human") end
 function UnitLevel(u)
     if u == "target" then return pick("targetLevel", 4) end
+    if u == "pet" then return pick("petLevel", 3) end
     return pick("level", 4)
 end
 function UnitXP() return pick("xp", 300) end
 function UnitXPMax() return pick("xpMax", 1000) end
 function UnitHealth(u)
     if u == "target" then return pick("targetHp", 40) end
+    if u == "pet" then return pick("petHp", 30) end
     return pick("hp", 80)
 end
 function UnitHealthMax(u)
     if u == "target" then return pick("targetHpMax", 100) end
+    if u == "pet" then return pick("petHpMax", 120) end
     return pick("hpMax", 100)
 end
 function UnitMana() return pick("mana", 60) end
@@ -128,6 +131,7 @@ function UnitPowerType() return pick("powerType", 0) end
 function UnitAffectingCombat() return pick("combat", nil) end
 function UnitIsDead(u)
     if u == "mouseover" then return pick("mouseoverDead", nil) end
+    if u == "pet" then return pick("petDead", nil) end
     return pick("dead", nil)
 end
 function UnitIsGhost() return pick("ghost", nil) end
@@ -135,6 +139,7 @@ function UnitIsAFK() return pick("afk", nil) end
 function UnitOnTaxi() return pick("taxi", nil) end
 function UnitExists(u)
     if u == "mouseover" then return pick("hasMouseover", nil) end
+    if u == "pet" then return pick("hasPet", nil) end
     return pick("hasTarget", 1)
 end
 function UnitName(u)
@@ -159,6 +164,62 @@ function GetMouseFocus()
     if STATE.mouseFocus == "ui" then return UIParent end
     return nil
 end
+
+-- The pet frame's reads (schema 22): a charm stands in the pet's place, told apart by
+-- UnitIsCharmed; happiness and loyalty only for a hunter's pet.
+function UnitIsCharmed(u)
+    if u == "pet" then return pick("petCharmed", nil) end
+    return nil
+end
+function UnitCreatureFamily(u)
+    if u == "pet" then return pick("petFamily", nil) end
+    return nil
+end
+function GetPetHappiness() return pick("petHappiness", nil), 125, 1 end
+function GetPetLoyalty() return pick("petLoyalty", nil) end
+
+-- Auras as 2.4.3 gives them: each list entry {name, icon, duration, left}, duration and
+-- left nil for one another cast. UnitBuff answers name, rank, icon, stacks, duration, time
+-- left; UnitDebuff puts the dispel type before the last two. The buff frame's own clock
+-- (GetPlayerBuff and its siblings) knows every aura on the player, numbered across both
+-- kinds; `playerClock` gives it a time by icon.
+local function auraList(unit, harmful)
+    if unit == "player" then return harmful and STATE.playerDebuffs or STATE.playerBuffs end
+    if unit == "target" and harmful then return STATE.targetDebuffs end
+    return nil
+end
+function UnitBuff(unit, i)
+    local a = (auraList(unit, false) or {})[i]
+    if a == nil then return nil end
+    return a[1], "Rank 1", a[2], 1, a[3], a[4]
+end
+function UnitDebuff(unit, i)
+    local a = (auraList(unit, true) or {})[i]
+    if a == nil then return nil end
+    return a[1], "Rank 1", a[2], 1, "Magic", a[3], a[4]
+end
+function GetPlayerBuff(j, filter)
+    local list = filter == "HARMFUL" and STATE.playerDebuffs or STATE.playerBuffs
+    if list == nil or list[j] == nil then return 0, nil end
+    return (filter == "HARMFUL" and 100 or 0) + j, nil
+end
+function GetPlayerBuffTexture(index)
+    local list = index > 100 and STATE.playerDebuffs or STATE.playerBuffs
+    local a = list and list[index % 100]
+    return a and a[2]
+end
+function GetPlayerBuffTimeLeft(index)
+    local icon = GetPlayerBuffTexture(index)
+    return STATE.playerClock and icon and STATE.playerClock[icon] or 0
+end
+-- The stance bar: STATE.forms is a list of {name, active}.
+function GetNumShapeshiftForms() return STATE.forms and #STATE.forms or 0 end
+function GetShapeshiftFormInfo(i)
+    local f = STATE.forms and STATE.forms[i]
+    if f == nil then return nil end
+    return "formicon" .. i, f[1], f[2], true
+end
+function GetComboPoints() return pick("combo", 0) end
 
 function IsMounted() return pick("mounted", nil) end
 function IsSwimming() return pick("swimming", nil) end

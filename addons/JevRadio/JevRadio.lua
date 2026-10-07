@@ -217,6 +217,9 @@ local function paint()
     pcall(Helpers.snapshotTaxi)
     pcall(Helpers.snapshotTrainer)
     pcall(Helpers.snapshotTalents)
+    -- And the auras once, so the watched auras, the bar's buffs and the target's debuffs
+    -- describe one moment.
+    pcall(Helpers.snapshotAuras)
 
     ENV.SEQ = (ENV.SEQ + 1) % 256
 

@@ -150,6 +150,28 @@ at a session boundary with the loop held:
 3. Check the strip reads as the new schema: Windows Python `tools/observe.py` shows `schema`
    20, and `ui.plates_friendly` and `ui.plates_enemy`. Then release the hold.
 
+**Schema 22 (V398)** paints the class mechanics: the pet and a charm in its place, the
+character's watched auras and resurrection sickness's time, its form or stance, which bar
+spells are up on it or on the target as its own debuffs, and combo points. It goes live the
+same way, decoder first; nothing in Jev's play reads the new fields yet, so installing it
+changes no decision, only what the strip shows. The grid keeps its thirteen rows (the payload
+fills the last row's spare cells), so `var/radio-grid.json` needs no change.
+- **What is installed**: one folder, `StatusStrip`, holding `StatusStrip.toc` and
+  `StatusStrip.lua` (about 83 KB), built from the live checkout after the merge by
+  `tools/gen_addon_fields.py` into `build/addon/StatusStrip`.
+- **Where**: `C:\Games\WoW243\Interface\AddOns\StatusStrip`, replacing the folder there.
+  `tools/gen_addon_fields.py --install` builds and copies it there in one step and moves the
+  old one to `captures/addon-backup/<time>-StatusStrip`; copying the built folder by hand
+  does the same, with the old folder kept somewhere first. The client must be closed or
+  restarted afterwards: an addon loads at login.
+- **Checking the schema in game**: the strip is the grid of coloured squares at the top
+  centre, unchanged in size. Windows Python `tools/observe.py` shows `schema` 22 (21 means
+  the old addon is still loaded: restart the client); on a hunter with its pet out it shows
+  `pet.has` true and `pet.happiness`, on any character `char.auras` 0 and `char.sickness_s`
+  0 when nothing is on, and with a target `bars.dots`. A strip the decoder refuses (a
+  checksum fault every read) means a half-copied folder: copy it again whole. To go back, put
+  the backup back as `Interface/AddOns/StatusStrip`; the new decoder reads schema 21 as before.
+
 The other order would leave every session in between blind: a decoder that does not know the
 new schema refuses the strip, as a checksum or schema fault. To go back, put the backup
 (`captures/addon-backup/<time>-StatusStrip`) back as `Interface/AddOns/StatusStrip` and

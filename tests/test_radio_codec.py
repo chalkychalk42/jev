@@ -73,11 +73,13 @@ def test_appended_fields_fit_the_existing_grid():
     attacker count. Schema 18's trainer census, 136 bits against the 23 left, adds one
     row more, deliberately (V237), and so does schema 19's talent census, 43 bits against
     the 31 left (V261). Schema 20's nameplate states, 4 bits, fit the row that left (V320),
-    and so does schema 21's tapped flag, 2 bits (V344)."""
+    and so does schema 21's tapped flag, 2 bits (V344), and schema 22's pet, auras, form and
+    combo points, 117 bits against the 126 left (V398)."""
     lay = layout()
     assert (lay["cols"], lay["rows"]) == (12, 13)
-    assert lay["payload_bits"] == 1586
-    assert lay["field_count"] == 183
+    assert lay["payload_bits"] == 1703
+    assert lay["field_count"] == 198
+    assert sum(f.bits for f in SCHEMA_FIELDS[21]) == 1586, "schema 21 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[20]) == 1584, "schema 20 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[19]) == 1580, "schema 19 is a preserved prefix"
     assert sum(f.bits for f in SCHEMA_FIELDS[18]) == 1537, "schema 18 is a preserved prefix"
@@ -113,11 +115,11 @@ def test_every_field_round_trips_at_its_boundaries(field):
 
 def test_the_schema_names_itself_in_the_revision_byte():
     """The 4-bit header ran out at 14: from 15 it says EXTENDED and the number follows."""
-    bits = radio.pack_bits({"schema": 21, "seq": 7})
+    bits = radio.pack_bits({"schema": 22, "seq": 7})
     assert int(bits[:4], 2) == 0
-    assert int(bits[4:12], 2) == 21
+    assert int(bits[4:12], 2) == 22
     decoded = radio.unpack_bits(bits)
-    assert decoded["schema"] == 21 and decoded["schema_rev"] == 21 and decoded["seq"] == 7
+    assert decoded["schema"] == 22 and decoded["schema_rev"] == 22 and decoded["seq"] == 7
 
 
 def test_a_schema_15_strip_still_decodes_without_the_flight_map():
@@ -152,8 +154,8 @@ def test_a_schema_17_strip_still_decodes_without_the_trainer_list():
 
 
 def test_a_revision_this_decoder_does_not_know_is_a_schema_error():
-    fields = SCHEMA_FIELDS[21]
-    values = {"schema": 0, "schema_rev": 22, "seq": 1}
+    fields = SCHEMA_FIELDS[22]
+    values = {"schema": 0, "schema_rev": 23, "seq": 1}
     bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
                    for f in fields)
     with pytest.raises(radio.DecodeError) as err:
@@ -175,7 +177,7 @@ def test_a_schema_19_strip_still_decodes_without_the_nameplate_states():
 
 
 def test_a_schema_20_strip_paints_both_nameplate_states():
-    values = {"schema": 21, "seq": 3, "ui.plates_enemy": True, "ui.plates_friendly": False}
+    values = {"schema": 22, "seq": 3, "ui.plates_enemy": True, "ui.plates_friendly": False}
     decoded = radio.unpack_bits(radio.pack_bits(values))
     assert decoded["ui.plates_enemy"] is True and decoded["ui.plates_friendly"] is False
 
@@ -194,9 +196,44 @@ def test_a_schema_20_strip_still_decodes_without_the_tapped_flag():
 
 def test_a_schema_21_strip_paints_whether_the_target_is_tagged_by_another():
     for tapped in (True, False):
-        decoded = radio.unpack_bits(radio.pack_bits({"schema": 21, "seq": 3, "target.has": True,
+        decoded = radio.unpack_bits(radio.pack_bits({"schema": 22, "seq": 3, "target.has": True,
                                                      "target.tapped": tapped}))
         assert decoded["target.tapped"] is tapped
+
+
+def test_a_schema_21_strip_still_decodes_without_the_class_mechanics():
+    """V398: the installed addon paints schema 21 until an operator installs 22, and the
+    decoder goes live first. Every schema-21 field reads as it did; the pet, the auras, the
+    form and the combo points are unknown, never "no pet" or "no aura"."""
+    fields = SCHEMA_FIELDS[21]
+    values = {f.name: _boundaries(f)[-1] for f in fields}
+    values.update({"schema": 0, "schema_rev": 21, "seq": 9, "char.level": 12,
+                   "target.has": True, "target.tapped": False})
+    bits = "".join(format(radio.encode_field(f, values.get(f.name)), f"0{f.bits}b")
+                   for f in fields)
+    assert len(bits) == 1586
+    decoded = radio.unpack_bits(bits + format(checksum(bits), "016b"))
+    assert decoded["schema"] == 21 and decoded["target.tapped"] is False
+    for field in fields[2:]:
+        if field.kind not in (Kind.FRAC, Kind.ANGLE):
+            assert decoded[field.name] == values[field.name], field.name
+    added = [f.name for f in FIELDS[len(fields):]]
+    assert len(added) == 15 and all(decoded[name] is None for name in added)
+
+
+def test_a_schema_22_strip_paints_the_pet_the_auras_the_form_and_combo_points():
+    values = {"schema": 22, "seq": 4, "pet.has": True, "pet.dead": False, "pet.hp": 0.5,
+              "pet.happiness": 3, "pet.loyalty": 6, "pet.level": 12, "pet.family_id": 4321,
+              "pet.charmed": False, "char.auras": 0b1000_0001, "char.sickness_s": 600,
+              "char.form_id": 0, "bars.buffs": 0b10, "bars.dots": 0b1_0000_0000_0000 - 1,
+              "target.dot_s": 0, "combat.combo": 5}
+    decoded = radio.unpack_bits(radio.pack_bits(values))
+    for name, value in values.items():
+        if name == "pet.hp":
+            assert abs(decoded[name] - value) < 0.002
+        else:
+            assert decoded[name] == value, name
+    assert FIELDS[-1].name == "combat.combo"
 
 
 def test_a_schema_14_strip_still_decodes_without_a_revision_byte():
