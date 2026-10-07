@@ -302,6 +302,24 @@ def rib_xp(rib: Node, level: int) -> float:
     return sum(kill_xp(level, m) for m in range(low, high + 1)) / (high - low + 1)
 
 
+def rib_pays(fit, level: int, rate=None) -> dict[str, float]:
+    """What each rib of `fit` pays a character of `level`, by id: the rib choice's one measure
+    (`_best`, `_short`, and the least a wait elsewhere takes, V391). With `rate` (a rib and a
+    level to experience an hour net of death time, `jev.learn.yields`, V392) where it values
+    every one of them; else a kill's experience (`rib_xp`), as without a table.
+
+    By a kill's experience, the rib of creatures up to a level above won, and there Jev dies
+    most: at 11-20 in the hive's 7 Oct 01:25-03:50, 39 deaths a hundred kills at the character's
+    level and 60 a level above, 16 two below. Net of 149 s a death, a kill's cycle paid 2,451 an
+    hour two levels below at 11-15 against 2,027 at the level and 1,807 a level above, and
+    3,018 a level below at 16-20 against 2,855 and 2,324."""
+    if rate is not None:
+        pays = {r.id: rate(r, level) for r in fit}
+        if all(pay is not None for pay in pays.values()):
+            return pays
+    return {r.id: rib_xp(r, level) for r in fit}
+
+
 def rib_fits(rib: Node, level: int) -> bool:
     """Do this rib's creatures suit a character of `level` (V323): none above
     `RIB_LEVELS_ABOVE` over it, and some worth experience to it."""
@@ -361,12 +379,12 @@ def spread_rank(key: int | str, rib_id: str) -> int:
 
 
 def _best(fit: list[Node], level: int, preferred: Node | None, near, key,
-          scale) -> Node:
+          scale, rate=None) -> Node:
     """Of ribs that fit: those paying within `RIB_XP_SHARE` of the best a kill, the nearest;
     with `key`, of those within `RIB_SPREAD_SHARE` and no more than `RIB_SPREAD_YARDS` further
     than the nearest of them, the one its `spread_rank` puts first; unplaced, `preferred`, else
-    the best."""
-    pay = {r.id: rib_xp(r, level) for r in fit}
+    the best. Paying by `rib_pays` (`rate`, V392)."""
+    pay = rib_pays(fit, level, rate)
     best = max(pay.values())
     good = [r for r in fit
             if pay[r.id] >= (RIB_XP_SHARE if key is None else RIB_SPREAD_SHARE) * best]
@@ -386,10 +404,10 @@ def _best(fit: list[Node], level: int, preferred: Node | None, near, key,
     return max(good, key=lambda r: pay[r.id])
 
 
-def _short(fit: list[Node], level: int, near, scale) -> Node | None:
+def _short(fit: list[Node], level: int, near, scale, rate=None) -> Node | None:
     """Of ribs that fit: the nearest of those paying within `RIB_XP_SHARE` of the best a kill and
     no further than `SHORT_RIB_YARDS` (V330); `None` when none is that near."""
-    pay = {r.id: rib_xp(r, level) for r in fit}
+    pay = rib_pays(fit, level, rate)
     best = max(pay.values())
     close = [r for r in fit if r.pos is not None and pay[r.id] >= RIB_XP_SHARE * best
              and (scale is None or _yards(r.pos, near, scale) <= SHORT_RIB_YARDS)]
@@ -401,7 +419,7 @@ def _short(fit: list[Node], level: int, near, scale) -> Node | None:
 def rib_for(ribs, level: int | None, preferred: Node | None = None,
             near: tuple[float, float] | None = None, short: bool = False, *,
             barred: frozenset[str] = frozenset(), key: int | str | None = None,
-            scale: tuple[float, float] | None = None) -> Node | None:
+            scale: tuple[float, float] | None = None, rate=None) -> Node | None:
     """The grind for a character of `level`: of the ribs not `barred` at the level, those whose
     creatures suit it (`rib_fits`), else of those barred (V329); the one paying the most a kill
     (`rib_xp`), or of those within `RIB_XP_SHARE` of it the nearest to where it is (`near`, the
@@ -411,7 +429,8 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
     spine. A rib the route leaves out (`route_blocked_reason`, V331) is none. `preferred` is the
     answer when the level is unknown. Distances are in yards on the guide's frame (`scale`,
     `frame_yards`, read off `ribs` when not given), or map fractions without one, when neither
-    `RIB_SPREAD_YARDS` nor `SHORT_RIB_YARDS` applies.
+    `RIB_SPREAD_YARDS` nor `SHORT_RIB_YARDS` applies. With `rate`, "paying" is experience an
+    hour net of death time where it values every rib that suits (`rib_pays`, V392).
 
     By its creatures' levels (`rib_levels`), not its window's top (V323): the window was read
     as the creatures' levels and "never above the character", and Westfall's 14-16 window,
@@ -446,11 +465,11 @@ def rib_for(ribs, level: int | None, preferred: Node | None = None,
         if not fit:
             continue
         if short and near is not None:
-            rib = _short(fit, level, near, scale)
+            rib = _short(fit, level, near, scale, rate)
             if rib is not None:
                 return rib
             continue
-        return _best(fit, level, preferred, near, key, scale)
+        return _best(fit, level, preferred, near, key, scale, rate)
     if short and near is not None:
         return None
     within = [r for r in ribs if rib_within(r, level)]

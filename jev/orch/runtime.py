@@ -35,9 +35,9 @@ from jev.coach import policy as scripted
 from jev.coach.schema import Decision, Intent, TeacherReply, Verdict
 from jev.coach.situation import with_key
 from jev.coach.verifier import verify
-from jev.guide.graph import Graph, frame_yards, rib_fits, rib_for
+from jev.guide.graph import Graph, frame_yards, rib_fits, rib_for, rib_levels, rib_pays
 from jev.guide.objectives import progress
-from jev.guide.route_memory import CAMP_YARDS
+from jev.guide.route_memory import CAMP_S, CAMP_YARDS
 from jev.guide.tracker import SHORT_RIB_S, Event, Tracker, waits_for_level
 from jev.guide.tracker import Verdict as TrackVerdict
 from jev.learn.episode import (
@@ -80,7 +80,28 @@ DETOUR = "detour:"
 # that one: hive-531, a level 7 troll mage, went Durotar 5-7, 7-9, 5-7, 7-9 from 04:35 to 09:30
 # on 29 Sep, and 990 of the hive's 1,112 rib-to-rib moves in 8 h came within 10 minutes of a
 # death. Bars of a level below the character's are dropped as it rises.
+#
+# A bar ends with its cause, not with the level (V391): kept as `RIB_BAR` + id + "@" + level +
+# "~" + its end (wall time, whole seconds), it holds until then. A death camp's bar ends when
+# the camp does (`Danger.camp_until`, the leave's `Context.death_camp_until`); any other - an
+# empty disk, the watchdog's no progress, a grind out of attempts, the rib's deaths - after
+# `RIB_BAR_S`. A bar kept without an end, from before, ends at once; one ending more than
+# `RIB_BAR_MAX_S` ahead is a clock set back, and none. A walk refused through a death camp bars
+# nothing: the rib waits for the camp (`Context.step_waits`, V334). Held for the level, a bar
+# outlived its cause by hours: at levels 11-19, 86% of the hive's living characters had a rib
+# barred at their level (10.4 on average), and 56% of rib time was on a rib paying under 85% of
+# the best in the character's route (7 Oct 01:25-03:50); a level is 5.3 to 6.9 played hours.
+# When a bar or a rib's wait ends, the rib is chosen again as at a ding (`_ding_rib`).
 RIB_BAR = "rib-bar:"
+RIB_BAR_S = 1800.0
+RIB_BAR_MAX_S = 7200.0
+# A rib that waits on a death camp is waited out on the best rib whose walk is not refused,
+# but none paying under this share of the best rib for the level (V391): with none, the wait is
+# stood clear of the camp (V334). Hive-591, a level 15 dwarf priest, had six walks refused
+# through one camp in six seconds (7 Oct 01:24:01-07), each sending it to the next rib down,
+# from Loch Modan's 15-17 (123 experience a kill) to its 11-13 (67.5); from its third session
+# of the night to its thirteenth it ground Dun Morogh's 9-11 (52.5).
+RIB_WAIT_SHARE = 0.7
 # A quest step passed over - failed again after its rib, refused, or passed by for an accept above
 # the level or a lost prerequisite - is passed for the level, not for good (V342): kept among the
 # retried steps with `PASSED` + its id + "@" + the level it was passed at, it is returned to from
@@ -115,6 +136,36 @@ WAIT_ELSEWHERE_S = SHORT_RIB_S
 # With no such rib, the ribs are looked through again no sooner than this: a wait ends when a
 # camp does, and a look is every rib's stations against every camp.
 WAIT_LOOK_S = 30.0
+
+
+def bar_entry(rib_id: str, level: int, until: float) -> str:
+    """The retried steps' entry for a bar on `rib_id` at `level` ending at `until` (V391)."""
+    return f"{RIB_BAR}{rib_id}@{level}~{math.ceil(until)}"
+
+
+def bar_of(entry: str) -> tuple[str, int | None, float | None] | None:
+    """A bar's rib, level and end from its entry among the retried steps (V391): the level
+    `None` when unreadable, the end `None` for a bar kept without one; `None` for no bar."""
+    if not entry.startswith(RIB_BAR):
+        return None
+    body, sep, end = entry[len(RIB_BAR):].rpartition("~")
+    if not sep:
+        body, end = entry[len(RIB_BAR):], None
+    rib, sep, level = body.rpartition("@")
+    if not sep:
+        return body, None, None
+    try:
+        until = float(end) if end is not None else None
+    except ValueError:
+        until = None
+    return rib, int(level) if level.isdigit() else None, until
+
+
+def bar_holds(entry: str, level: int | None, now: float) -> bool:
+    """Does this entry bar its rib at `level` at `now` (V391)?"""
+    bar = bar_of(entry)
+    return (bar is not None and level is not None and bar[1] == level and bar[2] is not None
+            and 0.0 < bar[2] - now <= RIB_BAR_MAX_S)
 
 
 @dataclass
@@ -219,6 +270,11 @@ class ClientRuntime:
     # many play one world, as in the hive. Alone, the live bot takes the nearest rib paying near
     # the best (V323): a spread there costs about 5% of a kill's experience and gains nothing.
     spread_ribs: bool = False
+    # The hive's yield table (`jev.learn.yields.Yields`, V392): with it, a rib is valued by the
+    # experience an hour, net of death time, a kill of its creatures makes for the character's
+    # class at its level (`rib_pays`); without it - the live bot, or no file - by a kill's
+    # experience, as before.
+    yields: object | None = None
     # The level this guide is outgrown at (`jev.run.cli.OUTGROWN_AT`): from it, between two
     # quests, the complete quests' hand-ins nearby are made and the guide is done (V162).
     outgrown_at: int | None = None
@@ -243,6 +299,12 @@ class ClientRuntime:
     # waits for its rib to be chosen again (`_ding_rib`, V345).
     _rib_level: int | None = field(default=None, init=False)
     _ding_due: bool = field(default=False, init=False)
+    # The tick's wall time, which the bars' ends are read against, and the ribs waiting at the
+    # last tick (`Context.step_waits`): a bar's or a wait's end chooses the rib again (V391).
+    _now: float = field(default=0.0, init=False)
+    _ribs_waiting: frozenset = field(default=frozenset(), init=False)
+    # The character's class, which the yield table is read for (V392).
+    _cls: str | None = field(default=None, init=False)
     # The steps by id and the grind ribs, looked up on every tick by the walk along the spine.
     _nodes: dict = field(default_factory=dict, init=False)
     _ribs_all: tuple = field(default=(), init=False)
@@ -297,6 +359,8 @@ class ClientRuntime:
         2 Hz plus events. A blocking body never blocks these clocks.
         """
         state = self.source.read() if state is None else state
+        self._now = state.t
+        self._cls = state.char.cls or self._cls
         if state.client_id != self.client_id:
             raise ValueError(f"source client {state.client_id!r} != runtime {self.client_id!r}")
         if (self.character_key is not None and state.char.key is not None
@@ -342,11 +406,22 @@ class ClientRuntime:
         self._apply(verdict, state)
         if state.char.level is not None:
             unlevelled = {r for r in self._retried if r.startswith(DETOUR) and "@" not in r}
+            # A bar of another level, or past its end, is lifted (V391).
             outgrown = {r for r in self._retried if r.startswith(RIB_BAR)
-                        and not r.endswith(f"@{state.char.level}")}
+                        and not bar_holds(r, state.char.level, state.t)}
             self._retried = ((self._retried - unlevelled - outgrown)
                              | {f"{r}@{state.char.level}" for r in unlevelled})
             self._mark_passed(state.char.level)
+            if outgrown:
+                self._ding_due = True       # a bar ended: the rib is chosen again (V391)
+        # And when a rib's wait ends - its camp's end - the rib is chosen again too (V391).
+        waits = getattr(self.policy_context, "step_wait_until", None) or {}
+        waiting = frozenset(r for r, until in waits.items()
+                            if r in self._nodes and self._nodes[r].kind is StepKind.GRIND
+                            and isinstance(until, (int, float)) and until > state.t)
+        if self._ribs_waiting - waiting:
+            self._ding_due = True
+        self._ribs_waiting = waiting
         if (not self.finished and self.outgrown_at is not None
                 and state.char.level is not None and state.char.level >= self.outgrown_at
                 and verdict.event not in (Event.FAIL, Event.DEATH)
@@ -480,7 +555,7 @@ class ClientRuntime:
 
     # -- internals -----------------------------------------------------------
 
-    def fail_over(self, skill: str, reason: str) -> bool:
+    def fail_over(self, skill: str, reason: str, *, camp: bool = False) -> bool:
         """Take the current step's own fail edge after its skill ran out of attempts.
 
         With one attempt a session, a hand-in the Abbey's stair defeats stopped every
@@ -488,12 +563,18 @@ class ClientRuntime:
         timeout never reached: the step's rib, and the pass-over after it, never came (run
         20260924T081531-4249a4). Only for the step's own skills - a merchant that failed
         on the way is not the step failing. `False` when there is no edge to take.
+
+        A rib whose hunt ended `camp` (`camp`, the supervisor's) and waits for its camp is
+        neither barred nor left (V391): it is waited out on another rib (`_wait_elsewhere`) or
+        stood clear of the camp, and chosen again when the camp ends.
         """
         node = self.graph.get(self.tracker.step_id)
         state = self.last_state
         if (node is not None and state is not None and not self.finished
                 and node.kind is StepKind.GRIND and not node.on_fail
                 and skill in (node.skills or ())):
+            if camp and self.policy_context.step_waiting(node.id, state.t) is not None:
+                return False
             # A rib has no fail edge: its own failure takes it back to the spine (V317).
             moved = self._leave_rib(state)
             if moved:
@@ -558,6 +639,8 @@ class ClientRuntime:
                 or v.combat is True):
             return False
         context.death_camp = None
+        ends = getattr(context, "death_camp_until", None)
+        context.death_camp_until = None
 
         def out(r) -> bool:
             return (r.world is not None and r.map_id == camp[0]
@@ -567,9 +650,11 @@ class ClientRuntime:
         level = state.char.level
         on_rib = node is not None and node.kind is StepKind.GRIND
         if on_rib and not out(node):
-            # The camp is on the rib it was working: barred at the level, or the next death at
-            # the rib it leaves for comes straight back here (`RIB_BAR`, V317).
-            self._bar(node.id, level)
+            # The camp is on the rib it was working: barred at the level until the camp ends
+            # (V391), or the next death at the rib it leaves for comes straight back here
+            # (`RIB_BAR`, V317). A camp's end not said, its hour from now.
+            self._bar(node.id, level, ends if isinstance(ends, (int, float)) and ends > state.t
+                      else state.t + CAMP_S)
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
         rib = self._rib(level, here, among=[r for r in self._ribs_all if out(r)])
@@ -599,7 +684,12 @@ class ClientRuntime:
         such rib the step is stood out where it is, the body having walked clear of the camp.
         It cannot loop: each rib the character is sent to and finds camped or out of reach
         waits in its turn, and no rib that waits is chosen, so the detours are fewer than the
-        ribs until a wait ends. `True` when the playhead moved."""
+        ribs until a wait ends. `True` when the playhead moved.
+
+        A rib that waits is waited out on none paying under `RIB_WAIT_SHARE` of the best rib
+        for the level, waiting or not (V391): the walks refused one rib after another took
+        hive-591 from a rib of 123 experience a kill to one of 67.5, kept for hours. The rib is
+        chosen again when its wait ends (`_ding_rib`); a quest step's rib rejoins it then."""
         context = self.policy_context
         step = self.tracker.step_id
         left = context.step_waiting(step, state.t)
@@ -620,13 +710,18 @@ class ClientRuntime:
         free = [r for r in self._ribs_all if r.id != step and rib_fits(r, level)
                 and context.step_waiting(r.id, state.t) is None
                 and not (camped is not None and camped(r, level))]
+        node, memory = self._nodes.get(step), self.tracker.memory
+        if free and node is not None and node.kind is StepKind.GRIND:
+            pays = rib_pays([r for r in self._ribs_all if rib_fits(r, level)], level,
+                            self._rate())
+            least = RIB_WAIT_SHARE * max(pays.values())
+            free = [r for r in free if pays[r.id] >= least]
         here = ((state.pos.mx, state.pos.my) if state.pos.mx is not None
                 and state.pos.my is not None else None)
         rib = self._rib(level, here, among=free) if free else None
         if rib is None:
             self._elsewhere_looked = (step, state.t)
             return False
-        node, memory = self._nodes.get(step), self.tracker.memory
         if node is not None and node.kind is StepKind.GRIND:
             back, until, target = memory.rejoin_to, memory.until, memory.level_at_entry
             self.tracker.enter(rib.id, state, rejoin_to=back)
@@ -650,7 +745,10 @@ class ClientRuntime:
         A rib was chosen once and kept across dings (`_below_level` ends one at the accept's
         level; camp leaves and waits carry it): in the hive's 4 Oct 16:26-18:30, 16 of 98 dings
         on a rib were still on it two minutes on; hive-524, a troll shaman, ground the Barrens'
-        1-3 rib eight minutes at level 7, 16 experience a kill where Durotar's 7-9 paid 82."""
+        1-3 rib eight minutes at level 7, 16 experience a kill where Durotar's 7-9 paid 82.
+
+        So too when a bar of the level or a rib's wait ends (`tick`, V391): the rib a bar or a
+        camp sent the character to is kept no longer than its cause."""
         level = state.char.level
         if level is None:
             return False
@@ -1183,18 +1281,36 @@ class ClientRuntime:
     def _rib(self, level: int | None, near: tuple[float, float] | None = None, *,
              short: bool = False, preferred=None, among=None):
         """The grind for the character at `level` (`rib_for`) of its ribs (`among`, else all):
-        of those not barred at the level (`RIB_BAR`), else of those barred (V329), spread by the
-        character (`character_key`, when `spread_ribs`, V332); `None` when none suits it."""
+        of those not barred at the level (`RIB_BAR`, until each bar's end, V391), else of those
+        barred (V329), spread by the character (`character_key`, when `spread_ribs`, V332);
+        `None` when none suits it."""
         ribs = self._ribs_all if among is None else tuple(among)
-        barred = (frozenset() if level is None else
-                  frozenset(r.id for r in ribs if f"{RIB_BAR}{r.id}@{level}" in self._retried))
+        barred = frozenset() if level is None else self._barred(level)
         return rib_for(ribs, level, preferred, near, short, barred=barred,
                        key=self.character_key if self.spread_ribs else None,
-                       scale=self._frame)
+                       scale=self._frame, rate=self._rate())
 
-    def _bar(self, rib_id: str, level: int | None) -> None:
-        if level is not None:
-            self._retried.add(f"{RIB_BAR}{rib_id}@{level}")
+    def _rate(self):
+        """A rib's worth to this character by the yield table (V392), or `None` without one."""
+        yields = self.yields
+        if yields is None:
+            return None
+        cls = self._cls
+        return lambda rib, level: yields.rib_rate(*rib_levels(rib), level, cls)
+
+    def _barred(self, level: int) -> frozenset[str]:
+        """The ribs barred at `level` now (V391)."""
+        return frozenset(bar_of(r)[0] for r in self._retried
+                         if r.startswith(RIB_BAR) and bar_holds(r, level, self._now))
+
+    def _bar(self, rib_id: str, level: int | None, until: float) -> None:
+        """Bar `rib_id` at `level` until `until` (V391), or until a later end it has already."""
+        if level is None:
+            return
+        kept = {r for r in self._retried if r.startswith(RIB_BAR) and bar_of(r)[0] == rib_id}
+        ends = [bar_of(r)[2] for r in kept if bar_holds(r, level, self._now)]
+        self._retried = ((self._retried - kept)
+                         | {bar_entry(rib_id, level, max([until, *ends]))})
 
     def _leave_rib(self, state: State) -> bool:
         """A rib that failed (`Verdict.failed`, or its grind out of attempts) is barred at the
@@ -1208,12 +1324,14 @@ class ClientRuntime:
         session resumed the same rib ("walked the whole disk and found nothing to fight",
         1,296 times in the hive's 8 h to 09:30 on 29 Sep), and the watchdog's "no quest or
         experience progress; step failed over" (5,036 times, 479 h) ran a clock out that a
-        15-minute session never reached, so it failed over nothing."""
+        15-minute session never reached, so it failed over nothing.
+
+        The bar holds `RIB_BAR_S`, no longer the level (V391)."""
         node = self._nodes.get(self.tracker.step_id)
         if node is None or node.kind is not StepKind.GRIND:
             return False
         level = state.char.level
-        self._bar(node.id, level)
+        self._bar(node.id, level, state.t + RIB_BAR_S)
         memory = self.tracker.memory
         back = memory.rejoin_to if memory.rejoin_to in self._nodes else None
         if back is not None:
