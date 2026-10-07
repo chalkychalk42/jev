@@ -108,6 +108,19 @@ from jev.world.training import spell as spell_facts
 
 # The radio fraction preserves zero exactly. Low health is still a living target.
 DEAD_HP = 0.0
+# Weapon blows that ask for nothing but a weapon in the hand and their cost - no stance or
+# form, no dodge to answer, no stealth, no dagger - so one greyed out with its cost paid is a
+# broken weapon (`Fight.disarmed`, V393): not Overpower, Backstab, Ambush or a druid's.
+PLAIN_BLOWS = frozenset({"Sinister Strike", "Heroic Strike", "Raptor Strike", "Cleave", "Slam",
+                         "Hemorrhage", "Mortal Strike"})
+
+
+def _blow_name(ability: Ability) -> str:
+    """An ability's spell name, by the catalog where it knows the spell."""
+    facts = spell_facts(ability.spell_id) if ability.spell_id is not None else None
+    return getattr(facts, "name", None) or ability.name
+
+
 # A selection whose health rises this far between two readings is another unit of the same
 # name: nothing in a fight heals a mob that fast.
 REPLACED_HP_RISE = 0.4
@@ -610,6 +623,9 @@ class Fight:
     # Something equipped is at zero durability. Advisory: reported so the caller can
     # decide to go and repair, never a reason to refuse the fight.
     broken: bool = field(default=False, init=False)
+    # Whether the weapon is the broken thing, as last read (`disarmed`, V393): `None` until a
+    # reading could tell.
+    disarmed_seen: bool | None = field(default=None, init=False)
     # The plate that produced the current selection, if a plate did.
     selected_plate: Plate | None = field(default=None, init=False)
     heals_landed: int = field(default=0, init=False)
@@ -857,6 +873,7 @@ class Fight:
         # money to make it; all this does is make the state impossible to miss again,
         # after an evening of `bags.durability_min` reading 0.0 with no reader.
         self.broken = v.get("bags.durability_min") == 0.0
+        self.disarmed(v)
 
         hp = v.get("vitals.hp")
         if not in_combat and hp is not None and hp < MIN_START_HP:
@@ -1754,6 +1771,36 @@ class Fight:
             if result.code is not FaceCode.NOT_VISIBLE or fighting:
                 return result
         return result
+
+    def disarmed(self, values: dict | None) -> bool | None:
+        """Is the weapon broken (V393)? With something at zero durability, a plain weapon blow
+        on the bar (`PLAIN_BLOWS`) whose cost the power pays, and none such usable: the client
+        greys it out, and the hive's strip does as the server says (`item_ok`). One usable
+        says the weapon is whole and the broken thing armour; `None` where nothing tells - no
+        such blow on the bar, a warrior's rage too low out of combat - and then the last
+        reading that told stands, until the gear is mended. A rogue with a broken weapon
+        pressed Sinister Strike 0.5 times a minute against 13.4, a warrior Heroic Strike,
+        Hamstring and Rend 0.3 against 2.7 (the hive, 7 Oct 01:25-03:50)."""
+        if not values:
+            return self.disarmed_seen
+        durability = values.get("bags.durability_min")
+        if durability is None:
+            return self.disarmed_seen
+        if durability > 0.0:
+            self.disarmed_seen = None
+            return False
+        usable, power, pool = (values.get("bars.usable"), values.get("vitals.power"),
+                               values.get("vitals.power_max"))
+        if (not isinstance(usable, int) or not isinstance(power, (int, float))
+                or not isinstance(pool, (int, float)) or pool <= 0):
+            return self.disarmed_seen
+        profile = self.profile or for_class(values.get("char.class_id"), values.get("char.race_id"))
+        paid = [a for a in profile.abilities
+                if _blow_name(a) in PLAIN_BLOWS and power * pool >= a.mana]
+        if paid:
+            # A stance's page (a warrior's 73-84) is the main bar's twelve keys.
+            self.disarmed_seen = not any(usable & (1 << ((a.slot - 1) % 12)) for a in paid)
+        return self.disarmed_seen
 
     def buff_up(self) -> int:
         """Out of combat, a caster's lasting buffs that are due (Frost Armor, Arcane

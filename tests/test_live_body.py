@@ -130,7 +130,7 @@ def test_a_purse_lesson_outlives_the_session(tmp_path):
     later = body()
     later.purse_memory = b.purse_memory
     later.policy_context = Context()
-    assert not later.policy_context.can_repair(50)
+    assert not later.policy_context.can_repair(45)
     later.policy_context.repaired()
     again = body()
     again.purse_memory = b.purse_memory
@@ -1699,12 +1699,14 @@ def test_the_policy_is_told_what_the_purse_keeps_for_the_trainer():
                  pos=Pos(zone="Elwynn Forest", zone_id=12, mx=here[0], my=here[1]))
     context = Context()
     b.policy_context = context
-    assert context.kept(state) == 10, "Devotion Aura"
+    assert context.reserve(state) == 10, "Devotion Aura"
+    # What a purchase keeps is the more of that and the repair reserve (V393): 2.6 x 8 x 8.
+    assert context.kept(state) == 166
     b.client.spells = _census(bar, {6603, 20154, 635, 465, 20271, 19740, 498, 639, 21082,
                                     853, 1152, 3127})
-    assert context.kept(state) == 0
+    assert context.reserve(state) == 0 and context.kept(state) == 166
     b.client.spells = None
-    assert context.kept(state) == 0
+    assert context.reserve(state) == 0
 
 
 def test_a_unit_not_found_on_the_floor_below_it_is_walked_up_to_again(monkeypatch):

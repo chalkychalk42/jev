@@ -131,10 +131,12 @@ def test_broke_repair_waits_for_observed_money_growth_and_combat_wins():
     assert decide(state, graph().nodes[0], context=ctx).decision.skill == "VENDOR_REPAIR"
     ctx.repair_failed(10)
     assert decide(state, graph().nodes[0], context=ctx).decision.skill == "ACCEPT_QUEST"
-    # A copper more is not a purse that grew (V196): a silver more is.
+    # A copper more mends a little more, the server mending item by item (V393, amending
+    # V196's silver more); the failures in a row space the walks (V322).
     copper = state.model_copy(update={"bags": Bags(durability_min=0, money_copper=11)})
+    ctx.service_failed("VENDOR_REPAIR", copper.t)
     assert decide(copper, graph().nodes[0], context=ctx).decision.skill == "ACCEPT_QUEST"
-    richer = state.model_copy(update={"bags": Bags(durability_min=0, money_copper=110)})
+    richer = copper.model_copy(update={"t": copper.t + 61})
     assert decide(richer, graph().nodes[0], context=ctx).decision.skill == "VENDOR_REPAIR"
     combat = richer.model_copy(update={"vitals": Vitals(hp=0.8, combat=True)})
     assert decide(combat, graph().nodes[0], context=ctx).rule.startswith("fight.")

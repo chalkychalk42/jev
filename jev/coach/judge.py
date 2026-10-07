@@ -122,7 +122,7 @@ def evidence(rule: str, state: State | None) -> str:
     v, b, g = state.vitals, state.bags, state.guide
     if rule.startswith("recover."):
         return f"health {_pct(v.hp)}, power {_pct(v.power)}"
-    if rule in ("service.broken", "service.durability"):
+    if rule in ("service.broken", "service.durability", "service.repair_near"):
         return f"worst gear at {_pct(b.durability_min)}, {b.money_copper or 0} copper"
     if rule == "service.bags_full":
         return f"{b.free} bag slots free"
@@ -267,6 +267,12 @@ def candidates(state: State, node: Node | None, context, floor) -> list:
     # Nor while the step waits (`policy.step_wait`, V334): its grind, or a grind where the
     # character stands, is the walk that was refused.
     if due or floor.rule.startswith("wait.step"):
+        plans = [p for p in plans if p is floor
+                 or p.decision.skill not in ("GRIND_UNTIL", "TRAVEL_TO")]
+
+    # Nor while a broken weapon waits for its repair (`policy.broken_wait`, V393): a grind is
+    # the pull it must not take.
+    if floor.rule.startswith("wait.broken"):
         plans = [p for p in plans if p is floor
                  or p.decision.skill not in ("GRIND_UNTIL", "TRAVEL_TO")]
     return plans

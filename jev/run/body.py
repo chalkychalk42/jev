@@ -78,7 +78,11 @@ from jev.world.training import placements as spell_placements
 from jev.world.training import spell as spell_facts
 from jev.world.training import trainer_due, training_cost, unpressed
 from jev.world.vendor import (
+    AMMO_KIND,
+    HUNTER,
     Supply,
+    ammo_for,
+    ammo_kind,
     bag_prices,
     bag_slots,
     consumable_role,
@@ -151,6 +155,14 @@ UPPER_FLOOR_YARDS = 4.0
 # Broken gear this far from the nearest repairer goes home by hearthstone first.
 BROKEN_DURABILITY = 0.05
 HEARTH_TO_REPAIR_YARDS = 150.0
+# A repairer is a short detour (`LiveBody.repairer_near`, V393) when walking by it adds at
+# most this to the straight way to the guide's step, or, with no step to walk to, stands half
+# this from the character: a flight master's visit's there and back (`DISCOVER_YARDS`).
+REPAIR_DETOUR_YARDS = 300.0
+# A hunter's ammunition is bought under `AMMO_LOW` rounds, to `AMMO_DESIRED`: three of a
+# merchant's 200 (V393).
+AMMO_LOW = 200
+AMMO_DESIRED = 600
 # Where to hover for a unit too close and tall for its nameplate to show, as fractions of
 # the client: down the middle first. The Spirit Healer stands over a fresh ghost and fills
 # the centre of the screen, with its plate drawn behind the strip at the top.
@@ -369,6 +381,12 @@ class LiveBody:
         self._conjured_last: frozenset[str] = frozenset()   # while the bar is unread (V243)
         self._placing_checked: object = object()  # the bar and spellbook last planned from
         self._kit_said: frozenset | None = None   # the spellbook last reported on (V361)
+        # The repairer the last repair opened, as (name, world, map point), for the sale that
+        # pays for it (V393); a hunter's ammunition by the last bag census, its rounds and the
+        # ammunition ids it carries (`None`: not counted since the last purchase).
+        self._repairer_at: tuple | None = None
+        self._ammo_count: int | None = None
+        self._ammo_carried: tuple[int, ...] = ()
         self.travelling = False
         self.policy_context = Context()
         self.checkpoint: Callable[[], None] = lambda: None
@@ -884,6 +902,7 @@ class LiveBody:
                     place=self._hunt_place((self.arm.step_id if self.arm is not None else None,
                                             objective_key(wanted, node.id))),
                     where=self._world_position)
+        hunt.pull_refused = self._pull_refused      # the repair before the next pull (V393)
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
         grind = node.kind in (StepKind.GRIND, StepKind.DING_GATE)
         # Every held quest's creatures round the hunt are its quarry too (V363).
@@ -1341,6 +1360,7 @@ class LiveBody:
         if items is None:
             return
         self._gear_checked = revision
+        self._count_ammo(getattr(wearer, "last_census", None))     # a hunter's rounds (V393)
         chosen = gear_upgrades(items, load_worn(self.gear_memory),
                                class_id=values.get("char.class_id"),
                                race_id=values.get("char.race_id"), level=values.get("char.level"))
@@ -1479,6 +1499,8 @@ class LiveBody:
         context.trainable = self.trainable
         context.camped = self.rib_camped
         context.reserve = self.training_reserve
+        context.repairer_near, context.disarmed = self.repairer_near, self.disarmed
+        context.ammo_low = self.ammo_low
         context.bindable = self.bindable
         context.discoverable = self.discoverable
         context.conjures = self.conjured_roles
@@ -1813,10 +1835,60 @@ class LiveBody:
             home = self._go_home()
             self.say(f"  broken gear and the nearest repairer {distance:.0f} yards off: "
                      f"hearthstone {home.value} {self.hearth.detail}".rstrip())
+        self._repairer_at = None
         repaired = self.repair.run()
+        if repaired.value == "too_poor" and self._sell_for_repair():
+            repaired = self.repair.run()           # with what the sale fetched (V393)
         if repaired.value == "done":
             self.policy_context.repaired()
+        elif repaired.value == "too_poor":
+            # The bags as they were when it gave up: more in them is more to sell (V393).
+            self.policy_context.repair_short((self._read() or {}).get("bags.free"))
         return self._result(repaired, self.repair.detail)
+
+    def _sell_for_repair(self) -> bool:
+        """A repair the purse could not pay sells the bags' goods to the repairer for it
+        (V393), then Repair All is pressed again: every grey, and every white or green that no
+        quest needs - while the gear is broken the gear worth keeping too, as a broken weapon
+        costs more than any spare. The bag service sold only for room, at two slots free (V250),
+        and the hive's characters of levels 6-20 whose weapon was broken carried a median 258
+        copper of junk (7 Oct): 23 of 88 could pay to mend it from the purse, 69 with the junk
+        and surplus sold. Whether anything sold."""
+        at = getattr(self, "_repairer_at", None)
+        values = self._read()
+        if at is None or not values:
+            return False
+        name, world, point = at
+        census = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
+                        self.client.size)
+        items = census.bag_items()
+        if not items:
+            return False
+        durability = values.get("bags.durability_min")
+        broken = isinstance(durability, (int, float)) and durability <= BROKEN_DURABILITY
+        keep = set() if broken else gear_keep(items, load_worn(self.gear_memory),
+                                              class_id=values.get("char.class_id"),
+                                              race_id=values.get("char.race_id"))
+        surplus = surplus_prices()
+        eligible = {**junk_prices(), **{i: surplus[i] for i in items
+                                        if i in surplus and i not in keep}}
+        counted = getattr(census, "last_census", None) or {}
+        worth = sum(eligible.get(item, 0) * count for item, count in counted.values())
+        if worth <= 0:
+            self.say("  too poor to repair, and nothing in the bags a merchant buys")
+            return False
+        vendor = Vendor(self.client.hid, self._read,
+                        lambda: self._open_merchant(name, world, point), self.client.origin,
+                        self.client.size, eligible=eligible)
+        try:
+            sold = vendor.run(expected_name=name, min_free=SELL_ALL,
+                              timeout_s=self.travel_timeout + 120)
+        except BodyFailure as failure:
+            self.say(f"  too poor to repair; the sale for it: {failure.result.detail}")
+            return False
+        self.say(f"  too poor to repair: sold {vendor.sold_stacks} stack(s), about {worth} "
+                 f"copper, to {name} ({sold.value}); Repair All again")
+        return vendor.sold_stacks > 0
 
     def _home_near_work(self, state) -> bool:
         """Home is near the guide's work: within `HOME_FAR_YARDS` of the step's node (V279).
@@ -1860,17 +1932,164 @@ class LiveBody:
             and n.world is not None and n.map_id == self.client.bounds.map_id]
         return min((math.dist(w[:2], at[:2]) for w in placed), default=None)
 
+    # -- solvency (V393) ------------------------------------------------------------------
+
+    def repairer_near(self, state: State) -> bool:
+        """A repairer a short detour off the character's way (V393), as the policy asks it
+        (`Context.repairer_near`): walking by it adds at most `REPAIR_DETOUR_YARDS` to the
+        straight way to the guide's step, or, with no step to walk to, it stands half that from
+        the character. One the repair would walk to: inside the measured zone's box or the box
+        of the zone the state says the character stands in (`_in_zone`). From the state alone,
+        in the supervisor's thread: no reading of the body's own."""
+        try:
+            bounds = self.client.bounds
+            if bounds is None or state.pos.mx is None or state.pos.my is None:
+                return False
+            here = map_to_world(state.pos.mx, state.pos.my, bounds)[:2]
+            node = self.graph.get(state.guide.step_id or "")
+            there = (node.world[:2] if node is not None and node.world is not None
+                     and node.map_id == bounds.map_id else None)
+            boxes = [bounds]
+            zone = (getattr(self.client, "coordinate_zones", None) or {}).get(state.pos.zone_id)
+            if zone is not None and zone != bounds and zone.map_id == bounds.map_id:
+                boxes.append(zone)
+            for merchant in self._map_repairers():
+                at = merchant.world[:2]
+                if not any((p := world_to_map(*at, box)) is not None
+                           and all(0 <= v <= 1 for v in p) for box in boxes):
+                    continue
+                extra = (2 * math.dist(here, at) if there is None else
+                         math.dist(here, at) + math.dist(at, there) - math.dist(here, there))
+                if extra <= REPAIR_DETOUR_YARDS:
+                    return True
+            return False
+        except Exception:
+            return False
+
+    def _map_repairers(self) -> tuple:
+        """The merchants that mend gear on the guide's map, kept a map at a time."""
+        map_id = self.client.bounds.map_id
+        kept = getattr(self, "_repairers_kept", None)
+        if kept is None or kept[0] != map_id:
+            kept = self._repairers_kept = (map_id, tuple(m for m in merchants(map_id)
+                                                         if m.repairs))
+        return kept[1]
+
+    def disarmed(self, state: State) -> bool:
+        """Whether the character's weapon is broken (V393), as the policy asks it
+        (`Context.disarmed`): as the fight last read it (`Fight.disarmed`: a plain weapon blow
+        greyed out with its cost paid); where no reading has told, a class that fights with
+        its weapon - not a caster - with something at zero durability: of the hive's 98
+        broken characters of levels 6-20 on 7 Oct, 87 had the main hand broken."""
+        durability = state.bags.durability_min
+        if durability is None or durability > 0.0:
+            return False
+        seen = getattr(self.fight, "disarmed_seen", None)
+        if seen is not None:
+            return bool(seen)
+        return state.char.cls is not None and not is_caster(state.char.cls)
+
+    def _pull_refused(self, values: dict | None = None) -> str | None:
+        """Why the hunt's next pull waits for the gear's repair (V393), or `None`: a repair due
+        now, the meal it waited for (V259) eaten; or, the weapon broken, one a moment off
+        (`policy.broken_wait`). Read afresh only with the gear worn under 60%."""
+        from jev.coach.policy import REPAIR_NEAR_BELOW, broken_wait, services
+
+        worn = (values or {}).get("bags.durability_min")
+        if values is not None and (worn is None or worn >= REPAIR_NEAR_BELOW):
+            return None
+        fresh = self._read()
+        if not fresh:
+            return None
+        self.fight.disarmed(fresh)
+        recent = getattr(self.client, "recent_state", None)
+        state = recent(RECENT_READ_S) if callable(recent) else None
+        if state is None and callable(getattr(self.client, "state", None)):
+            state = self.client.state()
+        if state is None:
+            return None
+        if self.arm is not None and self.arm.step_id:
+            state = state.model_copy(update={"guide": state.guide.model_copy(
+                update={"step_id": self.arm.step_id})})
+        repair = next((p for p in services(state, context=self.policy_context)
+                       if p.decision.skill == "VENDOR_REPAIR"), None)
+        if repair is not None:
+            return repair.decision.why
+        wait = broken_wait(state, self._node(), self.policy_context)
+        return wait.decision.why if wait is not None else None
+
+    def ammo_low(self, state: State) -> int | None:
+        """What a purchase of a hunter's ammunition costs while it runs low (V393), as the
+        policy asks it (`Context.ammo_low`): under `AMMO_LOW` rounds at the last bag census, the
+        best its level may use; `None` for another class, a count not taken since the last
+        purchase, or enough."""
+        if CLASS_IDS.get(state.char.cls) != HUNTER:
+            return None
+        count = getattr(self, "_ammo_count", None)
+        if count is None or count >= AMMO_LOW:
+            return None
+        best = ammo_for(ammo_kind(RACE_IDS.get(state.char.race),
+                                  getattr(self, "_ammo_carried", ())), state.char.level)
+        return best[0][1] if best else None
+
+    def _ammo_supply(self, state, values: dict) -> Supply | None:
+        """The hunter's ammunition a restock buys (V393), while it runs low (`ammo_low`): the
+        best of its kind its level may use that a merchant in the zone sells, bought with what
+        is above the repair reserve (`Supply.reserve`), to `AMMO_DESIRED` rounds."""
+        from jev.coach.policy import repair_reserve
+
+        if values.get("char.class_id") != HUNTER or self.ammo_low(state) is None:
+            return None
+        level = values.get("char.level")
+        sold = {item for m in self._in_zone(merchants(self.client.bounds.map_id))
+                for item in m.items}
+        kind = ammo_kind(values.get("char.race_id"), getattr(self, "_ammo_carried", ()))
+        for item, _ in ammo_for(kind, level if isinstance(level, int) else None):
+            if item in sold:
+                return Supply(item_id=item, name=f"ammunition {item}", role="ammo",
+                              desired=AMMO_DESIRED, reserve=repair_reserve(level, "hunter"))
+        return None
+
+    def _count_ammo(self, census: dict | None) -> None:
+        """A hunter's rounds, and the ammunition it carries, from a whole bag census (V393):
+        no strip field paints ammunition."""
+        if not census:
+            return
+        rows = [(item, count) for item, count in census.values() if item in AMMO_KIND]
+        self._ammo_count = sum(count for _, count in rows)
+        self._ammo_carried = tuple(sorted({item for item, _ in rows}))
+
+    def _kept(self, values: dict) -> int:
+        """What a purchase leaves in the purse (`Context.kept`, V215, V393): the trainer's due
+        or the repair reserve, whichever is more."""
+        from jev.coach.policy import repair_reserve
+
+        level = values.get("char.level")
+        return max(self.training_reserve(),
+                   repair_reserve(level if isinstance(level, int) else None,
+                                  CLASS_BY_ID.get(values.get("char.class_id"))))
+
     def _vendor(self, state) -> Result:
         values, here = self._read(), self._position()
         if values is None or here is None:
             return Result(SkillOutcome.PREEMPTED, "vendor position or inventory unread", "blind")
         supplies = ()
-        if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD":
+        # A hunter's ammunition running low (V393): bought on this visit, with the food and
+        # drink that are out.
+        ammo = (self._ammo_supply(state, values)
+                if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD" else None)
+        if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD" and ammo is None:
             supplies = tuple(s for s in supplies_for(values.get("char.class_id"), values.get("char.race_id"))
                              if getattr(state.bags, f"{s.role.lower()}_count", None) == 0
                              and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id)
             if not supplies:
                 return Result(SkillOutcome.ABORTED, "no confirmed empty supported food/drink slot", "unsupported")
+        elif ammo is not None:
+            supplies = (*(s for s in supplies_for(values.get("char.class_id"),
+                                                  values.get("char.race_id"))
+                          if getattr(state.bags, f"{s.role.lower()}_count", None) == 0
+                          and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id),
+                        ammo)
         eligible, min_free = junk_prices(), 1 if supplies else 6
         bag = ()
         if self.arm.decision.skill == "BAG_MAKE_SPACE":
@@ -1922,8 +2141,8 @@ class LiveBody:
                           "no_supplier" if supplies else "unsupported")
         world = map_to_world(*here, self.client.bounds)
         ranked = self._ranked(candidates, world)
-        # A purchase keeps what the trainer is owed (V215).
-        reserve = self.training_reserve() if supplies else 0
+        # A purchase keeps what the trainer is owed (V215), or the repair reserve (V393).
+        reserve = self._kept(values) if supplies else 0
         if supplies:
             walk = self._walks.get(ranked[0].entry)          # planned once, by the ranking
             if walk is None:
@@ -1964,7 +2183,7 @@ class LiveBody:
                                      supplies=tuple(s for s in (*supplies, *bag)
                                                     if s.item_id in merchant.items),
                                      min_free=min_free,
-                                     reserve_copper=(self.training_reserve() if bag else reserve),
+                                     reserve_copper=(self._kept(values) if bag else reserve),
                                      timeout_s=self.travel_timeout + 120)
             except BodyFailure as failure:
                 if failure.result.code in MERCHANT_UNREACHABLE:
@@ -1977,6 +2196,8 @@ class LiveBody:
                 note_merchant(self.merchant_memory, merchant.entry, failed=False)
                 if supplies:
                     self.policy_context.restocked()
+                    if ammo is not None:
+                        self._ammo_count = None          # counted again at the next census
                 elif self.arm.decision.skill == "BAG_MAKE_SPACE":
                     # Sold, and the bags still nearly full: what is left does not sell, and
                     # the service is not asked again until something new is in them (V250).
@@ -2021,7 +2242,8 @@ class LiveBody:
     def _bag_to_buy(self, values: dict) -> tuple:
         """The general bag to buy on this walk, as a supply of one, or none: the belt short of
         `BAG_ROOM_SLOTS`, a merchant in the zone selling one, and the purse able to spare the
-        cheapest a slot over the trainer's due and `BAG_SPARE_COPPER` (V260)."""
+        cheapest a slot over the trainer's due or the repair reserve (`_kept`, V393) and
+        `BAG_SPARE_COPPER` (V260)."""
         total, money = values.get("inventory.total"), values.get("bags.money_copper")
         if not isinstance(total, int) or total >= BAG_ROOM_SLOTS or not isinstance(money, int):
             return ()
@@ -2031,7 +2253,7 @@ class LiveBody:
         if not sold:
             return ()
         best = min(sold, key=lambda item: (prices[item] / slots[item], -slots[item], item))
-        if money < prices[best] + self.training_reserve() + BAG_SPARE_COPPER:
+        if money < prices[best] + self._kept(values) + BAG_SPARE_COPPER:
             return ()
         return (Supply(item_id=best, name=f"bag {best}", role="bag", desired=1),)
 
@@ -2130,10 +2352,9 @@ class LiveBody:
             ranked = [m for m in ranked if math.dist(m.world[:2], ranked[0].world[:2])
                       <= REPAIRER_NEIGHBOUR_YARDS]
             for merchant in ranked:
+                point = world_to_map(*merchant.world[:2], self.client.bounds)
                 try:
-                    opened = self._open_merchant(
-                        merchant.name, merchant.world,
-                        world_to_map(*merchant.world[:2], self.client.bounds))
+                    opened = self._open_merchant(merchant.name, merchant.world, point)
                 except BodyFailure as failure:
                     if failure.result.code in MERCHANT_UNREACHABLE:
                         note_merchant(self.merchant_memory, merchant.entry, failed=True)
@@ -2143,6 +2364,7 @@ class LiveBody:
                     continue
                 if opened:
                     note_merchant(self.merchant_memory, merchant.entry, failed=False)
+                    self._repairer_at = (merchant.name, merchant.world, point)   # V393
                 return opened
         candidates = [n for n in self.graph.nodes if n.kind is StepKind.REPAIR
                       and n.world is not None and n.map_id == self.client.bounds.map_id
@@ -2150,7 +2372,10 @@ class LiveBody:
         if not candidates:
             return False
         node = min(candidates, key=lambda n: math.dist(n.world[:2], world))
-        return self._open_merchant(node.target_name, node.world, node.pos)
+        opened = self._open_merchant(node.target_name, node.world, node.pos)
+        if opened:
+            self._repairer_at = (node.target_name, node.world, node.pos)
+        return opened
 
     def _corpse_walk(self, point) -> bool:
         wx, wy = map_to_world(*point, self.client.bounds)

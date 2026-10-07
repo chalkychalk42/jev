@@ -286,6 +286,11 @@ class Hunt:
     # the post a resumed hunt goes on from; `None`, the post it was at.
     place: Place | None = None
     where: Callable[[], tuple | None] | None = None
+    # Why the next pull is not taken, the gear's repair coming first (V393), from the pass's
+    # reading; `None` pulls. Asked after the meal before the pull, which the service check at
+    # the top of the pass is not: a repair waits for a meal (V259), and a character losing
+    # fights with a broken weapon was hurt at every pass, ate, and pulled again.
+    pull_refused: Callable[[dict | None], str | None] | None = None
     clock: Callable[[], float] = time.monotonic
     resumed: bool = field(default=False, init=False)
     _found: bool = field(default=False, init=False)
@@ -518,6 +523,9 @@ class Hunt:
             if not self._ready_to_pull(None if walked else v):
                 self.detail = "too hurt to pull, and nothing left to fix it with"
                 return Hunted.NO_FOOD
+            if self.pull_refused is not None and (reason := self.pull_refused(v)):
+                self.detail = reason
+                return Hunted.SERVICE_NEEDED
 
             outcome = self.fight.run(name_id)
             event("fight.summary", code=outcome.value, detail=self.fight.detail,

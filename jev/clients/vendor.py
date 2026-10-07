@@ -104,7 +104,9 @@ class Vendor:
             if sell:
                 self._sell(min_free)
             for supply in supplies:
-                self._buy(supply, reserve_copper)
+                # A supply's own reserve where it has one (`Supply.reserve`, V393).
+                own = getattr(supply, "reserve", None)
+                self._buy(supply, reserve_copper if own is None else own)
             return Vended.DONE if self.sold_stacks or self.bought_units else Vended.NOT_NEEDED
         except _Stop as stop:
             self.detail = stop.detail

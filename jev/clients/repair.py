@@ -41,6 +41,10 @@ from jev.run.evidence import event, traced
 # means the fights that broke it were already being lost, and a corpse run costs more than
 # a walk to the Abbey.
 REPAIR_BELOW = 0.35
+# Below this a repair asked for is made: the policy asks for one under 60% wherever a repairer
+# is a short detour (`jev.coach.policy.REPAIR_NEAR_BELOW`, V393), and the skill does what it
+# was asked rather than answer "not needed" and be asked again at once.
+REPAIR_ASKED_BELOW = 0.60
 
 # Broken. Nothing that uses gear should be attempted at this, at any distance.
 BROKEN = 0.0
@@ -84,7 +88,7 @@ class Repair:
         if v is None:
             return False
         worst = v.get("bags.durability_min")
-        return worst is not None and worst <= REPAIR_BELOW
+        return worst is not None and worst < REPAIR_ASKED_BELOW
 
     @traced("repair")
     def run(self) -> Repaired:

@@ -19,6 +19,10 @@ class Supply:
     role: str
     desired: int = 10
     slot: int | None = None
+    # What the purse keeps back from this one's purchase, where it is not the visit's own
+    # (`Vendor.run`'s `reserve_copper`): a hunter's ammunition keeps the repair reserve alone
+    # (V393). `None`: the visit's.
+    reserve: int | None = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +115,37 @@ def supplies_for(class_id: int | None, race_id: int | None) -> tuple[Supply, ...
     return tuple(Supply(item_id=r["item_id"], name=r["name"], role=role, slot=r["slot"],
                         desired=CASTER_DRINKS if caster and role == "drink" else 10)
                  for role, r in sorted(roles.items()))
+
+
+# A hunter's ammunition (V393): the white arrows and bullets merchants sell, 200 rounds a
+# purchase, as (the level that may use it, item id, copper a purchase), lowest first
+# (world_item_template class 6, RequiredLevel and BuyPrice; each sold by 45-102 of the
+# catalog's merchants). Arrows for a bow or a crossbow, bullets for a gun: dwarf and tauren
+# hunters begin with a gun (Old Blunderbuss), the others with a bow or, the draenei, a crossbow
+# - what every one of the hive's 50 hunters still wore on 7 Oct.
+AMMO = {"arrow": ((1, 2512, 10), (10, 2515, 50), (25, 3030, 300), (40, 11285, 1000),
+                  (55, 28053, 1600), (65, 28056, 3000)),
+        "bullet": ((1, 2516, 10), (10, 2519, 50), (25, 3033, 300), (40, 11284, 1000),
+                   (55, 28060, 1600), (65, 28061, 3000))}
+AMMO_KIND = {item: kind for kind, rows in AMMO.items() for _, item, _ in rows}
+GUN_RACES = frozenset({3, 6})
+HUNTER = 3
+
+
+def ammo_kind(race_id: int | None, carried=()) -> str:
+    """What a hunter shoots: the kind of ammunition it carries (`carried`, item ids), else what
+    its race's starting weapon takes."""
+    for item in carried:
+        if item in AMMO_KIND:
+            return AMMO_KIND[item]
+    return "bullet" if race_id in GUN_RACES else "arrow"
+
+
+def ammo_for(kind: str, level: int | None) -> tuple[tuple[int, int], ...]:
+    """The ammunition of `kind` a hunter of `level` may use, best first, as (item id, copper a
+    purchase)."""
+    return tuple((item, price) for need, item, price in reversed(AMMO.get(kind, ()))
+                 if level is None or need <= level)
 
 
 CONSUMABLES = pathlib.Path(__file__).resolve().parents[2] / "content/tbc/consumables.json"

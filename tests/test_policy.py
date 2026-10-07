@@ -302,19 +302,23 @@ def test_the_body_drinks_to_the_policys_line_so_a_rest_is_not_armed_again():
     assert drink_to(True) > rest_mana(True) and drink_to(False) > rest_mana(False)
 
 
-def test_a_spell_the_purse_can_pay_for_comes_before_a_repair_of_gear_not_broken():
-    """V240: the level 7 mage's repairs took the copper Frostbolt waited for (session 208)."""
-    from jev.coach.policy import Context, service
+def test_gear_worn_under_a_third_is_mended_before_the_trainer_is_paid():
+    """V393, reversing V240: melee characters died 60 times a hundred kills with broken gear
+    against 7.9 intact (the hive, 7 Oct), and the purse went to the trainer first."""
+    from jev.coach.policy import Context, services
     from jev.world.state_v1 import Char
 
     context = Context()
     context.trainable = lambda state: True
     worn = _s(char=Char(level=8), bags=Bags(free=10, durability_min=0.3))
-    assert service(worn, context=context).decision.skill == "TRAIN_CLASS"
+    assert [p.decision.skill for p in services(worn, context=context)] == [
+        "VENDOR_REPAIR", "TRAIN_CLASS"], "the repair, then training with what it left"
     broken = _s(char=Char(level=8), bags=Bags(free=10, durability_min=0.0))
-    assert service(broken, context=context).decision.skill == "VENDOR_REPAIR", "broken first"
-    context.trainable = lambda state: False
-    assert service(worn, context=context).decision.skill == "VENDOR_REPAIR", "nothing to learn"
+    assert services(broken, context=context)[0].decision.skill == "VENDOR_REPAIR"
+    context.repair_failed(5)
+    assert [p.decision.skill for p in services(worn.model_copy(update={"bags": Bags(
+        free=10, durability_min=0.3, money_copper=5)}), context=context)] == ["TRAIN_CLASS"], \
+        "a repair the purse cannot pay leaves the trainer as before"
 
 
 def test_a_restock_does_not_buy_what_the_character_conjures():
@@ -439,19 +443,28 @@ def test_a_supply_out_of_reach_is_not_asked_for_again_this_session():
     assert asks(bags(0.0, 3), conjuring), "the water it conjures is not what it is out of"
 
 
-def test_a_repair_the_purse_could_not_pay_waits_for_the_purse_to_grow():
-    """V196: after a repair the purse could not pay, any copper more walked a broke level 2
-    mage back to the smith after every kill."""
-    from jev.coach.policy import REPAIR_RETRY_COPPER, Context
+def test_a_repair_the_purse_could_not_pay_waits_for_more_copper_or_more_to_sell():
+    """V393, amending V196: hive-523, a level 13 rogue, fought with a broken weapon and 46
+    copper, its repair waiting for 146 (7 Oct 02:59). The server mends item by item as the
+    purse pays, so any copper more, or more in the bags to sell at the repairer, is worth the
+    walk; the failures in a row space the walks (V322), not a doubled purse."""
+    from jev.coach.policy import Context
 
     broke = Context()
-    broke.repair_failed(10)
-    assert not broke.can_repair(11) and not broke.can_repair(10 + REPAIR_RETRY_COPPER - 1)
-    assert broke.can_repair(10 + REPAIR_RETRY_COPPER)
-    short = Context()
-    short.repair_failed(500)
-    assert not short.can_repair(999) and short.can_repair(1000), "or doubled, whichever is more"
-    assert not short.can_repair(None)
+    broke.repair_short(4)
+    broke.repair_failed(46)
+    assert not broke.can_repair(46) and not broke.can_repair(None)
+    assert broke.can_repair(47), "any copper more"
+    assert not broke.can_repair(46, free=4) and broke.can_repair(46, free=3), "or more to sell"
+    assert not broke.can_repair(None, free=None)
+    restored = Context()
+    restored.restore_purse(broke.purse())
+    assert restored.repair_free == 4 and restored.can_repair(46, free=3)
+    restored.repaired()
+    assert restored.repair_free is None and restored.can_repair(0)
+    old = Context()
+    old.restore_purse({"repair_blocked": True, "repair_money": 0})
+    assert old.repair_free is None and old.can_repair(1), "a purse kept before V393"
 
 
 def test_the_purses_lessons_are_kept_and_cleared():
@@ -468,7 +481,7 @@ def test_the_purses_lessons_are_kept_and_cleared():
     assert len(saves) == 3
     later = Context()
     later.restore_purse(first.purse())
-    assert not later.can_repair(50) and later.can_repair(145)
+    assert not later.can_repair(45) and later.can_repair(46)
     assert not later.can_restock(20) and later.can_restock(25)
     later.saved = lambda: saves.append(2)
     later.repaired()

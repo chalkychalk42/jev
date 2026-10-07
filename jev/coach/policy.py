@@ -124,6 +124,39 @@ STEP_RETRY_MAX_S = 1800.0
 DEATH_RETRY_MIN_S = 15.0
 DEATH_RETRY_MAX_S = 300.0
 DEATH_SKILLS = ("RELEASE_SPIRIT", "CORPSE_RUN")
+# The repair reserve (V393): what the purse keeps for a repair out of every purchase - food and
+# drink, ammunition, a bag - as it keeps the trainer's due (V215): about what a full repair of
+# the kit its class wears costs from nothing, copper times the level squared by class (an
+# item's price a point of durability grows with its item level, and so do its points). Priced
+# on the DBCs (DurabilityCosts by item level and subclass, DurabilityQuality by quality), the
+# kits worn by the hive's 478 characters of levels 1-20 (the character DB, 7 Oct 04:40) cost a
+# median 141, 350 and 630 copper from nothing at levels 6-10, 11-15 and 16-20, the warriors',
+# paladins', rogues' and hunters' 189, 407 and 892; a class's kit the level squared times its
+# median below (30-59 characters each, the druids 12). 35.5% of the hive's deaths (7 Oct
+# 01:25-03:50) were warriors', paladins', rogues' and hunters' with broken gear, broken about
+# half their alive time with a median 16-30 copper in the purse.
+REPAIR_RESERVE_PER_LEVEL2 = {"warrior": 3.0, "paladin": 2.6, "hunter": 0.8, "rogue": 2.5,
+                             "priest": 1.6, "shaman": 2.6, "mage": 1.2, "warlock": 1.5,
+                             "druid": 1.5}
+REPAIR_RESERVE_UNREAD = 2.5          # a class not read: a rogue's, the melee kits' median
+# Broken: the worst item at this or under. And under `REPAIR_NEAR_BELOW` the gear is mended
+# wherever a repairer is a short detour (V393, `LiveBody.repairer_near`).
+BROKEN = 0.05
+REPAIR_NEAR_BELOW = 0.60
+# A character whose weapon is broken takes no pull while its repair waits on a retry at most
+# this far off (V393): it stands, fighting what attacks it, and the repair is armed when the
+# retry comes. Further off - too poor with the bags sold, a repairer out of reach, a long
+# back-off - it pulls as before: with no pull there is no loot, no copper and no repair
+# (`Fight.run`'s broken-gear note).
+BROKEN_STAND_S = 60.0
+
+
+def repair_reserve(level: int | None, cls: str | None = None) -> int:
+    """What the purse keeps for a repair at `level` (V393): the class's
+    `REPAIR_RESERVE_PER_LEVEL2` times the level squared; nothing for a level not read."""
+    if not isinstance(level, int) or isinstance(level, bool) or level < 1:
+        return 0
+    return round(REPAIR_RESERVE_PER_LEVEL2.get(cls or "", REPAIR_RESERVE_UNREAD) * level * level)
 
 
 @dataclass(frozen=True)
@@ -266,8 +299,8 @@ class Context:
 
     def repaired(self) -> None:
         """A repair that landed: the purse pays for repairs again."""
-        if self.repair_blocked:
-            self.repair_blocked, self.repair_money = False, None
+        if self.repair_blocked or self.repair_free is not None:
+            self.repair_blocked, self.repair_money, self.repair_free = False, None, None
             self._save()
 
     # A repairer out of reach is not walked to again on this step, as a merchant for
@@ -317,18 +350,44 @@ class Context:
                 if getattr(self, f"{kind}_unreachable_step") not in (None, step_id)]):
             self._save()
 
+    # The free bag slots when a repair the purse could not pay was given up, its bags' goods
+    # sold for it (`LiveBody._repair`, V393): fewer free since is more to sell.
+    repair_free: int | None = None
+
+    def repair_short(self, free: int | None) -> None:
+        self.repair_free = free if isinstance(free, int) and not isinstance(free, bool) else None
+
     def can_repair(self, money: int | None, step_id: str | None = None,
-                   now: float | None = None) -> bool:
+                   now: float | None = None, free: int | None = None) -> bool:
         if self._barred("repair", step_id, now):
             return False
-        # An unknown purse cannot establish that an unaffordable repair became payable. The
-        # repair's price is not read before it is asked for: the purse must have doubled, or
-        # grown by `REPAIR_RETRY_COPPER`, whichever is more (V196). Any copper more walked a
-        # broke level 2 mage to Northshire's smith after every kill.
-        return not self.repair_blocked or (
-            money is not None and self.repair_money is not None
-            and money >= max(2 * self.repair_money, self.repair_money + REPAIR_RETRY_COPPER)
-        )
+        if not self.repair_blocked:
+            return True
+        # A repair the purse could not pay, the bags' goods sold for it at the repairer
+        # (`LiveBody._repair`), is asked again once the purse holds more than it did then or
+        # the bags more to sell (fewer slots free), its failures in a row spacing the walks
+        # (V322): the server mends item by item as the purse pays (`DurabilityRepairAll`), so
+        # a little more mends a little more. Not at a doubled purse, or 100 copper more (V196,
+        # amended by V393): 77 of the hive's 366 purse files held a repair so blocked on 7 Oct,
+        # 58 failed with 10 copper or less, and of the 88 characters of levels 6-20 whose
+        # weapon was broken, 23 could pay to mend it from the purse and 69 with their bags'
+        # junk and surplus sold. An unknown purse and unknown bags establish nothing.
+        grew = money is not None and self.repair_money is not None and money > self.repair_money
+        filled = free is not None and self.repair_free is not None and free < self.repair_free
+        return grew or filled
+
+    def repair_retry_in(self, step_id: str | None, now: float) -> float | None:
+        """Seconds until a repair held off by its failures in a row (V315, V322) or by a
+        repairer out of reach on this step (V185) may be armed again; `None` when neither
+        holds it (V393)."""
+        waits = []
+        at = self.service_failed_at.get("VENDOR_REPAIR")
+        if at is not None and abs(now - at) < self.service_wait("VENDOR_REPAIR"):
+            waits.append(max(0.0, at + self.service_wait("VENDOR_REPAIR") - now))
+        if self._barred("repair", step_id, now):
+            until = self.repair_unreachable_until
+            waits.append(math.inf if until is None else max(0.0, until - now))
+        return max(waits) if waits else None
 
     def supplies_failed(self, money: int | None) -> None:
         self.supplies_blocked, self.supplies_money = True, money
@@ -356,8 +415,8 @@ class Context:
     # a service that could not be done on a step (V309), as a trainer not reached is (V254):
     # Neris, a level 4 night elf, ended five sessions in a row from 13:25 to 14:10 on 28 Sep
     # on the same bag service on the same step, each timed out.
-    PURSE = ("repair_blocked", "repair_money", "supplies_blocked", "supplies_money",
-             "supplies_needed", "train_blocked_level", "train_blocked_until",
+    PURSE = ("repair_blocked", "repair_money", "repair_free", "supplies_blocked",
+             "supplies_money", "supplies_needed", "train_blocked_level", "train_blocked_until",
              "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step",
              "repair_unreachable_until", "supplies_unreachable_until", "bags_unreachable_until",
              "service_failed_at", "service_failures", "step_wait_until", "step_wait_why",
@@ -477,10 +536,31 @@ class Context:
             return frozenset()
 
     def kept(self, state: State) -> int:
+        """What a purchase leaves in the purse: the trainer's due (V215) or the repair reserve
+        (`repair_reserve`, V393), whichever is more - either may be the next service, and the
+        same copper pays for it."""
         try:
-            return max(0, int(self.reserve(state))) if self.reserve is not None else 0
+            training = max(0, int(self.reserve(state))) if self.reserve is not None else 0
         except Exception:
-            return 0
+            training = 0
+        return max(training, repair_reserve(state.char.level, state.char.cls))
+
+    # Whether a repairer stands a short detour off the character's way to the guide's step
+    # (`LiveBody.repairer_near`, V393). Absent, none does.
+    repairer_near: Callable[[State], bool] | None = None
+    # Whether the character's weapon is broken: its weapon blows unusable with their cost paid,
+    # as the strip's `bars.usable` says (`LiveBody.disarmed`, V393). Absent, it is not.
+    disarmed: Callable[[State], bool] | None = None
+    # What a purchase of ammunition costs, while a hunter's runs low (`LiveBody.ammo_low`,
+    # V393); `None` when none is wanted. Absent, none ever is.
+    ammo_low: Callable[[State], int | None] | None = None
+
+    def _asked(self, name: str, state: State, default):
+        hook = getattr(self, name)
+        try:
+            return hook(state) if hook is not None else default
+        except Exception:
+            return default
     train_blocked_level: int | None = None
     # A trainer not reached is asked for again from this wall time; a visit made, only at the
     # next level (`None`). Both kept in the purse file (V254): the level 7 mage's walk to its
@@ -607,8 +687,6 @@ def preempt(state: State, context: Context | None = None) -> Plan | None:
 # Free bag slots at which the merchant is visited. Not none: every fight on the way there
 # drops loot, and with full bags session 81 left four kills unlooted on its way to one.
 BAGS_LOW = 2
-# After a repair the purse could not pay, how much more it must hold before the next (V196).
-REPAIR_RETRY_COPPER = 100
 # Fights that ended without ever engaging - nothing faced, nothing found, nothing reached. After
 # `UNENGAGED_FIGHTS` of them in a row, combat does not take the floor for `FIGHT_PAUSE_S`, and
 # the step's walk carries the character out of reach of what it cannot reach (V212). A Defias
@@ -654,7 +732,7 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
         return plans
     b = state.bags
     can_repair = context is None or context.can_repair(b.money_copper, state.guide.step_id,
-                                                       state.t)
+                                                       state.t, b.free)
     can_sell = context is None or context.can_make_space(b.free, state.guide.step_id, state.t)
 
     # A walk to a merchant or a smith waits for a meal first, as training does (V259): of the
@@ -665,7 +743,7 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     # `is not None` throughout: unknown bags are not full bags, and a service loop on an
     # unread number is the failure the verifier's `no_service_loop` rule also guards.
     if (can_repair and not hurt and b.durability_min is not None
-            and b.durability_min <= 0.05):
+            and b.durability_min <= BROKEN):
         due(Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "equipment is broken", 0.85,
                        ("dead", "combat"), service="repair"), True, "service.broken"))
 
@@ -677,7 +755,14 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     # repair at a third of the durability buys no armour back, and the level 7 mage's
     # repairs took the copper Frostbolt waited for, 77 of 137 in session 208, while it died
     # to boars and bears it had no slow for.
+    # Only while the repair cannot be had (V393): where it can, gear worn under 35% is mended
+    # before the trainer is paid, as a weapon broken costs far more than a spell rank waited
+    # for. In the hive's deaths of 7 Oct 01:25-03:50, melee characters died 60 times a hundred
+    # kills with broken gear against 7.9 intact (warriors 98.5 against 5.4), and a rogue with a
+    # broken weapon pressed Sinister Strike 0.5 times a minute against 13.4. Training comes
+    # after, with what the repair left.
     if (context is not None and b.durability_min is not None and b.durability_min < 0.35
+            and not can_repair
             and _recover(state, context) is None and context.can_train(state)):
         due(Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "the class trainer has spells to teach",
                        0.6, ("dead", "combat"), service="train"), True, "service.train"))
@@ -685,6 +770,16 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     if can_repair and not hurt and b.durability_min is not None and b.durability_min < 0.35:
         due(Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is low", 0.65,
                        ("dead", "combat"), service="repair"), True, "service.durability"))
+
+    # Under 60%, mended wherever a repairer is a short detour (V393), as a flight master near
+    # is visited: while the purse pays for it, and before the next deaths break it (a death
+    # takes a tenth of every item's durability).
+    if (can_repair and not hurt and context is not None and b.durability_min is not None
+            and b.durability_min < REPAIR_NEAR_BELOW
+            and context._asked("repairer_near", state, False)):
+        due(Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "durability is under 60% and a repairer "
+                    "is near", 0.6, ("dead", "combat"), service="repair"), True,
+                 "service.repair_near"))
 
     conjured = context.conjured() if context is not None else frozenset()
     kept = [(item, count) for item, count, kind in ((b.food_id, b.food_count, "food"),
@@ -703,6 +798,18 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
             due(Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD",
                            "confirmed food or drink is empty", 0.8, ("dead", "combat"),
                            service="supplies"), True, "service.supplies"))
+
+    # A hunter's ammunition running low, bought with what is above the repair reserve (V393):
+    # a shot is a hunter's weapon as its blade is, before the trainer's due. 22 of the hive's
+    # 50 hunters carried none on 7 Oct (04:40): Jev never bought it.
+    price = context._asked("ammo_low", state, None) if context is not None else None
+    if (price is not None and not hurt
+            and not context._barred("supplies", state.guide.step_id, state.t)
+            and (b.money_copper is None
+                 or b.money_copper - repair_reserve(state.char.level, state.char.cls)
+                 >= price)):
+        due(Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD", "ammunition is running low", 0.8,
+                    ("dead", "combat"), service="supplies"), True, "service.ammo"))
 
     # Last: spells a trainer would teach now. A paladin that never trained fought to level
     # 8 on Seal of Righteousness and Holy Light rank 1, losing to two wolves at once. It can
@@ -837,6 +944,30 @@ def step_wait(state: State, context: Context | None) -> Plan | None:
                    1.0), True, "wait.step")
 
 
+# The steps whose work is pulls: a grind's, and a quest objective's (V393, as V379 has them).
+PULL_STEPS = (StepKind.GRIND, StepKind.DING_GATE, StepKind.QUEST_OBJECTIVE)
+
+
+def broken_wait(state: State, node: Node | None, context: Context | None) -> Plan | None:
+    """A character whose weapon is broken (`Context.disarmed`, V393) takes no pull while its
+    repair waits on a retry at most `BROKEN_STAND_S` off: a grind's or an objective's step,
+    or a grind where it stands, waits; a fight that comes to it is fought, and every other
+    step - a hand-in, an accept, a walk - goes on. When the repair is due it is a service,
+    armed before any step; when it waits longer, or is not to be had (too poor with the bags
+    sold, a repairer out of reach), the step plays as before."""
+    b = state.bags
+    if (context is None or b.durability_min is None or b.durability_min > BROKEN
+            or (node is not None and node.kind not in PULL_STEPS)
+            or not context.can_repair(b.money_copper, free=b.free)     # too poor: pulls earn
+            or not context._asked("disarmed", state, False)):
+        return None
+    left = context.repair_retry_in(state.guide.step_id, state.t)
+    if left is None or left > BROKEN_STAND_S:
+        return None
+    return Plan(_d(Intent.WAIT, None, f"a broken weapon pulls nothing: the repair is tried "
+                   f"again in {left:.0f}s", 1.0), True, "wait.broken")
+
+
 def decide(state: State, node: Node | None = None, *, context: Context | None = None) -> Plan:
     """Always returns a usable plan. Never raises, never returns None.
 
@@ -850,6 +981,10 @@ def decide(state: State, node: Node | None = None, *, context: Context | None = 
                  _recover(state, context)):
         if plan is not None:
             return plan
+    # A broken weapon's pulls wait a moment for its repair (V393).
+    waiting = broken_wait(state, node, context)
+    if waiting is not None:
+        return _derate(waiting) if _blind(state) else waiting
 
     plan = step_wait(state, context) or _guide(state, node) or _fallback(state)
     return _derate(plan) if _blind(state) else plan
