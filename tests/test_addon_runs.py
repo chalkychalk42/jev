@@ -843,3 +843,99 @@ def test_a_shut_talent_frame_paints_the_points_and_the_talents_but_no_button():
     assert shut["ui.talents"] is False and shut["char.talent_points"] == 5
     assert shut["talents.tab"] == 2 and shut["talents.x"] is None
     assert shut["talents.shown"] is False, "no open frame shows its tab (tri paints no unknown)"
+
+
+# --- schema 22: the pet, the auras, the form and combo points (V400) --------------------
+
+from jev.perceive.fields import SELF_AURAS  # noqa: E402
+
+
+def _read(**state) -> dict:
+    return radio.unpack(payload(paint(state))[:PAYLOAD_CELLS])
+
+
+def test_a_hunters_pet_is_painted_as_its_frame_shows_it():
+    """Out, alive, its health, happiness and loyalty from the pet frame's own reads, its
+    level and its family by name: what V389's pet service plays by, read by the client."""
+    from jev.perceive.radio_frame import name_id
+
+    v = _read(hasPet=1, petHp=60, petHpMax=120, petLevel=11, petFamily="Boar",
+              petHappiness=2, petLoyalty="Loyalty Level 3")
+    assert (v["pet.has"], v["pet.dead"], v["pet.charmed"]) == (True, False, False)
+    assert v["pet.hp"] == pytest.approx(0.5, abs=0.002)
+    assert (v["pet.happiness"], v["pet.loyalty"], v["pet.level"]) == (2, 3, 11)
+    assert v["pet.family_id"] == name_id("Boar")
+    dead = _read(hasPet=1, petDead=1, petHp=0)
+    assert dead["pet.has"] is True and dead["pet.dead"] is True
+
+
+def test_no_pet_is_none_out_and_its_frame_is_unknown_not_zero():
+    v = _read()
+    assert (v["pet.has"], v["pet.charmed"]) == (False, False)
+    for name in ("pet.dead", "pet.hp", "pet.happiness", "pet.loyalty", "pet.level",
+                 "pet.family_id"):
+        assert v[name] is None, name
+
+
+def test_a_charm_in_the_pets_place_is_a_charm_and_no_pet():
+    """A Taming Rod's beast takes the pet frame for its fifteen minutes; nothing of a pet is
+    read from it (a demon, a hunter's pet, nothing: it is not the character's)."""
+    v = _read(hasPet=1, petCharmed=1, petLevel=6, petHappiness=3)
+    assert (v["pet.has"], v["pet.charmed"]) == (False, True)
+    assert v["pet.level"] is None and v["pet.happiness"] is None
+
+
+def test_a_demon_has_no_happiness():
+    v = _read(hasPet=1, petFamily="Imp")
+    assert v["pet.has"] is True and v["pet.happiness"] is None and v["pet.loyalty"] is None
+
+
+def test_the_watched_auras_are_one_bit_each_from_any_caster():
+    v = _read(playerDebuffs=[["Weakened Soul", "ws", 15, 9.5], ["Dazed", "dz", None, None]],
+              playerBuffs=[["Drink", "dr", None, None], ["Power Word: Fortitude", "pw", None, None]])
+    bits = {name: bool(v["char.auras"] >> i & 1) for i, name in enumerate(SELF_AURAS)}
+    assert {n for n, on in bits.items() if on} == {"Weakened Soul", "Dazed", "Drink"}
+    assert _read()["char.auras"] == 0
+    assert _read()["char.sickness_s"] == 0, "no sickness on is none, not unknown"
+
+
+def test_resurrection_sickness_is_timed_by_the_buff_frames_own_clock():
+    """A Spirit Healer's sickness is not the player's own aura, and UnitDebuff gives it no
+    time: the buff frame's GetPlayerBuffTimeLeft does, found by the aura's icon."""
+    sick = [["Resurrection Sickness", "rs", None, None]]
+    v = _read(playerDebuffs=sick, playerClock={"rs": 431.7})
+    assert v["char.sickness_s"] == 431
+    assert v["char.auras"] & 1
+    unclocked = _read(playerDebuffs=sick, missingApi="GetPlayerBuffTimeLeft")
+    assert unclocked["char.sickness_s"] is None, "on, and no clock: unknown"
+
+
+def test_the_active_stance_bar_entry_is_the_form():
+    from jev.perceive.radio_frame import name_id
+
+    bear = _read(forms=[["Bear Form", False], ["Cat Form", True]])
+    assert bear["char.form_id"] == name_id("Cat Form")
+    assert _read(forms=[["Battle Stance", False]])["char.form_id"] == 0
+    assert _read(missingApi="GetShapeshiftFormInfo")["char.form_id"] is None
+
+
+def test_the_bars_buffs_and_the_targets_own_debuffs_are_named_by_the_slots_spells():
+    """The fixture's bar: Attack, Seal of Righteousness (20154) and Holy Light (635) on slots
+    1-3, named by GetSpellName as the spellbook names them. A debuff with no duration is
+    another's and is not the character's own."""
+    v = _read(spellFixture=True,
+              playerBuffs=[["spell20154", "seal", 30, 21.0]],
+              targetDebuffs=[["spell635", "hl", 21, 7.9], ["spell6603", "other", None, None]])
+    assert v["bars.buffs"] == 0b010
+    assert v["bars.dots"] == 0b100
+    assert v["target.dot_s"] == 7
+    none = _read(spellFixture=True, targetDebuffs=[["spell635", "hl", None, None]])
+    assert none["bars.dots"] == 0 and none["target.dot_s"] is None
+    alone = _read(spellFixture=True, hasTarget=False, targetDebuffs=[["spell635", "hl", 21, 3]])
+    assert alone["bars.dots"] is None and alone["target.dot_s"] is None
+
+
+def test_combo_points_are_painted():
+    assert _read(combo=4)["combat.combo"] == 4
+    assert _read()["combat.combo"] == 0
+    assert _read(missingApi="GetComboPoints")["combat.combo"] is None
