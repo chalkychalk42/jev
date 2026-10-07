@@ -419,7 +419,8 @@ def test_damage_over_time_shouts_shields_and_aspects_have_their_roles():
 def test_what_the_fight_cannot_press_stays_utility():
     """A form, stealth, speed, tracking, a one-school ward, a stealth opener, a finisher, a
     channel, a rage or energy interrupt, Charge and Life Tap: nothing presses them yet."""
-    for sid in (1784, 5118, 1494, 703, 1943, 689, 1766, 72, 100, 1454, 1130):
+    # Hunter's Mark (1130) is a mark since V404, pressed as a fight opens.
+    for sid in (1784, 5118, 1494, 703, 1943, 689, 1766, 72, 100, 1454):
         assert spell(sid).role == "utility", (sid, spell(sid).name, spell(sid).role)
     assert spell(543).role == "short_buff"                       # Fire Ward: one school
 

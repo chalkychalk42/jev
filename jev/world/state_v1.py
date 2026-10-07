@@ -291,6 +291,27 @@ class Bags(Frozen):
     slot: InventorySlot | None = None
 
 
+class Pet(Frozen):
+    """The character's pet as its pet frame shows it, and its charm (V389). All unknown on the
+    live strip, which paints no pet (no field, and no schema change for one): only a server body
+    (the hive's) reads one. `has` is a pet out, dead or alive; `False` is none out, which is not
+    none kept - a dead hunter's pet, one dismissed or one left behind by a flight is kept, to be
+    called."""
+
+    has: Tri = None
+    dead: Tri = None
+    entry: int | None = Field(default=None, ge=1)
+    level: int | None = Field(default=None, ge=1, le=70)
+    hp: Fraction | None = None
+    happiness: int | None = Field(default=None, ge=1, le=3)   # 1 unhappy, 2 content, 3 happy
+    loyalty: int | None = Field(default=None, ge=1, le=6)
+    # The food in the bags worth most to it, and how many of the bags' foods it eats in full
+    # (`jev.world.pets.in_bags`): none of those is what sends the hunter to a merchant.
+    food_id: int | None = Field(default=None, ge=1)
+    food_count: int | None = Field(default=None, ge=0)
+    charmed: Tri = None               # the character holds a charm (a Taming Rod's beast)
+
+
 class Ui(Frozen):
     """Windows. Vision owns these — the radio can report them but pixels decide (PLAN §5.3)."""
 
@@ -368,6 +389,7 @@ class State(Frozen):
     target: Target = Target()
     bags: Bags = Bags()
     ui: Ui = Ui()
+    pet: Pet = Pet()
     # `None` means the quest log was not read; `()` means it was read and is empty.
     # These are different facts and the difference is load-bearing: "the objective counter
     # is not ticking" is the first ambiguity `ARCHITECTURE.md` §1 names, and defaulting an

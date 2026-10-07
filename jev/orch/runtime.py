@@ -59,10 +59,11 @@ from jev.world.state_v1 import ArmedBy, State, StepKind
 # the clock already stood still in combat, but not for the walk to an attacker or the
 # corpse after it, and a dozen kobolds on the way back from Fargodeep Mine ran quest 60's
 # hand-in out of its four minutes with the quest complete (run 20260924T132256-fc8503).
+# And a hunter's pet's care, a taming's walk and channel among it (V389).
 SERVICING_SKILLS = frozenset({"EAT_DRINK", "BAG_MAKE_SPACE", "VENDOR_REPAIR",
                               "BUY_AMMO_REAGENT_FOOD", "LOOT", "RELEASE_SPIRIT", "CORPSE_RUN",
                               "TRAIN_CLASS", "BIND_HEARTH", "DISCOVER_FLIGHT", "COMBAT_PROFILE",
-                              "BUY_WAND"})
+                              "TEND_PET", "BUY_WAND", "BUY_WEAPON"})
 # A hand-in passed over after failing twice leaves its quest complete in the log for good:
 # Kobold Candles sat there with William Pestle twenty yards from Marshal Dughan, whom the
 # guide visits again and again (25 September). A later step that brings the character

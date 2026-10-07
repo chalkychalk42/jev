@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -49,6 +50,9 @@ STARTUP_LOG_TRIES = 250
 # unreachable walk to a quest giver was the quest's failure: 203 of the 383 quest steps failed
 # over in its 4 Oct 16:26-18:30, where the live bot would have walked again.
 RETRIES = 3
+# A spell effect that teaches another (`SPELL_EFFECT_LEARN_SPELL`): a quest whose reward casts one
+# pays in a spell (`worthless_quests`, V388).
+LEARN_SPELL = 36
 
 
 @contextmanager
@@ -234,11 +238,27 @@ def worthless_quests(world_db: Path | None, graph: Graph) -> frozenset[int]:
                 "SELECT entry FROM world_quest_template WHERE RewMoneyMaxLevel = 0 "
                 f"AND RewChoiceItemId1 = 0 AND entry IN ({','.join('?' * len(quests))})",
                 quests).fetchall()
+            worthless = frozenset(row[0] for row in rows)
+            # Nor one whose reward teaches a spell (V388): the spell the server casts at the
+            # hand-in (`RewSpellCast`, else `RewSpell`, as `Player::RewardQuest` casts it)
+            # learning one (SPELL_EFFECT_LEARN_SPELL). Training the Beast (6081) pays nothing
+            # and is how a hunter learns Feed Pet and Revive Pet, which no trainer teaches;
+            # The Stolen Tome (1598) a human warlock's Summon Imp; Call of Fire (9555) a
+            # draenei shaman's Searing Totem.
+            with contextlib.suppress(sqlite3.Error):
+                teaching = connection.execute(
+                    "SELECT q.entry FROM world_quest_template q JOIN world_spell_template s "
+                    "ON s.Id = CASE WHEN q.RewSpellCast > 0 THEN q.RewSpellCast "
+                    "ELSE q.RewSpell END "
+                    f"WHERE {LEARN_SPELL} IN (s.Effect1, s.Effect2, s.Effect3) "
+                    f"AND q.entry IN ({','.join('?' * len(worthless))})",
+                    sorted(worthless)).fetchall() if worthless else ()
+                worthless -= {row[0] for row in teaching}
         finally:
             connection.close()
     except sqlite3.Error:
         return frozenset()
-    return frozenset(row[0] for row in rows)
+    return worthless
 
 
 def _guide_on(args, graph, path: Path):

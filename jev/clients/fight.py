@@ -346,6 +346,20 @@ MAX_RANGED_STEPS = 8
 # a fight the shooter fights in melee, as before. Two shots of a 2.8-3.0 s bow and a margin.
 SHOT_SILENT_S = 7.0
 SHOT_GIVE_UP = 2
+# A mark (Hunter's Mark, V404) goes on a unit with at least this share of its health left: on
+# one nearly dead it is a global cooldown for nothing. It lasts its spell's two minutes.
+MARK_ABOVE = 0.5
+MARK_S = 120.0
+# A slow (Concussive Shot, V404) is pressed at a unit coming for the character and not yet at
+# hand, not again while it lasts (its spell's 4 s).
+SLOW_S = 4.0
+# A shooter at hand with a unit that is not attacking it - a pet holding it, a unit running or
+# held - backs off out of its shot's dead zone (V404): about nine yards at the walk backwards,
+# where Auto Shot reaches it again (it does not inside the melee reach and five yards, the
+# bridge's `min_range`); at most this many times a fight, and not again within this long. A
+# unit attacking it follows at its own run, faster than a walk backwards, and is fought at hand.
+DEAD_ZONE_STEPS = 3
+DEAD_ZONE_AGAIN_S = 4.0
 # After a root at contact (Frost Nova) a caster backs off this long, still facing: about
 # nine yards at the walk backwards, out of the held unit's reach (V169).
 STEP_CLEAR_S = 2.0
@@ -457,6 +471,7 @@ class Fought(StrEnum):
     REFUSED = "refused"
     INTERRUPTED = "interrupted"
     HELD = "held"                    # the selected unit held out of it (Polymorph): the other next
+    USED = "used"                    # a quest's item used on it, and the quest complete (V387)
 
     @property
     def ok(self) -> bool:
@@ -646,6 +661,11 @@ class Fight:
     # Something equipped is at zero durability. Advisory: reported so the caller can
     # decide to go and repair, never a reason to refuse the fight.
     broken: bool = field(default=False, init=False)
+    # Nothing loaded to fire, as the body's last bag census counted (V402, `LiveBody._dry`): a
+    # shooter's fight gives its shots up at once, as after `SHOT_GIVE_UP` silences. The server
+    # refuses every shot "no ammo", and a dry hunter stood up to 14 s at range pressing Auto
+    # Shot before it gave up and walked in: 24 of the hive's 42 hunters were dry on 7 Oct.
+    dry: bool = field(default=False, init=False)
     # Whether the weapon is the broken thing, as last read (`disarmed`, V393): `None` until a
     # reading could tell.
     disarmed_seen: bool | None = field(default=None, init=False)
@@ -769,6 +789,9 @@ class Fight:
     # cost, until its swing (`NEXT_SWING_HOLD_S`): what else is pressed leaves that much.
     _dotted: dict[tuple, float] = field(default_factory=dict, init=False)
     _dot_guid: object = field(default=None, init=False)
+    # A shooter's backing off out of its dead zone this fight (V404): how many times, and when.
+    _dead_zone_steps: int = field(default=0, init=False)
+    _dead_zone_at: float = field(default=-math.inf, init=False)
     _queued: dict[int, tuple[float, int]] = field(default_factory=dict, init=False)
 
     # -- the skill -----------------------------------------------------------
@@ -880,8 +903,9 @@ class Fight:
         self.detail = ""
         self._last_use = {}
         self._saved_at = None
-        self._shooting_at, self._shots_silent, self._no_shots = None, 0, False
+        self._shooting_at, self._shots_silent, self._no_shots = None, 0, bool(self.dry)
         self._wanding = False
+        self._dead_zone_steps, self._dead_zone_at = 0, -math.inf
         # The damage over time a fight just ended by a hold left on the unit fought is on it
         # still when the next fight takes it back (V395).
         self._dotted = self._dotted if self._after_hold else {}
@@ -1218,6 +1242,15 @@ class Fight:
                 self.detail = (f"closed {self.closed} times over {self._approach_s:.0f}s and "
                                "never came within reach; cannot reach it")
                 return Fought.UNREACHABLE
+
+            # A shooter at hand with a unit not attacking it - its pet holds it, it runs - backs
+            # out of the dead zone to shoot (V404).
+            if self._dead_zone_due(profile, v):
+                self._leave_dead_zone()
+                if self._input_refused:
+                    return Fought.REFUSED
+                time.sleep(pace(self.hid, 0.2))
+                continue
 
             # A second attacker held off at hand too (V395): a rogue's Gouge, a druid's
             # Entangling Roots on one still coming.
@@ -1853,8 +1886,14 @@ class Fight:
                 or not isinstance(pool, (int, float)) or pool <= 0):
             return self.disarmed_seen
         profile = self.profile or for_class(values.get("char.class_id"), values.get("char.race_id"))
+        # The weapon a class fights with (V402): a shooter's is its ranged one, whose repeating
+        # shot (Auto Shot) the client greys out when it is broken; its melee blows are what it
+        # strikes with at hand, not what tells. 26 of the hive's 42 hunters had the ranged
+        # weapon broken on 7 Oct, 25 the melee one.
+        shooter = profile.shooter and not profile.caster
         paid = [a for a in profile.abilities
-                if _blow_name(a) in PLAIN_BLOWS and power * pool >= a.mana]
+                if (repeats(a) if shooter else _blow_name(a) in PLAIN_BLOWS)
+                and power * pool >= a.mana]
         if paid:
             # A stance's page (a warrior's 73-84) is the main bar's twelve keys.
             self.disarmed_seen = not any(usable & (1 << ((a.slot - 1) % 12)) for a in paid)
@@ -1862,17 +1901,21 @@ class Fight:
 
     def buff_up(self) -> int:
         """Out of combat, a caster's lasting buffs that are due (Frost Armor, Arcane
-        Intellect), each only with `BUFF_UP_RESERVE` of the mana left after it (V176).
-        How many were pressed; nothing for a class that is not a caster."""
+        Intellect), each only with `BUFF_UP_RESERVE` of the mana left after it (V176), and
+        every class's aura not yet up (V404: a hunter's Aspect of the Hawk, a paladin's
+        Devotion Aura), which a fight's first look pressed before at the cost of a global
+        cooldown. How many were pressed."""
         pressed = 0
         profile = self.profile               # the bar's census: without it, nothing is read
-        if profile is None or not profile.caster:
+        if profile is None:
             return 0
         v = self.read()
         if v is None or v.get("vitals.combat") is not False:
             return 0
         pool = v.get("vitals.power_max")
-        for buff in (*profile.by_role(Role.AURA), *profile.by_role(Role.BUFF)):
+        rows = ((*profile.by_role(Role.AURA), *profile.by_role(Role.BUFF)) if profile.caster
+                else profile.by_role(Role.AURA))
+        for buff in rows:
             if not buff.lasting:
                 continue
             last = self._lasting.get(buff.name)
@@ -1951,6 +1994,45 @@ class Fight:
         self._no_shots = self._shots_silent >= SHOT_GIVE_UP
         event("fight.shots_silent", data={"times": self._shots_silent,
                                           "given_up": self._no_shots})
+
+    def _dead_zone_due(self, profile: CombatProfile, values: dict) -> bool:
+        """Whether a shooter (`CombatProfile.shooter`, no caster) backs out of its shot's dead
+        zone now (V404): in a fight, the unit at hand (the strip's ten yards) and not attacking
+        it - a pet holds it, it runs or is held - with no second attacker, its repeating shot
+        usable and not given up this fight, at most `DEAD_ZONE_STEPS` times a fight and
+        `DEAD_ZONE_AGAIN_S` apart. A unit attacking it follows faster than a walk backwards:
+        that one is fought at hand (Raptor Strike, Wing Clip)."""
+        now = time.monotonic()
+        if (not profile.shooter or profile.caster or self._no_shots
+                or values.get("vitals.combat") is not True or values.get("bars.casting") is True
+                or values.get("target.in_melee") is not True
+                or values.get("target.attacking_me") is not False
+                or (values.get("combat.attackers") or 0) >= 2
+                or self._dead_zone_steps >= DEAD_ZONE_STEPS
+                or now - self._dead_zone_at < DEAD_ZONE_AGAIN_S):
+            return False
+        hp = values.get("target.hp")
+        if not isinstance(hp, (int, float)) or hp <= DEAD_HP:
+            return False
+        usable = values.get("bars.usable")
+        return any(usable is None or bool(usable & (1 << (a.slot - 1)))
+                   for a in profile.by_role(Role.ATTACK) if repeats(a))
+
+    def _leave_dead_zone(self) -> None:
+        """Back off out of the dead zone, still facing the unit (V404), as a caster steps clear
+        of a root (`STEP_CLEAR_S`); the repeating shot is pressed again from there."""
+        self._dead_zone_steps += 1
+        self._dead_zone_at = time.monotonic()
+        event("fight.dead_zone", data={"key": "s", "seconds": STEP_CLEAR_S,
+                                       "times": self._dead_zone_steps})
+        if not self._back_off(STEP_CLEAR_S):
+            self._input_refused = True
+            self.detail = "dead-zone step input refused"
+        self._shooting_at = None
+
+    def _back_off(self, seconds: float) -> bool:
+        """A walk backwards this long, still facing the unit: the client's S key."""
+        return bool(self.hid.hold("s", seconds))
 
     def _dotted_now(self, attack: Ability, now: float) -> bool:
         """Damage over time of this attack's already on the selected unit (V360)."""
@@ -2657,6 +2739,26 @@ class Fight:
             if pressable(buff) and affordable(buff) and (last is None or now - last >= buff.every_s):
                 if self._press(buff) and buff.lasting:
                     self._lasting[buff.name] = now
+                return
+
+        # 2b. Open on the unit (V404): its mark (Hunter's Mark) once while it lasts, on a unit
+        #     with most of its health left; and a slow (Concussive Shot) at one coming for the
+        #     character and not yet at hand, not again while it lasts. Neither is pressed out of
+        #     its reach (`bars.out_range`).
+        self._dot_guid = values.get("target.guid")
+        far = out if isinstance(out, int) else 0
+        coming = (values.get("target.attacking_me") is True
+                  and values.get("target.in_melee") is False)
+        for row, wanted, lasts in (
+                *((r, isinstance(target_hp, (int, float)) and target_hp >= MARK_ABOVE,
+                   r.every_s or MARK_S) for r in profile.by_role(Role.MARK)),
+                *((r, coming, r.holds_s or SLOW_S) for r in profile.by_role(Role.SLOW))):
+            if (wanted and not far & (1 << (row.slot - 1))
+                    and self._dotted.get((self._dot_guid, row.name), -math.inf) <= now
+                    and pressable(row) and affordable(row) and self._press(row)):
+                self._dotted[(self._dot_guid, row.name)] = now + lasts
+                event("fight." + row.role.value, data={"slot": row.slot, "name": row.name,
+                                                       "target_hp": target_hp})
                 return
 
         # 3. Swing. A toggle is pressed at most once and only before anything has landed,

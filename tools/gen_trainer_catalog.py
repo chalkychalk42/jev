@@ -58,6 +58,11 @@ not take (V394: a druid's Claw, a rogue's Sap, a warrior's Shield Block).
                  beside a first effect of another kind (Earth Shock's interrupt, V361)
     dot          damage over time on the enemy (aura 3), not channelled, no combo point
                  given or spent: Corruption, Shadow Word: Pain, Serpent Sting, Rend (V361)
+    mark         an aura on the enemy that raises the attack power of whoever attacks it
+                 (auras 127 and 165: Hunter's Mark, V404), put on a unit once as a fight opens
+    slow         the enemy slowed (aura 33) as the first effect, with no damage beside it and
+                 nothing that holds it, cast with mana and not channelled (Concussive Shot,
+                 V404): pressed at a unit coming for the character
     root         everything round the caster held in place (aura 26: Frost Nova)
     conjure      an item made for the caster (effect 24: Conjure Water, Conjure Food), and
                  which item (`creates`)
@@ -139,6 +144,9 @@ AURAS_GUARD = (47, 49, 51)
 AURA_DAMAGE_TAKEN = 87
 AURA_DUMMY = 4
 PROC_TAKEN_MELEE = 0x8 | 0x20
+# An enemy marked: whoever attacks it hits harder (V404), the ranged and melee attack power
+# its attackers gain (`SPELL_AURA_RANGED_ATTACK_POWER_ATTACKER_BONUS`, `..._MELEE_...`).
+AURAS_MARK = (127, 165)
 # A wand's shot (V397): a weapon blow that asks for a wand (item class 2, subclass 19) and
 # repeats until stopped (the server's `SPELL_ATTR_EX2_AUTOREPEAT_FLAG`).
 ITEM_CLASS_WEAPON = 2
@@ -293,6 +301,19 @@ def spell_facts(db: sqlite3.Connection, spell_id: int) -> dict | None:
         # Damage beside a first effect of another kind, cast with mana: Earth Shock (V361).
         # A rage or energy interrupt (Kick, Shield Bash) is the interrupt's, not damage's.
         facts["role"] = "strike"
+    elif any(e == EFFECT_APPLY_AURA and a in AURAS_MARK and t == TARGET_ENEMY
+             for e, a, t in effects):
+        # A unit marked as the fight opens, not again while it lasts (V404): Hunter's Mark.
+        facts["role"] = "mark"
+        facts["every_s"] = duration_s or 0.0
+    elif (effect == EFFECT_APPLY_AURA and aura == AURA_SLOW and target == TARGET_ENEMY
+          and not creature_type and not channel and power_type == POWER_MANA
+          and not auras & set(AURAS_HOLD)
+          and EFFECT_SCHOOL_DAMAGE not in (effect2, effect3)
+          and not set(EFFECTS_WEAPON) & {effect2, effect3}):
+        # A unit coming for the character slowed, nothing else (V404): Concussive Shot.
+        facts["role"] = "slow"
+        facts["holds_s"] = duration_s or 0.0
     elif AURA_ROOT in auras and target != TARGET_ENEMY:
         facts["role"] = "root"
     elif (effect == EFFECT_SCHOOL_DAMAGE and target == TARGET_CASTER_AREA

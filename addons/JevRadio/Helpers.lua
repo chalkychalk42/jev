@@ -469,6 +469,26 @@ local function choiceIsWand(i)
     return select(9, GetItemInfo(link)) == "INVTYPE_RANGEDRIGHT"
 end
 
+-- A hunter takes a bow, gun or crossbow it can use before any other reward (V403): its ranged
+-- weapon is the weapon it fights with, and every one of the hive's 42 hunters at 9-13 still had
+-- the one it was created with (7 Oct). A bow's equip slot is INVTYPE_RANGED, a gun's and a
+-- crossbow's INVTYPE_RANGEDRIGHT (a wand's too, which a hunter cannot use: not usable).
+local SHOOTER_CLASSES = { HUNTER = true }
+
+local function shooter()
+    if UnitClass == nil then return false end
+    local _, classFile = UnitClass("player")
+    return SHOOTER_CLASSES[classFile or ""] == true
+end
+
+local function choiceIsRanged(i)
+    if GetQuestItemLink == nil or GetItemInfo == nil then return false end
+    local link = GetQuestItemLink("choice", i)
+    if link == nil then return false end
+    local slot = select(9, GetItemInfo(link))
+    return slot == "INVTYPE_RANGED" or slot == "INVTYPE_RANGEDRIGHT"
+end
+
 local function questChoiceShown()
     local panel = QuestFrameRewardPanel
     return panel ~= nil and panel.IsVisible ~= nil and panel:IsVisible() and panel or nil
@@ -481,11 +501,13 @@ local function QUEST_CHOICE(what)
     if panel == nil or n < 1 then return nil end
     if what == "made" then return (panel.itemChoice or 0) > 0 end
     local best, bestUsable, bestQuality = nil, -1, -1
-    local wanting = wandless()
+    local wanting, shooting = wandless(), shooter()
     for i = 1, n do
         local _, _, _, quality, usable = GetQuestItemInfo("choice", i)
         usable = usable and 1 or 0
-        if usable == 1 and wanting and choiceIsWand(i) then usable = 2 end
+        if usable == 1 and ((wanting and choiceIsWand(i)) or (shooting and choiceIsRanged(i))) then
+            usable = 2
+        end
         quality = quality or 0
         if usable > bestUsable or (usable == bestUsable and quality > bestQuality) then
             best, bestUsable, bestQuality = i, usable, quality
