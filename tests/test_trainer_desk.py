@@ -401,7 +401,8 @@ def test_a_window_shut_after_its_list_was_read_ends_the_visit():
 def test_two_spells_for_one_free_slot_buy_the_one_that_fights():
     """Level 12, one slot left on the bar and 50 silver: Frost Nova is bought and goes
     there, and Dampen Magic is not, which the bar's placing would have put there in Frost
-    Nova's place (a long buff is handed a free slot before a root)."""
+    Nova's place (a long buff was handed a free slot before a root). Polymorph is bought for
+    Conjure Food's slot (V394), and Conjure Food 2 with it is not."""
     known = frozenset({6603, 143, 168, 1459, 205, 5504, 2136, 587, 5143})
     bar = {1: 6603, 2: 143, 3: 168, 4: 1459, 5: 205, 6: 5504, 7: 2136, 8: 587, 9: 5143,
            10: 0, 11: None, 12: None}
@@ -412,7 +413,7 @@ def test_two_spells_for_one_free_slot_buy_the_one_that_fights():
     trained = TrainerDesk(window, window.read, window.visit, clock=lambda: window.now,
                           sleep=window.sleep, trainer=ZALDIMAR, known=known, bar=bar)
     assert trained.run() is Trained.DONE, trained.detail
-    assert window.bought == [122, 145, 5505, 7300, 597], "Frost Nova first, no Dampen Magic"
+    assert window.bought == [122, 118, 145, 5505, 7300], "Frost Nova first, no Dampen Magic"
 
 
 def test_a_row_swapped_under_the_same_list_is_named_again_before_its_click():

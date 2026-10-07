@@ -43,7 +43,8 @@ class Role(StrEnum):
     LAST_RESORT = "last_resort"    # a full heal on a long cooldown, at the very end
     CONJURE = "conjure"            # makes an item: pressed out of combat, never in a fight
     ROOT = "root"                  # holds what is round the caster: then a step clear
-    CC = "cc"                      # holds the selected unit out of the fight: Polymorph (V287)
+    CC = "cc"                      # holds one attacker out of the fight: Polymorph (V287, V395)
+    GUARD = "guard"                # holds off a crowd's blows: Evasion, Psychic Scream (V396)
 
 
 # -- policy -------------------------------------------------------------------------
@@ -169,6 +170,13 @@ class Ability:
     spell_id: int | None = None
     # The item a conjure makes (Conjured Water, 5350).
     creates: int | None = None
+    # A hold's or a guard's (V395, V396): how long it lasts, the creature types it takes (the
+    # spell's TargetCreatureType mask, 0 for any), whether it only pins its unit where it
+    # stands (a root) and whether it reaches the enemies round the character (a scream).
+    holds_s: float = 0.0
+    creatures: int = 0
+    pins: bool = False
+    around: bool = False
 
     @property
     def self_cast(self) -> bool:
@@ -365,6 +373,10 @@ TRAINED_ROLES = {"attack": Role.ATTACK, "strike": Role.ATTACK, "heal": Role.HEAL
                  "short_buff": Role.BUFF, "long_buff": Role.BUFF, "aura": Role.AURA,
                  "save": Role.SAVE, "stun": Role.STUN, "last_resort": Role.LAST_RESORT,
                  "conjure": Role.CONJURE, "root": Role.ROOT, "cc": Role.CC,
+                 "guard": Role.GUARD,
+                 # A wand's shot: an attack from range that repeats (V397), a caster's when its
+                 # mana is spent or its unit nearly dead.
+                 "wand": Role.ATTACK,
                  # Damage to every enemy round the character: an attack the fight presses with
                  # more than one at hand (V277).
                  "area": Role.ATTACK,
@@ -422,7 +434,8 @@ def from_bar(bar: dict[int, int | None] | None, base: CombatProfile) -> CombatPr
                             every_s=(float("inf") if role is Role.AURA else facts.every_s),
                             toggle=facts.role == "attack", friendly=facts.self_cast,
                             lasting=lasting, spends=facts.spends, spell_id=facts.spell_id,
-                            creates=facts.creates))
+                            creates=facts.creates, holds_s=facts.holds_s,
+                            creatures=facts.creatures, pins=facts.pins, around=facts.around))
     return CombatProfile(name=base.name, abilities=tuple(rows), caster=base.caster)
 
 

@@ -1679,8 +1679,9 @@ def test_training_visits_the_trainer_once_a_level_and_puts_the_spells_on_the_bar
     assert handed["trainer"].name == "Brother Wilhelm" and handed["race_id"] == 1
     assert handed["known"] == {6603, 20154, 635} and handed["bar"] == bar
     assert any("Hammer of Justice 1" in line and "Judgement" in line for line in said)
+    # The fight's lines before the blessing (V394).
     assert [(p.spell_id, p.slot) for p in plans[0]] == [
-        (639, 3), (465, 4), (19740, 5), (20271, 6), (498, 7), (853, 8)]
+        (639, 3), (465, 4), (20271, 5), (498, 6), (853, 7), (19740, 8)]
     assert not b.policy_context.can_train(state), "a second visit at the same level"
 
 

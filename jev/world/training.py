@@ -18,12 +18,22 @@ here, by role, so a class needs no list of its own:
 - one long buff per kind of aura it applies (a blessing of attack power, one of mana);
 - every strike;
 - every conjure (a caster's water and food, V166), and a root (Frost Nova, V169);
+- every hold (`cc`: Polymorph, Fear, Gouge, V395) and every guard (Evasion, Psychic Scream,
+  V396), and a wand's shot once a wand is worn, over the melee toggle (V397);
 - no new heal and no new short buff: the starting bar has its heal and its seal already,
   and a second seal would only replace the first.
 
+The fight's lines take the twelve slots first (V394): a free slot goes to what is pressed in
+a fight before what is kept up or made between fights, and a full bar gives a fight line
+waiting the slot of what no fight presses - first a spell cast only in a form the character
+never takes (a druid's Maul), then a conjure that makes no drink, then the newest long buff
+kept up between fights (ten minutes or more: not Battle Shout); a conjure of water never, a
+caster's mana being its damage. Nothing presses a spell that is not on the bar: a buff or a
+conjure given up is not cast.
+
 What is worth buying follows from the same rules (V237): a spell whose role the fight code
 presses, which would go on the bar - a new rank where the old one is, or a new spell the
-bar takes. Polymorph, a dispel, Slow Fall or a second save is never bought, and a trainer
+bar takes. A dispel, Slow Fall or a second save is never bought, and a trainer
 is not walked to, nor copper kept back, for one. Among the spells worth buying, what acts
 in a fight comes before what is kept up or made between fights (`buy_order`).
 """
@@ -50,10 +60,12 @@ HORDE_RACES = frozenset({2, 5, 6, 8, 10})
 MAX_TRAINER_YARDS = 1500.0
 TRAINER_REACH_SPELLS = 2
 
-# Roles worth a new bar slot, in the order free slots are handed out.
+# Roles worth a new bar slot, in the order free slots are handed out: what a fight presses
+# first (V394). Of the 30 hive mages at level 12 and over on 7 Oct, 28 had full bars, with
+# Conjure Water, Conjure Food, Frost Armor and Arcane Intellect, and none Polymorph.
 ONE_OF_EACH = ("aura", "save", "stun", "last_resort")
-NEW_LINE_ROLES = ("aura", "long_buff", "strike", "dot", "save", "stun", "last_resort",
-                  "conjure", "root", "cc", "area")
+NEW_LINE_ROLES = ("aura", "strike", "dot", "save", "guard", "stun", "last_resort", "root",
+                  "cc", "area", "wand", "long_buff", "conjure")
 BAR_SLOTS = 12
 
 # The roles the fight code presses (`jev.world.combat.TRAINED_ROLES`), in the order a spell
@@ -65,15 +77,20 @@ BAR_SLOTS = 12
 # fight. The mage with a spell's money a visit bought Conjure Water before Frostbolt at
 # level 5 and Conjure Food before Fire Blast at 6, in the stock window's order.
 # Damage over time is damage (V361): Corruption, Shadow Word: Pain, Serpent Sting, Rend.
-FIGHT_ROLES = ("strike", "dot", "short_buff", "root", "stun", "cc", "area", "save",
-               "last_resort", "heal", "aura", "attack")
+# A guard is pressed in a fight against more than one or one being lost (V396), a wand's shot
+# when the mana is spent or the unit nearly dead (V397).
+FIGHT_ROLES = ("strike", "dot", "short_buff", "root", "stun", "cc", "guard", "area", "save",
+               "last_resort", "heal", "aura", "attack", "wand")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
-# What holds more than one attacker, bought before the oldest gap (V242). Polymorph holds
-# one and is bought by its level, as the strikes are (V287).
-CONTROL_ROLES = ("root", "stun")
-# A line a full bar gives up to a new fight line ranked above it (`placements`, V287).
-DISPLACED_ROLES = ("cc",)
+# What holds off more than one attacker, bought before the oldest gap (V242): a root, a stun,
+# and a guard (V396) - Psychic Scream scatters what is round the priest. A hold takes one,
+# and is bought by its level, as the strikes are (V287).
+CONTROL_ROLES = ("root", "stun", "guard")
+# A long buff kept up between fights, which a full bar gives up to a fight line (V394): one
+# lasting ten minutes or more, pressed again five seconds before it lapses (Arcane Intellect,
+# Inner Fire). A shorter one is pressed in the fight (Battle Shout, Blessing of Might).
+KEPT_UP_S = 595.0
 
 
 @dataclass(frozen=True)
@@ -95,6 +112,15 @@ class SpellFacts:
     # A trainer's spell that teaches others (V359): Judgement is sold as 10321, which teaches
     # 20271 and a Seal of Righteousness; these facts are the first one's.
     teaches: tuple[int, ...] = ()
+    # A hold's or a guard's (V395, V396): how long it lasts, the creature types it takes (0:
+    # any), a root that pins its unit where it stands, a fear round the caster.
+    holds_s: float = 0.0
+    creatures: int = 0
+    pins: bool = False
+    around: bool = False
+    # Cast only in a form or stance the character does not take (V394): a druid's Claw, a
+    # rogue's Sap, a warrior's Shield Block.
+    form: bool = False
 
     @property
     def self_cast(self) -> bool:
@@ -149,7 +175,10 @@ def spell(spell_id: int | None, facts: dict | None = None) -> SpellFacts | None:
                       cooldown_s=float(raw.get("cooldown_s", 0.0)),
                       target=raw.get("target", "other"), spends=bool(raw.get("spends")),
                       aura=raw.get("aura"), slows=bool(raw.get("slows")),
-                      creates=raw.get("creates"), teaches=tuple(raw.get("teaches") or ()))
+                      creates=raw.get("creates"), teaches=tuple(raw.get("teaches") or ()),
+                      holds_s=float(raw.get("holds_s", 0.0)),
+                      creatures=int(raw.get("creatures") or 0), pins=bool(raw.get("pins")),
+                      around=bool(raw.get("around")), form=bool(raw.get("form")))
 
 
 def side(race_id: int | None) -> str | None:
@@ -219,8 +248,11 @@ def worth_buying(spell_id: int, known: Iterable[int], bar: Mapping[int, int | No
     if spell_id not in after:
         return False
     lines = {spell(s, facts).name for s in after}
+    # A fight line may take what a buff or a conjure would have had (V394), nothing else.
+    fighting = facts_of.role in FIGHT_ROLES
     return all(spell(p.spell_id, facts).name in lines
-               for p in placements(bar, known, facts=facts))
+               for p in placements(bar, known, facts=facts)
+               if not (fighting and spell(p.spell_id, facts).role in BETWEEN_ROLES))
 
 
 def shopping(offers: Iterable[Offer], known: Iterable[int], bar: Mapping[int, int | None], *,
@@ -426,11 +458,12 @@ def _lines(spells: Iterable[int], facts: dict | None) -> dict[str, SpellFacts]:
 
 
 def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
-               facts: dict | None = None) -> list[Placement]:
+               facts: dict | None = None, wand: bool = False) -> list[Placement]:
     """What to drag from the spellbook onto the main bar, in order.
 
     `bar` is each main-bar slot's spell id, 0 for an empty slot and `None` for an item or
-    an unread slot (never overwritten). `known` is the spellbook's spell ids.
+    an unread slot (never overwritten). `known` is the spellbook's spell ids. `wand`: one is
+    worn, and its shot goes over the melee toggle (V397); without one it goes nowhere.
     """
     lines = _lines(known, facts)
     out: list[Placement] = []
@@ -456,7 +489,7 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
     for f in sorted(lines.values(), key=lambda f: (NEW_LINE_ROLES.index(f.role)
                                                    if f.role in NEW_LINE_ROLES else 99,
                                                    first.get(f.name, 0), f.spell_id)):
-        if f.role not in NEW_LINE_ROLES or f.name in on_bar:
+        if f.role not in NEW_LINE_ROLES or f.name in on_bar or (f.role == "wand" and not wand):
             continue
         if f.role in ONE_OF_EACH and (f.role in roles_on_bar
                                       or any(w.role == f.role for w in wanted)):
@@ -466,23 +499,75 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
                                              for w in wanted)):
             continue
         wanted.append(f)
+    # A wand's shot over the melee toggle (V397): a caster with a wand shoots where it would
+    # have swung its staff.
+    shot = next((f for f in wanted if f.role == "wand"), None)
+    toggle = next(((slot, f) for slot, f in _on_bar_slots(bar, facts) if f.role == "attack"
+                   and not any(p.slot == slot for p in out)), None)
+    if shot is not None and toggle is not None:
+        out.append(Placement(shot.spell_id, toggle[0], toggle[1].spell_id))
+        wanted.remove(shot)
     free = [(slot, 0) for slot in range(1, BAR_SLOTS + 1) if bar.get(slot) == 0] + spare
     out.extend(Placement(f.spell_id, slot, old)
                for f, (slot, old) in zip(wanted, free, strict=False))
-    # A full bar gives Polymorph's place to a new fight line ranked above it (V287): at 10 a
-    # new mage's Frost Nova goes over the Polymorph its bar took at 8, where the full bar had
-    # kept Frost Nova out and the mage bought Conjure Water 2 instead. Nothing else is moved:
-    # a long buff that ranks above a root for a free slot does not push one off (V237).
-    waiting = [f for f in wanted[len(free):] if f.role in FIGHT_ROLES]
-    rank = {role: i for i, role in enumerate(NEW_LINE_ROLES)}
-    held = [(slot, f) for slot, f in _on_bar_slots(bar, facts)
-            if f.role in DISPLACED_ROLES and not any(p.slot == slot for p in out)]
-    for f in waiting:
-        if not held or rank[held[0][1].role] <= rank[f.role]:
-            break
-        slot, old = held.pop(0)
+    # A full bar gives a fight line waiting the slot of a line nothing presses in a fight
+    # (V394), the least needed first (`_yield_order`): at 10 a mage's Frost Nova goes over
+    # Conjure Food, where since V287 it went over Polymorph. A conjure of water is kept.
+    # A line given up takes its new rank with it: Conjure Food 2 is not bought for a slot
+    # Polymorph is to have.
+    waiting = [f for f in wanted[len(free):] if f.role in FIGHT_ROLES and not f.form]
+    yielding = sorted(((slot, f) for slot, f in _on_bar_slots(bar, facts) if _yields(f)),
+                      key=lambda pair: _yield_order(pair[1], facts))
+    for f, (slot, old) in zip(waiting, yielding, strict=False):
+        out = [p for p in out if p.slot != slot]
         out.append(Placement(f.spell_id, slot, old.spell_id))
     return out
+
+
+def _yields(f: SpellFacts) -> bool:
+    """A line a full bar gives up to a fight line (V394): one cast only in a form the
+    character does not take (a druid's Maul, a warrior's Shield Block), which nothing can
+    press; a long buff kept up between fights (`KEPT_UP_S`); or a conjure that makes no drink
+    (food, a healthstone, a soulstone). Water is a caster's mana, and its rests are its
+    downtime."""
+    if f.form:
+        return True
+    if f.role == "long_buff":
+        return f.every_s >= KEPT_UP_S
+    if f.role != "conjure":
+        return False
+    from jev.world.vendor import consumable_role
+
+    return consumable_role(f.creates) not in ("drink", "both")
+
+
+def _yield_order(f: SpellFacts, facts: dict | None) -> tuple:
+    """Which given-up line goes first: one nothing can press, then a conjure, then a long
+    buff; of each the newest - by the level its first rank is taught at, a line a class
+    starts with (Frost Armor) the oldest - and of two as new, the later spell."""
+    return (not f.form, f.role != "conjure", -_rank_one_levels(facts).get(f.name, 0),
+            -f.spell_id)
+
+
+def _rank_one_levels(facts: dict | None) -> dict[str, int]:
+    """The level each line's first rank is taught at; a line whose first rank no trainer
+    teaches is a class's from the start."""
+    return _catalog_rank_one_levels() if facts is None else _find_rank_one_levels(facts)
+
+
+@cache
+def _catalog_rank_one_levels() -> dict[str, int]:
+    return _find_rank_one_levels(catalog())
+
+
+def _find_rank_one_levels(facts: dict) -> dict[str, int]:
+    first: dict[str, int] = {}
+    for offers in facts["offers"].values():
+        for o in offers:
+            raw = facts["spells"].get(str(o["spell"]))
+            if raw is not None and raw.get("rank", 0) <= 1:
+                first[raw["name"]] = min(first.get(raw["name"], o["level"]), o["level"])
+    return first
 
 
 def _on_bar_slots(bar: Mapping[int, int | None], facts: dict | None):
