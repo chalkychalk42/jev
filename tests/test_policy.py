@@ -683,3 +683,26 @@ def test_a_step_that_planned_no_route_waits_twice_as_long_each_time_in_a_row():
     context.step_moved("rib")
     assert context.step_stuck("rib", "no route", now + 5_000.0) == STEP_RETRY_MIN_S, \
         "a try that walked ends the run"
+
+
+def test_resurrection_sickness_holds_a_grinds_pulls_and_brings_services_forward():
+    """V379: sick after the Spirit Healer, the pulls of a grind or kill objective wait for the
+    sickness to end; a hand-in goes on, a repair of the get-up's 25% comes due at once, and a
+    clock set back holds nothing."""
+    from jev.coach import policy as pol
+    from jev.world.state_v1 import StepKind
+
+    ctx = pol.Context()
+    ctx.sick_until = 1000.0 + 240.0
+    assert ctx.sick(1000.0) == 240.0 and ctx.sick(1300.0) == 0.0
+    assert ctx.sick(1000.0 - 2 * pol.SICK_MAX_S) == 0.0, "a clock set back: none"
+    grind = type("N", (), {"kind": StepKind.GRIND})()
+    turnin = type("N", (), {"kind": StepKind.QUEST_TURNIN})()
+    state = type("S", (), {"t": 1000.0})()
+    held = pol.sick_wait(state, grind, ctx)
+    assert held is not None and held.rule == "wait.sick"
+    assert pol.sick_wait(state, turnin, ctx) is None, "a hand-in goes on"
+    assert pol.sick_wait(type("S", (), {"t": 1300.0})(), grind, ctx) is None, "ended"
+    restored = pol.Context()
+    restored.restore_purse({"sick_until": 1240.0})
+    assert restored.sick_until == 1240.0

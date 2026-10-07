@@ -266,7 +266,7 @@ def candidates(state: State, node: Node | None, context, floor) -> list:
     # taken or handed in where the character stands still is.
     # Nor while the step waits (`policy.step_wait`, V334): its grind, or a grind where the
     # character stands, is the walk that was refused.
-    if due or floor.rule.startswith("wait.step"):
+    if due or floor.rule.startswith(("wait.step", "wait.sick")):
         plans = [p for p in plans if p is floor
                  or p.decision.skill not in ("GRIND_UNTIL", "TRAVEL_TO")]
 

@@ -2616,7 +2616,7 @@ class LiveBody:
                 self._revived(None)
                 self.say(f"  up at the Spirit Healer: {unreached} corpse runs in a row did not "
                          "get up at the body")
-                self._wait_out_sickness()
+                self._note_sick()
                 return self._result(up, "up at the Spirit Healer; the body is out of reach")
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
         elif healer_camp is not None:
@@ -2637,7 +2637,7 @@ class LiveBody:
                     self.say("  up at the Spirit Healer; home is far from the guide's work: "
                              "walking on")
                     detail = "up at the Spirit Healer; walking on"
-                self._wait_out_sickness()
+                self._note_sick()
                 return self._result(up, detail)
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body, "
                      f"to get up {TRAP_RECLAIM_YARDS:.0f} yards short of it")
@@ -2649,7 +2649,7 @@ class LiveBody:
                 self.say("  up at the Spirit Healer: the body lies in a death camp" if died_there
                          else f"  up at the Spirit Healer: the body lies in a camp, "
                               f"{room:.0f} yards from a hostile spawn at best")
-                self._wait_out_sickness()
+                self._note_sick()
                 return self._result(up, "up at the Spirit Healer; the body lies in a camp")
             self.say(f"  the Spirit Healer did not raise us ({up.value}); back to the body")
         # Always short of the body. Whatever killed the character stands beside it, back at
@@ -2674,7 +2674,7 @@ class LiveBody:
             if up is Recovered.ALIVE:
                 self._revived(None)
                 self.say("  up at the Spirit Healer: nothing knows where the body lies")
-                self._wait_out_sickness()
+                self._note_sick()
                 return self._result(up, "up at the Spirit Healer; where the body lies is unknown")
             return self._result(outcome, f"{detail}; the Spirit Healer did not raise it "
                                          f"({up.value}: {self.recover.detail})")
@@ -2794,21 +2794,18 @@ class LiveBody:
         mine = getattr(getattr(state, "char", None), "level", None)
         return isinstance(killer, int) and isinstance(mine, int) and killer - mine >= OUTCLASSED_BY
 
-    def _wait_out_sickness(self) -> float:
-        """Stand still while resurrection sickness lasts, up to `SICKNESS_WAIT_MAX_S`; an
-        attack ends the wait, and the fight is the policy's. The seconds waited."""
-        level = (self._read() or {}).get("char.level")
-        if not isinstance(level, int) or level <= SICKNESS_FROM_LEVEL:
+    def _note_sick(self) -> float:
+        """Resurrection sickness after the Spirit Healer (V379): kept in the policy's context (and
+        the purse file) instead of stood out; services and hand-ins go on meanwhile and only the
+        pulls wait (`policy.sick_wait`). The seconds it lasts."""
+        sick = sickness_s((self._read() or {}).get("char.level"))
+        if sick <= 0.0:
             return 0.0
-        wait = min(60.0 * min(level - SICKNESS_FROM_LEVEL, 10), SICKNESS_WAIT_MAX_S)
-        self.say(f"  resurrection sickness: waiting {wait / 60:.0f} min before going on")
-        started = time.monotonic()
-        while time.monotonic() - started < wait:
-            self.checkpoint()
-            if (self._read() or {}).get("vitals.combat") is True:
-                break
-            time.sleep(1.0)
-        return time.monotonic() - started
+        self.policy_context.sick_until = time.time() + sick
+        self._save_purse()
+        self.say(f"  resurrection sickness: {sick / 60:.0f} min; services and hand-ins meanwhile, "
+                 f"no pulls until it ends")
+        return sick
 
     def _release(self, state) -> Result:
         # Released where it died: walks keep clear of the spot for a while
@@ -2913,6 +2910,15 @@ class LiveBody:
 
     def _wait(self, state) -> Result:
         return Result(SkillOutcome.SUCCEEDED)
+
+
+def sickness_s(level) -> float:
+    """The resurrection sickness a get-up at the Spirit Healer brings at `level`, in seconds:
+    none to level 10, a minute a level above ten, ten minutes at most (mangos-tbc
+    `Player::ResurrectPlayer`, `Death.SicknessLevel` 11); none for a level not read."""
+    if not isinstance(level, int) or isinstance(level, bool) or level <= SICKNESS_FROM_LEVEL:
+        return 0.0
+    return 60.0 * min(level - SICKNESS_FROM_LEVEL, 10)
 
 
 def reclaim_spot(body: tuple[float, float], short: tuple[float, float], spawns,

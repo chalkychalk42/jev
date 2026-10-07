@@ -113,6 +113,11 @@ STEP_WAIT_MAX_S = 7200.0
 # character ends the run. After V325 made refusals instant, bot 224's hunt that planned none
 # was armed again a median 0.6 s after the last ended, 204 times in a row, and bot 217's 124
 # (29 Sep 15:10-15:15).
+# The longest resurrection sickness lasts (level 20: ten minutes), so a sickness kept further
+# ahead than this is a clock set back, and none (V379).
+SICK_MAX_S = 600.0
+# While sick, a repair is due from this worst durability (V379): the get-up took 25% from all.
+SICK_REPAIR_BELOW = 0.9
 STEP_RETRY_MIN_S = 60.0
 STEP_RETRY_MAX_S = 1800.0
 # A death skill that failed - aborted or timed out - is armed again at once the first time,
@@ -186,6 +191,19 @@ class Context:
     # times in a row since it last succeeded (V322).
     service_failed_at: dict[str, float] = field(default_factory=dict)
     service_failures: dict[str, int] = field(default_factory=dict)
+
+    # Resurrection sickness after a Spirit Healer get-up, as wall time (V379): the character
+    # stood it out, up to five minutes (`SICKNESS_WAIT_MAX_S`), half of the hive's dead time (6 Oct
+    # 13:00-17:00: 74.6 of 148.2 h). Sickness matters only to a fight: meanwhile the services
+    # come due early (a repair the get-up's 25% made worth it, a sale, a trainer), hand-ins and
+    # walks go on, and only the pulls of a grind or a kill objective wait for it to end.
+    sick_until: float = 0.0
+
+    def sick(self, now: float) -> float:
+        """Seconds of resurrection sickness left at `now`; none past `SICK_MAX_S` ahead (a
+        wall clock set back) and none once it has ended."""
+        left = self.sick_until - now
+        return left if 0.0 < left <= SICK_MAX_S else 0.0
 
     def service_failed(self, skill: str, now: float) -> None:
         self.service_failed_at[skill] = now
@@ -420,7 +438,7 @@ class Context:
              "repair_unreachable_step", "supplies_unreachable_step", "bags_unreachable_step",
              "repair_unreachable_until", "supplies_unreachable_until", "bags_unreachable_until",
              "service_failed_at", "service_failures", "step_wait_until", "step_wait_why",
-             "step_failures")
+             "step_failures", "sick_until")
 
     def purse(self) -> dict:
         return {name: (dict(value) if isinstance(value := getattr(self, name), dict) else value)
@@ -429,7 +447,10 @@ class Context:
     def restore_purse(self, raw: dict) -> None:
         for name in self.PURSE:
             value = raw.get(name)
-            if name == "step_wait_why":
+            if name == "sick_until":
+                self.sick_until = (float(value) if isinstance(value, (int, float))
+                                   and not isinstance(value, bool) else 0.0)
+            elif name == "step_wait_why":
                 kept = value if isinstance(value, dict) else {}
                 self.step_wait_why = {str(k): v for k, v in kept.items() if isinstance(v, str)}
             elif name.startswith(("service_", "step_")):
@@ -750,6 +771,17 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
         due(Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "equipment is broken", 0.85,
                        ("dead", "combat"), service="repair"), True, "service.broken"))
 
+    # Sick after the Spirit Healer (V379): the minutes a pull must wait go to the services that
+    # would come due anyway, a repair of the get-up's 25% first.
+    sick = context is not None and context.sick(state.t) > 0.0
+    if (sick and can_repair and b.durability_min is not None
+            and b.durability_min < SICK_REPAIR_BELOW):
+        due(Plan(_d(Intent.SERVICE, "VENDOR_REPAIR", "resurrection sickness: repairing meanwhile",
+                       0.7, ("dead", "combat"), service="repair"), True, "service.sick_repair"))
+    if sick and context.can_train(state):
+        due(Plan(_d(Intent.SERVICE, "TRAIN_CLASS", "resurrection sickness: training meanwhile",
+                       0.6, ("dead", "combat"), service="train"), True, "service.sick_train"))
+
     if can_sell and not hurt and b.free is not None and b.free <= BAGS_LOW:
         due(Plan(_d(Intent.SERVICE, "BAG_MAKE_SPACE", "bags are nearly full",
                        0.75, ("dead", "combat"), service="bags"), True, "service.bags_full"))
@@ -989,8 +1021,22 @@ def decide(state: State, node: Node | None = None, *, context: Context | None = 
     if waiting is not None:
         return _derate(waiting) if _blind(state) else waiting
 
-    plan = step_wait(state, context) or _guide(state, node) or _fallback(state)
+    plan = (step_wait(state, context) or sick_wait(state, node, context) or _guide(state, node)
+            or _fallback(state))
     return _derate(plan) if _blind(state) else plan
+
+
+def sick_wait(state: State, node: Node | None, context: Context | None) -> Plan | None:
+    """Resurrection sickness (V379): a grind's or a kill objective's pulls wait for it to end;
+    every other step (a hand-in, an accept, a walk) and every service goes on."""
+    if context is None or node is None:
+        return None
+    left = context.sick(state.t)
+    if left <= 0.0 or node.kind not in (StepKind.GRIND, StepKind.DING_GATE,
+                                        StepKind.QUEST_OBJECTIVE):
+        return None
+    return Plan(_d(Intent.WAIT, None, f"resurrection sickness: no pulls for {left:.0f}s more",
+                   1.0), True, "wait.sick")
 
 
 def wants_teacher(plan: Plan) -> bool:
