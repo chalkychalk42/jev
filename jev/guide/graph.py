@@ -302,6 +302,13 @@ def rib_xp(rib: Node, level: int) -> float:
     return sum(kill_xp(level, m) for m in range(low, high + 1)) / (high - low + 1)
 
 
+def rib_pays(fit, level: int) -> dict[str, float]:
+    """What each rib of `fit` pays a character of `level`, by id: the rib choice's one measure
+    (`_best`, `_short`, and the least a wait elsewhere takes, V391), a kill's experience
+    (`rib_xp`)."""
+    return {r.id: rib_xp(r, level) for r in fit}
+
+
 def rib_fits(rib: Node, level: int) -> bool:
     """Do this rib's creatures suit a character of `level` (V323): none above
     `RIB_LEVELS_ABOVE` over it, and some worth experience to it."""
@@ -366,7 +373,7 @@ def _best(fit: list[Node], level: int, preferred: Node | None, near, key,
     with `key`, of those within `RIB_SPREAD_SHARE` and no more than `RIB_SPREAD_YARDS` further
     than the nearest of them, the one its `spread_rank` puts first; unplaced, `preferred`, else
     the best."""
-    pay = {r.id: rib_xp(r, level) for r in fit}
+    pay = rib_pays(fit, level)
     best = max(pay.values())
     good = [r for r in fit
             if pay[r.id] >= (RIB_XP_SHARE if key is None else RIB_SPREAD_SHARE) * best]
@@ -389,7 +396,7 @@ def _best(fit: list[Node], level: int, preferred: Node | None, near, key,
 def _short(fit: list[Node], level: int, near, scale) -> Node | None:
     """Of ribs that fit: the nearest of those paying within `RIB_XP_SHARE` of the best a kill and
     no further than `SHORT_RIB_YARDS` (V330); `None` when none is that near."""
-    pay = {r.id: rib_xp(r, level) for r in fit}
+    pay = rib_pays(fit, level)
     best = max(pay.values())
     close = [r for r in fit if r.pos is not None and pay[r.id] >= RIB_XP_SHARE * best
              and (scale is None or _yards(r.pos, near, scale) <= SHORT_RIB_YARDS)]

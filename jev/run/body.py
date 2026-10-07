@@ -2623,9 +2623,11 @@ class LiveBody:
                      if soon is not None else memory.died(map_id, at, level=level, who=who))
             if soon is not None:
                 soon()
-            if (death.camp(time.time())
-                    or memory.camp_at(map_id, at, time.time(), level) is not None):
-                self.policy_context.camp_left(map_id, at[0], at[1])
+            now = time.time()
+            camp = death if death.camp(now) else memory.camp_at(map_id, at, now, level)
+            if camp is not None:
+                # With the camp's end: the rib it lies on is barred until then (V391).
+                self.policy_context.camp_left(map_id, at[0], at[1], until=camp.camp_until)
                 self.say("  died in a death camp: left once up")
         except Exception as exc:                # the release is made: a record never undoes it
             self.say(f"  the death was not kept: {type(exc).__name__}: {exc}")

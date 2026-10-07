@@ -471,7 +471,9 @@ class Supervisor:
         # Give the tracker's on_fail edge first refusal; stop only if it cannot rejoin.
         if exhausted and self.runtime.tracker.step_id == exhausted[0][0]:
             fail_over = getattr(self.runtime, "fail_over", None)
-            if fail_over is not None and fail_over(exhausted[0][1], exhausted[1] or ""):
+            # A rib that waits on its camp is not left for it (V391): the run goes on, waiting.
+            if fail_over is not None and fail_over(exhausted[0][1], exhausted[1] or "",
+                                                   camp=camped):
                 failed_over = True
                 self.say(f"{exhausted[0][1]} out of attempts on {exhausted[0][0]}; "
                          f"failed over to {self.runtime.tracker.step_id}")

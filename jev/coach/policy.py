@@ -536,9 +536,12 @@ class Context:
     # went back through it (the hive, 28 Sep 12:15-12:23).
     death_camp: tuple[int, float, float] | None = None
     leaving_until: float | None = None
+    # When that camp ends, as wall time (`Danger.camp_until`): the rib it lies on is barred until
+    # then (V391); `None`, not said.
+    death_camp_until: float | None = None
 
-    def camp_left(self, map_id: int, x: float, y: float) -> None:
-        self.death_camp = (map_id, x, y)
+    def camp_left(self, map_id: int, x: float, y: float, until: float | None = None) -> None:
+        self.death_camp, self.death_camp_until = (map_id, x, y), until
 
     def leaving(self, now: float) -> bool:
         return self.leaving_until is not None and now < self.leaving_until

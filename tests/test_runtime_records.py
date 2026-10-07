@@ -485,7 +485,7 @@ def test_a_barred_rib_that_suits_comes_before_an_unbarred_one_above(tmp_path):
                             mob_levels=(7, 8), pos=(0.5, 0.5), skills=("GRIND_UNTIL",)))
     rt = ClientRuntime("c", g.model_copy(update={"nodes": nodes}),
                        ScriptedSource([held(0, 3), held(12, 3)]), Recorder(tmp_path),
-                       start_retried=frozenset({"rib-bar:rib@3"}))
+                       start_retried=frozenset({"rib-bar:rib@3~1800"}))
     rt.tick(choose=False)
     rt.tick(choose=False)
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib", "turnin")
@@ -1329,7 +1329,7 @@ def test_a_rib_that_earns_nothing_goes_back_to_the_spine_not_round_again(tmp_pat
     rt.tick(choose=False)
     assert (rt.tracker.step_id, rt.tracker.memory.rejoin_to) == ("rib_b", "gated")
     assert rt.tracker.memory.level_at_entry == 7, "still the accept's level"
-    assert "rib-bar:rib_a@6" in rt._retried
+    assert "rib_a" in rt._barred(6)
     assert rt.expire_step()
     rt.tick(choose=False)
     assert rt.tracker.step_id == "rib_c", "never back to the rib that failed"
@@ -1354,7 +1354,7 @@ def test_a_ribs_grind_out_of_attempts_rejoins_the_spine_rather_than_stopping_the
     rt.tick(choose=False)
     assert rt.tracker.step_id == "rib"
     assert rt.fail_over("GRIND_UNTIL", "walked the whole disk and found nothing to fight")
-    assert rt.tracker.step_id == "turnin" and "rib-bar:rib@3" in rt._retried
+    assert rt.tracker.step_id == "turnin" and "rib" in rt._barred(3)
 
 
 def test_a_death_camp_on_a_rib_never_sends_the_next_death_back_to_it(tmp_path):
@@ -1401,7 +1401,7 @@ def test_a_ribs_bar_is_lifted_when_the_level_rises(tmp_path):
     rt.tick(choose=False)
     rt.expire_step()
     rt.tick(choose=False)
-    assert "rib-bar:rib_a@6" in rt._retried
+    assert "rib_a" in rt._barred(6)
     rt.tick(choose=False)
     assert not any(r.startswith("rib-bar:") for r in rt._retried)
 
@@ -1515,7 +1515,7 @@ def test_a_wait_elsewhere_takes_its_rib_as_every_other_rib_choice_does(tmp_path)
     rt.policy_context.step_waits("kill", 4000.0, "camp", 1000.0)
     rt.tick(choose=False)
     assert rt.tracker.step_id == "rib_mid"
-    barred = _elsewhere(tmp_path, start_retried=frozenset({"rib-bar:rib_near@5"}))
+    barred = _elsewhere(tmp_path, start_retried=frozenset({"rib-bar:rib_near@5~4000"}))
     barred.policy_context.step_waits("kill", 4000.0, "camp", 1000.0)
     barred.tick(choose=False)
     assert barred.tracker.step_id == "rib_mid", "the barred rib after the others"
