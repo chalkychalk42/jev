@@ -2668,7 +2668,9 @@ class LiveBody:
         money = values.get("bags.money_copper")
         spare = (money - (floor - owned) // AMMO_STACK * price - reserve
                  if isinstance(money, int) else 0)
-        fill = min(AMMO_DESIRED, floor + max(0, spare // price) * AMMO_STACK)
+        # A stack short of what the purse would pay: the rounds counted at the census may have
+        # been fired since, and a purchase the reserve stops ends the visit "too poor".
+        fill = min(AMMO_DESIRED, floor + max(0, spare // price - 1) * AMMO_STACK)
         name = f"ammunition {item}"
         out = [Supply(item_id=item, name=name, role="ammo", desired=AMMO_LOW, reserve=0)]
         if fill > floor:
@@ -2702,6 +2704,10 @@ class LiveBody:
         self._tell_dry(values)
         prices = junk_prices()
         self._junk_worth = sum(prices.get(item, 0) * count for item, count in census.values())
+        if self._shoots(values.get("char.class_id"), values.get("char.race_id")):
+            # What a canary's ammunition guard counts (V401): the rounds the weapon fires.
+            event("ammo.census", data={"loaded": loaded, "rounds": self._ammo_count,
+                                       "carried": sum(rows.values()), "junk": self._junk_worth})
 
     def _tell_dry(self, values: dict | None = None) -> None:
         """Tell the fight whether nothing is loaded to fire (`Fight.dry`, V402)."""
