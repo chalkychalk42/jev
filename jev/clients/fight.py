@@ -712,6 +712,8 @@ class Fight:
     # which any other press stops (V397).
     _waking: bool = field(default=False, init=False)
     _after_hold: bool = field(default=False, init=False)
+    # The most attackers this fight counted, for a death's (V395).
+    _most_attackers: int = field(default=0, init=False)
     _guarded_until: float = field(default=0.0, init=False)
     _wanding: bool = field(default=False, init=False)
     # (time, our health, target health, casting, target guid), this fight: who dies first.
@@ -771,6 +773,7 @@ class Fight:
             line = self.choices.pick("all", HEAL_LINES)
             self.heal_below = float(line)
         self._low_hp = None
+        self._most_attackers = 0
         self._mana_seen = (None, None)
         self.ended_far = self._from_range = self._last_near = False
         self._ranged_steps = 0
@@ -784,6 +787,11 @@ class Fight:
                 self.mana_costs.append(max(0.0, first - last))
             return result
         finally:
+            if result is Fought.DIED and self._most_attackers >= 2:
+                # A death with two attackers or more counted, as its own operation for the
+                # canary to count (V395, V396): 29.6% of the hive's deaths on 7 Oct.
+                with operation("fight.outnumbered") as span:
+                    span.finish(code="died", data={"attackers": self._most_attackers})
             low = self._low_hp
             went_badly = result is Fought.DIED or (low is not None and low < BAD_FIGHT_HP)
             came_to_blows = result in (Fought.KILLED, Fought.DIED, Fought.LOSING, Fought.TIMEOUT,
@@ -3078,6 +3086,9 @@ class Fight:
         return min(high, max(low, MANA_MARGIN * statistics.median(self.mana_costs)))
 
     def _observe(self, values: dict | None) -> None:
+        attackers = None if values is None else values.get("combat.attackers")
+        if isinstance(attackers, int) and not isinstance(attackers, bool):
+            self._most_attackers = max(self._most_attackers, attackers)
         hp = None if values is None else values.get("vitals.hp")
         if isinstance(hp, (int, float)) and not isinstance(hp, bool):
             self._low_hp = hp if self._low_hp is None else min(self._low_hp, hp)

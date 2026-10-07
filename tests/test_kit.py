@@ -452,3 +452,39 @@ def test_a_priest_keeping_its_heal_s_mana_shoots_rather_than_stands():
     f, hid = _fight([keeping], priest)
     f._rotate(keeping)
     assert hid.taps == ["1"]
+
+
+def test_a_death_with_two_attackers_or_more_is_an_operation_the_canary_counts(monkeypatch):
+    """The canary counts operations' ends (`hive.events`): a death in a fight that counted two
+    attackers or more ends `fight.outnumbered` "died", beside the fight's own "died"."""
+    import jev.clients.fight as fight_module
+
+    ended = []
+
+    class _Span:
+        enabled = True
+
+        def finish(self, *, code="", **_):
+            self.code = code
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def operation(name, **_):
+        span = _Span()
+        yield span
+        ended.append((name, span.code))
+
+    monkeypatch.setattr(fight_module, "operation", operation)
+    warlock = _profile(9, 2, WARLOCK_BAR)
+    for attackers, expected in ((2, [("fight.outnumbered", "died")]), (1, [])):
+        ended.clear()
+        f, _ = _fight([{**FOUGHT, "combat.attackers": attackers}], warlock)
+
+        def die(name_id, timeout_s, f=f, attackers=attackers):
+            f._observe({**FOUGHT, "combat.attackers": attackers})
+            return Fought.DIED
+
+        f._fight = die
+        assert f.run() is Fought.DIED
+        assert [e for e in ended if e[0] == "fight.outnumbered"] == expected
