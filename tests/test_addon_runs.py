@@ -825,7 +825,7 @@ def test_a_shut_talent_frame_paints_the_points_and_the_talents_but_no_button():
     assert shut["talents.shown"] is False, "no open frame shows its tab (tri paints no unknown)"
 
 
-# --- schema 22: the pet, the auras, the form and combo points (V398) --------------------
+# --- schema 22: the pet, the auras, the form and combo points (V400) --------------------
 
 from jev.perceive.fields import SELF_AURAS  # noqa: E402
 

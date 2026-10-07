@@ -37,7 +37,7 @@ SUMMARY = ("schema", "seq", "char.level", "char.xp_pct", "pos.zone_id", "pos.mx"
            "bars.slot_x", "bars.slot_y", "ui.spellbook", "ui.trainer", "cursor.holding",
            "ui.taxi", "taxi.total", "taxi.index", "taxi.name_id", "taxi.type", "taxi.x", "taxi.y",
            "ui.plates_enemy", "ui.plates_friendly", "target.tapped",
-           # Schema 22 (V398): the pet, the auras, the form and combo points.
+           # Schema 22 (V400): the pet, the auras, the form and combo points.
            "pet.has", "pet.dead", "pet.hp", "pet.happiness", "pet.loyalty", "pet.level",
            "pet.family_id", "pet.charmed", "char.auras", "char.sickness_s", "char.form_id",
            "bars.buffs", "bars.dots", "target.dot_s", "combat.combo")

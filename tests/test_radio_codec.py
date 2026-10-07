@@ -74,7 +74,7 @@ def test_appended_fields_fit_the_existing_grid():
     row more, deliberately (V237), and so does schema 19's talent census, 43 bits against
     the 31 left (V261). Schema 20's nameplate states, 4 bits, fit the row that left (V320),
     and so does schema 21's tapped flag, 2 bits (V344), and schema 22's pet, auras, form and
-    combo points, 117 bits against the 126 left (V398)."""
+    combo points, 117 bits against the 126 left (V400)."""
     lay = layout()
     assert (lay["cols"], lay["rows"]) == (12, 13)
     assert lay["payload_bits"] == 1703
@@ -202,7 +202,7 @@ def test_a_schema_21_strip_paints_whether_the_target_is_tagged_by_another():
 
 
 def test_a_schema_21_strip_still_decodes_without_the_class_mechanics():
-    """V398: the installed addon paints schema 21 until an operator installs 22, and the
+    """V400: the installed addon paints schema 21 until an operator installs 22, and the
     decoder goes live first. Every schema-21 field reads as it did; the pet, the auras, the
     form and the combo points are unknown, never "no pet" or "no aura"."""
     fields = SCHEMA_FIELDS[21]

@@ -83,7 +83,7 @@ the button that spends a point in it, or its tab's (V261).
 22: the class mechanics: the pet as its frame shows it and a charm in its place, the
 character's own watched auras and resurrection sickness's time, its form or stance, which
 main-bar spells are up on it and which are on the target as its own debuffs, and combo
-points (V398).
+points (V400).
 Old schemas remain readable, with appended observations unknown: `SCHEMA_FIELDS`."""
 LAST_HEADER_SCHEMA = 14
 EXTENDED = 0
@@ -720,7 +720,7 @@ FIELDS: tuple[Field, ...] = (
          "return tri(UnitIsTapped('target') and not UnitIsTappedByPlayer('target'))",
          "the selected unit is tagged by someone else: its kill pays them, not the character"),
 
-    # -- schema 22: the class mechanics (V398) --------------------------------------------
+    # -- schema 22: the class mechanics (V400) --------------------------------------------
     #
     # What a hunter, a warlock, a druid, a warrior, a rogue and a priest play by and the strip
     # did not show: the hive's server body has had all of it from the server since 6 Oct, and
