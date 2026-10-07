@@ -182,6 +182,12 @@ _SKILLS: tuple[Skill, ...] = (
     Skill("BUY_AMMO_REAGENT_FOOD", "restock exact supported food and drink", 360.0,
           success=JUDGED_ELSEWHERE, pre=_alive),
 
+    # A hunter's pet (V389): called, revived, fed, its charm let go, or a beast tamed - a walk to
+    # the beast's spawns, a meal and a drink before the cast, a twenty-second channel and the
+    # fights round it. The body judges it by the pet the server shows (`LiveBody._pet`).
+    Skill("TEND_PET", "call, revive, feed or tame the hunter's pet", 420.0,
+          success=JUDGED_ELSEWHERE, pre=lambda s: _alive(s) and s.vitals.combat is not True),
+
     Skill("MOUNT_UP", "mount, if we have one and may use it", 15.0,
           success=lambda s: s.flags.mounted is True,
           pre=lambda s: _alive(s) and s.vitals.combat is not True

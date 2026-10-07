@@ -44,6 +44,7 @@ from jev.world.state_v1 import (
     Classification,
     Flags,
     InventorySlot,
+    Pet,
     Pos,
     PowerType,
     Quest,
@@ -919,6 +920,10 @@ def to_state(reading: RadioReading, *, t: float, client_id: str,
         count = v["quests.count"]
         quests = () if count == 0 else None
 
+    # The pet (V389): painted by a server body's strip alone (the hive's), never by the live
+    # addon, which has no field for it; unknown here for every live reading.
+    pet = Pet(**{name: v.get(f"pet.{name}") for name in Pet.model_fields})
+
     return State(
         t=t,
         client_id=client_id,
@@ -929,6 +934,7 @@ def to_state(reading: RadioReading, *, t: float, client_id: str,
         target=target,
         bags=bags,
         ui=ui,
+        pet=pet,
         quests=quests,
         sense=sense,
     )

@@ -47,6 +47,10 @@ NPC_VENDOR = 0x0080
 NPC_REPAIR = 0x1000
 NPC_FLIGHTMASTER = 0x2000
 NPC_INNKEEPER = 0x10000
+# `item_template.spelltrigger_*`'s on use (ITEM_SPELLTRIGGER_ON_USE), and
+# `item_required_target.type`'s living creature (ITEM_TARGET_TYPE_CREATURE; 2 is a dead one).
+ITEM_SPELL_ON_USE = 0
+ITEM_TARGET_ALIVE = 1
 
 @dataclass(frozen=True)
 class Spawn:
@@ -229,6 +233,14 @@ def rib_id(prefix: str, zone: str, lo: int, hi: int, creature: str | None = None
     as `jev.learn.values` and the hive's measures name it), another by its creature too."""
     base = f"{prefix}_grind_{_slug(zone, 12)}_{lo}_{hi}"
     return base if creature is None else f"{base}_{_slug(creature, 16)}"
+
+
+def _hunted(requirement: Requirement) -> bool:
+    """Is the requirement worked by walking its creature's spawns: a kill, a loot, or an item
+    used on a creature (V387)?"""
+    return requirement.kind in ("kill", "loot") or (
+        requirement.kind == "event" and requirement.required_id is not None
+        and requirement.spawn is not None)
 
 
 def hunt_spawns(spawn: Spawn | None) -> tuple[tuple[float, float, float], ...]:
@@ -451,8 +463,15 @@ class WorldDB:
         items = [i for i in range(1, 5) if row[f"ReqItemId{i}"]]
         mixed = bool(creatures and items)
         extra_event = bool((row["SpecialFlags"] or 0) & 2)
+        # An event the quest's own item makes on the creature the item names (V387): the
+        # Taming Rod Thotar gives for Taming the Beast (6062) is used on a Dire Mottled Boar,
+        # and the quest is complete once its channel has run. Nothing else is counted - the
+        # rod handed back is the item the accept supplied - so no counter is joined.
+        use = (self._item_use(row) if extra_event and not creatures
+               and all(row[f"ReqItemId{s}"] == row["SrcItemId"] for s in items) else None)
         blocked_counter = ("mixed objective families need painted counter identity" if mixed else
-                           "event and counters need painted counter identity" if extra_event else None)
+                           "event and counters need painted counter identity"
+                           if extra_event and use is None else None)
         result: list[Requirement] = []
         for index, slot in enumerate(creatures):
             entry = row[f"ReqCreatureOrGOId{slot}"]
@@ -481,17 +500,23 @@ class WorldDB:
                 blocked = (f"quest item {item_id} requires purchase; no quest-item purchase executor"
                            if vendor else f"no supported source for quest item {item_id}")
             result.append(Requirement(kind=kind, required_id=item_id, required_count=count,
-                                      source_slot=slot, counter_index=None if blocked_counter else index,
+                                      source_slot=slot,
+                                      counter_index=None if blocked_counter or use else index,
                                       spawn=spawn, blocked_reason=blocked))
+        if use is not None:
+            # First, so the objective step stands among the creature and its hunt selects the
+            # use before the delivery, which needs nothing done (V387).
+            result.insert(0, Requirement("event", required_id=use[0], spawn=use[1]))
         # An elite is not a solo character's fight at the quest's level: Hogger, a level 11
         # elite with his gnolls round him, is the claw Wanted: "Hogger" asks for. Only what
         # is fought: a delivery's creature is the quest's taker, and Gryan Stoutmantle, who
-        # takes Westfall's hand-ins at Sentinel Hill, is an elite too.
+        # takes Westfall's hand-ins at Sentinel Hill, is an elite too. Nor is an elite stood
+        # under through an item's channel (V387).
         result = [r if r.blocked_reason or r.spawn is None or r.spawn.kind != "creature"
-                  or r.kind not in ("kill", "loot") or not self._elite(r.spawn.npc_id) else
-                  replace(r, blocked_reason=f"{r.spawn.name} is an elite; not a solo fight")
+                  or r.kind not in ("kill", "loot", "event") or not self._elite(r.spawn.npc_id)
+                  else replace(r, blocked_reason=f"{r.spawn.name} is an elite; not a solo fight")
                   for r in result]
-        if extra_event:
+        if extra_event and use is None:
             # These DBC columns are raw float bits, exactly like WorldMapArea. Their
             # layout is AreaTriggerEntry in this server's DBCStructure.h.
             triggers = self.con.execute(
@@ -512,6 +537,42 @@ class WorldDB:
         row = self.con.execute("select Rank from world_creature_template where Entry = ?",
                                (entry,)).fetchone()
         return bool(row and row["Rank"] in (1, 2, 3))
+
+    def _item_use(self, row) -> tuple[int, Spawn] | None:
+        """The quest's own item and where the living creature it is used on spawns, when the
+        item says so (V387): an on-use spell (`spelltrigger` 0), and a living creature
+        (`item_required_target` type 1) with spawns, the one spawning most when it names more
+        than one. The server refuses the use on any other unit. `None` otherwise.
+
+        Of the 38 quests an event kept off the hive's routes (6 Oct), 15 are of this kind, every
+        one a hunter's Taming the Beast: rod 15917 on a Dire Mottled Boar (3099), 15919 on a Surf
+        Crawler (3107), 15920 on an Armored Scorpid (3126) for an orc or troll. The rest name no
+        creature for their item, or count kills beside the event."""
+        item = row["SrcItemId"] or 0
+        if not item:
+            return None
+        proto = self.con.execute("select * from world_item_template where entry = ?",
+                                 (item,)).fetchone()
+        if proto is None or not any(proto[f"spellid_{i}"]
+                                    and proto[f"spelltrigger_{i}"] == ITEM_SPELL_ON_USE
+                                    for i in range(1, 6)):
+            return None
+        try:
+            entries = [r[0] for r in self.con.execute(
+                "select targetEntry from world_item_required_target where entry = ? and type = ? "
+                "order by targetEntry", (item, ITEM_TARGET_ALIVE))]
+        except sqlite3.OperationalError:
+            return None
+        counted = []
+        for entry in entries:
+            spawned = self.con.execute("select count(*) from world_creature where id = ?",
+                                       (entry,)).fetchone()[0]
+            spawn = self._creature_cluster(entry) if spawned else None
+            if spawn is not None:
+                counted.append((spawned, spawn))
+        if not counted:
+            return None
+        return item, max(counted, key=lambda c: c[0])[1]
 
     def _creature_cluster(self, entry: int) -> Spawn | None:
         rows = self.con.execute(
@@ -1116,7 +1177,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
                 target_kind=spawn.kind if spawn and requirement.kind != "explore" else None,
                 pos=frac, world=world, map_id=map_id,
                 coord_zone_id=coordinate_bounds.area_id if coordinate_bounds else None,
-                hunt_yards=hunt_yards(spawn) if requirement.kind in ("kill", "loot") else None,
+                hunt_yards=hunt_yards(spawn) if _hunted(requirement) else None,
                 blocked_reason=blocked,
             ))
 
@@ -1141,7 +1202,7 @@ def _generate(db: WorldDB, *, graph_id: str, faction: str, zone_ids: tuple[int, 
             if mobs is not None and mobs.points:
                 spawns[f"{base}_do"] = [list(p) for p in mobs.points]
             for requirement in requirements:
-                if (requirement.kind in ("kill", "loot") and requirement.spawn is not None
+                if (_hunted(requirement) and requirement.spawn is not None
                         and requirement.spawn.points):
                     spawns[f"{base}_do#{requirement.spawn.npc_id}"] = [
                         list(p) for p in requirement.spawn.points]
