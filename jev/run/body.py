@@ -37,7 +37,7 @@ from jev.clients.pet import (
 )
 from jev.clients.recover import Recover, Recovered
 from jev.clients.repair import MAIN_HAND as MAIN_HAND_SLOT
-from jev.clients.repair import SHOOTER_WEAPONS, Repair
+from jev.clients.repair import REPAIR_ASKED_BELOW, SHOOTER_WEAPONS, Repair
 from jev.clients.rest import SLOT_KEYS as REST_KEYS
 from jev.clients.rest import Rest
 from jev.clients.spellbook import Spellbook
@@ -48,7 +48,7 @@ from jev.clients.trainer import TrainerDesk
 from jev.clients.use import UseOn
 from jev.clients.vendor import Vended, Vendor
 from jev.clients.windows import close_observed
-from jev.coach.policy import BAGS_LOW, PET_WHY, Context, service, services
+from jev.coach.policy import BAGS_LOW, PET_WHY, SICK_REPAIR_BELOW, Context, service, services
 from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
@@ -2673,6 +2673,13 @@ class LiveBody:
         self.repair.first_slots = (SHOOTER_WEAPONS if self._shoots(cls, race)
                                    else () if cls is None or is_caster(state.char.cls)
                                    else (MAIN_HAND_SLOT,))
+        # Mended under the line the policy asked at (V495): while sick it asks under 90%, the
+        # Spirit Healer's 25% (V379), and a skill that mended only under 60% answered "not
+        # needed" and was asked again at once - 23,245 times in the hive's 100 minutes to 16:00
+        # on 8 Oct, a loop every 0.6 s through the sickness, the training it waits for never
+        # reached.
+        sick = state is not None and self.policy_context.sick(state.t) > 0.0
+        self.repair.asked_below = SICK_REPAIR_BELOW if sick else REPAIR_ASKED_BELOW
         repaired = self.repair.run()
         if repaired.value == "too_poor" and self._sell_for_repair():
             repaired = self.repair.run()           # with what the sale fetched (V393)

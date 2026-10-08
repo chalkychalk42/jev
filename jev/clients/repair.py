@@ -93,6 +93,10 @@ class Repair:
     # Jev has no control for, and presses Repair All; the hive's bridge mends each item first
     # (`repair <npc> <item>`) while the purse pays for it.
     first_slots: tuple[int, ...] = ()
+    # The worst durability under which a repair asked for is made, set by the body before each
+    # repair to the line the policy asked it at (V495): `REPAIR_ASKED_BELOW`, or while sick
+    # after the Spirit Healer `jev.coach.policy.SICK_REPAIR_BELOW`, the get-up's 25% mended.
+    asked_below: float = REPAIR_ASKED_BELOW
 
     before: float | None = field(default=None, init=False)
     after: float | None = field(default=None, init=False)
@@ -114,7 +118,7 @@ class Repair:
         if v is None:
             return False
         worst = v.get("bags.durability_min")
-        return worst is not None and worst < REPAIR_ASKED_BELOW
+        return worst is not None and worst < self.asked_below
 
     @traced("repair")
     def run(self) -> Repaired:
