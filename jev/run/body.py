@@ -37,8 +37,7 @@ from jev.clients.pet import (
 )
 from jev.clients.recover import Recover, Recovered
 from jev.clients.repair import MAIN_HAND as MAIN_HAND_SLOT
-from jev.clients.repair import RANGED as RANGED_SLOT
-from jev.clients.repair import Repair
+from jev.clients.repair import SHOOTER_WEAPONS, Repair
 from jev.clients.rest import SLOT_KEYS as REST_KEYS
 from jev.clients.rest import Rest
 from jev.clients.spellbook import Spellbook
@@ -2665,13 +2664,15 @@ class LiveBody:
             self.say(f"  broken gear and the nearest repairer {distance:.0f} yards off: "
                      f"hearthstone {home.value} {self.hearth.detail}".rstrip())
         self._repairer_at = None
-        # The weapon the class fights with first (V402): a shooter's ranged one, a melee class's
-        # main hand; a caster's Repair All alone.
+        # The weapons the class fights with first (V402, V492): a shooter's main hand, then its
+        # ranged weapon; a melee class's main hand; a caster's Repair All alone. Repair All
+        # spends the purse on the armour first, in slot order: hive-698's 22 copper went on
+        # its belt, the Worn Shortsword's 15 short (8 Oct 02:51).
         cls, race = (CLASS_IDS.get(state.char.cls), RACE_IDS.get(state.char.race)) \
             if state is not None else (None, None)
-        self.repair.first_slot = (RANGED_SLOT if self._shoots(cls, race)
-                                  else None if cls is None or is_caster(state.char.cls)
-                                  else MAIN_HAND_SLOT)
+        self.repair.first_slots = (SHOOTER_WEAPONS if self._shoots(cls, race)
+                                   else () if cls is None or is_caster(state.char.cls)
+                                   else (MAIN_HAND_SLOT,))
         repaired = self.repair.run()
         if repaired.value == "too_poor" and self._sell_for_repair():
             repaired = self.repair.run()           # with what the sale fetched (V393)

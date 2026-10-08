@@ -213,25 +213,29 @@ def _hunter_profile(bar=HUNTER_BAR):
 
 
 def test_a_hunters_weapon_is_broken_when_auto_shot_greys_out():
-    """26 of the 42 had the ranged weapon broken, 25 the melee one: Auto Shot tells."""
+    """26 of the 42 had the ranged weapon broken, 25 the melee one: Auto Shot tells, and so does
+    Raptor Strike (V493, `test_hunter_weapons`)."""
     profile = _hunter_profile()
     shot = next(a for a in profile.abilities if a.name == "Auto Shot")
     reading = {"bags.durability_min": 0.0, "vitals.power": 1.0, "vitals.power_max": 300,
                "char.class_id": HUNTER, "char.race_id": ORC}
     f, _ = _fight(reading, profile)
     assert f.disarmed({**reading, "bars.usable": ALL & ~(1 << (shot.slot - 1))}) is True
-    assert f.disarmed({**reading, "bars.usable": ALL & ~0b10}) is False, \
-        "Raptor Strike greyed (the melee weapon), Auto Shot whole: armed"
+    assert f.disarmed({**reading, "bars.usable": ALL & ~0b10}) is True, \
+        "Raptor Strike greyed (the melee weapon), Auto Shot whole: what it strikes at hand with"
+    assert f.disarmed({**reading, "bars.usable": ALL}) is False
 
 
 def test_the_weapon_the_class_fights_with_is_mended_first(tmp_path):
+    """A hunter's main hand, then its ranged weapon (V492, amending V402)."""
     b = _hunter_body(tmp_path)
-    b.repair = SimpleNamespace(run=lambda: Repaired.DONE, detail="", first_slot=None)
+    b.repair = SimpleNamespace(run=lambda: Repaired.DONE, detail="", first_slots=None)
     b._repairer_yards = lambda: None
-    for cls, race, slot in (("hunter", "tauren", RANGED), ("warrior", "orc", MAIN_HAND),
-                            ("rogue", "troll", MAIN_HAND), ("mage", "troll", None)):
+    for cls, race, slots in (("hunter", "tauren", (MAIN_HAND, RANGED)),
+                             ("warrior", "orc", (MAIN_HAND,)), ("rogue", "troll", (MAIN_HAND,)),
+                             ("mage", "troll", ())):
         b._repair(_s(cls=cls, race=race, durability_min=0.0))
-        assert b.repair.first_slot == slot, cls
+        assert b.repair.first_slots == slots, cls
 
 
 # -- the ranged weapon: worn by score, bought better (V403) ---------------------------------

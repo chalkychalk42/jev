@@ -1,0 +1,170 @@
+{
+ "about": "Two broke hunters of the cohort founded 7 Oct 14:04, from the hive's recorded play (var/runs) and its character DB (8 Oct 14:12, read only): hive-698's repair at 02:51 (Naramin, draenei 9, everything worn at 0%, 22 copper), and hive-732's at 09:50 (Telunti, tauren 9, 121 copper once its junk was sold) and its first fight after it. Repair prices are the server's (`Player::DurabilityRepair`): the lost durability times DurabilityCosts.dbc's multiplier for the item level and subclass times DurabilityQuality.dbc's for the quality, truncated, times the merchant's reputation discount (Friendly, 0.95), truncated; `cost` is from 0%.",
+ "hive-698": {
+  "run": "20261008T024935-5f9e95",
+  "at": "02:51:14",
+  "level": 9,
+  "purse_before": 22,
+  "purse_after": 11,
+  "worst_after": 0.0,
+  "first": [
+   {
+    "slot": 17,
+    "entry": 15807,
+    "paid": 0,
+    "ok": true
+   }
+  ],
+  "outcome": [
+   "too_poor"
+  ],
+  "discount": 0.95,
+  "kit_read": "the character DB at 14:12, everything still at 0%, but for the ranged weapon: at 02:51 the Light Crossbow (15807, the entry `repair.first` names, bought for 279 copper at 21:18 by V403), the Silver Crossbow since; the replay of Repair All with it gives the 11 copper recorded",
+  "kit": [
+   {
+    "slot": 4,
+    "entry": 26018,
+    "name": "Elekk Handler's Leathers",
+    "max_durability": 55,
+    "durability": 0,
+    "cost": 110
+   },
+   {
+    "slot": 5,
+    "entry": 24129,
+    "name": "Salvaged Leather Belt",
+    "max_durability": 16,
+    "durability": 0,
+    "cost": 12
+   },
+   {
+    "slot": 6,
+    "entry": 24424,
+    "name": "Rough Leather Leggings",
+    "max_durability": 35,
+    "durability": 0,
+    "cost": 28
+   },
+   {
+    "slot": 7,
+    "entry": 9751,
+    "name": "Gypsy Sandals",
+    "max_durability": 30,
+    "durability": 0,
+    "cost": 72
+   },
+   {
+    "slot": 8,
+    "entry": 3641,
+    "name": "Journeyman's Bracers",
+    "max_durability": 14,
+    "durability": 0,
+    "cost": 22
+   },
+   {
+    "slot": 15,
+    "entry": 25,
+    "name": "Worn Shortsword",
+    "max_durability": 20,
+    "durability": 0,
+    "cost": 16
+   },
+   {
+    "slot": 17,
+    "entry": 15807,
+    "name": "Light Crossbow",
+    "max_durability": 30,
+    "durability": 0,
+    "cost": 72
+   }
+  ],
+  "after": "53 of its next 59 fights lost, 8 Oct 01:41-06:43, the purse at 11 copper from 02:51 to 06:47"
+ },
+ "hive-732": {
+  "run": "20261008T093856-878c88",
+  "at": "09:50:41",
+  "level": 9,
+  "purse_before": 121,
+  "purse_after": 12,
+  "worst_after": 0.0,
+  "first": [
+   {
+    "slot": 17,
+    "entry": 2509,
+    "paid": 45,
+    "ok": true
+   }
+  ],
+  "discount": 0.95,
+  "weapons": [
+   {
+    "slot": 15,
+    "entry": 1383,
+    "name": "Stone Tomahawk",
+    "max_durability": 30,
+    "cost": 24
+   },
+   {
+    "slot": 17,
+    "entry": 2509,
+    "name": "Ornate Blunderbuss",
+    "max_durability": 30,
+    "cost": 48
+   }
+  ],
+  "fight_after": {
+   "begin": "09:59:34",
+   "end": "10:00:08",
+   "code": "died",
+   "samples": 156,
+   "at_hand": 0.99,
+   "sample": {
+    "vitals.hp": 1.0,
+    "vitals.power": 1.0,
+    "bars.usable": 1277,
+    "target.in_melee": true,
+    "target.attacking_me": true,
+    "combat.attackers": 1,
+    "vitals.power_max": 213,
+    "bags.durability_min": 0.0,
+    "char.class_id": 3,
+    "char.race_id": 6
+   },
+   "usable_every_sample": [
+    1277
+   ],
+   "bar": {
+    "1": 6603,
+    "2": 2973,
+    "3": 75,
+    "4": 13163,
+    "5": 3044,
+    "6": 1978,
+    "7": 1130,
+    "8": 5116
+   },
+   "run": "20261008T095357-a75669",
+   "unit_level": 12,
+   "then": "died again at 10:02:57 and 10:06:04, the gun whole and the tomahawk broken, and from 10:08 with both broken; each of the three against a unit of 12-15 at hand (the ticks), so the case is the reading, not the deaths' cause"
+  }
+ },
+ "fights": {
+  "about": "the cohort's hunters' fights killed or lost, 7 Oct 14:43-8 Oct 12:34, by whether Raptor Strike (the main hand) and Auto Shot (the ranged weapon) were usable in most of the fight's samples with mana for them",
+  "main hand broken, ranged broken": {
+   "died": 145,
+   "killed": 26
+  },
+  "main hand broken, ranged whole": {
+   "died": 18,
+   "killed": 9
+  },
+  "main hand whole, ranged broken": {
+   "died": 6,
+   "killed": 29
+  },
+  "main hand whole, ranged whole": {
+   "died": 1014,
+   "killed": 10776
+  }
+ }
+}

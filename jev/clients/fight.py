@@ -1886,17 +1886,21 @@ class Fight:
                 or not isinstance(pool, (int, float)) or pool <= 0):
             return self.disarmed_seen
         profile = self.profile or for_class(values.get("char.class_id"), values.get("char.race_id"))
-        # The weapon a class fights with (V402): a shooter's is its ranged one, whose repeating
-        # shot (Auto Shot) the client greys out when it is broken; its melee blows are what it
-        # strikes with at hand, not what tells. 26 of the hive's 42 hunters had the ranged
-        # weapon broken on 7 Oct, 25 the melee one.
+        # The weapons a class fights with (V402, V493): a melee class's main hand, which its
+        # plain blows ask for; a shooter's ranged one, whose repeating shot (Auto Shot) the
+        # client greys out when it is broken, and its main hand too, what it strikes with at
+        # hand (Raptor Strike): a pet-less hunter of 6-10 has the unit at hand 84% of a fight,
+        # and with the main hand broken and the bow whole lost 18 fights of 27 (7-8 Oct).
         shooter = profile.shooter and not profile.caster
-        paid = [a for a in profile.abilities
-                if (repeats(a) if shooter else _blow_name(a) in PLAIN_BLOWS)
-                and power * pool >= a.mana]
-        if paid:
-            # A stance's page (a warrior's 73-84) is the main bar's twelve keys.
-            self.disarmed_seen = not any(usable & (1 << ((a.slot - 1) % 12)) for a in paid)
+        told = []
+        for asks in ((repeats, lambda a: _blow_name(a) in PLAIN_BLOWS) if shooter
+                     else (lambda a: _blow_name(a) in PLAIN_BLOWS,)):
+            paid = [a for a in profile.abilities if asks(a) and power * pool >= a.mana]
+            if paid:
+                # A stance's page (a warrior's 73-84) is the main bar's twelve keys.
+                told.append(not any(usable & (1 << ((a.slot - 1) % 12)) for a in paid))
+        if told:
+            self.disarmed_seen = any(told)
         return self.disarmed_seen
 
     def buff_up(self) -> int:

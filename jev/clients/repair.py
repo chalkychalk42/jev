@@ -57,6 +57,11 @@ SETTLE_S = 1.5
 # main hand, and a hunter's ranged weapon. Repair All mends item by item in slot order as the
 # purse pays (`Player::DurabilityRepairAll`): the main hand sixteenth, the ranged weapon last.
 MAIN_HAND, RANGED = 15, 17
+# A hunter's, in the order it mends them (V492): the main hand, what it strikes with at hand
+# (84% of a pet-less hunter's fight time at levels 6-10, half with a pet), 12-24 copper from
+# nothing on the cohort's hunters of 7-13 (8 Oct) against a bow's or gun's 48-140; then the
+# ranged weapon.
+SHOOTER_WEAPONS = (MAIN_HAND, RANGED)
 
 
 class Repaired(StrEnum):
@@ -82,15 +87,26 @@ class Repair:
     visit: Callable[[], bool]
     window_origin: tuple[int, int] = (0, 0)
     window_size: tuple[int, int] = (1600, 900)
-    # The slot whose item is mended before Repair All (`MAIN_HAND`, `RANGED`, V402), the weapon
-    # the class fights with, set by the body before each repair; `None`, Repair All alone. The
-    # live client mends one item only through the repair cursor, which Jev has no control for,
-    # and presses Repair All; the hive's bridge mends the one item first (`repair <npc> <item>`).
-    first_slot: int | None = None
+    # The slots whose items are mended, in this order, before Repair All (`MAIN_HAND`, `RANGED`,
+    # V402, V492): the weapons the class fights with, set by the body before each repair; none,
+    # Repair All alone. The live client mends one item only through the repair cursor, which
+    # Jev has no control for, and presses Repair All; the hive's bridge mends each item first
+    # (`repair <npc> <item>`) while the purse pays for it.
+    first_slots: tuple[int, ...] = ()
 
     before: float | None = field(default=None, init=False)
     after: float | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
+
+    @property
+    def first_slot(self) -> int | None:
+        """The first of `first_slots`, or `None`: the one slot a hive bridge from before V492
+        mends alone (`ServerRepair._press` reads it)."""
+        return self.first_slots[0] if self.first_slots else None
+
+    @first_slot.setter
+    def first_slot(self, slot: int | None) -> None:
+        self.first_slots = () if slot is None else (slot,)
 
     def needed(self, values: dict | None = None) -> bool:
         """Is it worth the walk? `None` durability is no observation, not full repair."""
