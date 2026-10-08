@@ -138,6 +138,18 @@ WAIT_ELSEWHERE_S = SHORT_RIB_S
 # With no such rib, the ribs are looked through again no sooner than this: a wait ends when a
 # camp does, and a look is every rib's stations against every camp.
 WAIT_LOOK_S = 30.0
+# An accept or a hand-in its body says it did (`SUCCEEDED`: the live advance's own reading of a
+# whole log, or the hive's server's answer) is done once the tracker's log has stayed unread this
+# long since (V455, extracted from bet-quests-2's V423): a reader that the strip's paints alias
+# sees a log changed in its count only when a whole cycle comes, and the step's predicate never
+# sees the quest arrive or leave. On the hive's parity shard (the strip's quest log, 7 Oct) every
+# such loop read the log until the body's first success and none after: hive-686 handed The
+# Wayward Apprentice in at 18:47 and the log stayed unread the 300 s left of its run, the hand-in
+# "made" 585 times; hive-707 took Report to Orgnil at 21:29 and the accept was "made" 418 times in
+# 240 s unread. A log read every tick (the hive's other shards) never lets the wait run.
+CONFIRMED_WAIT_S = 10.0
+# The step kinds so confirmed, by the skill that is their own.
+CONFIRMED_SKILLS = {StepKind.QUEST_ACCEPT: "ACCEPT_QUEST", StepKind.QUEST_TURNIN: "TURNIN_QUEST"}
 
 
 def bar_entry(rib_id: str, level: int, until: float) -> str:
@@ -318,6 +330,9 @@ class ClientRuntime:
     # The last look back along the spine for a step to return to (`_behind`), by what it
     # depends on, so a character grinding does not walk the spine each tick.
     _behind_seen: tuple = field(default=(), init=False)
+    # The accept or hand-in its body said it did (V455): the step, and since when the log has
+    # stayed unread (`None` until an unread tick after the body's first success).
+    _confirmed: tuple | None = field(default=None, init=False)
 
     counters: Counters = field(default_factory=Counters)
     armed: Armed | None = None
@@ -375,6 +390,8 @@ class ClientRuntime:
         self.counters.ticks += 1
         if not state.sense.addon_ok:
             self.counters.blind_ticks += 1
+        if self._confirmed is not None and self._confirmed[0] != self.tracker.step_id:
+            self._confirmed = None              # the step left: its body's word goes with it
         if not self._entered:
             start = self.start_step if self.graph.get(self.start_step or "") is not None else None
             if start is not None and (self._nodes[start].kind is StepKind.GRIND
@@ -406,6 +423,8 @@ class ClientRuntime:
         if verdict.event is Event.ADVANCE and not verdict.completed:
             self._tracker_event = "rejoin_or_skip"
         self._apply(verdict, state)
+        if not self.finished:
+            self._confirmed_done(state, move=verdict.event in (Event.NONE, Event.ARRIVED))
         if state.char.level is not None:
             unlevelled = {r for r in self._retried if r.startswith(DETOUR) and "@" not in r}
             # A bar of another level, or past its end, is lifted (V391).
@@ -553,7 +572,53 @@ class ClientRuntime:
                     and self.armed.step_id == self.tracker.step_id
                     and scripted.own_rule(self.armed.rule).startswith("guide.")):
                 self.tracker.memory.attempts += 1
+            # The step's own accept or hand-in its body says it did is done once the log has
+            # stayed unread `CONFIRMED_WAIT_S` (`_confirmed_done`, V455). The first success
+            # starts the wait and the same step's next ones do not: re-armed while the log
+            # stays unread, the body "made" the accept or hand-in again every half second.
+            node = self._nodes.get(self.tracker.step_id)
+            if (outcome is SkillOutcome.SUCCEEDED and self.armed.step_id == self.tracker.step_id
+                    and node is not None and node.quest_id is not None
+                    and self.armed.decision.skill == CONFIRMED_SKILLS.get(node.kind)
+                    and (self._confirmed is None or self._confirmed[0] != node.id)):
+                self._confirmed = (node.id, None)
         self.armed = None
+
+    def _confirmed_done(self, state: State, *, move: bool = True) -> bool:
+        """An accept or a hand-in its body said it did (`finish`), the log unread since for
+        `CONFIRMED_WAIT_S` on end, is done (V455): a hand-in's quest counted handed in if the
+        step saw it held, and the playhead on as the step's predicate would take it. A log
+        read judges the step itself, and the body's word goes until it says so again: so where
+        the log is read every tick nothing here moves. `move` false (a tick that is no wait at
+        the step) only keeps the clock. `True` when the playhead moved."""
+        confirmed, node = self._confirmed, self._nodes.get(self.tracker.step_id)
+        if confirmed is None:
+            return False
+        if node is None or confirmed[0] != node.id or state.quests is not None:
+            self._confirmed = None
+            return False
+        if confirmed[1] is None:
+            self._confirmed = (node.id, state.t)
+            return False
+        if not move or state.t - confirmed[1] < CONFIRMED_WAIT_S:
+            return False
+        return self._take_confirmed(state, node)
+
+    def _take_confirmed(self, state: State, node) -> bool:
+        """The step its body did taken as done (V455). A hand-in whose quest the step never
+        saw held is not: its body's word is all there is that it was ever taken."""
+        self._confirmed = None
+        if node.kind is StepKind.QUEST_TURNIN and not self.tracker.memory.quest_was_in_log:
+            return False
+        onward = self.tracker._exit_of(node)
+        if onward is None:
+            return False                    # the guide's last step: a read log ends it
+        if node.kind is StepKind.QUEST_TURNIN:
+            self.completed.add(node.quest_id)
+        self.counters.advances += 1
+        self.tracker.enter(onward, state)
+        self._tracker_event = "advance"
+        return True
 
     # -- internals -----------------------------------------------------------
 
@@ -572,6 +637,20 @@ class ClientRuntime:
         """
         node = self.graph.get(self.tracker.step_id)
         state = self.last_state
+        # Out of attempts after its body said it did the step, the log unread since: the step
+        # is done, not failed (V455). The hive's body answers "not in the log" to a hand-in
+        # made again, and three of those failed the step over before any wait could end:
+        # hive-707 handed A Peon's Burden and Report to Orgnil in at 21:39 on 7 Oct, failed over
+        # about 3 and 5.5 s after, neither counted handed in, and Report to Orgnil's accept was
+        # walked back to at 7, 8 and 9.
+        confirmed = self._confirmed
+        if (node is not None and state is not None and not self.finished
+                and confirmed is not None and confirmed[0] == node.id
+                and confirmed[1] is not None and skill == CONFIRMED_SKILLS.get(node.kind)
+                and self._take_confirmed(state, node)):
+            if self.on_progress is not None:
+                self._progress()
+            return True
         if (node is not None and state is not None and not self.finished
                 and node.kind is StepKind.GRIND and not node.on_fail
                 and skill in (node.skills or ())):
