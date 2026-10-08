@@ -193,9 +193,11 @@ def test_a_hunter_with_tame_beast_tends_its_pet_as_the_server_shows_it():
     x, y = _spawn(SCORPID)
     here = _at(bounds, x, y, guide=GuidePos(kind=StepKind.GRIND))
     assert b.pet_due(here) is None, "no pet read: the live strip"
-    out = Pet(has=True, dead=False, level=10, happiness=2, food_id=JERKY, food_count=5,
+    out = Pet(has=True, dead=False, level=10, happiness=3, food_id=JERKY, food_count=5,
               charmed=False)
     assert b.pet_due(here.model_copy(update={"pet": out})) is None
+    content = out.model_copy(update={"happiness": 2})
+    assert b.pet_due(here.model_copy(update={"pet": content})) == "feed", "kept happy (V490)"
     assert b.pet_due(here.model_copy(update={"pet": out.model_copy(update={"dead": True})})) \
         == "revive"
     unhappy = out.model_copy(update={"happiness": 1})

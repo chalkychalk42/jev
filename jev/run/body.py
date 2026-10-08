@@ -393,9 +393,16 @@ TAME_STEPS = frozenset({StepKind.GRIND, StepKind.QUEST_OBJECTIVE, StepKind.DING_
 PET_ANSWER_S = 2.0
 REVIVE_WAIT_S = 13.0
 PET_POLL_S = 0.25
-# A pet's food is bought ten at a time, as the character's own (`Supply.desired`): fed once it is
-# unhappy, a pet at loyalty 1 eats about one every five minutes, one at loyalty 2 every ten.
+# A pet's food is bought ten at a time, as the character's own (`Supply.desired`): fed while it is
+# not happy, a pet at loyalty 1 eats about one every four or five minutes, one at loyalty 2 every
+# nine or ten.
 PET_FOOD_DESIRED = 10
+# A feed is not cast again until the last one's effect has run (V490): Feed Pet eats its food at
+# once and gives happiness ten ticks over 20 s, the first 2 s after it, and a second feed replaces
+# the first's effect before its ticks (`jev.world.pets`). The hive's hunters fed 825 times in 22
+# hours of 7-8 Oct, 94% of the feeds followed by the next within 2 s, and their pets read unhappy
+# 95% of the time they were out (content 5%, happy never).
+FEED_AGAIN_S = pets.FEED_EFFECT_S
 # A cast that needs mana is drunk for to its cost and this much over (`Rest.until`).
 MANA_SLACK = 0.05
 # The result codes that end a session (`Supervisor`): a pet's care returns none of them.
@@ -545,6 +552,9 @@ class LiveBody:
         self._walks: dict[int, float] = {}          # the last ranking's planned walks (V309)
         # What the last Call Pet said of a pet not out (V389): none kept, or kept dead.
         self._pet_none = self._pet_dead = False
+        # When the last feed the server took was cast (V490), on the monotonic clock: none again
+        # while its effect runs.
+        self._fed_at: float | None = None
         self.camera = Camera(hid=client.hid, window_origin=client.origin, window_size=client.size)
         self.interact.level = self.fight.level = self.loot.level = self.camera.ensure_level
         self.fight.realign = self.camera.face
@@ -2356,16 +2366,17 @@ class LiveBody:
 
     def pet_due(self, state: State) -> str | None:
         """What the hunter's pet needs now, as the policy asks it (`Context.pet_need`, V389):
-        "revive" a dead one, "feed" an unhappy one with food it eats in the bags, "dismiss" a
-        charm held where a pet would be (Call Pet and Tame Beast are refused while one is),
-        "call" one not out, "tame" a beast of the character's level or one below spawning near
-        it on a step it hunts on once no pet is kept, or `None`. A pet not out may be kept,
-        alive or dead (its owner died, or flew): Call Pet says which, and what it said stands
-        until a pet is out again (`_pet_none`, `_pet_dead`). Taming waits for Feed Pet (Training
-        the Beast, a walk after Tame Beast's quest): tamed unhappy, an unfed pet's loyalty runs
-        out in about ten minutes, and then it may run away or stand where it is. From `state`
-        and the spellbook's census alone: the policy asks from the supervisor's thread. `None`
-        on the live strip, which paints no pet."""
+        "revive" a dead one, "feed" one not happy with food it eats in the bags, but not while
+        the last feed's effect still runs (V490), "dismiss" a charm held where a pet would be
+        (Call Pet and Tame Beast are refused while one is), "call" one not out, "tame" a beast
+        of the character's level or one below spawning near it on a step it hunts on once no
+        pet is kept, or `None`. A pet not out may be kept, alive or dead (its owner died, or
+        flew): Call Pet says which, and what it said stands until a pet is out again
+        (`_pet_none`, `_pet_dead`). Taming waits for Feed Pet (Training the Beast, a walk after
+        Tame Beast's quest): tamed unhappy, an unfed pet's loyalty runs out in about ten
+        minutes, and then it may run away or stand where it is. From `state`, the spellbook's
+        census and the last feed's time alone: the policy asks from the supervisor's thread.
+        `None` on a strip that paints no pet."""
         pet = state.pet
         census = getattr(self.client, "spells", None)
         if pet.has is None or state.char.cls != "hunter" or census is None:
@@ -2379,11 +2390,16 @@ class LiveBody:
         if pet.has is True:
             self._pet_none = self._pet_dead = False
             if pet.dead is True:
+                self._fed_at = None               # a pet's death takes its auras, the feed's too
                 return "revive" if pets.REVIVE_PET in known else None
-            if (pet.happiness == pets.UNHAPPY and pets.FEED_PET in known
-                    and pet.food_id is not None):
+            # Kept happy, as the server's own playerbots keep theirs (`PlayerbotHunterAI`, a pet
+            # not HAPPY is fed): content it gains loyalty half as fast and does a fifth less
+            # damage, unhappy it loses loyalty and does 75%.
+            if (pet.happiness in (pets.UNHAPPY, pets.CONTENT) and pets.FEED_PET in known
+                    and pet.food_id is not None and not self._feeding()):
                 return "feed"
             return None
+        self._fed_at = None                       # put away or gone: no effect runs on it
         if pet.charmed is True:
             return "dismiss"
         if getattr(self, "_pet_dead", False):
@@ -2392,6 +2408,11 @@ class LiveBody:
             return ("tame" if pets.FEED_PET in known and state.guide.kind in TAME_STEPS
                     and self._beasts_near(state) else None)
         return "call" if pets.CALL_PET in known else None
+
+    def _feeding(self) -> bool:
+        """Is the last feed's effect still running (V490)? Fed again before it has, the pet eats
+        the food and the effect starts afresh, its ticks given to nothing."""
+        return self._fed_at is not None and time.monotonic() - self._fed_at < FEED_AGAIN_S
 
     def _beasts_near(self, state: State) -> list:
         """The beasts the character may tame within `TAME_NEAR_YARDS` of where it stands
@@ -2488,10 +2509,13 @@ class LiveBody:
         if item is None:
             return Result(SkillOutcome.ABORTED, "no food the pet eats in the bags", "no_pet_food")
         cast = self._pet_cast(pets.FEED_PET, item=item)
-        event("pet.feed", data={"item": item, "codes": list(cast.codes), "sent": cast.sent})
+        event("pet.feed", data={"item": item, "codes": list(cast.codes), "sent": cast.sent,
+                                "happiness": values.get("pet.happiness")})
         if cast.refused:
             return Result(SkillOutcome.ABORTED, f"Feed Pet on {item} refused: {self._said(cast)}",
                           "not_fed")
+        # Taken: its effect runs 20 s, and no feed is cast again until it has (V490).
+        self._fed_at = time.monotonic()
         return Result(SkillOutcome.SUCCEEDED, f"fed it {item}", "fed")
 
     def _call(self, values: dict) -> Result:

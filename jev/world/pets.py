@@ -14,10 +14,18 @@ world database teaches any of them (V388). The server's rules, as CMaNGOS has th
   and a food is worth 35,000 happiness a tick to a pet at most five levels above it, 17,000 to
   one six to ten above, 8,000 to one eleven to fourteen above and nothing beyond
   (`Pet::GetCurrentFoodBenefitLevel`); Feed Pet's effect ticks ten times (spell 1539).
+- Feed Pet eats its food at once and gives its happiness through that effect: an aura on the
+  pet that ticks every 2 s for 20 s, the first tick 2 s after the feed (`EffectAmplitude1`
+  2,000, `DurationIndex` 18). A second feed while it runs replaces it (`Unit::
+  AddSpellAuraHolder`, AURA_REMOVE_BY_STACK): the first one's food is gone and its ticks yet
+  to come with it, so feeds a second apart eat a food each and give nothing (V490).
 - A pet tamed starts unhappy (166,500 of 1,050,000; 333,000 a state, `Pet::
   CreateBaseAtCreature`) and loses happiness at 70,000 a minute at loyalty 1, half that at 2
   (`Pet::LooseHappiness`, half as fast again in combat); unhappy, its loyalty falls 100 a minute
-  (`Pet::TickLoyaltyChange`), and below none, from 1,000 at the taming, it may run away.
+  (`Pet::TickLoyaltyChange`), content it rises 50 and happy 100, and below none, from 1,000 at
+  the taming, it may run away (one time in three: one in three it turns aggressive, one in
+  three stays where it is, passive, `Pet::ModifyLoyalty`). Unhappy it does 75% of its damage,
+  happy 125% (`Pet::GetConditionalTotalPhysicalDamageModifier`).
 - Tame Beast costs 48% of the hunter's base mana and Revive Pet 80% (`ManaCostPercentage`).
 
 Read from the snapshot once a process; nothing without it.
@@ -44,6 +52,11 @@ BEAST_TRAINING = 5149
 
 # `HappinessState`, as the bridge's "happy" and the client's `GetPetHappiness` give it.
 UNHAPPY, CONTENT, HAPPY = 1, 2, 3
+# Feed Pet's effect (spell 1539): how long it runs and how often it ticks. A feed cast while one
+# runs replaces it before the rest of its ticks (V490).
+FEED_EFFECT = 1539
+FEED_EFFECT_S = 20.0
+FEED_TICK_S = 2.0
 # `Pet::GetCurrentFoodBenefitLevel`: the levels above a food's item level a pet may stand and
 # still get each share of it, best first.
 BENEFITS = ((5, 35000), (10, 17000), (14, 8000))

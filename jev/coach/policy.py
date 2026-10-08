@@ -781,7 +781,7 @@ def _affordable(item_id: int, money: int | None) -> bool:
 
 
 # Why each of a pet's needs is served (`Context.pet_need`, V389).
-PET_WHY = {"revive": "the pet is dead", "call": "no pet is out", "feed": "the pet is unhappy",
+PET_WHY = {"revive": "the pet is dead", "call": "no pet is out", "feed": "the pet is not happy",
            "dismiss": "a charm is held where the pet would be",
            "tame": "no pet, and a beast to tame of the character's level is near"}
 
