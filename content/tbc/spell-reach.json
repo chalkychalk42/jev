@@ -19,6 +19,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -529,6 +530,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "dot": 144.0,
    "dot_s": 18.0,
    "gcd_s": 1.0
@@ -1517,6 +1519,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -1524,6 +1527,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -1531,6 +1535,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -2008,6 +2013,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -2582,6 +2588,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -2589,6 +2596,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -2611,6 +2619,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3354,6 +3363,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "dot": 204.0,
    "dot_s": 18.0,
    "gcd_s": 1.0
@@ -3362,6 +3372,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "dot": 282.0,
    "dot_s": 18.0,
    "gcd_s": 1.0
@@ -3370,6 +3381,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "dot": 354.0,
    "dot_s": 18.0,
    "gcd_s": 1.0
@@ -3434,6 +3446,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3461,6 +3474,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3468,6 +3482,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3475,6 +3490,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3658,6 +3674,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3811,6 +3828,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3818,6 +3836,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3934,6 +3953,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -3941,6 +3961,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -5007,6 +5028,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -5014,6 +5036,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -5021,6 +5044,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -5058,6 +5082,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -5065,6 +5090,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -5072,6 +5098,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -5093,6 +5120,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "dot": 444.0,
    "dot_s": 18.0,
    "gcd_s": 1.0
@@ -5101,6 +5129,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "dot": 552.0,
    "dot_s": 18.0,
    "gcd_s": 1.0
@@ -7851,6 +7880,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -8340,6 +8370,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "dot": 666.0,
    "dot_s": 18.0,
    "gcd_s": 1.0
@@ -8362,6 +8393,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -8403,6 +8435,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "dot": 810.0,
    "dot_s": 18.0,
    "gcd_s": 1.0
@@ -8560,6 +8593,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -8567,6 +8601,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -8588,6 +8623,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -9253,6 +9289,7 @@
    "min_yd": 0.0,
    "max_yd": 5.0,
    "cast_s": 0.0,
+   "behind": true,
    "weapon": true,
    "gcd_s": 1.0
   },
@@ -9901,17 +9938,20 @@
   "34411": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "behind": true
   },
   "34412": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "behind": true
   },
   "34413": {
    "min_yd": 0.0,
    "max_yd": 5.0,
-   "cast_s": 0.0
+   "cast_s": 0.0,
+   "behind": true
   },
   "34428": {
    "min_yd": 0.0,

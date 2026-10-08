@@ -95,6 +95,7 @@ from jev.world.combat import (
     Ability,
     CombatProfile,
     Role,
+    behind,
     for_class,
     grey_level,
     by_value,
@@ -174,6 +175,13 @@ NEXT_SWING_HOLD_S = 2.5
 # answered and 30 refused, at 1.8 s 222 and 6, and from 1.9 s none was refused. Each refusal
 # cost a look and left its row out for `NOT_READY_HOLD_S`: Fireball, then Arcane Missiles.
 GCD_GUARD_S = 1.9
+# The power a character gains only by fighting (`UnitPowerType` 1): rage. It does not come back
+# on its own as mana and energy do, so what one press spends is what the blow ranked above it
+# waits for (V500). The hive's cohort warriors (8 Oct 04:00-15:30, 12,841 fights) pressed
+# Hamstring - 5 damage for 10 rage - 1.59 times a fight and Heroic Strike 0.93: 95% of the
+# Hamstrings at 10-14 rage, where Heroic Strike's 15 could not be paid, and Thunder Clap's 20
+# in 9% of their fights against two.
+RAGE_TYPE = 1
 
 # After a target vanishes, how long to watch for the experience that proves a kill.
 SETTLE_LOOKS = 3
@@ -2778,7 +2786,11 @@ class Fight:
         # By damage a second where the data says it, not by the bar's slot (V360): Smite in
         # slot 2 left Mind Blast pressed in 1% of the priests' kills.
         # A caster's instant blows keep their places: kept for contact (V165).
-        attacks = by_value(tuple(a for a in profile.by_role(Role.ATTACK) if not _area(a)),
+        # Nor a blow struck only from behind its unit (V501): the unit faces the character it
+        # fights, and the client paints Backstab usable all the same - Jev picked it, and the
+        # server refused it "not behind", 2,862 times in a day for five rogues.
+        attacks = by_value(tuple(a for a in profile.by_role(Role.ATTACK)
+                                 if not _area(a) and not behind(a)),
                            keep=instant_blow if casting_instead else None)
         # Damage over time already on this unit is not pressed again while it lasts, and a
         # next-swing blow pressed keeps its cost for its swing (V360).
@@ -2802,6 +2814,13 @@ class Fight:
             attacks = (*shots, *attacks)
         if crowd:
             attacks = (*areas, *attacks)
+        # Rage waits for the blow ranked first (V500): while it cannot pay for it, no attack
+        # ranked below it spends what it waits for, but a dot not yet on the unit and a blow
+        # its own cooldown gates.
+        waiting = self._rage_wanted(attacks, values, pressable, affordable, looked)
+        if waiting is not None:
+            below = attacks[attacks.index(waiting) + 1:]
+            attacks = tuple(a for a in attacks if a not in below or not self._spends_waited(a))
         # Jev's pick among the attacks ready now, asked as the last press began (V298); the
         # bar's order when it has none. Melee's toggle stays the bar's.
         if self.judge is not None:
@@ -2827,6 +2846,43 @@ class Fight:
                     self.judge.ask(values, {_jev_name(a): _jev_text(a) for a in attacks
                                             if not a.toggle and affordable(a)})
             return
+
+    def _rage_wanted(self, attacks: tuple[Ability, ...], values: dict, pressable, affordable,
+                     now: float) -> Ability | None:
+        """The attack the character's rage waits for (V500), or `None`: of `attacks` in the
+        order the fight presses them, the first that costs rage and lacks only that - ready,
+        not held for its swing (`_held`), no form or stance the character never takes, and
+        more rage than it has - before any attack that can be pressed now. Only for rage
+        (`RAGE_TYPE`): mana and energy come back on their own."""
+        if values.get("vitals.power_type") != RAGE_TYPE:
+            return None
+        ready, frac, pool = values.get("bars.ready"), values.get("vitals.power"), \
+            values.get("vitals.power_max")
+        if not isinstance(ready, int) or not isinstance(frac, (int, float)) or not pool:
+            return None
+        rage = frac * pool
+        for attack in attacks:
+            if attack.toggle or repeats(attack):
+                continue
+            if pressable(attack) and affordable(attack):
+                return None                      # pressed now, in its turn
+            facts = spell_facts(attack.spell_id)
+            if (attack.mana and attack.mana > rage and ready & (1 << (attack.slot - 1))
+                    and self._held.get(attack.slot, 0.0) <= now
+                    and not (facts is not None and facts.form)):
+                return attack
+        return None
+
+    @staticmethod
+    def _spends_waited(attack: Ability) -> bool:
+        """Whether pressing `attack` spends the rage another waits for (V500): it costs power
+        and is no damage over time (one not yet on the unit is pressed in its turn; one on it is
+        not offered) and no blow its own cooldown gates (Overpower after a dodge, Mocking
+        Blow)."""
+        if attack.toggle or not attack.mana or lingers(attack):
+            return False
+        facts = spell_facts(attack.spell_id)
+        return not (facts is not None and facts.cooldown_s > 0)
 
     def _guard_due(self, profile: CombatProfile, values: dict, pressable) -> Ability | None:
         """The guard to press now (V396), or `None`: with the selected unit at hand, two

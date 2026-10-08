@@ -488,7 +488,7 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
             continue
         on_bar[here.name] = here
         best = lines.get(here.name)
-        if best is not None and best.rank > here.rank:
+        if best is not None and best.rank > here.rank and fought_with(best):
             out.append(Placement(best.spell_id, slot, here.spell_id))
     # An aura that raises the damage dealt takes the slot of one on the bar that does not
     # (`DAMAGE_AURAS`, V404): Aspect of the Hawk over Aspect of the Monkey.
@@ -507,7 +507,8 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
     for f in sorted(lines.values(), key=lambda f: (NEW_LINE_ROLES.index(f.role)
                                                    if f.role in NEW_LINE_ROLES else 99,
                                                    first.get(f.name, 0), f.spell_id)):
-        if f.role not in NEW_LINE_ROLES or f.name in on_bar or (f.role == "wand" and not wand):
+        if (f.role not in NEW_LINE_ROLES or f.name in on_bar or (f.role == "wand" and not wand)
+                or not fought_with(f)):
             continue
         if f.role in ONE_OF_EACH and (f.role in roles_on_bar
                                       or any(w.role == f.role for w in wanted)):
@@ -540,6 +541,22 @@ def placements(bar: Mapping[int, int | None], known: Iterable[int], *,
         out = [p for p in out if p.slot != slot]
         out.append(Placement(f.spell_id, slot, old.spell_id))
     return out
+
+
+def fought_with(f: SpellFacts) -> bool:
+    """Whether a fight can press the spell at all (V501): not one cast only in a form or stance
+    the character never takes (`SpellFacts.form`: a rogue's Sap and Ambush, out of a Stealth
+    nothing presses; a warrior's Revenge and Shield Block, out of a Defensive Stance it never
+    takes), nor a blow struck only from behind its unit (`jev.world.combat.behind`: Backstab),
+    whose unit faces the character it fights. Neither goes on the bar, so neither is worth
+    buying (`worth_buying`): of the hive's 32 cohort rogues on 8 Oct, 26 had bought Sap and 32
+    Backstab, which the server refused "not behind" 2,862 times in 26 hours; a rogue spends 71
+    silver on them by 20 (Backstab 1, 2 and 3, Sap, Ambush), a warrior 35 on Revenge and
+    Shield Block by 16."""
+    from jev.world.combat import reach
+
+    facts = reach(f.spell_id)
+    return not f.form and not (facts is not None and facts.behind)
 
 
 def _yields(f: SpellFacts) -> bool:

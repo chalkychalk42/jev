@@ -208,6 +208,9 @@ class Reach(NamedTuple):
     combo: bool = False
     unread: bool = False
     gcd_s: float = 0.0
+    # Struck only from behind its unit (V501): Backstab, Ambush, Garrote. A unit fighting the
+    # character faces it, and the client paints the slot usable all the same.
+    behind: bool = False
 
     @property
     def instant(self) -> bool:
@@ -242,7 +245,7 @@ def _reaches() -> dict[int, Reach]:
                           float(v.get("dmg", 0.0)), float(v.get("dot", 0.0)),
                           float(v.get("dot_s", 0.0)), bool(v.get("weapon")),
                           bool(v.get("combo")), bool(v.get("unread")),
-                          float(v.get("gcd_s", 0.0)))
+                          float(v.get("gcd_s", 0.0)), bool(v.get("behind")))
             for k, v in (raw.get("spells") or {}).items()}
 
 
@@ -277,6 +280,12 @@ def lingers(ability: Ability) -> bool:
     """An attack whose damage is mostly over time (`Reach.lingers`, V360)."""
     facts = reach(ability.spell_id)
     return ability.role is Role.ATTACK and facts is not None and facts.lingers
+
+
+def behind(ability: Ability) -> bool:
+    """A blow struck only from behind its unit (`Reach.behind`, V501): Backstab, Ambush."""
+    facts = reach(ability.spell_id)
+    return facts is not None and facts.behind
 
 
 def instant_blow(ability: Ability) -> bool:

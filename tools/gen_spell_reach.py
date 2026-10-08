@@ -34,6 +34,13 @@ NEXT_SWING = 0x4 | 0x400
 # server's `SPELL_ATTR_EX2_AUTOREPEAT_FLAG`): pressed once, it shoots on every ranged swing,
 # and on the client pressed again while it repeats it stops (V358).
 AUTO_REPEAT = 0x20
+# Bits of a blow struck only from behind its unit (V501; the server's `Spell::CheckTarget`):
+# AttributesEx2's INITIATE_COMBAT_POST_CAST with AttributesEx's INITIATES_COMBAT_ENABLES_AUTO_
+# ATTACK, a druid's Pounce aside (its facing limit went in 2.0.1, the flags stayed), or the
+# server's own FACING_BACK. Backstab, Ambush, Garrote: a unit fighting the character faces it,
+# and the client's bar paints them usable all the same.
+BEHIND_EX2, BEHIND_EX, FACING_BACK_SS = 0x00100000, 0x00000200, 0x00000008
+SPELLFAMILY_DRUID, POUNCE_FAMILY_FLAG = 7, 0x0000000000020000
 # What a cast deals (V360): its first, second and third effects' school damage (2) at the mean
 # of their roll, and the auras that deal it over time - periodic damage (3), a periodic leech
 # (53) and a periodic trigger of a damaging spell (23, Arcane Missiles' missiles) - over their
@@ -131,8 +138,10 @@ def reach(db: sqlite3.Connection, ids: list[int]) -> dict[str, dict]:
               for row in db.execute("SELECT id, c1, c2 FROM dbc_SpellRange")}
     casts = {row[0]: row[1] for row in db.execute("SELECT id, c1 FROM dbc_SpellCastTimes")}
     out = {}
-    for spell_id, range_index, cast_index, attributes_ex, attributes, attributes_ex2 in db.execute(
-            f"SELECT Id, RangeIndex, CastingTimeIndex, AttributesEx, Attributes, AttributesEx2 "
+    for (spell_id, range_index, cast_index, attributes_ex, attributes, attributes_ex2, server,
+         family, family_flags) in db.execute(
+            f"SELECT Id, RangeIndex, CastingTimeIndex, AttributesEx, Attributes, AttributesEx2, "
+            f"AttributesServerside, SpellFamilyName, SpellFamilyFlags "
             f"FROM world_spell_template WHERE Id IN ({','.join('?' * len(ids))})", ids):
         low, high = ranges.get(range_index, (0.0, 0.0))
         out[str(spell_id)] = {"min_yd": round(low, 1), "max_yd": round(high, 1),
@@ -143,6 +152,10 @@ def reach(db: sqlite3.Connection, ids: list[int]) -> dict[str, dict]:
             out[str(spell_id)]["next_swing"] = True
         if (attributes_ex2 or 0) & AUTO_REPEAT:
             out[str(spell_id)]["repeats"] = True
+        pounce = family == SPELLFAMILY_DRUID and int(family_flags or 0) & POUNCE_FAMILY_FLAG
+        if ((((attributes_ex2 or 0) & BEHIND_EX2 and (attributes_ex or 0) & BEHIND_EX)
+                and not pounce) or (server or 0) & FACING_BACK_SS):
+            out[str(spell_id)]["behind"] = True
         out[str(spell_id)].update(damage(db, spell_id))
     return dict(sorted(out.items(), key=lambda item: int(item[0])))
 
