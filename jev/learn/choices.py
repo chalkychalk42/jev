@@ -250,6 +250,9 @@ class Stations:
         self._judged_at: float | None = None
         self._open: tuple[tuple, float] | None = None
         self._walk: float | None = None
+        # Who ordered the last lap: "jev" when the judge picked where it begins, which the hunt
+        # keeps (V512); "local" for the draw alone.
+        self.by: str | None = None
 
     def order(self, stations: Sequence[Sequence[float]]) -> list[tuple]:
         """One lap of `stations`, the most payoffs a second first (V310), each a little less
@@ -269,6 +272,7 @@ class Stations:
             if first is not None:
                 order = [first] + [i for i in order if i != first]
                 by = "jev"
+        self.by = by
         if self.log is not None:
             self.log.write({"event": "choice", "point": self.point, "objective": self.objective,
                             "rate": round(rate, 4), "by": by,

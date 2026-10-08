@@ -63,7 +63,7 @@ from jev.orch.runtime import Armed
 from jev.perceive.radio_frame import CLASS_BY_ID, RACE_BY_ID, UI_ERROR_KEYS, list_lines, name_id
 from jev.run.client import ARRIVED_NEAR_YARDS, FLOOR_SWITCH_YARDS, FOCUS_QUICK_S, Client, surfaces_under
 from jev.run.evidence import event
-from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, Place, spawn_tour
+from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, Looked, Place, spawn_tour
 from jev.run.hunt import stations as hunt_stations
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import graveyards, hostiles, pets
@@ -368,6 +368,9 @@ KIT_IDS_SAID = 8
 # A caster's hunt stands this far short of each station: inside Fireball's 35 yards and
 # Frostbolt's 30, outside most mobs' notice (V167).
 CASTER_STANDOFF_YARDS = 18.0
+# The objectives whose empty looks are kept (`LiveBody._hunt_looked`, V511): a step's own and
+# the few before it, between which a route goes back and forth.
+LOOKED_KEPT = 8
 # A reading this recent stands for the state a service check needs (V338): the hunt's own,
 # taken a moment before it asks.
 RECENT_READ_S = 0.5
@@ -1166,7 +1169,8 @@ class LiveBody:
                     walk_note=lambda: self._walk_note(level), observe=observe,
                     place=self._hunt_place((self.arm.step_id if self.arm is not None else None,
                                             objective_key(wanted, node.id))),
-                    where=self._world_position)
+                    where=self._world_position,
+                    looked=self._hunt_looked(objective_key(wanted, node.id)))
         hunt.pull_refused = self._pull_refused      # the repair before the next pull (V393)
         yards = destination.hunt_yards or DEFAULT_HUNT_YARDS
         grind = node.kind in (StepKind.GRIND, StepKind.DING_GATE)
@@ -1246,6 +1250,22 @@ class LiveBody:
         if kept is None or kept[0] != key:
             kept = self._place = (key, Place())
         return kept[1]
+
+    def _hunt_looked(self, objective: str) -> Looked:
+        """Where this character's looks for `objective` found nothing lately (`Looked`, V511),
+        kept across its hunts of it on the guide's map: a look for kobolds that found none says
+        nothing of the wolves another quest wants. `LOOKED_KEPT` objectives are kept, the
+        latest; another map's begin afresh."""
+        map_id = getattr(getattr(self.client, "bounds", None), "map_id", None)
+        kept = getattr(self, "_looked", None)
+        if kept is None or kept[0] != map_id:
+            kept = self._looked = (map_id, {})
+        memory = kept[1]
+        looked = memory.pop(objective, None) or Looked(map_id=map_id)
+        memory[objective] = looked                      # the latest last
+        while len(memory) > LOOKED_KEPT:
+            memory.pop(next(iter(memory)))
+        return looked
 
     def _world_position(self) -> tuple[float, float] | None:
         """Where the character stands, in world yards on the guide's map; `None` unread."""

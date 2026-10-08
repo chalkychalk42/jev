@@ -1,0 +1,249 @@
+{
+ "source": {
+  "run": "20261008T131307-713839",
+  "client": "hive-722",
+  "class": "warrior",
+  "note": "JevHive cohort, 8 Oct 2026, the Barrens; a hunt begun afresh after another step's hunt waited on a death camp; positions in world yards from the strip's map coordinates; station keys to the yard (choices.jsonl)",
+  "what": "A hunt begun afresh 4 yards from a station nobody had looked at: the draw's first was one an empty look had covered 80 s before, 60 yards off, its second one covered 12 s before; four empty looks and two walks later the hunt was walking back to the station it began beside"
+ },
+ "objective": "creature:56393",
+ "stations": [
+  [
+   -252.0,
+   -3156.0
+  ],
+  [
+   -214.0,
+   -3177.0
+  ],
+  [
+   -192.0,
+   -3139.0
+  ],
+  [
+   -277.0,
+   -3118.0
+  ],
+  [
+   -319.0,
+   -3086.0
+  ],
+  [
+   -309.0,
+   -3159.0
+  ],
+  [
+   -318.0,
+   -3210.0
+  ],
+  [
+   -258.0,
+   -3212.0
+  ],
+  [
+   -152.0,
+   -3254.0
+  ]
+ ],
+ "laps": [
+  [
+   [
+    -252.0,
+    -3156.0
+   ],
+   [
+    -214.0,
+    -3177.0
+   ],
+   [
+    -192.0,
+    -3139.0
+   ],
+   [
+    -277.0,
+    -3118.0
+   ],
+   [
+    -319.0,
+    -3086.0
+   ],
+   [
+    -309.0,
+    -3159.0
+   ],
+   [
+    -318.0,
+    -3210.0
+   ],
+   [
+    -258.0,
+    -3212.0
+   ],
+   [
+    -152.0,
+    -3254.0
+   ]
+  ],
+  [
+   [
+    -252.0,
+    -3156.0
+   ],
+   [
+    -214.0,
+    -3177.0
+   ],
+   [
+    -192.0,
+    -3139.0
+   ],
+   [
+    -277.0,
+    -3118.0
+   ],
+   [
+    -309.0,
+    -3159.0
+   ],
+   [
+    -319.0,
+    -3086.0
+   ],
+   [
+    -258.0,
+    -3212.0
+   ],
+   [
+    -318.0,
+    -3210.0
+   ],
+   [
+    -152.0,
+    -3254.0
+   ]
+  ]
+ ],
+ "at": [
+  -193.9,
+  -3142.2
+ ],
+ "t": 1791462453.0,
+ "looks_before": [
+  {
+   "t": 1791462372.94,
+   "at": [
+    -253.9,
+    -3152.8
+   ]
+  },
+  {
+   "t": 1791462377.23,
+   "at": [
+    -253.9,
+    -3152.8
+   ]
+  },
+  {
+   "t": 1791462440.92,
+   "at": [
+    -216.2,
+    -3175.6
+   ]
+  },
+  {
+   "t": 1791462445.97,
+   "at": [
+    -216.2,
+    -3175.6
+   ]
+  }
+ ],
+ "recorded": [
+  {
+   "t": 1791462463.86,
+   "op": "hunt.approach",
+   "code": "true",
+   "s": 10.83,
+   "at": [
+    -246.1,
+    -3156.1
+   ],
+   "destination": [
+    -252.2,
+    -3155.6
+   ]
+  },
+  {
+   "t": 1791462467.99,
+   "op": "fight",
+   "code": "no_target",
+   "s": 4.13,
+   "at": [
+    -248.8,
+    -3155.9
+   ],
+   "destination": null
+  },
+  {
+   "t": 1791462472.35,
+   "op": "fight",
+   "code": "no_target",
+   "s": 4.36,
+   "at": [
+    -248.8,
+    -3155.9
+   ],
+   "destination": null
+  },
+  {
+   "t": 1791462477.89,
+   "op": "hunt.approach",
+   "code": "true",
+   "s": 5.54,
+   "at": [
+    -221.3,
+    -3172.5
+   ],
+   "destination": [
+    -214.0,
+    -3176.9
+   ]
+  },
+  {
+   "t": 1791462481.9,
+   "op": "fight",
+   "code": "no_target",
+   "s": 4.01,
+   "at": [
+    -216.5,
+    -3175.4
+   ],
+   "destination": null
+  },
+  {
+   "t": 1791462486.36,
+   "op": "fight",
+   "code": "no_target",
+   "s": 4.45,
+   "at": [
+    -216.5,
+    -3175.4
+   ],
+   "destination": null
+  },
+  {
+   "t": 1791462487.97,
+   "op": "hunt.approach",
+   "code": "exception",
+   "s": 1.61,
+   "at": [
+    -213.8,
+    -3171.2
+   ],
+   "destination": [
+    -191.5,
+    -3139.0
+   ]
+  }
+ ]
+}

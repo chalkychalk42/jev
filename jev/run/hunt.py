@@ -41,9 +41,19 @@ RINGS = (0.15, 0.35, 0.6, 1.0)
 PER_RING = 4
 STATIONS = 1 + len(RINGS) * PER_RING
 
-# Fruitless looks at one station before moving on. Two, because a camp is a moving crowd
-# and one empty look says very little.
-DRY_LOOKS = 2
+# Empty looks at a camp's spot before moving on (V510). Two once, "because a camp is a moving
+# crowd and one empty look says very little"; measured, the second says almost nothing: of the
+# hive's 20,110 looks made straight after an empty one from the same spot (8 Oct 04:00-15:30, a
+# third of its runs), 3.7% found anything, against 28% for a look on arriving at a station and
+# 35% after a kill, and the live client's 975 such looks found 6.7% against 39.6% on arriving.
+# Each cost a whole look round, 4.6 s: about one a kill, 4.4 s of the cycle's 71.
+DRY_LOOKS = 1
+# A lone spawn, a named one, is still waited at, and a caster that has not seen it from its
+# stand-off steps to its own spot after this many (V221).
+LONE_DRY_LOOKS = 2
+# Fights that came to blows and nothing (a timeout, a unit out of reach or lost) before the
+# station is left: what is still there is looked for again, as before (V510).
+DRY_PASSES = 2
 # One spawn point is one mob, a named one, and not there it has been killed and is coming
 # back: its spawn is waited at, a look every `LONE_LOOK_S`, until the hunt's own time is up.
 # Goldtooth respawns in six minutes; the hunt looked four times in 90 s, called the disk
@@ -66,6 +76,53 @@ PULL_LINE = HEAL_OUT_OF_COMBAT
 # began again on the same objective after a walk cut by combat (4 Oct 16:26-18:30), the next
 # began 34 s after at the median, 104 s at the 90th percentile, 5,462 within this.
 PLACE_KEEP_S = 300.0
+
+# An area a look found empty (V511): a station this near where the character stood for an empty
+# look, within `LOOKED_STALE_S` of it, is covered by it, and walked to only after every station
+# left in the lap that is not. A look sees plates 20 yards round and Tab 40 in front, and a unit
+# wanders: of the hive's 18,365 arrivals at a station (8 Oct 04:00-15:30, a third of its runs,
+# where the positions are sound), those within 30 yards of an empty look made in the 300 s
+# before the walk began found something on arriving 10-22% of the time (5-16% within 60 s of
+# it, 9-20% within 180 s), those 30-50 yards off 37%, farther or with none 44.5%. 44% of the
+# arrivals were so covered, and 15.5% while a station not covered stood in the hunt's tour.
+LOOK_REACH_YARDS = 30.0
+# The world's commonest respawn (300 s for 54,248 of the world's creature spawns): the yield
+# of a covered station is still half a fresh one's at 180-300 s.
+LOOKED_STALE_S = 300.0
+# Empty looks kept: at one look every 10 s or so, more than the window holds.
+LOOKS_KEPT = 64
+
+
+@dataclass
+class Looked:
+    """Where the character's looks for one objective found nothing to fight, and when (V511),
+    kept by the body across that objective's hunts on one map (`LiveBody._hunt_looked`), as
+    `Place` is kept for its tour: a station within `LOOK_REACH_YARDS` of an empty look in the
+    last `LOOKED_STALE_S` is one the character has just looked at, whichever hunt looked."""
+
+    map_id: object = None
+    looks: list = field(default_factory=list)      # (when, x, y), oldest first
+
+    def empty(self, where, now: float) -> None:
+        """A look from `where` (world yards) found nothing at `now`."""
+        if where is None or len(where) < 2 or None in where[:2]:
+            return
+        self.looks.append((now, float(where[0]), float(where[1])))
+        if len(self.looks) > LOOKS_KEPT:
+            del self.looks[:len(self.looks) - LOOKS_KEPT]
+
+    def covered(self, point, now: float) -> float | None:
+        """Seconds since the latest empty look that covers `point`, within the window; `None`
+        when none does."""
+        for when, x, y in reversed(self.looks):
+            age = now - when
+            if age < 0.0:
+                continue                    # a clock set back: not evidence either way
+            if age >= LOOKED_STALE_S:
+                break
+            if math.dist((x, y), point[:2]) <= LOOK_REACH_YARDS:
+                return age
+        return None
 
 
 class Hunted(StrEnum):
@@ -291,6 +348,9 @@ class Hunt:
     # the top of the pass is not: a repair waits for a meal (V259), and a character losing
     # fights with a broken weapon was hurt at every pass, ate, and pulled again.
     pull_refused: Callable[[dict | None], str | None] | None = None
+    # Where the character's looks found nothing lately (`Looked`, V511), kept by the body across
+    # its hunts; `None` walks the stations in their order whatever was looked at.
+    looked: Looked | None = None
     clock: Callable[[], float] = time.monotonic
     resumed: bool = field(default=False, init=False)
     _found: bool = field(default=False, init=False)
@@ -399,12 +459,19 @@ class Hunt:
                                         "destination": list(posts[post]) if post < len(posts)
                                         else None, "here": list(here) if here else None})
         else:
-            posts = ([p for _ in range(laps) for p in chooser.order(tour)] if chooser is not None
-                     else tour * laps)
+            posts, judged = [], False
+            for n in range(laps):
+                posts += chooser.order(tour) if chooser is not None else list(tour)
+                judged = judged or (n == 0 and getattr(chooser, "by", None) == "jev")
             post = 0
+            if not judged:
+                # Jev's pick of where the first lap begins stands; the draw's first gives way
+                # to the station nearest the character (V512).
+                self._nearest_first(posts, len(tour), clear)
             if place is not None:
                 place.begin(whole, posts, len(tour))
                 place.failed = failed
+        lap = place.lap if self.resumed else len(tour)
         dry = 0
         stood = False
         close = False                # a lone spawn looked for from its own spot (V221)
@@ -482,6 +549,8 @@ class Hunt:
                     self.detail = ("no route to any station could be planned" if self.stuck
                                    else "walked the whole disk and found nothing to fight")
                     return Hunted.UNREACHABLE
+                self._fresh_first(posts, post, lap,
+                                  lambda p: p in clear and p not in failed)
                 target = posts[post]
                 if place is not None:
                     place.post = post                # walked to, then stood at (V343)
@@ -558,10 +627,14 @@ class Hunt:
                 if stopped is not None:
                     return stopped
             else:
-                # Nothing here worth swinging at. Two empty looks and the camp has moved
-                # on without us; go and stand somewhere else.
+                # Nothing here worth swinging at. An empty look and the camp has moved on
+                # without us, or is not back yet: go and stand somewhere else (V510), and the
+                # area it covered is not looked at again within its respawn (V511).
                 dry += 1
-                if lone and self.standoff_yards and not close and dry >= DRY_LOOKS:
+                empty = outcome is Fought.NO_TARGET
+                if empty and self.looked is not None and self.where is not None:
+                    self.looked.empty(self.where(), self.clock())
+                if lone and self.standoff_yards and not close and dry >= LONE_DRY_LOOKS:
                     # Not seen from a caster's stand-off, which walks nothing when already
                     # within it and so never faces the spawn: from the spawn's own spot,
                     # walked to (V221). The mage stood 18 yards from Garrick Padfoot with
@@ -570,7 +643,7 @@ class Hunt:
                     close, stood = True, False
                 elif lone:
                     self.sleep(LONE_LOOK_S)
-                elif dry >= DRY_LOOKS:
+                elif dry >= (DRY_LOOKS if empty else DRY_PASSES):
                     stood = False
 
         have, need = self.progress()
@@ -596,6 +669,59 @@ class Hunt:
         self.say(f"    {laps} lap(s) and nothing worth fighting: any of {len(names)} more kinds "
                  f"at levels {getattr(wider, 'low', '?')}-{getattr(wider, 'high', '?')}")
         return wider
+
+    def _nearest_first(self, posts: list, lap: int, clear: set) -> None:
+        """A new hunt walks first to the station of its first lap nearest where the character
+        stands (V512), as a resumed one goes on from the nearest (V343), of those no recent
+        empty look covers (V511); the lap goes on in its drawn order, the draw's first where
+        the nearest was. With every station covered, the draw's order stands. Of the hive's
+        2,766 hunts begun afresh with a station not covered (8 Oct 04:00-15:30, a third of its
+        runs), the first walk went to one a median 38-40 yards farther than the nearest of
+        those when it lay within 150 yards, 59-75 yards from farther off: the draw orders a lap
+        by what each station has paid, from the tour's head at the camp's core, not from where
+        the character comes in."""
+        here = self.where() if self.where is not None else None
+        if here is None or None in tuple(here)[:2]:
+            return
+        first = [i for i in range(min(lap, len(posts))) if tuple(posts[i]) in clear]
+        if len(first) < 2:
+            return
+        now = self.clock()
+        fresh = [i for i in first
+                 if self.looked is None or self.looked.covered(posts[i], now) is None]
+        if not fresh:
+            return
+        pick = min(fresh, key=lambda i: (math.dist(posts[i][:2], here[:2]), i))
+        if pick == 0:
+            return
+        event("hunt.nearest_first", data={
+            "station": list(posts[pick]), "instead_of": list(posts[0]),
+            "yards": round(math.dist(posts[pick][:2], here[:2]), 1),
+            "instead_yards": round(math.dist(posts[0][:2], here[:2]), 1)})
+        posts[0], posts[pick] = posts[pick], posts[0]
+
+    def _fresh_first(self, posts: list, post: int, lap: int,
+                     walkable: Callable[[tuple], bool]) -> None:
+        """The next station, when an empty look covers it (V511), gives way to the first one
+        left in its lap that none covers: walked to after them, as the stations of a lap all
+        covered are walked to in their order, as before. Nothing is skipped, so a camp looked
+        empty all round is toured as it was; what changes is that a station just looked at
+        from 20 yards away no longer comes before one nobody has looked at."""
+        if self.looked is None or post >= len(posts):
+            return
+        now = self.clock()
+        age = self.looked.covered(posts[post], now)
+        if age is None:
+            return
+        end = min(len(posts), (post // max(1, lap) + 1) * max(1, lap))
+        for i in range(post + 1, end):
+            point = tuple(posts[i])
+            if walkable(point) and self.looked.covered(point, now) is None:
+                event("hunt.fresh_first", data={"station": list(point),
+                                                "instead_of": list(posts[post]),
+                                                "covered_s": round(age, 1)})
+                posts[post], posts[i] = posts[i], posts[post]
+                return
 
     def _out_of_camps(self, tour) -> tuple[list, list[float]]:
         """The tour without its stations in a death camp, and when each such camp ends (V334).
