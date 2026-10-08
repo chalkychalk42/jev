@@ -342,13 +342,27 @@ def _sides(db: sqlite3.Connection, template: int) -> list[str]:
             if not enemies & mask and (ours | friends) & (mask | MASK_PLAYER)]
 
 
+# The training line of the class trainers' menus the world database leaves with no option at all
+# (V491): flagged gossip and trainer, they open on a text with nothing to choose and never train.
+# The hive's database has each its class's usual line from JevHive's server/sql/trainers.sql; a
+# realm without it still offers none, and the line is not found there, as before.
+EMPTY_MENU_LINES = {
+    6652: "I seek training in the ways of the Hunter.",   # the blood elf hunters' five
+    4008: "I seek training in the ways of the Hunter.",   # Jocaste
+    4482: "I require warrior training.",                  # Wu Shen
+    3642: "I seek more training in the priestly ways.",   # High Priest Rohan
+    9580: "I am interested in mage training.",            # Horace Alder
+}
+
+
 def _gossip(db: sqlite3.Connection, menu: int) -> str | None:
-    """The line that opens the training window: gossip option 5 (GOSSIP_OPTION_TRAINER)."""
+    """The line that opens the training window: gossip option 5 (GOSSIP_OPTION_TRAINER), or the
+    line `EMPTY_MENU_LINES` gives a menu the world database leaves empty."""
     if not menu:
         return None
     row = db.execute("select option_text from world_gossip_menu_option where menu_id=? "
                      "and option_id=5 order by id limit 1", (menu,)).fetchone()
-    return row[0] if row and row[0] else None
+    return row[0] if row and row[0] else EMPTY_MENU_LINES.get(menu)
 
 
 def _learned(db: sqlite3.Connection, spell: int) -> list[int]:
