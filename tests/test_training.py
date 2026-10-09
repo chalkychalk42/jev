@@ -222,7 +222,7 @@ def _names(spell_ids):
 
 
 def test_a_spell_nothing_presses_or_the_bar_will_not_hold_is_not_worth_buying():
-    """Parry (passive), Slow Fall (a new short buff), Flash of Light (a new heal) and
+    """Slow Fall (a new short buff), Flash of Light (a new heal) and
     Blessing of Protection beside Divine Protection (a second save) are never pressed: not
     worth a copper. A new rank of a spell on the bar, a strike, a root, Polymorph (V287),
     damage round the caster (Arcane Explosion, V277) or a conjure is."""
@@ -234,8 +234,11 @@ def test_a_spell_nothing_presses_or_the_bar_will_not_hold_is_not_worth_buying():
     assert worth_buying(5505, MAGE_START | {5504}, mage_bar), "Conjure Water rank 2"
     paladin_bar = starting_bar(2, 1)
     paladin = frozenset({6603, 20154, 635, 498})
-    for spell_id in (3127, 19750, 1022, 21082):
+    for spell_id in (19750, 1022, 21082):
         assert not worth_buying(spell_id, paladin, paladin_bar), spell(spell_id).name
+    # Parry works unpressed: bought (V562, amends this test's V237 reading of a passive).
+    assert worth_buying(3127, paladin, paladin_bar)
+    assert not worth_buying(3127, paladin | {3127}, paladin_bar), "known: not again"
     for spell_id in (639, 20287, 853, 633, 465):
         assert worth_buying(spell_id, paladin, paladin_bar), spell(spell_id).name
 

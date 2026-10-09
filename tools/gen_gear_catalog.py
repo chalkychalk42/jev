@@ -4,7 +4,7 @@ The bot equips upgrades it finds in its bags (`jev.world.gear`). That needs thre
 item the strip cannot give: the slot it goes in, whether this character can use it, and how
 good it is. They come from this server's world database, like the vendor catalog:
 
-- `items`: every armour piece and one-handed weapon up to level 30 in a slot the bot fills,
+- `items`: every armour piece and one- or two-handed weapon up to level 30 in a slot the bot fills,
   and in the ranged slot every wand (V397, shot with `Shoot`) and every bow, gun and crossbow
   (V403, shot with Auto Shot), with its armour type or weapon type, required level, class and
   race masks, and a score - armour plus weighted primary stats for armour, damage per second
@@ -25,11 +25,13 @@ import sqlite3
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-# InventoryType -> the slot the bot fills. Rings and trinkets have two slots each, and
-# two-handers would take the shield off: left out.
+# InventoryType -> the slot the bot fills. Rings and trinkets have two slots each: left out.
+# A two-hander (17) takes the main hand and the off hand both, and is worn where it beats the
+# two together (`jev.world.gear.upgrades`, V563).
 SLOTS = {1: "head", 2: "neck", 3: "shoulders", 5: "chest", 20: "chest", 6: "waist",
          7: "legs", 8: "feet", 9: "wrists", 10: "hands", 16: "back",
-         13: "main_hand", 21: "main_hand", 14: "off_hand", 15: "ranged", 26: "ranged"}
+         13: "main_hand", 21: "main_hand", 14: "off_hand", 15: "ranged", 26: "ranged",
+         17: "two_hand"}
 # In the ranged slot (a bow's InventoryType 15, a gun's, a crossbow's and a wand's 26), what a
 # class's shot fires: a wand (V397), a caster's shot when its mana is spent, and a bow, a gun
 # or a crossbow (V403), a hunter's Auto Shot, its weapon. Only a class whose starting spells
@@ -46,6 +48,9 @@ PROFICIENCIES = {
     9078: (4, 1), 9077: (4, 2), 8737: (4, 3), 750: (4, 4), 9116: (4, 6),
     196: (2, 0), 198: (2, 4), 201: (2, 7), 1180: (2, 15), 15590: (2, 13), 5009: WAND,
     264: BOW, 266: GUN, 5011: CROSSBOW,
+    # Two-handed axes, maces and swords, staves and polearms (V563): every warrior starts with
+    # the first three, a paladin with maces and swords, a shaman, a mage and a druid a staff.
+    197: (2, 1), 199: (2, 5), 202: (2, 8), 227: (2, 10), 200: (2, 6),
 }
 # Armour subclass 0 (cloaks, necks, rings) is miscellaneous and needs no proficiency.
 MISC_ARMOUR = (4, 0)

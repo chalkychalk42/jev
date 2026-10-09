@@ -84,6 +84,12 @@ FIGHT_ROLES = ("strike", "dot", "mark", "slow", "short_buff", "root", "stun", "c
                "area", "save", "last_resort", "heal", "aura", "attack", "wand")
 BETWEEN_ROLES = ("conjure", "long_buff")
 BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
+# Passives worth their price though nothing presses them, bought first at their level (V562,
+# amends V237): Parry (3127), Dual Wield (674), a warrior's Stance Mastery (12678) and a
+# paladin's Spiritual Attunement (31785). Bought by none - "pressed by nothing" - not one of the
+# hive's 116 warriors, paladins, hunters and rogues online on 9 Oct 01:00 had Parry, offered at
+# 1-12 for a silver or eight, nor one of its 32 rogues Dual Wield, three silver at 10.
+PASSIVES_BOUGHT = frozenset({3127, 674, 12678, 31785})
 # What holds off more than one attacker, bought before the oldest gap (V242): a root, a stun,
 # and a guard (V396) - Psychic Scream scatters what is round the priest. A hold takes one,
 # and is bought by its level, as the strikes are (V287).
@@ -249,6 +255,8 @@ def worth_buying(spell_id: int, known: Iterable[int], bar: Mapping[int, int | No
     Frost Nova bought, Dampen Magic is not: `placements` hands a long buff a free slot
     before a root, and would have put it there in Frost Nova's place."""
     facts_of = spell(spell_id, facts)
+    if spell_id in PASSIVES_BOUGHT:
+        return spell_id not in set(known)          # no slot: it works unpressed (V562)
     if facts_of is None or facts_of.role not in BUY_ORDER:
         return False
     known = set(known)
@@ -293,8 +301,11 @@ def buy_order(offer: Offer, known: Iterable[int] = (), facts: dict | None = None
     # mage's 17 deaths in sessions 206-213 had two to four attackers, Mangy Wolves and
     # murlocs below its level among them, and a mage behind on its spells would have
     # bought Frostbolt and both level 8 spells before Frost Nova.
-    return (role not in FIGHT_ROLES, role not in CONTROL_ROLES, offer.level, order, new_line,
-            offer.cost, offer.spell_id)
+    # A passive worth buying goes with the control of more than one: first at its level, for a
+    # silver or a few (V562).
+    passive = offer.spell_id in PASSIVES_BOUGHT
+    return (role not in FIGHT_ROLES and not passive, role not in CONTROL_ROLES and not passive,
+            offer.level, order, new_line, offer.cost, offer.spell_id)
 
 
 def learnable(trainer: Trainer, level: int, known: Iterable[int], *,

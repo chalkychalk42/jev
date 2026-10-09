@@ -12,8 +12,10 @@ compares it against the remembered score and leaves it - so a wrong first guess 
 by the next look, not repeated.
 
 Only what a fresh character of the class can use: its starting proficiencies (Mail,
-One-Handed Maces, Shield...) from the world database, its level, and the item's class and
-race masks. Two-handers are left out: one would take the shield off.
+One-Handed Maces, Shield, Two-Handed Axes, Staves...) from the world database, its level, and
+the item's class and race masks. A two-hander takes the main hand and the off hand both: it is
+worn where it beats what they hold together, and a one-hander or an off-hand piece where it
+and what goes beside it beat the two-hander worn (V563).
 """
 
 from __future__ import annotations
@@ -104,17 +106,38 @@ def usable(item_id: int, class_id: int | None, race_id: int | None, level: int |
     return Piece(item_id=item_id, slot=item["slot"], score=float(item["score"]))
 
 
+# The slots a two-hander takes (V563).
+HANDS = ("main_hand", "off_hand")
+TWO_HAND = "two_hand"
+
+
 def upgrades(bag_items: Iterable[int], worn: Mapping[str, float], *, class_id: int | None,
              race_id: int | None, level: int | None, facts: dict | None = None) -> list[Piece]:
-    """The best usable bag item for each slot that beats what is remembered worn there."""
+    """The best usable bag item for each slot that beats what is remembered worn there; for the
+    hands, the better of a two-hander and what the main and off hand would hold (V563): a
+    warrior of 14 carried a Barbaric Battle Axe (11.9 a second) in its bags and fought with a
+    Billy Club (3.9) on 9 Oct, two-handers being left out of the catalog."""
     best: dict[str, Piece] = {}
     for item_id in set(bag_items):
         piece = usable(item_id, class_id, race_id, level, facts)
-        if piece is None or piece.score <= worn.get(piece.slot, 0.0):
+        if piece is None:
             continue
         if piece.slot not in best or piece.score > best[piece.slot].score:
             best[piece.slot] = piece
-    return sorted(best.values(), key=lambda p: p.slot)
+    out = {slot: p for slot, p in best.items()
+           if slot not in (*HANDS, TWO_HAND) and p.score > worn.get(slot, 0.0)}
+    worn_two = worn.get(TWO_HAND, 0.0)
+    held = {slot: worn.get(slot, 0.0) for slot in HANDS}
+    # What the hands would hold with the bags' best one-handed pieces, against a two-hander.
+    pair = {slot: best[slot] for slot in HANDS
+            if slot in best and best[slot].score > held[slot]}
+    pair_score = sum(pair[s].score if s in pair else held[s] for s in HANDS)
+    two = best.get(TWO_HAND)
+    if two is not None and two.score > max(worn_two, pair_score):
+        out[TWO_HAND] = two
+    elif pair and pair_score > worn_two:
+        out.update(pair)
+    return sorted(out.values(), key=lambda p: p.slot)
 
 
 def keep(bag_items: Iterable[int], worn: Mapping[str, float], *, class_id: int | None,
@@ -166,5 +189,9 @@ def save_worn(path: pathlib.Path | None, pieces: Iterable[Piece]) -> None:
         slots = {}
     for piece in pieces:
         slots[piece.slot] = {"item_id": piece.item_id, "score": piece.score}
+        # A two-hander empties both hands; a hand's piece takes a two-hander off (V563).
+        cleared = HANDS if piece.slot == TWO_HAND else (TWO_HAND,) if piece.slot in HANDS else ()
+        for slot in cleared:
+            slots.pop(slot, None)
     with suppress(OSError):
         atomic_json(path, {"format": 1, "slots": slots})
