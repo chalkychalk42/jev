@@ -138,6 +138,12 @@ WAIT_ELSEWHERE_S = SHORT_RIB_S
 # With no such rib, the ribs are looked through again no sooner than this: a wait ends when a
 # camp does, and a look is every rib's stations against every camp.
 WAIT_LOOK_S = 30.0
+# A rib's own measured rate stands for it from this many played hours at the level (V560): the
+# hive's ribs of 2 h or more at a band were 22,462 of its 23,700 rib hours on 8 Oct.
+RIB_MEASURED_H = 2.0
+# And it is drawn to the level's mean as if this many hours more had paid the mean: a rib of 2 h
+# keeps three fifths of its difference from it, one of 30 h nine tenths.
+RIB_PRIOR_H = 3.0
 # An accept or a hand-in its body says it did (`SUCCEEDED`: the live advance's own reading of a
 # whole log, or the hive's server's answer) is done once the tracker's log has stayed unread this
 # long since (V455, extracted from bet-quests-2's V423): a reader that the strip's paints alias
@@ -289,6 +295,11 @@ class ClientRuntime:
     # class at its level (`rib_pays`); without it - the live bot, or no file - by a kill's
     # experience, as before.
     yields: object | None = None
+    # What the hive measured each grind to pay an hour as played (`jev.learn.values.Values`,
+    # V312), lent as the other priors are: with it a rib is valued by its own measured rate, the
+    # yield table's level-difference estimate only standing in where the values say nothing
+    # (`_rate`, V560).
+    values: object | None = None
     # The level this guide is outgrown at (`jev.run.cli.OUTGROWN_AT`): from it, between two
     # quests, the complete quests' hand-ins nearby are made and the guide is done (V162).
     outgrown_at: int | None = None
@@ -1372,11 +1383,34 @@ class ClientRuntime:
                        scale=self._frame, rate=self._rate())
 
     def _rate(self):
-        """A rib's worth to this character by the yield table (V392), or `None` without one."""
-        yields = self.yields
+        """A rib's worth to this character (`rib_pays`): with the value table, what the hive
+        measured the rib itself to pay an hour at the level over `RIB_MEASURED_H` or more, and a
+        rib not so measured the level's measured mean (V560); without it, the yield table's
+        estimate by the creatures' levels (V392); `None` with neither.
+
+        The yield table knows a rib only by its creatures' levels, so every rib of a band paid
+        alike and the nearest of them won (`RIB_XP_SHARE`): on 8 Oct the hive's characters ground
+        their routes' ribs at 1,208 experience an hour against 2,322 on their route's two best
+        measured ribs of the same levels (22,462 rib hours), a quarter of them at 11-14 in their
+        starting zones - Dun Morogh's 11-13, two laps of its stations with nothing to fight."""
+        yields, values, cls = self.yields, self.values, self._cls
+        if values is not None:
+            means: dict[int, float | None] = {}
+
+            def measured(rib, level):
+                if level not in means:
+                    means[level] = values.played_mean(level, cls, RIB_MEASURED_H)
+                mean = means[level]
+                own = values.played(rib.id, level, cls, RIB_MEASURED_H, toward=mean,
+                                    prior_hours=RIB_PRIOR_H)
+                if own is not None:
+                    return own
+                if mean is not None:
+                    return mean
+                return None if yields is None else yields.rib_rate(*rib_levels(rib), level, cls)
+            return measured
         if yields is None:
             return None
-        cls = self._cls
         return lambda rib, level: yields.rib_rate(*rib_levels(rib), level, cls)
 
     def _barred(self, level: int) -> frozenset[str]:
