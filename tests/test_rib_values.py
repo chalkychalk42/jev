@@ -84,3 +84,19 @@ def test_a_rib_not_measured_takes_the_level_s_mean_and_no_values_is_as_before(tm
     empty = tmp_path / "values.json"
     empty.write_text(json.dumps({"format": 1, "quests": {}, "grinds": {}}))
     assert Values.load(empty) is None
+
+
+def test_a_grind_the_spine_walks_onto_is_chosen_again_by_the_values(tmp_path):
+    """V561: a level 15 priest whose playhead stands on Loch Modan's 15-17 rib (1,653 a priest
+    over 9.6 h) is moved to the best measured rib of its level at the first tick; without the
+    values its spine's rib stands, as before."""
+    v = _values()
+    rt = _runtime(tmp_path, [at15(1000.0 + i) for i in range(3)], values=v)
+    rt.tick(choose=False)
+    assert rt._cls == "priest"
+    pays = rib_pays(list(rt._ribs_all), 15, rt._rate())
+    assert rt.tracker.step_id != "loch_modan_15_17"
+    assert pays[rt.tracker.step_id] >= 0.9 * max(pays.values()), (rt.tracker.step_id, pays)
+    before = _runtime(tmp_path, [at15(1000.0 + i) for i in range(3)])
+    before.tick(choose=False)
+    assert before.tracker.step_id == "loch_modan_15_17"

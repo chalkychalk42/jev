@@ -324,6 +324,9 @@ class ClientRuntime:
     # waits for its rib to be chosen again (`_ding_rib`, V345).
     _rib_level: int | None = field(default=None, init=False)
     _ding_due: bool = field(default=False, init=False)
+    # The step a grind's entry was last looked at for (V561): a grind the spine walks onto is
+    # chosen again, as a ding's is, where the values measure the ribs.
+    _grind_seen: str | None = field(default=None, init=False)
     # The tick's wall time, which the bars' ends are read against, and the ribs waiting at the
     # last tick (`Context.step_waits`): a bar's or a wait's end chooses the rib again (V391).
     _now: float = field(default=0.0, init=False)
@@ -477,6 +480,16 @@ class ClientRuntime:
             self._tracker_event = "rejoin_or_skip"
         if self._wait_elsewhere(state):
             self._tracker_event = "rejoin_or_skip"
+        # A grind the spine walks onto is chosen again as a ding's would be (V561): the route's
+        # own rib is its author's place for the level, and the hive measured a priest at 12 on
+        # Dun Morogh's 11-13 at 782 an hour, laps of stations with nothing to fight, where its
+        # 9-11 rib paid 2,879. Only with the values: without them the choice is the band's
+        # alone, and the spine's rib stands as before.
+        if self.tracker.step_id != self._grind_seen:
+            entered = self._nodes.get(self.tracker.step_id)
+            if self.values is not None and entered is not None and entered.kind is StepKind.GRIND:
+                self._ding_due = True
+            self._grind_seen = self.tracker.step_id
         if self._ding_rib(state):
             self._tracker_event = "rejoin_or_skip"
         # Every tick that stays on the step, arriving included: standing at the quest giver
