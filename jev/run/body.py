@@ -48,7 +48,7 @@ from jev.clients.trainer import TrainerDesk
 from jev.clients.use import UseOn
 from jev.clients.vendor import Vended, Vendor
 from jev.clients.windows import close_observed
-from jev.coach.policy import BAGS_LOW, PET_WHY, SICK_REPAIR_BELOW, Context, service, services
+from jev.coach.policy import BAGS_LOW, PET_WHY, SICK_REPAIR_BELOW, Context, own_rule, service, services
 from jev.coach.schema import Intent
 from jev.guide.coords import map_to_world, world_to_map
 from jev.guide.graph import Graph, ObjectiveTarget
@@ -67,6 +67,7 @@ from jev.run.hunt import DEFAULT_HUNT_YARDS, PACK_YARDS, Hunt, Hunted, Place, sp
 from jev.run.hunt import stations as hunt_stations
 from jev.run.supervisor import BodyFailure, Cancelled, FocusLost, Result, Unsupported
 from jev.world import graveyards, hostiles, pets
+from jev.world import potions as potion_facts
 from jev.world.combat import (
     HEAL_OUT_OF_COMBAT,
     Role,
@@ -96,6 +97,11 @@ from jev.world.vendor import (
     AMMO_KIND,
     AMMO_STACK,
     AMMO_STARTING,
+    PROVISION_STACK,
+    PROVISIONS_DESIRED,
+    PROVISIONS_LOW,
+    PROVISIONS_SHARE,
+    Larder,
     Supply,
     ammo_for,
     ammo_kind,
@@ -110,6 +116,10 @@ from jev.world.vendor import (
     load_merchant_failures,
     merchants,
     note_merchant,
+    provision_to_buy,
+    provisioner_serves,
+    provisions,
+    stock,
     supplies_for,
     surplus_prices,
     wand_for_sale,
@@ -249,6 +259,15 @@ REPAIRER_NEIGHBOUR_YARDS = 60.0
 # mage's restock walked for Goldshire's barkeep, 675 yards through the Defias road, as the
 # walk for Ben Trias had through Elwynn's wolves the hour before (26 September).
 SUPPLY_WALK_MAX_YARDS = 400.0
+# A merchant selling food or drink is a short detour (`LiveBody.larder`, V550) as a repairer is
+# (V393): walking by it adds at most this to the straight way to the guide's step, or with no
+# step to walk to it stands half this from the character. Of the hive's runs of 8 Oct 04:00-
+# 15:30, 70% came within 100 yards of a merchant selling food or drink the character could use,
+# 57% within their first five minutes.
+PROVISION_DETOUR_YARDS = 300.0
+# A placement on the bar that did not land is not tried again for the same item for this long
+# (V551): each meal would try it again.
+BAR_RETRY_S = 600.0
 # Binding the hearthstone (`LiveBody.bindable`): an inn this near the guide's current step,
 # while home is farther than `HOME_FAR_YARDS` from it or unknown. Goldshire's inn is 590
 # yards from Northshire's quests, which bind nowhere, and 360 from Fargodeep Mine's.
@@ -495,6 +514,15 @@ class LiveBody:
         # What the bags' goods would fetch at a merchant at that census (V401): a purchase of
         # the floor's rounds the purse is short of sells them first.
         self._junk_worth = 0
+        # What the bags held to eat and drink at the last census, item: count, less what the
+        # meals since took (V550); `None` before the first census. What the bar's food and drink
+        # slots hold, by what the body put there (V551): a slot it never filled holds what the
+        # character was created with. A placement that did not land, by slot: (item, when). The
+        # merchants a near one's walk turned out too long for, this session.
+        self._larder_rows: dict[int, int] | None = None
+        self._bar_items: dict[int, int] = {}
+        self._bar_failed: dict[int, tuple[int, float]] = {}
+        self._provisions_far: set[int] = set()
         self.travelling = False
         self.policy_context = Context()
         self.checkpoint: Callable[[], None] = lambda: None
@@ -1518,6 +1546,7 @@ class LiveBody:
     def _rest(self, state) -> Result:
         self._clear_of_spawns()
         self._wear_upgrades()
+        self._stock_bar()
         self._place_spells()
         self._spend_talents()
         self._bar_profile()
@@ -1527,19 +1556,297 @@ class LiveBody:
         line = (self.measured_mana_line() if caster else None) or rest_mana(caster)
         if (state.vitals.power_type is PowerType.MANA and state.vitals.power is not None
                 and state.vitals.power < line):
+            # Short of mana and hurt, every class that drinks eats with it (V553), as V167 had
+            # a caster do: a paladin or a hunter drank to its line, stood, and sat down again
+            # to eat - two meals' time for one.
             hurt = state.vitals.hp is not None and state.vitals.hp < HEAL_OUT_OF_COMBAT
-            rested = self._result(self.rest.until_both(0.9, drink_to(caster)) if caster and hurt
+            rested = self._result(self.rest.until_both(0.9, drink_to(caster)) if hurt
                                   else self.rest.until(drink_to(caster), role=Role.DRINK),
                                   self.rest.detail)
+            self._ate()
             self._conjure()
             self.fight.buff_up()
             return rested
         if self.fight.top_up():
             return Result(SkillOutcome.SUCCEEDED, "health topped up", "healthy")
         rested = self._result(self.rest.until(0.9), self.rest.detail)
+        self._ate()
         self._conjure()
         self.fight.buff_up()
         return rested
+
+    # -- food and drink: kept, on the bar, eaten (V550-V553) ------------------------------
+
+    def _count_provisions(self, census: dict | None) -> None:
+        """What the bags hold to eat and drink, from a whole census (V550): every food and
+        drink by item, whatever it is - bought, looted, a quest's or conjured - and every
+        potion (V555)."""
+        if not census:
+            return
+        rows: dict[int, int] = {}
+        for item, count in census.values():
+            if item and count and (consumable_role(item) is not None
+                                   or potion_facts.kind(item) is not None):
+                rows[item] = rows.get(item, 0) + count
+        self._larder_rows = rows
+
+    def _bar_slots(self, values: dict) -> dict[str, tuple[int, int | None]]:
+        """The bar's food and drink slots, role: (main-bar slot 1-12, the item the body last
+        put there, else the one the character was created with there). A warrior's food is on
+        its stance's bar, slot 84, which keys and paints as slot 12 (V552)."""
+        out = {}
+        for supply in supplies_for(values.get("char.class_id"), values.get("char.race_id")):
+            role = supply.role.lower()
+            if role not in ("food", "drink") or supply.slot is None:
+                continue
+            slot = (supply.slot - 1) % 12 + 1
+            out[role] = (slot, self._bar_items.get(slot, supply.item_id))
+        return out
+
+    def _stock_bar(self) -> None:
+        """The best food and drink the bags hold go on the bar's food and drink slots, where
+        a meal presses them (V551): what a purchase brought is eaten from the bar, not the bags
+        - a meal from the bags is a census and a right-click, 8.4 s a meal on the live client.
+        From the last census; out of combat, no shop open, the cursor empty. A placement that
+        does not land is not tried again for the same item for `BAR_RETRY_S`."""
+        values = self._read()
+        rows = self._larder_rows
+        if (not values or not rows or values.get("vitals.combat") is not False
+                or values.get("ui.vendor") is not False):
+            return
+        level = values.get("char.level")
+        level = level if isinstance(level, int) else None
+        slots = self._bar_slots(values)
+        for role, (slot, held) in sorted(slots.items()):
+            best = next((item for item in consumables(role, level) if rows.get(item)), None)
+            if best is not None and best != held:
+                self._place_on_bar(role, best, slot, held)
+        # A potion of each kind the class drinks, on a slot of its own (V555): the one it has, or
+        # the highest the bar's census reads empty - 11 first, a class that drinks no water's.
+        bar = None
+        for which in ("heal", "mana") if "drink" in slots else ("heal",):
+            best = potion_facts.best(rows, which, level)
+            slot = next((s for s, item in sorted(self._bar_items.items())
+                         if potion_facts.kind(item) == which), None)
+            if best is None or (slot is not None and self._bar_items[slot] == best):
+                continue
+            if slot is None:
+                bar = bar if bar is not None else (self._census()[0] or {})
+                taken = {s for s, _ in slots.values()} | set(self._bar_items)
+                slot = next((s for s in (11, *range(10, 0, -1))
+                             if bar.get(s) == 0 and s not in taken), None)
+                if slot is None:
+                    event("bar.item", code="no_slot", data={"role": which, "item": best})
+                    continue
+            self._place_on_bar(f"{which} potion", best, slot, self._bar_items.get(slot))
+
+    def _place_on_bar(self, role: str, item: int, slot: int, held: int | None) -> bool:
+        """Put `item` on the bar's `slot` (V551), remembered; one that did not land is not tried
+        again for the item for `BAR_RETRY_S`. The bar is read again afterwards, as after a
+        spell's drag, before anything else is put on it."""
+        failed = self._bar_failed.get(slot)
+        if failed is not None and failed[0] == item and time.monotonic() - failed[1] < BAR_RETRY_S:
+            return False
+        placer = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
+                        self.client.size)
+        placed = placer.place_item(item, slot)
+        event("bar.item", code="placed" if placed else "not_placed",
+              data={"role": role, "slot": slot, "item": item, "was": held,
+                    "detail": placer.detail})
+        self.say(f"  {role} {item} on the bar's slot {slot}: "
+                 f"{'placed' if placed else 'not placed'}"
+                 + (f" ({placer.detail})" if placer.detail and not placed else ""))
+        census = getattr(self.client, "spells", None)
+        if census is not None and hasattr(census, "forget_bar"):
+            with self.client._capturing:
+                census.forget_bar()
+        if placed:
+            self._bar_items[slot] = item
+            self._bar_failed.pop(slot, None)
+            self._save_purse()
+        else:
+            self._bar_failed[slot] = (item, time.monotonic())
+        return placed
+
+    def _provision_roles(self, values: dict) -> tuple[str, ...]:
+        """What the character eats and drinks that a merchant sells it (V550): what its bar
+        keeps a slot for - food for every class, drink for a class that spends mana - less what
+        it conjures for itself (V166)."""
+        conjured = self.conjured_roles()
+        return tuple(role for role in sorted(self._bar_slots(values)) if role not in conjured)
+
+    def larder(self, state: State) -> Larder | None:
+        """What the bags hold to eat and drink, as the policy asks it (`Context.larder`, V550),
+        from the last census: the roles none of which they hold, and the cheapest purchase in
+        the zone of what those eat; and the roles under `PROVISIONS_LOW` of the best tier a
+        merchant in the zone sells for which one a short detour off sells that tier
+        (`_provisions_near`), with the cheapest purchase there. `None` before the first census:
+        the strip's starting food and drink are the policy's. From the state alone, in the
+        supervisor's thread."""
+        rows = self._larder_rows
+        if rows is None:
+            return None
+        try:
+            values = {"char.class_id": CLASS_IDS.get(state.char.cls),
+                      "char.race_id": RACE_IDS.get(state.char.race)}
+            level = state.char.level
+            roles = self._provision_roles(values)
+            sold = self._sold_in_box()
+            empty = tuple(role for role in roles if stock(rows, role, level) == 0)
+            prices = [p.price for item, p in provisions().items()
+                      if item in sold and (level is None or p.level <= level)
+                      and any(p.role in (role, "both") for role in empty)]
+            near, near_price = self._provisions_near(state, rows, roles, level, sold)
+            return Larder(roles=roles, empty=empty, price=min(prices, default=None),
+                          near=near, near_price=near_price)
+        except Exception:
+            return None
+
+    def _provisions_near(self, state: State, rows: dict[int, int], roles, level,
+                         sold) -> tuple[tuple[str, ...], int | None]:
+        """The roles under `PROVISIONS_LOW` of the best tier a merchant in the zone sells
+        (`sold`) for which a merchant a short detour off sells that tier - any tier, for a role
+        the bags hold none of - and the cheapest such purchase (V550). Short is as for a
+        repairer near (`repairer_near`, V393): walking by it adds at most
+        `PROVISION_DETOUR_YARDS` to the straight way to the guide's step, or it stands half that
+        from the character with no step to walk to; inside the measured zone's box or the box of
+        the zone the character stands in, serving its side, and not one whose walk this session
+        turned out too long."""
+        from jev.world.vendor import best_tier
+
+        wanted: dict[str, int] = {}
+        free = state.bags.free
+        for role in roles:
+            tier = best_tier(role, level, sold)
+            if tier is None or stock(rows, role, level, at_least=tier) >= PROVISIONS_LOW:
+                continue
+            none = not stock(rows, role, level)
+            if not none and not (isinstance(free, int) and free > BAGS_LOW + 1):
+                continue                     # no room but for a role it holds none of
+            wanted[role] = 0 if none else tier
+        bounds = self.client.bounds
+        if not wanted or bounds is None or state.pos.mx is None or state.pos.my is None:
+            return (), None
+        here = map_to_world(state.pos.mx, state.pos.my, bounds)[:2]
+        node = self.graph.get(state.guide.step_id or "")
+        there = (node.world[:2] if node is not None and node.world is not None
+                 and node.map_id == bounds.map_id else None)
+        boxes = [bounds]
+        zone = (getattr(self.client, "coordinate_zones", None) or {}).get(state.pos.zone_id)
+        if zone is not None and zone != bounds and zone.map_id == bounds.map_id:
+            boxes.append(zone)
+        side = self._side or state.char.faction
+        found: set[str] = set()
+        price = None
+        for merchant in self._map_provisioners():
+            if (merchant.entry in self._provisions_far
+                    or not provisioner_serves(merchant.entry, side)):
+                continue
+            at = merchant.world[:2]
+            if not any((p := world_to_map(*at, box)) is not None
+                       and all(0 <= v <= 1 for v in p) for box in boxes):
+                continue
+            extra = (2 * math.dist(here, at) if there is None else
+                     math.dist(here, at) + math.dist(at, there) - math.dist(here, there))
+            if extra > PROVISION_DETOUR_YARDS:
+                continue
+            for role, tier in wanted.items():
+                offer = provision_to_buy(role, level, merchant.items, None, rows)
+                if offer is not None and offer.level >= tier:
+                    found.add(role)
+                    price = offer.price if price is None else min(price, offer.price)
+        return tuple(sorted(found)), price
+
+    def _map_provisioners(self) -> tuple:
+        """The merchants that sell food or drink on the guide's map, kept a map at a time."""
+        map_id = self.client.bounds.map_id
+        kept = getattr(self, "_provisioners_kept", None)
+        if kept is None or kept[0] != map_id:
+            sold = set(provisions())
+            kept = self._provisioners_kept = (map_id, tuple(m for m in merchants(map_id)
+                                                            if m.items & sold))
+        return kept[1]
+
+    def _provisions_at(self, sold, values: dict, *, spent: int = 0) -> tuple[Supply, ...]:
+        """What to buy of food and drink at a merchant selling `sold` (V550), as a player
+        buys: for each role the bar keeps (`_provision_roles`), the best tier the level may use
+        that the merchant sells and the purse spares a purchase of, to `PROVISIONS_DESIRED` of
+        that tier or better - nothing while one purchase would overfill it. `PROVISIONS_SHARE`
+        of the purse above what it keeps (`_kept`: the trainer's due or the repair reserve) and
+        `spent` (the ammunition bought first) goes a purchase at a time, the role the bags hold
+        fewer of first, a first purchase for a role held none of from all of it; and no more
+        new bag slots are filled than leave one more than `BAGS_LOW` free -
+        nearly full bags are a merchant's walk of their own - but one for a role the bags hold
+        none of, which the visit sells junk for."""
+        money, level, free = (values.get("bags.money_copper"), values.get("char.level"),
+                              values.get("bags.free"))
+        # A level not read buys the first tier; a purse not read is not a reason to buy
+        # nothing (V195): the desk sees the price and the purse at the merchant.
+        level = level if isinstance(level, int) else 1
+        rows = self._larder_rows or {}
+        spare = (money - self._kept(values) - max(0, spent)) if isinstance(money, int) else None
+        budget = None if spare is None else spare * PROVISIONS_SHARE
+        plans = []
+        for role in self._provision_roles(values):
+            none = stock(rows, role, level) == 0
+            # The best tier the share pays for, or all of the purse for a first purchase of a
+            # role the bags hold none of.
+            offer = provision_to_buy(role, level, sold,
+                                     None if spare is None else spare if none else budget, rows)
+            if offer is None:
+                continue
+            have = stock(rows, role, level, at_least=offer.level)
+            want = PROVISIONS_DESIRED - have
+            if want >= offer.count:
+                plans.append({"role": role, "offer": offer, "have": have, "none": none,
+                              "wanted": -(-want // offer.count), "given": 0})
+        slots = max(0, free - BAGS_LOW - 1) if isinstance(free, int) else 0
+        spare_slot = any(plan["none"] for plan in plans)
+        plans.sort(key=lambda plan: (plan["have"], plan["role"]))
+        while True:
+            given = False
+            for plan in plans:
+                offer = plan["offer"]
+                first = plan["none"] and not plan["given"]
+                if plan["given"] >= plan["wanted"] or (spare is not None and (
+                        spare < offer.price or (budget < offer.price and not first))):
+                    continue
+                owned = rows.get(offer.item_id, 0) + plan["given"] * offer.count
+                new = (-(-(owned + offer.count) // PROVISION_STACK)
+                       - -(-owned // PROVISION_STACK))
+                if new > slots:
+                    if not (plan["none"] and spare_slot and new <= slots + 1):
+                        continue
+                    spare_slot = False
+                    slots += 1
+                slots -= new
+                if spare is not None:
+                    spare, budget = spare - offer.price, budget - offer.price
+                plan["given"] += 1
+                given = True
+            if not given:
+                break
+        kept = self._kept(values)
+        return tuple(Supply(item_id=plan["offer"].item_id, name=f"{plan['role']} "
+                            f"{plan['offer'].item_id}", role=plan["role"],
+                            desired=(rows.get(plan["offer"].item_id, 0)
+                                     + plan["given"] * plan["offer"].count),
+                            reserve=kept)
+                     for plan in plans if plan["given"])
+
+    def _ate(self) -> None:
+        """Take what the meal ate from the bar out of the larder (V550): one of the slot's
+        item a press. A meal from the bags is taken out where it is eaten."""
+        rows = self._larder_rows
+        taken = getattr(self.rest, "taken", None)
+        if rows is None or not taken:
+            return
+        slots = self._bar_slots(self._read() or {})
+        for role, how in taken.items():
+            item = slots.get(getattr(role, "value", role), (None, None))[1]
+            presses = sum(1 for way in how if way == "bar")
+            if item is not None and presses and rows.get(item):
+                rows[item] = max(0, rows[item] - presses)
 
     def _spend_talents(self) -> None:
         """Talent points unspent go to the class's build, at a meal (V261): the paladin
@@ -1570,6 +1877,9 @@ class LiveBody:
         used = user.use_item(consumables(kind, values.get("char.level")))
         self.say(f"    {kind} from the bags: {used}" if used is not None
                  else f"    no {kind} in the bags - {user.detail}")
+        rows = self._larder_rows
+        if used is not None and rows is not None and rows.get(used):
+            rows[used] -= 1
         return used is not None
 
     def _conjure(self) -> None:
@@ -1646,6 +1956,8 @@ class LiveBody:
         if items is None:
             return
         self._gear_checked = revision
+        # What the bags hold to eat and drink (V550).
+        self._count_provisions(getattr(wearer, "last_census", None))
         # A shooter's rounds, and better ones loaded where the body can (V393, V401).
         self._count_ammo(getattr(wearer, "last_census", None), values)
         self._load_best_ammo(values)
@@ -1701,6 +2013,15 @@ class LiveBody:
         base = for_class(values.get("char.class_id"), values.get("char.race_id"))
         bar, _ = self._census()
         self.fight.profile = profile_from_bar(bar, base) if bar else None
+        # The potions on the bar (V555), where the census still reads an item: a slot it reads
+        # empty or holding a spell holds the potion no longer.
+        if bar:
+            for slot, item in list(self._bar_items.items()):
+                if potion_facts.kind(item) is not None and bar.get(slot) is not None:
+                    self._bar_items.pop(slot)
+            self.fight.potions = {potion_facts.kind(item): slot
+                                  for slot, item in sorted(self._bar_items.items())
+                                  if potion_facts.kind(item) is not None}
 
     def _trainer(self, state: State | None = None):
         """The class trainer worth a visit now (`jev.world.training.trainer_due`), or None."""
@@ -1772,6 +2093,13 @@ class LiveBody:
                 revived = raw.get("revived_at") if isinstance(raw, dict) else None
                 if isinstance(revived, (int, float)) and not isinstance(revived, bool):
                     self._revived_at = float(revived)
+                # What the body put on the bar's food and drink slots (V551): the bar is the
+                # server's, kept between sessions, and so is what is on it.
+                kept = raw.get("bar_items") if isinstance(raw, dict) else None
+                if isinstance(kept, dict):
+                    self._bar_items = {int(k): int(v) for k, v in kept.items()
+                                       if str(k).isdigit() and isinstance(v, int)
+                                       and not isinstance(v, bool)}
                 ready = raw.get("hearth_ready_at") if isinstance(raw, dict) else None
                 if isinstance(ready, (int, float)) and not isinstance(ready, bool):
                     self._hearth_ready_at = float(ready)
@@ -1797,6 +2125,7 @@ class LiveBody:
         context.reserve = self.training_reserve
         context.repairer_near, context.disarmed = self.repairer_near, self.disarmed
         context.ammo_low = self.ammo_low
+        context.larder = self.larder
         context.bindable = self.bindable
         context.discoverable = self.discoverable
         context.conjures = self.conjured_roles
@@ -1883,7 +2212,10 @@ class LiveBody:
                                                                 if self._graveyard else None),
                                                   "fell": list(fell) if fell else None,
                                                   "alive_at": list(alive) if alive else None,
-                                                  "corpse": list(corpse) if corpse else None})
+                                                  "corpse": list(corpse) if corpse else None,
+                                                  # What the body put on the bar (V551).
+                                                  "bar_items": {str(k): v for k, v in sorted(
+                                                      getattr(self, "_bar_items", {}).items())}})
 
     def _go_home(self):
         """Home by hearthstone; where it sets the character down is home from then on. Not
@@ -3058,30 +3390,55 @@ class LiveBody:
         values, here = self._read(), self._position()
         if values is None or here is None:
             return Result(SkillOutcome.PREEMPTED, "vendor position or inventory unread", "blind")
-        supplies = ()
+        buying = self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD"
+        # Food and drink low with a merchant a short detour off (V550): only what that merchant
+        # sells of the best is walked for, and a walk that turns out long is not asked again.
+        near = buying and own_rule(getattr(self.arm, "rule", None) or "") == "service.provisions"
+        if buying:
+            self._take_larder(values)        # the bags as they are, not as the strip counts them
+        level = values.get("char.level")
+        level = level if isinstance(level, int) else None
+        rows = self._larder_rows
         # A hunter's ammunition running low (V393, V401): bought on this visit, with the food
-        # and drink that are out.
-        ammo = (self._ammo_supply(state, values)
-                if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD" else ())
-        if self.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD" and not ammo:
-            supplies = tuple(s for s in supplies_for(values.get("char.class_id"), values.get("char.race_id"))
-                             if getattr(state.bags, f"{s.role.lower()}_count", None) == 0
-                             and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id)
-            # And the hunter's pet's food, bought with them (V389).
-            supplies = self._with_pet_food(supplies, state)
-            if not supplies and state.pet.has is True:
+        # and drink the merchant sells (V550).
+        ammo = self._ammo_supply(state, values) if buying else ()
+        # And the hunter's pet's food (V389).
+        pet = self._with_pet_food((), state) if buying and not ammo else ()
+        if rows is not None:
+            empty = [role for role in self._provision_roles(values) if not stock(rows, role, level)]
+        else:
+            empty = [s.role.lower() for s in supplies_for(values.get("char.class_id"),
+                                                          values.get("char.race_id"))
+                     if getattr(state.bags, f"{s.role.lower()}_count", None) == 0
+                     and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id]
+        # What the walk is for, as items a merchant must sell one of (V550): anything the level
+        # may eat or drink of a role the bags hold none of; for a merchant near, the best tier
+        # sold in the zone of the roles it is low on.
+        food = set()
+        if buying and not ammo:
+            for role in (self._low_roles(values) if near else empty):
+                food |= self._provision_items(role, level, best=role not in empty)
+        if buying and not (ammo or pet or food):
+            if empty and not near:
+                # None in the zone sells what the empty roles eat (V292, V302).
+                self.policy_context.supplies_out_of_reach("no_supplier")
+                event("provisions.gave_up", code="no_supplier", data={"roles": empty})
+                return Result(SkillOutcome.ABORTED, "no merchant in the measured zone sells food "
+                              "or drink the level can use", "no_supplier")
+            if state.pet.has is True:
                 # Armed for the pet's food, and none to buy by now: the pet fed or dead since
                 # the policy looked. No fault of the session's.
                 return Result(SkillOutcome.ABORTED, "no supply to buy for the pet", "nothing_to_buy")
-            if not supplies:
-                return Result(SkillOutcome.ABORTED, "no confirmed empty supported food/drink slot", "unsupported")
-        elif ammo:
-            supplies = (*(s for s in supplies_for(values.get("char.class_id"),
-                                                  values.get("char.race_id"))
-                          if getattr(state.bags, f"{s.role.lower()}_count", None) == 0
-                          and getattr(state.bags, f"{s.role.lower()}_id", None) == s.item_id),
-                        *ammo)
-        eligible, min_free = junk_prices(), 1 if supplies else 6
+            if rows is not None and not near:
+                # The strip counts the starting food alone: the bags hold others (V550).
+                return Result(SkillOutcome.SUCCEEDED, "the bags hold food and drink",
+                              "not_needed")
+            if near:
+                return Result(SkillOutcome.SUCCEEDED, "food and drink enough", "not_needed")
+            return Result(SkillOutcome.ABORTED, "no confirmed empty supported food/drink slot",
+                          "unsupported")
+        buys = bool(ammo or pet or food)
+        eligible, min_free = {**junk_prices(), **self._leftovers(values, state)}, 1 if buys else 6
         # The floor's rounds the purse cannot pay are paid by the bags' junk, sold first
         # (V401), as a repair's are (V393): Wilge, a level 13 tauren with 2 copper, had no
         # bullet and its Old Blunderbuss broken.
@@ -3090,6 +3447,7 @@ class LiveBody:
                 and money < self._floor_price(ammo[0])):
             min_free = SELL_ALL
         bag = ()
+        planned = values          # the purse and the bags the food's purchase is sized on
         if self.arm.decision.skill == "BAG_MAKE_SPACE":
             # A bag lying in the bags is the cheapest room there is: no merchant needed.
             equipper = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
@@ -3102,6 +3460,8 @@ class LiveBody:
             # since the character is at a merchant anyway and training wants the silver.
             items = equipper.bag_items()
             if items is not None:
+                self._count_provisions(getattr(equipper, "last_census", None))
+                eligible = {**eligible, **self._leftovers(values, state)}
                 keep = gear_keep(items, self._worn(values),
                                  class_id=values.get("char.class_id"),
                                  race_id=values.get("char.race_id"))
@@ -3116,6 +3476,10 @@ class LiveBody:
                 counted = getattr(equipper, "last_census", None) or {}
                 worth = sum(eligible.get(item, 0) * count for item, count in counted.values())
                 free = values.get("bags.free")
+                # The food bought after the sale has the slots the sale empties (V550).
+                if isinstance(free, int):
+                    planned = {**values, "bags.free": free + sum(
+                        1 for item, count in counted.values() if count and eligible.get(item))}
                 # A bag bought needs a slot to land in: one free, or one a sale empties.
                 bag = (self._bag_to_buy(values)
                        if (isinstance(free, int) and free > 0) or worth > 0 else ())
@@ -3124,31 +3488,44 @@ class LiveBody:
                     return Result(SkillOutcome.ABORTED,
                                   f"the bags' goods fetch {worth} copper, not worth the walk "
                                   f"with {free} slot{'s' if free > 1 else ''} free", "no_junk")
-        wanted = {s.item_id for s in (*supplies, *bag)}
+        wanted = {s.item_id for s in (*ammo, *pet, *bag)} | food
+        side = self._side or state.char.faction
         candidates = self._in_zone(m for m in merchants(self.client.bounds.map_id)
-                                   if not wanted or wanted & m.items)
+                                   if not wanted or (wanted & m.items and (
+                                       ammo or pet or bag or (provisioner_serves(m.entry, side)
+                                                              and not (near and m.entry
+                                                                       in self._provisions_far)))))
         if not candidates:
             # None in the zone sells what is wanted: as a merchant too far off (V205), nothing
             # to walk to on this step, and no fault of the session's (V292). A human warlock's
             # starting food, the Forest Mushroom Cap, is sold nowhere in Elwynn, and every
             # session stopped on it at once, 2515 times in a quarter of an hour (the hive).
             # Nor on any step after it this session (V302).
-            if supplies:
+            if buys:
                 self.policy_context.supplies_out_of_reach("no_supplier")
+                event("provisions.gave_up", code="no_supplier", data={"roles": empty})
             return Result(SkillOutcome.ABORTED, "no generated supplier in the measured zone",
-                          "no_supplier" if supplies else "unsupported")
+                          "no_supplier" if buys else "unsupported")
         world = map_to_world(*here, self.client.bounds)
         ranked = self._ranked(candidates, world)
         # A purchase keeps what the trainer is owed (V215), or the repair reserve (V393).
-        reserve = self._kept(values) if supplies else 0
-        if supplies:
+        reserve = self._kept(values) if buys else 0
+        if buys:
             walk = self._walks.get(ranked[0].entry)          # planned once, by the ranking
             if walk is None:
                 walk = self._walk_yards(ranked[0].world, math.dist(ranked[0].world[:2], world))
             # Nothing loaded to fire is the weapon gone (V402): no cap, as stranded.
             dry = bool(ammo) and self._dry(values.get("char.class_id"), values.get("char.race_id"))
             if walk > SUPPLY_WALK_MAX_YARDS and not self._stranded(state, values) and not dry:
-                self.policy_context.supplies_out_of_reach("too_far")     # this session (V302)
+                if near:
+                    # The merchant the detour was for is a longer walk than its straight line
+                    # (V550): not asked for again this session.
+                    self._provisions_far.update(m.entry for m in ranked)
+                else:
+                    self.policy_context.supplies_out_of_reach("too_far")     # this session (V302)
+                event("provisions.gave_up", code="too_far",
+                      data={"merchant": ranked[0].name, "walk": round(walk), "near": near,
+                            "roles": empty})
                 return Result(SkillOutcome.ABORTED,
                               f"the nearest merchant with them, {ranked[0].name}, is a "
                               f"{walk:.0f}-yard walk", "too_far")
@@ -3172,16 +3549,33 @@ class LiveBody:
                 else:
                     self.say(f"  {'no rounds to fire' if dry else 'out of food and drink with broken gear'}: "
                              f"walking {walk:.0f} yards to {ranked[0].name}")
+        # What the ammunition bought first will cost, out of what the food may spend.
+        spent = sum(-(-max(0, s.desired - getattr(self, "_ammo_rows", {}).get(s.item_id, 0))
+                      // AMMO_STACK) * price
+                    for s in ammo[-1:]
+                    for item, price in ammo_for(AMMO_KIND.get(s.item_id, "arrow"), None)
+                    if item == s.item_id)
         for merchant in ranked:
             def visit(merchant=merchant):
                 return self._open_merchant(merchant.name, merchant.world,
                                            world_to_map(*merchant.world[:2], self.client.bounds))
             vendor = Vendor(self.client.hid, self._read, visit, self.client.origin, self.client.size,
                             eligible=eligible)
+            # The best food and drink this merchant sells, at any visit (V550), with the pet's
+            # where it is the same item.
+            stocked = self._provisions_at(merchant.items, planned, spent=spent)
+            here_supplies = tuple(s for s in (*ammo, *self._with_pet_food(stocked, state), *bag)
+                                  if s.item_id in merchant.items) if buying else tuple(
+                s for s in (*stocked, *bag) if s.item_id in merchant.items)
+            if stocked:
+                event("provisions.plan", data={
+                    "merchant": merchant.name, "rule": own_rule(getattr(self.arm, "rule", None) or ""),
+                    "skill": self.arm.decision.skill, "money": money, "kept": self._kept(values),
+                    "spent": spent, "free": values.get("bags.free"),
+                    "buy": [{"item": s.item_id, "role": s.role, "desired": s.desired,
+                             "have": (rows or {}).get(s.item_id, 0)} for s in stocked]})
             try:
-                outcome = vendor.run(expected_name=merchant.name,
-                                     supplies=tuple(s for s in (*supplies, *bag)
-                                                    if s.item_id in merchant.items),
+                outcome = vendor.run(expected_name=merchant.name, supplies=here_supplies,
                                      min_free=min_free,
                                      reserve_copper=(self._kept(values) if bag else reserve),
                                      timeout_s=self.travel_timeout + 120)
@@ -3194,7 +3588,7 @@ class LiveBody:
                 continue
             if outcome.ok:
                 note_merchant(self.merchant_memory, merchant.entry, failed=False)
-                if supplies:
+                if buys:
                     self.policy_context.restocked()
                     if ammo:
                         self._ammo_count = None          # counted again at the next census
@@ -3207,7 +3601,7 @@ class LiveBody:
                     free = (self._read() or {}).get("bags.free")
                     if isinstance(free, int) and free <= BAGS_LOW:
                         self.policy_context.bags_failed(free)
-            if outcome is Vended.TOO_POOR and supplies:
+            if outcome is Vended.TOO_POOR and buys:
                 self.policy_context.supplies_need(vendor.needed_copper)
             if bag and vendor.bought_units:
                 # The bag bought goes on the belt at once, where it is room.
@@ -3215,9 +3609,104 @@ class LiveBody:
                               self.client.size)
                 worn = belt.equip_bags(bag_slots())
                 self.say(f"  bought a bag ({bag[0].item_id}): {'on' if worn else 'not on'} the belt")
+            if buys and food and outcome.ok and getattr(vendor, "bought_units", None) == 0:
+                # Food or drink walked for and none bought - the merchant's dearer than the purse,
+                # or the bags without room: not asked for again this session (V550), as a
+                # merchant too far is not (V302).
+                if near:
+                    self._provisions_far.add(merchant.entry)
+                else:
+                    self.policy_context.supplies_out_of_reach("nothing_sold")
+            if stocked:
+                # The bags counted again as they leave the merchant (V550), for the policy's
+                # next look and the next meal's bar.
+                self._take_larder(self._read() or values)
+                after = self._larder_rows or {}
+                event("provisions.bought", code=outcome.value, data={
+                    "merchant": merchant.name, "units": getattr(vendor, "bought_units", None),
+                    "larder": {role: stock(after, role, level)
+                               for role in self._provision_roles(values)}})
             return self._result(outcome, vendor.detail or
                                 f"sold {vendor.sold_stacks} stacks; bought {vendor.bought_units} units")
         raise AssertionError("unreachable: the last merchant returns or raises")
+
+    def _take_larder(self, values: dict | None = None) -> None:
+        """A whole bag census now, for what the bags hold to eat and drink (V550). Out of combat
+        with no dialog; a census that does not finish leaves the last one."""
+        counter = Vendor(self.client.hid, self._read, lambda: False, self.client.origin,
+                         self.client.size)
+        take = getattr(counter, "census", None)
+        census = take() if callable(take) else None
+        if census:
+            self._count_provisions(census)
+
+    def _low_roles(self, values: dict) -> list[str]:
+        """The roles the bags hold fewer than `PROVISIONS_LOW` of, of the best tier a merchant in
+        the measured zone's box sells (V550)."""
+        from jev.world.vendor import best_tier
+
+        rows = self._larder_rows or {}
+        level = values.get("char.level")
+        level = level if isinstance(level, int) else None
+        sold = self._sold_in_box()
+        out = []
+        for role in self._provision_roles(values):
+            tier = best_tier(role, level, sold)
+            if tier is not None and stock(rows, role, level, at_least=tier) < PROVISIONS_LOW:
+                out.append(role)
+        return out
+
+    def _provision_items(self, role: str, level: int | None, *, best: bool,
+                         anywhere: bool = False) -> set[int]:
+        """The food or drink of `role` a character of `level` may use that a merchant in the
+        measured zone's box sells (`anywhere`: in the catalog at all); `best`, of the best tier
+        sold there alone (V550)."""
+        from jev.world.vendor import best_tier
+
+        sold = set(provisions()) if anywhere else self._sold_in_box()
+        level = level if isinstance(level, int) else 1
+        items = {item for item, p in provisions().items()
+                 if item in sold and p.role in (role, "both")
+                 and (level is None or p.level <= level)}
+        if best and items:
+            top = best_tier(role, level, items)
+            items = {item for item in items if provisions()[item].level == top}
+        return items
+
+    def _leftovers(self, values: dict, state=None) -> dict[int, int]:
+        """Food and drink a merchant may buy back when the bags want room (V550): of a role the
+        bags hold `PROVISIONS_LOW` or more of a better tier, the tiers under it, at their sell
+        prices. What is eaten from the bar is the best; the rest is a slot each. Never a food a
+        hunter's pet eats (V389): its family's diet, or any food while the family is not known.
+        And any drink a class that drinks nothing holds."""
+        rows = self._larder_rows or {}
+        pet = getattr(state, "pet", None)
+        family = pets.family_of(pet.entry) if pet is not None and pet.entry else None
+        hunter = self._shoots(values.get("char.class_id"), values.get("char.race_id"))
+        level = values.get("char.level")
+        level = level if isinstance(level, int) else None
+        out: dict[int, int] = {}
+        catalog_ = provisions()
+        for role in self._provision_roles(values):
+            tiers = sorted({catalog_[i].level for i, n in rows.items()
+                            if n and i in catalog_ and catalog_[i].role in (role, "both")
+                            and (level is None or catalog_[i].level <= level)}, reverse=True)
+            top = next((t for t in tiers if stock(rows, role, level, at_least=t) >= PROVISIONS_LOW),
+                       None)
+            if top is None:
+                continue
+            out.update({i: catalog_[i].sell for i, n in rows.items()
+                        if n and i in catalog_ and catalog_[i].role == role
+                        and catalog_[i].level < top and catalog_[i].sell > 0
+                        and not (hunter and role == "food"
+                                 and (family is None or pets.eats(family, i)))})
+        # And what a class that drinks nothing carries to drink: hive-745's and hive-685's
+        # warriors carried Refreshing Spring Water and no food (9 Oct).
+        if "drink" not in self._bar_slots(values):
+            out.update({i: catalog_[i].sell for i, n in rows.items()
+                        if n and i in catalog_ and catalog_[i].role == "drink"
+                        and catalog_[i].sell > 0})
+        return out
 
     def _stranded(self, state, values: dict) -> bool:
         """Out of all it eats and drinks that it does not conjure, with its gear broken: no cap
@@ -3226,8 +3715,15 @@ class LiveBody:
         roles = [s for s in supplies_for(values.get("char.class_id"), values.get("char.race_id"))
                  if s.role.lower() not in conjured]
         durability = state.bags.durability_min
-        return (bool(roles) and durability is not None and durability <= BROKEN_DURABILITY
-                and all(getattr(state.bags, f"{s.role.lower()}_count", None) == 0 for s in roles))
+        if not (bool(roles) and durability is not None and durability <= BROKEN_DURABILITY):
+            return False
+        rows = self._larder_rows
+        if rows is not None:
+            # By the census where there is one (V550): any food the level can eat is food.
+            level = values.get("char.level")
+            return all(not stock(rows, s.role.lower(), level if isinstance(level, int) else None)
+                       for s in roles)
+        return all(getattr(state.bags, f"{s.role.lower()}_count", None) == 0 for s in roles)
 
     def _home_supplies(self, wanted: set[int], walk: float, world) -> bool:
         """Home by hearthstone is the way to a merchant with `wanted` (V302), as it is to a

@@ -1,0 +1,271 @@
+{
+ "format": 1,
+ "items": {
+  "118": {
+   "item_level": 5,
+   "kind": "heal",
+   "level": 1,
+   "max": 90,
+   "min": 70
+  },
+  "13443": {
+   "item_level": 51,
+   "kind": "mana",
+   "level": 41,
+   "max": 1500,
+   "min": 900
+  },
+  "13444": {
+   "item_level": 59,
+   "kind": "mana",
+   "level": 49,
+   "max": 2250,
+   "min": 1350
+  },
+  "13446": {
+   "item_level": 55,
+   "kind": "heal",
+   "level": 45,
+   "max": 1750,
+   "min": 1050
+  },
+  "1710": {
+   "item_level": 31,
+   "kind": "heal",
+   "level": 21,
+   "max": 585,
+   "min": 455
+  },
+  "17348": {
+   "item_level": 55,
+   "kind": "heal",
+   "level": 45,
+   "max": 1260,
+   "min": 980
+  },
+  "17349": {
+   "item_level": 45,
+   "kind": "heal",
+   "level": 35,
+   "max": 720,
+   "min": 560
+  },
+  "17351": {
+   "item_level": 55,
+   "kind": "mana",
+   "level": 45,
+   "max": 1260,
+   "min": 980
+  },
+  "17352": {
+   "item_level": 45,
+   "kind": "mana",
+   "level": 35,
+   "max": 720,
+   "min": 560
+  },
+  "18253": {
+   "item_level": 60,
+   "kind": "mana",
+   "level": 50,
+   "max": 1760,
+   "min": 1440
+  },
+  "22829": {
+   "item_level": 65,
+   "kind": "heal",
+   "level": 55,
+   "max": 2500,
+   "min": 1500
+  },
+  "22832": {
+   "item_level": 68,
+   "kind": "mana",
+   "level": 55,
+   "max": 3000,
+   "min": 1800
+  },
+  "22850": {
+   "item_level": 75,
+   "kind": "mana",
+   "level": 65,
+   "max": 2750,
+   "min": 1650
+  },
+  "23578": {
+   "item_level": 59,
+   "kind": "mana",
+   "level": 49,
+   "max": 2250,
+   "min": 1350
+  },
+  "23579": {
+   "item_level": 55,
+   "kind": "heal",
+   "level": 45,
+   "max": 1750,
+   "min": 1050
+  },
+  "2455": {
+   "item_level": 15,
+   "kind": "mana",
+   "level": 5,
+   "max": 180,
+   "min": 140
+  },
+  "2456": {
+   "item_level": 15,
+   "kind": "mana",
+   "level": 5,
+   "max": 150,
+   "min": 90
+  },
+  "2462": {
+   "item_level": 15,
+   "kind": "heal",
+   "level": 1,
+   "max": 180,
+   "min": 140
+  },
+  "28100": {
+   "item_level": 60,
+   "kind": "heal",
+   "level": 55,
+   "max": 1750,
+   "min": 1050
+  },
+  "28101": {
+   "item_level": 62,
+   "kind": "mana",
+   "level": 55,
+   "max": 2250,
+   "min": 1350
+  },
+  "3087": {
+   "item_level": 15,
+   "kind": "mana",
+   "level": 0,
+   "max": 180,
+   "min": 140
+  },
+  "32762": {
+   "item_level": 68,
+   "kind": "mana",
+   "level": 55,
+   "max": 3000,
+   "min": 1800
+  },
+  "32763": {
+   "item_level": 65,
+   "kind": "heal",
+   "level": 55,
+   "max": 2500,
+   "min": 1500
+  },
+  "32902": {
+   "item_level": 68,
+   "kind": "mana",
+   "level": 55,
+   "max": 3000,
+   "min": 1800
+  },
+  "32905": {
+   "item_level": 65,
+   "kind": "heal",
+   "level": 55,
+   "max": 2500,
+   "min": 1500
+  },
+  "32947": {
+   "item_level": 65,
+   "kind": "heal",
+   "level": 55,
+   "max": 2500,
+   "min": 1500
+  },
+  "32948": {
+   "item_level": 68,
+   "kind": "mana",
+   "level": 55,
+   "max": 3000,
+   "min": 1800
+  },
+  "3385": {
+   "item_level": 24,
+   "kind": "mana",
+   "level": 14,
+   "max": 360,
+   "min": 280
+  },
+  "33934": {
+   "item_level": 60,
+   "kind": "heal",
+   "level": 55,
+   "max": 2500,
+   "min": 1500
+  },
+  "33935": {
+   "item_level": 62,
+   "kind": "mana",
+   "level": 55,
+   "max": 3000,
+   "min": 1800
+  },
+  "34440": {
+   "item_level": 75,
+   "kind": "mana",
+   "level": 60,
+   "max": 2750,
+   "min": 1650
+  },
+  "3827": {
+   "item_level": 32,
+   "kind": "mana",
+   "level": 22,
+   "max": 585,
+   "min": 455
+  },
+  "3928": {
+   "item_level": 45,
+   "kind": "heal",
+   "level": 35,
+   "max": 900,
+   "min": 700
+  },
+  "4596": {
+   "item_level": 15,
+   "kind": "heal",
+   "level": 5,
+   "max": 180,
+   "min": 140
+  },
+  "6149": {
+   "item_level": 41,
+   "kind": "mana",
+   "level": 31,
+   "max": 900,
+   "min": 700
+  },
+  "858": {
+   "item_level": 13,
+   "kind": "heal",
+   "level": 3,
+   "max": 180,
+   "min": 140
+  },
+  "9144": {
+   "item_level": 45,
+   "kind": "heal",
+   "level": 35,
+   "max": 1500,
+   "min": 1
+  },
+  "929": {
+   "item_level": 22,
+   "kind": "heal",
+   "level": 12,
+   "max": 360,
+   "min": 280
+  }
+ }
+}

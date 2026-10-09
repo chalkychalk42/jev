@@ -165,6 +165,7 @@ def generate(db: sqlite3.Connection, profiles: dict, guide_quests: set[int] | No
             faction = db.execute("select Faction from world_creature_template where Entry=?",
                                  (v["entry"],)).fetchone()
             weapon_sides[str(v["entry"])] = _sides(db, faction[0]) if faction else []
+    provisions = _provisions(db, vendors)
     # Innkeepers, where the hearthstone is bound: the one nearest the guide's work becomes
     # home (`LiveBody._bind`). A game event's spawns stand there only while it runs.
     innkeepers = []
@@ -202,7 +203,54 @@ def generate(db: sqlite3.Connection, profiles: dict, guide_quests: set[int] | No
             "vendors": vendors, "bags": bags, "bag_prices": bag_prices, "surplus_prices": surplus,
             "innkeepers": innkeepers, "flightmasters": flightmasters,
             "wands": {"items": wand_items, "sides": wand_sides},
-            "weapons": {"items": weapon_items, "sides": weapon_sides}}
+            "weapons": {"items": weapon_items, "sides": weapon_sides},
+            "provisions": provisions}
+
+
+# What a food's or a drink's spell restores (`tools/gen_consumables.py`): aura 84 is health,
+# 85 mana.
+AURA_FOOD, AURA_DRINK = 84, 85
+ITEM_FLAG_CONJURED = 0x2
+
+
+def _provisions(db: sqlite3.Connection, vendors: list[dict]) -> dict:
+    """Food and drink a merchant sells for copper (V550): each item's role, the level that may
+    use it, its price and what one purchase brings (`BuyCount`), and what a merchant pays for
+    one (`SellPrice`), as items; the sides each merchant who sells one serves, as sides. Not a
+    conjured item, not one any merchant sells in limited stock (`maxcount`) - the desk stops on
+    stock it cannot see is there - and not one sold singly: every merchant's food and drink comes
+    five a purchase, but a quest's Special Chicken Feed. None from a snapshot without the
+    columns."""
+    sold = {item for v in vendors for item in v["items"]}
+    try:
+        auras = {row[0]: {row[1], row[2], row[3]} - {0, None} for row in db.execute(
+            "select Id, EffectApplyAuraName1, EffectApplyAuraName2, EffectApplyAuraName3 "
+            "from world_spell_template")}
+        rows = db.execute("select entry, spellid_1, RequiredLevel, BuyPrice, BuyCount, "
+                          "SellPrice, Flags from world_item_template where class=0 and "
+                          "subclass=5 and spellid_1>0 and BuyPrice>0 order by entry").fetchall()
+        limited = {int(r[0]) for r in db.execute(
+            "select item from world_npc_vendor where maxcount>0 union "
+            "select item from world_npc_vendor_template where maxcount>0")}
+    except sqlite3.OperationalError:
+        return {"items": {}, "sides": {}}
+    items = {}
+    for entry, spell, level, price, count, sell, flags in rows:
+        found = auras.get(spell, set())
+        food, drink = AURA_FOOD in found, AURA_DRINK in found
+        if (not (food or drink) or entry not in sold or entry in limited or (count or 1) < 2
+                or (flags or 0) & ITEM_FLAG_CONJURED):
+            continue
+        items[str(entry)] = {"role": "both" if food and drink else "food" if food else "drink",
+                             "level": int(level or 0), "price": int(price),
+                             "count": int(count or 1), "sell": int(sell or 0)}
+    sides = {}
+    for v in vendors:
+        if any(str(item) in items for item in v["items"]):
+            faction = db.execute("select Faction from world_creature_template where Entry=?",
+                                 (v["entry"],)).fetchone()
+            sides[str(v["entry"])] = _sides(db, faction[0]) if faction else []
+    return {"items": items, "sides": sides}
 
 
 def guide_quests(folder: pathlib.Path) -> set[int]:

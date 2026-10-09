@@ -1,0 +1,335 @@
+{
+ "source": "JevHive runs of 8 Oct 2026 09:00-15:00 (executions.jsonl, ticks.jsonl, skills.jsonl), streamed; purse files var/characters/*.purse.json read 9 Oct 00:40",
+ "window_8_oct_0400_1530": {
+  "runs_sampled": 3303,
+  "hours": 773.1,
+  "share": "one run in three",
+  "restocks": {
+   "too_far": 1320,
+   "bought": 202,
+   "no_supplier": 70,
+   "other": 92
+  },
+  "no_food_rest_seconds_by_cause": {
+   "after_too_far": 78365,
+   "before_too_far": 24716,
+   "never_asked_purse_ok": 84021,
+   "purse_under_reserve": 20996,
+   "bought_ran_out": 5752,
+   "no_supplier": 996,
+   "other": 4206
+  },
+  "rest_seconds_without_food_share": {
+   "warrior": 1.0,
+   "hunter": 0.95,
+   "rogue": 0.92,
+   "shaman": 0.8,
+   "druid": 0.77,
+   "mage": 0.73,
+   "warlock": 0.71,
+   "paladin": 0.69,
+   "priest": 0.67
+  },
+  "runs_within_100_yards_of_a_merchant_selling_usable_food": [
+   767,
+   1099
+  ]
+ },
+ "purse_backoff_9_oct": {
+  "files": 595,
+  "BUY_AMMO_REAGENT_FOOD_wait_s": {
+   "0": 108,
+   "60": 28,
+   "120": 39,
+   "240": 31,
+   "480": 29,
+   "960": 19,
+   "1800": 341
+  }
+ },
+ "too_far": {
+  "run": "20261009T003459-1e988a",
+  "client": "hive-848",
+  "cls": "shaman",
+  "race": "draenei",
+  "level": 13,
+  "zone": "BloodmystIsle",
+  "money": 5915,
+  "food_id": 4540,
+  "food_count": 0,
+  "drink_id": 159,
+  "drink_count": 0,
+  "detail": "the nearest merchant with them, Meriaad, is a 734-yard walk"
+ },
+ "near_empty": [
+  {
+   "run": "20261008T090211-d88d1c",
+   "t": 1791447153.603835,
+   "client": "hive-689",
+   "cls": "hunter",
+   "race": "nightelf",
+   "level": 12,
+   "side": "alliance",
+   "zone": 141,
+   "zone_name": "Darkshore",
+   "mx": 0.6607096614383969,
+   "my": 1.7373318600368324,
+   "world": [
+    5935.2,
+    450.5
+   ],
+   "money": 310,
+   "free": 21,
+   "food_id": 117,
+   "food_count": 0,
+   "drink_id": 159,
+   "drink_count": 9,
+   "step": "hive_nightelf_hunter_1_20_963_for_love_eternal_do",
+   "merchant": {
+    "entry": 4307,
+    "name": "Heldan Galesong",
+    "yards": 93.4,
+    "food": [
+     787,
+     4592
+    ]
+   }
+  },
+  {
+   "run": "20261008T090224-b8dde4",
+   "t": 1791446902.1109414,
+   "client": "hive-844",
+   "cls": "mage",
+   "race": "scourge",
+   "level": 10,
+   "side": "horde",
+   "zone": 85,
+   "zone_name": "Tirisfal",
+   "mx": 0.630482617740821,
+   "my": 0.49698584128139434,
+   "world": [
+    2340.3,
+    184.3
+   ],
+   "money": 2411,
+   "free": 14,
+   "food_id": 4604,
+   "food_count": 0,
+   "drink_id": 159,
+   "drink_count": 0,
+   "step": "hive_undead_mage_1_20_grind_tirisfal_gla_9_11",
+   "merchant": {
+    "entry": 5688,
+    "name": "Innkeeper Renee",
+    "yards": 93.2,
+    "food": [
+     4604,
+     4605
+    ]
+   }
+  },
+  {
+   "run": "20261008T090301-e41307",
+   "t": 1791447041.0396352,
+   "client": "hive-747",
+   "cls": "hunter",
+   "race": "draenei",
+   "level": 11,
+   "side": "alliance",
+   "zone": 3524,
+   "zone_name": "BloodmystIsle",
+   "mx": 0.41090607175234056,
+   "my": -0.017133386551873946,
+   "world": [
+    -2747.2,
+    -12172.7
+   ],
+   "money": 753,
+   "free": 5,
+   "food_id": 4540,
+   "food_count": 0,
+   "drink_id": 159,
+   "drink_count": 3,
+   "step": "hive_draenei_hunter_1_20_9634_alien_predators_do",
+   "merchant": {
+    "entry": 21145,
+    "name": "Little Azimi",
+    "yards": 99.8,
+    "food": [
+     4536,
+     4537
+    ]
+   }
+  },
+  {
+   "run": "20261008T090306-c5ba01",
+   "t": 1791446619.1243544,
+   "client": "hive-760",
+   "cls": "rogue",
+   "race": "bloodelf",
+   "level": 10,
+   "side": "horde",
+   "zone": 3430,
+   "zone_name": "Ghostlands",
+   "mx": 0.4745786802030457,
+   "my": 1.0459481287623065,
+   "world": [
+    7607.5,
+    -6824.8
+   ],
+   "money": 23,
+   "free": 21,
+   "food_id": 20857,
+   "food_count": 0,
+   "drink_id": null,
+   "drink_count": null,
+   "step": "hive_bloodelf_rogue_1_20_grind_ghostlands_9_11_nerubis_guard",
+   "merchant": {
+    "entry": 16542,
+    "name": "Innkeeper Kalarin",
+    "yards": 90.5,
+    "food": [
+     4536,
+     4537
+    ]
+   }
+  }
+ ],
+ "bag_visit": [
+  {
+   "run": "20261008T090826-c22b24",
+   "t": 1791447667.5566375,
+   "cls": "priest",
+   "race": "draenei",
+   "level": 12,
+   "merchant": "Little Azimi",
+   "entry": 21145,
+   "sells": [
+    159,
+    1179,
+    1205,
+    1645,
+    1708,
+    4536,
+    4537,
+    4538,
+    4539,
+    4602,
+    8766,
+    8953
+   ],
+   "money": 2335,
+   "free": 2,
+   "food_count": 0,
+   "drink_count": 10,
+   "skill": "BAG_MAKE_SPACE"
+  },
+  {
+   "run": "20261008T092301-f3e7e0",
+   "t": 1791447990.93626,
+   "cls": "warlock",
+   "race": "gnome",
+   "level": 10,
+   "merchant": "Keeg Gibn",
+   "entry": 1697,
+   "sells": [
+    159,
+    1179,
+    1205,
+    1645,
+    1708,
+    8766
+   ],
+   "money": 406,
+   "free": 2,
+   "food_count": 0,
+   "drink_count": 0,
+   "skill": "BAG_MAKE_SPACE"
+  },
+  {
+   "run": "20261008T092721-2ba6a8",
+   "t": 1791448183.096505,
+   "cls": "warrior",
+   "race": "orc",
+   "level": 19,
+   "merchant": "Innkeeper Gryshka",
+   "entry": 6929,
+   "sells": [
+    117,
+    159,
+    1179,
+    1205,
+    1645,
+    1708,
+    2287,
+    3770,
+    3771,
+    4599,
+    8766,
+    8952
+   ],
+   "money": 2,
+   "free": 0,
+   "food_count": 0,
+   "drink_count": null,
+   "skill": "BAG_MAKE_SPACE"
+  },
+  {
+   "run": "20261008T093328-a682d6",
+   "t": 1791449058.294544,
+   "cls": "rogue",
+   "race": "bloodelf",
+   "level": 10,
+   "merchant": "Areyn",
+   "entry": 16260,
+   "sells": [
+    159
+   ],
+   "money": 816,
+   "free": 2,
+   "food_count": 0,
+   "drink_count": null,
+   "skill": "BAG_MAKE_SPACE"
+  }
+ ],
+ "warrior_bags": [
+  {
+   "run": "20261008T090406-8e1eaa",
+   "race": "orc",
+   "level": 4,
+   "seconds": 9.87776030099485,
+   "code": "healthy",
+   "observed": [
+    {
+     "vitals.hp": 0.5693430656934306,
+     "vitals.power": 0.0,
+     "bars.usable": 2049
+    },
+    {
+     "vitals.hp": 1.0,
+     "vitals.power": 0.0,
+     "bars.usable": 2049
+    }
+   ]
+  },
+  {
+   "run": "20261008T091940-9f1efd",
+   "race": "scourge",
+   "level": 11,
+   "seconds": 12.333163363975473,
+   "code": "healthy",
+   "observed": [
+    {
+     "vitals.hp": 0.5192307692307693,
+     "vitals.power": 0.13,
+     "bars.usable": 2093
+    },
+    {
+     "vitals.hp": 1.0,
+     "vitals.power": 0.0,
+     "bars.usable": 2049
+    }
+   ]
+  }
+ ]
+}

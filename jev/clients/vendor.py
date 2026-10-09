@@ -18,6 +18,14 @@ from jev.world.vendor import Supply, junk_prices
 
 # Grey, white and green: what the price tables may offer for sale. Never blue or better.
 SELL_QUALITIES = (0, 1, 2)
+# Food and drink put on the bar (V551, `Vendor.place_item`): open world to let a handed-back
+# action go on, as the spellbook's (`jev.clients.spellbook.DROP_POINT`); how long the bar's slot
+# takes to be painted, and the slot to read its new action after the drop.
+DROP_POINT = (0.66, 0.32)
+PLACE_SLOT_S = 8.0
+PLACED_S = 8.0
+# The addon paints every 100 ms: after the release, this long for paints of its end.
+DROP_SETTLE_S = 0.4
 
 
 class Vended(StrEnum):
@@ -76,8 +84,9 @@ class Vendor:
         """Reach `min_free`, then top up requested exact items in one merchant visit.
 
         `expected_name` comes from a generated merchant spawn. Empty/unconfirmed names
-        are refused. Supply identities come from `supplies_for` (or an explicit caller
-        configuration); the body never upgrades to a different item that the bar cannot use.
+        are refused. Supply identities come from the body (`LiveBody._provisions_at`: the best
+        food and drink the merchant sells, V550; ammunition; a bag) or an explicit caller
+        configuration; food the bar's slot does not hold goes on it at the next meal (V551).
         """
         self.sold_stacks = self.bought_units = 0
         self.detail = ""
@@ -334,6 +343,164 @@ class Vendor:
         except _Stop as stop:
             self.detail = stop.detail
             return None
+
+    @traced("vendor.place_item")
+    def place_item(self, item: int, slot: int, *, timeout_s: float = 40.0) -> bool:
+        """Put `item` from the bags on the main bar's `slot` (1-12), where a meal presses it
+        (V551); whether it landed. A drag, as a player makes it: the mouse held on the item in
+        its bag, moved off it - the stock bag picks it up as the drag starts - and let go over the
+        bar's button, which places it and hands back on the cursor the action the slot held.
+        Only with no shop open, where a drop could sell, and an empty cursor.
+
+        Open world, where the spellbook lets a handed-back rank go, is where an item picked up
+        from the bags asks to be destroyed. So what the cursor holds after the drop is let go
+        there only once the bag slot the item came from reads unlocked - the item back in it,
+        and what is held the bar's old action; a drop that missed, the slot still locked, puts
+        the item back where it came from, and so does a drag cut short. A dialog that asks
+        anything meanwhile is cancelled. Landed is the bar changing and the slot holding an
+        item: its census paints no spell for it."""
+        self.detail = ""
+        self._deadline = self.clock() + timeout_s
+        source = None
+        try:
+            values = self._read(merchant=False)
+            if values.get("ui.vendor") is not False:
+                raise _Stop(Vended.REFUSED, "a shop is open: a drop on it could sell")
+            if values.get("cursor.holding") is not False:
+                raise _Stop(Vended.REFUSED, "the cursor holds something, or is unread")
+            if values.get("bars.slot") is None or values.get("bars.revision") is None:
+                raise _Stop(Vended.BLIND, "this addon paints no bar census")
+            row = self._bag_slot_of(item)
+            source = (row.get("inventory.bag"), row.get("inventory.slot"))
+            start = self._screen(row, "inventory.")
+            revision = self._read(merchant=False).get("bars.revision")
+            event("bar.drag", data={"item": item, "slot": slot, "from": list(source),
+                                    "point": list(start)})
+            self._drag(start, slot)
+            self._let_go(item, source)
+            self._await(lambda r: r.get("bars.revision") != revision
+                        and r.get("cursor.holding") is False, PLACED_S, merchant=False)
+            landed = self._await(lambda r: r.get("bars.slot") == slot, PLACE_SLOT_S,
+                                 merchant=False)
+            if landed.get("bars.slot_spell") is not None:
+                raise _Stop(Vended.NO_CHANGE, f"slot {slot} holds no item after the drop")
+            return True
+        except _Stop as stop:
+            self.detail = stop.detail
+            self._recover_cursor(item, source)
+            return False
+
+    def _bag_slot_of(self, item: int) -> dict:
+        """A census paint of a bag slot holding `item`, unlocked, its button painted (its bag
+        opened if it was closed)."""
+        seen: set[int] = set()
+        while True:
+            values = self._read(merchant=False)
+            total, ordinal = values.get("inventory.total"), values.get("inventory.ordinal")
+            if total is None or ordinal is None:
+                raise _Stop(Vended.BLIND, "bag slot census unreadable")
+            seen.add(ordinal)
+            if (values.get("inventory.item_id") == item and values.get("inventory.count")
+                    and values.get("inventory.locked") is False):
+                if values.get("inventory.x") is not None:
+                    return values
+                self._click(values, "inventory.open_")
+                bag = values.get("inventory.bag")
+                self._await(lambda r, bag=bag: r.get("inventory.bag") == bag
+                            and r.get("inventory.x") is not None, 4.0, merchant=False)
+                continue
+            if len(seen) >= total:
+                raise _Stop(Vended.UNAVAILABLE, f"{item} is not in the bags")
+            self.sleep(0.05)
+
+    def _screen(self, values: dict, prefix: str) -> tuple[int, int]:
+        x, y = values.get(prefix + "x"), values.get(prefix + "y")
+        if x is None or y is None or not 0 <= x <= 1 or not 0 <= y <= 1:
+            raise _Stop(Vended.NO_BUTTON, f"no observed button: {prefix}")
+        ox, oy = self.window_origin
+        w, h = self.window_size
+        return ox + round(x * w), oy + round(y * h)
+
+    def _drag(self, start: tuple[int, int], slot: int) -> None:
+        """Pick the item up, find the bar's button - the stock bar shows an empty one only
+        while something is dragged - and let go over it; cut short, let go over the bag slot it
+        came from, which puts it back."""
+        if not self.hid.move_to(*start) or not self.hid.button(True):
+            raise _Stop(Vended.REFUSED, "drag input refused")
+        end = start
+        try:
+            if not self.hid.move_to(start[0] + 24, start[1] + 12):
+                raise _Stop(Vended.REFUSED, "drag input refused")
+            target = self._await(lambda r: r.get("bars.slot") == slot
+                                 and r.get("bars.slot_x") is not None, PLACE_SLOT_S,
+                                 merchant=False)
+            end = self._screen(target, "bars.slot_")
+            event("bar.drop", data={"slot": slot, "to": list(end)})
+            if not self.hid.move_to(*end):
+                raise _Stop(Vended.REFUSED, "drag input refused")
+            self.sleep(0.1)
+        except BaseException:
+            end = start
+            self.hid.move_to(*start)
+            raise
+        finally:
+            self.hid.button(False)
+            self.sleep(0.2)
+
+    def _source_row(self, source) -> dict:
+        return self._await(lambda r: (r.get("inventory.bag"), r.get("inventory.slot")) == source,
+                           max(4.0, PLACE_SLOT_S), merchant=False)
+
+    def _let_go(self, item: int, source) -> None:
+        """What the cursor holds after the drop: nothing; the bar's old action, let go on open
+        world; or the item itself, the drop missed, put back in its bag slot."""
+        # A few paints after the release, so no paint from the drag itself is read as its end.
+        self.sleep(DROP_SETTLE_S)
+        held = self._await(lambda r: r.get("cursor.holding") is not None, 2.0, merchant=False)
+        if held.get("cursor.holding") is False:
+            return
+        row = self._source_row(source)
+        if row.get("inventory.locked") is not False:
+            self._click(row, "inventory.")              # back where it came from
+            self._await(lambda r: r.get("cursor.holding") is False, 2.0, merchant=False)
+            raise _Stop(Vended.NO_CHANGE, "the drop missed the bar; the item is back in its bag")
+        ox, oy = self.window_origin
+        w, h = self.window_size
+        point = (ox + round(DROP_POINT[0] * w), oy + round(DROP_POINT[1] * h))
+        event("bar.drop_held", data={"point": list(point)})
+        if self.hid.click(*point) is False:
+            raise _Stop(Vended.REFUSED, "drop click refused")
+
+    def _recover_cursor(self, item: int, source) -> None:
+        """After a placement given up: a dialog cancelled, and the item, if it is still on the
+        cursor, put back in its bag slot. Read raw, the dialog expected; best effort."""
+        try:
+            values = self.read() or {}
+            if values.get("ui.modal") is True:
+                self.hid.tap("esc")                     # never the dialog's first button
+                self.sleep(0.3)
+                values = self.read() or {}
+            if values.get("cursor.holding") is not True or source is None:
+                return
+            until = self.clock() + PLACE_SLOT_S
+            while self.clock() < until:
+                values = self.read() or {}
+                if values.get("cursor.holding") is not True:
+                    return
+                if (values.get("inventory.bag"), values.get("inventory.slot")) == source:
+                    ox, oy = self.window_origin
+                    w, h = self.window_size
+                    if values.get("inventory.locked") is True and values.get("inventory.x") is not None:
+                        # The item itself: back in its bag slot.
+                        self.hid.click(ox + round(values["inventory.x"] * w),
+                                       oy + round(values["inventory.y"] * h))
+                    elif values.get("inventory.locked") is False:
+                        # The item is in its slot: what is held is the bar's old action.
+                        self.hid.click(ox + round(DROP_POINT[0] * w), oy + round(DROP_POINT[1] * h))
+                    return
+                self.sleep(0.05)
+        except Exception:
+            return
 
     def _await_worn(self, revision, seconds: float = 4.0) -> None:
         """The bags changing after an equip click, answering "will bind it to you" on the
