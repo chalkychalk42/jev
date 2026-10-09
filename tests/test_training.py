@@ -236,9 +236,8 @@ def test_a_spell_nothing_presses_or_the_bar_will_not_hold_is_not_worth_buying():
     paladin = frozenset({6603, 20154, 635, 498})
     for spell_id in (19750, 1022, 21082):
         assert not worth_buying(spell_id, paladin, paladin_bar), spell(spell_id).name
-    # Parry works unpressed: bought (V562, amends this test's V237 reading of a passive).
-    assert worth_buying(3127, paladin, paladin_bar)
-    assert not worth_buying(3127, paladin | {3127}, paladin_bar), "known: not again"
+    # Parry works unpressed (V562), but is not bought while V564 suspends the passives.
+    assert not worth_buying(3127, paladin, paladin_bar)
     for spell_id in (639, 20287, 853, 633, 465):
         assert worth_buying(spell_id, paladin, paladin_bar), spell(spell_id).name
 

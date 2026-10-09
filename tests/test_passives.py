@@ -6,6 +6,9 @@ none of its 32 rogues had Dual Wield, three silver at level 10: training bought 
 presses or the bar holds (V237), "a passive ... pressed by nothing"."""
 
 from jev.world import training
+import pytest
+
+from jev.world import training as training_module
 from jev.world.training import PASSIVES_BOUGHT, buy_order, shopping, starting_bar, worth_buying
 
 
@@ -15,7 +18,19 @@ def _offers(spell_ids, level):
             if o.spell_id in spell_ids and o.level <= level]
 
 
-def test_parry_and_dual_wield_are_worth_buying_and_go_first_at_their_level():
+@pytest.fixture
+def bought(monkeypatch):
+    monkeypatch.setattr(training_module, "PASSIVES_SUSPENDED", False)
+
+
+def test_while_suspended_no_passive_is_worth_buying():
+    """V564: the census does not show a passive once learned; bought, it was bought again at
+    every visit, so none is bought until learned skills are remembered."""
+    assert training_module.PASSIVES_SUSPENDED
+    assert not worth_buying(3127, frozenset({6603}), starting_bar(1, 1))
+
+
+def test_parry_and_dual_wield_are_worth_buying_and_go_first_at_their_level(bought):
     rogue = frozenset({6603, 1752, 2098})                 # Attack, Sinister Strike, Eviscerate
     bar = starting_bar(4, 1)
     assert worth_buying(3127, rogue, bar) and worth_buying(674, rogue, bar)

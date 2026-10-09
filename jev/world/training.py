@@ -90,6 +90,11 @@ BUY_ORDER = FIGHT_ROLES + BETWEEN_ROLES
 # hive's 116 warriors, paladins, hunters and rogues online on 9 Oct 01:00 had Parry, offered at
 # 1-12 for a silver or eight, nor one of its 32 rogues Dual Wield, three silver at 10.
 PASSIVES_BOUGHT = frozenset({3127, 674, 12678, 31785})
+# Suspended (V564): the spellbook census does not show a passive once learned, so a passive
+# bought stayed "not known" and every trainer visit bought it again - the hive's class-training
+# decisions rose 3.6 times in the hour after V562 (63 to 225 a 600 runs). Bought again only
+# with learned skills remembered (bet-arms' V590).
+PASSIVES_SUSPENDED = True
 # What holds off more than one attacker, bought before the oldest gap (V242): a root, a stun,
 # and a guard (V396) - Psychic Scream scatters what is round the priest. A hold takes one,
 # and is bought by its level, as the strikes are (V287).
@@ -256,7 +261,8 @@ def worth_buying(spell_id: int, known: Iterable[int], bar: Mapping[int, int | No
     before a root, and would have put it there in Frost Nova's place."""
     facts_of = spell(spell_id, facts)
     if spell_id in PASSIVES_BOUGHT:
-        return spell_id not in set(known)          # no slot: it works unpressed (V562)
+        # No slot: it works unpressed (V562); suspended until a learned one is remembered (V564).
+        return not PASSIVES_SUSPENDED and spell_id not in set(known)
     if facts_of is None or facts_of.role not in BUY_ORDER:
         return False
     known = set(known)
