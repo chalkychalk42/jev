@@ -36,7 +36,7 @@ from jev.guide.graph import Node
 from jev.skills.catalog import NAMES
 from jev.world.combat import HEAL_OUT_OF_COMBAT, is_caster, rest_mana
 from jev.world.state_v1 import PowerType, State, StepKind
-from jev.world.vendor import supply_prices
+from jev.world.vendor import NEAR_PURCHASES, PROVISIONS_SHARE, supply_prices
 
 # Below this, a decision is worth a teacher call if one is affordable. Above it, asking
 # would be spending a rate-limited resource on something already known.
@@ -498,8 +498,9 @@ class Context:
                     stranded: bool = False, now: float | None = None) -> bool:
         if self._barred("supplies", step_id, now):
             return False
-        if self.supplies_noted == "no_supplier" or (self.supplies_noted == "too_far"
-                                                    and not stranded):
+        # Or one walked for that sold nothing the purse or the bags could take (V550).
+        if self.supplies_noted in ("no_supplier", "nothing_sold") or (
+                self.supplies_noted == "too_far" and not stranded):
             return False
         if not self.supplies_blocked:
             return True
@@ -578,6 +579,11 @@ class Context:
     # What a purchase of ammunition costs, while a hunter's runs low (`LiveBody.ammo_low`,
     # V393); `None` when none is wanted. Absent, none ever is.
     ammo_low: Callable[[State], int | None] | None = None
+    # What the bags hold to eat and drink by the body's last census (`LiveBody.larder`,
+    # `jev.world.vendor.Larder`, V550): the roles none of which they hold, and those low with a
+    # merchant a short detour off. Absent, or `None` before a census, the strip's starting food
+    # and drink alone are counted, as before.
+    larder: Callable[[State], object] | None = None
 
     def _asked(self, name: str, state: State, default):
         hook = getattr(self, name)
@@ -887,26 +893,53 @@ def services(state: State, *, context: Context | None = None) -> list[Plan]:
     tame = need == "tame" and not hurt
 
     conjured = context.conjured() if context is not None else frozenset()
-    kept = [(item, count) for item, count, kind in ((b.food_id, b.food_count, "food"),
-                                                    (b.drink_id, b.drink_count, "drink"))
-            if item is not None and kind not in conjured]
-    empty = [item for item, count in kept if count == 0]
+    # What the bags hold to eat and drink, by the body's census where it has one (V550): the
+    # strip counts the race's starting food and drink alone, and a bag of bought bread read
+    # as none.
+    larder = context._asked("larder", state, None) if context is not None else None
+    if larder is not None:
+        kept = list(larder.roles)
+        empty = list(larder.empty)
+    else:
+        kept = [(item, count) for item, count, kind in ((b.food_id, b.food_count, "food"),
+                                                        (b.drink_id, b.drink_count, "drink"))
+                if item is not None and kind not in conjured]
+        empty = [item for item, count in kept if count == 0]
     stranded = (bool(empty) and len(empty) == len(kept) and b.durability_min is not None
                 and b.durability_min <= 0.05)
     # And a pet's food, bought with them (V389): the bags hold none it eats in full.
     pet_food = context.pet_food_wanted(state) if context is not None else None
-    wanted = empty + ([pet_food] if pet_food is not None else [])
-    if wanted and (context is None or context.can_restock(b.money_copper, state.guide.step_id,
-                                                          stranded=stranded, now=state.t)):
+    wanted = (empty if larder is None else []) + ([pet_food] if pet_food is not None else [])
+
+    def spare() -> int | None:
         # What is above the trainer's due (V215), asked only with something to buy: the
         # spellbook's census is shared with the capture thread.
-        spare = (b.money_copper - context.kept(state)
-                 if context is not None and b.money_copper is not None else b.money_copper)
-        if any(_affordable(item, spare) for item in wanted):
+        return (b.money_copper - context.kept(state)
+                if context is not None and b.money_copper is not None else b.money_copper)
+
+    if (wanted or empty) and (context is None or context.can_restock(
+            b.money_copper, state.guide.step_id, stranded=stranded, now=state.t)):
+        left = spare()
+        if any(_affordable(item, left) for item in wanted) or (
+                larder is not None and empty and larder.price is not None
+                and (left is None or left >= larder.price)):
             due(Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD",
                            "confirmed food or drink is empty" if empty
                            else "the pet's food is out", 0.8, ("dead", "combat"),
                            service="supplies"), True, "service.supplies"))
+    # Food or drink low, and a merchant who sells the best of it a short detour off (V550): a
+    # player buys at the merchants it passes, and the walk is a short one, waited on for a
+    # meal as every walk is (V259), for no fewer than `NEAR_PURCHASES` from the share of the
+    # purse food may spend. Not held by the session's "too far" (V302), which is for the long
+    # walk out of food: the merchant here is near.
+    if (larder is not None and larder.near and not hurt
+            and not context._barred("supplies", state.guide.step_id, state.t)
+            and larder.near_price is not None
+            and ((left := spare()) is None
+                 or left * PROVISIONS_SHARE >= NEAR_PURCHASES * larder.near_price)):
+        due(Plan(_d(Intent.SERVICE, "BUY_AMMO_REAGENT_FOOD",
+                    f"{' and '.join(larder.near)} is low and a merchant is near", 0.7,
+                    ("dead", "combat"), service="supplies"), True, "service.provisions"))
 
     # A hunter's ammunition running low (V393): a shot is a hunter's weapon as its blade is,
     # before the trainer's due. 22 of the hive's 50 hunters carried none on 7 Oct (04:40): Jev

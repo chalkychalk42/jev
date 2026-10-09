@@ -66,6 +66,9 @@ class Rest:
     slot: int | None = field(default=None, init=False)
     started_at: float | None = field(default=None, init=False)
     detail: str = field(default="", init=False)
+    # How each role was taken this meal, a take at a time: "bar" (the slot pressed), "bags"
+    # (`use_item`) or "none" (nothing to take) (V550).
+    taken: dict[Role, list[str]] = field(default_factory=dict, init=False)
 
     def _take(self, v: dict, role: Role) -> bool | None:
         """Begin eating or drinking: the bar's slot, else the bags (`use_item`). `True` if
@@ -75,16 +78,24 @@ class Rest:
         if ability is None:
             self.detail = f"this character has no {role.value} on its bar"
             return None
-        self.slot = ability.slot
+        # A class that starts in a stance keeps its starting rows on that stance's bar, the
+        # same twelve keys (`jev.world.combat.from_bar`): a warrior's food is slot 84, which the
+        # key "=" presses and the strip paints as slot 12 (V552). Read as 84, the bit was never
+        # set and every warrior's meal came from the bags.
+        slot = (ability.slot - 1) % 12 + 1
+        self.slot = slot
         usable = v.get("bars.usable")
-        if usable is None or usable & (1 << (ability.slot - 1)):
-            event("consume.request", data={"slot": ability.slot, "role": role.value})
-            self.hid.tap(SLOT_KEYS.get(ability.slot, str(ability.slot)))
+        if usable is None or usable & (1 << (slot - 1)):
+            event("consume.request", data={"slot": slot, "role": role.value})
+            self.hid.tap(SLOT_KEYS.get(slot, str(slot)))
+            self.taken.setdefault(role, []).append("bar")
             return True
         if self.use_item is not None and self.use_item(role):
+            self.taken.setdefault(role, []).append("bags")
             return True
-        self.detail = (f"slot {ability.slot} ({ability.name or role.value}) is not usable "
+        self.detail = (f"slot {slot} ({ability.name or role.value}) is not usable "
                        f"and the bags hold none; out of {role.value}")
+        self.taken.setdefault(role, []).append("none")
         return False
 
     @traced("rest")
@@ -111,6 +122,36 @@ class Rest:
         return self._until({Role.FOOD: health, Role.DRINK: mana}, timeout_s)
 
     def _until(self, marks: dict[Role, float], timeout_s: float) -> Rested:
+        """The meal, and its summary as it ends (`rest.summary`, V552): how each role was
+        taken - from the bar, the bags or neither, the body regenerating alone - its seconds and
+        the gauges either side."""
+        self.taken = {}
+        began, first, last = time.monotonic(), None, None
+        result: Rested | None = None
+
+        def seen(v):
+            nonlocal first, last
+            if v is not None:
+                gauges = (v.get("vitals.hp"), v.get("vitals.power"))
+                first = first or gauges
+                last = gauges
+
+        try:
+            result = self._meal(marks, timeout_s, seen)
+            return result
+        finally:
+            event("rest.summary", code=result.value if result is not None else "raised", data={
+                "marks": {r.value: f for r, f in marks.items()},
+                # "bar", "bags", "none" (nothing to take: the body regenerated) or
+                # "not_needed" (never short of its mark)
+                "took": {r.value: (self.taken[r][0] if self.taken.get(r) else "not_needed")
+                         for r in marks},
+                "takes": {r.value: sum(1 for way in self.taken.get(r, ()) if way != "none")
+                          for r in marks},
+                "seconds": round(time.monotonic() - began, 1),
+                "start": first, "end": last})
+
+    def _meal(self, marks: dict[Role, float], timeout_s: float, seen) -> Rested:
         self.detail = ""
         deadline = time.monotonic() + timeout_s
         gauges = {Role.FOOD: "vitals.hp", Role.DRINK: "vitals.power"}
@@ -122,6 +163,7 @@ class Rest:
                                     "timeout_s": timeout_s})
         while time.monotonic() < deadline:
             v = self.read()
+            seen(v)
             event("rest.observed", code="blind" if v is None else "readable",
                   data={} if v is None else {key: v.get(key) for key in (
                       "vitals.hp", "vitals.power", "vitals.combat", "bars.usable")})

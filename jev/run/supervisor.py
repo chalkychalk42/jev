@@ -326,8 +326,15 @@ class Supervisor:
                 if (worker.arm.decision.skill == "DISCOVER_FLIGHT"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)):
                     self.runtime.policy_context.discover_failed(worker.arm.step_id)
+                # A purchase given up before any walk - the merchant too far, or none in the zone
+                # - failed nothing: the session's note holds it (V302), and counted a failure it
+                # held the walk to the merchant next door for up to half an hour, across sessions
+                # (V554): 341 of the hive's 595 purse files waited the full half hour on 9 Oct.
+                planned_out = (worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD"
+                               and result.code in ("too_far", "no_supplier"))
                 if (result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
-                        and own_rule(worker.arm.rule).startswith("service.")):
+                        and own_rule(worker.arm.rule).startswith("service.")
+                        and not planned_out):
                     # Whatever its own bar says, a failed service waits `SERVICE_RETRY_MIN_S`
                     # before a service rule arms it again (V315).
                     self.runtime.policy_context.service_failed(
@@ -341,7 +348,7 @@ class Supervisor:
                         retry_at=(state.t if state is not None else time.time()) + TRAIN_RETRY_S)
                 if (worker.arm.decision.skill == "BUY_AMMO_REAGENT_FOOD"
                         and result.outcome in (SkillOutcome.ABORTED, SkillOutcome.TIMED_OUT)
-                        and result.code not in ("too_poor",)):
+                        and result.code not in ("too_poor",) and not planned_out):
                     # A merchant out of reach is not walked to again on this step (V175).
                     self.runtime.policy_context.supplies_unreachable(
                         worker.arm.step_id, state.t if state is not None else time.time())

@@ -128,6 +128,9 @@ def evidence(rule: str, state: State | None) -> str:
         return f"{b.free} bag slots free"
     if rule == "service.supplies":
         return f"food {b.food_count}, drink {b.drink_count}, {b.money_copper or 0} copper"
+    if rule == "service.provisions":
+        # The bags' count is the body's census (V550), not the strip's starting food.
+        return f"{b.free} bag slots free, {b.money_copper or 0} copper"
     if rule == "service.pet":
         pet = state.pet
         return (f"pet out {pet.has}, dead {pet.dead}, happiness {pet.happiness}, "
