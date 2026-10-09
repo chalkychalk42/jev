@@ -198,6 +198,117 @@ def consumables(role: str, level: int | None) -> tuple[int, ...]:
     return tuple(item for item, _ in usable)
 
 
+# -- food and drink, kept as a player keeps them (V550) -----------------------------------
+#
+# A player buys the best food and drink the level can use at the merchants it passes, about
+# twenty of each, and eats and drinks whenever it rests. Jev bought only the race's starting
+# food (61 health over 18 s), ten of it, only once the bags held none, and only from a merchant
+# a 400-yard walk off (V205): in the hive's 8 Oct 04:00-15:30 (a third of the runs, 3,303 of
+# them), 1,320 restocks gave up "too far" against 202 that bought, and two thirds to all of a
+# class's rest time was spent standing while the body regenerated. What every merchant sells
+# is in the catalog's `provisions` (`tools/gen_vendor_catalog.py`): each food's and drink's
+# role, the level that may use it - its tier: 1, 5, 15, 25 ... restoring 61, 243, 552, 874
+# health or 151, 436, 835, 1,344 mana - its price and what one purchase brings (five).
+PROVISIONS_DESIRED = 20
+# Under this many of the best a merchant near sells, a merchant a short detour off is visited
+# (`LiveBody.larder`); a merchant visited for anything else tops up whatever is under
+# `PROVISIONS_DESIRED` less one purchase.
+PROVISIONS_LOW = 10
+# Food and drink stack twenty to a bag slot.
+PROVISION_STACK = 20
+# Of the purse above what it keeps (the trainer's due, the repair reserve), a visit spends at
+# most this share on food and drink - but a first purchase for a role the bags hold none of:
+# the rest is for a wand, a bow, a bag (V398, V403, V260). The hive's characters kept 4 copper
+# a kill at levels 6-10 and 7.5 at 11-15 after all they spent (8 Oct 04:00-15:30), and food and
+# drink of the level's tier cost about 25 copper a rest each.
+PROVISIONS_SHARE = 0.5
+# A merchant near is walked to for no fewer purchases than this, from that share.
+NEAR_PURCHASES = 2
+
+
+@dataclass(frozen=True)
+class Provision:
+    item_id: int
+    role: str                        # "food", "drink" or "both"
+    level: int                       # the level that may use it: its tier
+    price: int                       # copper a purchase
+    count: int = 5                   # what one purchase brings
+    sell: int = 0                    # what a merchant pays for one
+
+
+@lru_cache(maxsize=1)
+def provisions() -> dict[int, Provision]:
+    """Every food and drink a merchant sells for copper, by item (V550)."""
+    raw = (catalog().get("provisions") or {}).get("items") or {}
+    return {int(k): Provision(item_id=int(k), role=v["role"], level=int(v["level"]),
+                              price=int(v["price"]), count=int(v.get("count") or 5),
+                              sell=int(v.get("sell") or 0))
+            for k, v in raw.items()}
+
+
+@lru_cache(maxsize=1)
+def _provision_sides() -> dict[int, frozenset[str]]:
+    raw = (catalog().get("provisions") or {}).get("sides") or {}
+    return {int(k): frozenset(v) for k, v in raw.items()}
+
+
+def provisioner_serves(entry: int, side: str | None) -> bool:
+    """Whether a merchant who sells food or drink serves `side`: one the catalog names no side
+    for (a creature of no faction a player is friends with) serves none; a side not known is
+    served by all."""
+    sides = _provision_sides().get(entry)
+    return side is None or sides is None or side in sides
+
+
+def _of_role(item: int, role: str) -> bool:
+    row = _consumables().get(item)
+    return row is not None and row["role"] in (role, "both")
+
+
+def stock(rows: dict[int, int], role: str, level: int | None, at_least: int = 0) -> int:
+    """How many the bags hold (`rows`, item: count) of `role`'s food or drink a character of
+    `level` can use, of tier `at_least` or better: anything eaten or drunk, bought, looted,
+    a quest's or conjured (`content/tbc/consumables.json`)."""
+    return sum(count for item, count in rows.items()
+               if count > 0 and _of_role(item, role)
+               and (level is None or _consumables()[item]["level"] <= level)
+               and _consumables()[item]["level"] >= at_least)
+
+
+def best_tier(role: str, level: int | None, sold: frozenset[int] | set[int]) -> int | None:
+    """The best tier of `role` that `sold` holds and `level` may use, or `None`."""
+    tiers = [p.level for item, p in provisions().items()
+             if item in sold and p.role in (role, "both")
+             and (level is None or p.level <= level)]
+    return max(tiers, default=None)
+
+
+@dataclass(frozen=True)
+class Larder:
+    """What the bags hold to eat and drink, as the policy asks it (`Context.larder`, V550),
+    from the body's last bag census."""
+    roles: tuple[str, ...]            # what the bar keeps that the character does not conjure
+    empty: tuple[str, ...] = ()       # of them, none at all in the bags
+    price: int | None = None          # the cheapest purchase in the zone of what those eat
+    near: tuple[str, ...] = ()        # under `PROVISIONS_LOW`, a merchant a short detour off
+    near_price: int | None = None     # the cheapest purchase there
+
+
+def provision_to_buy(role: str, level: int | None, sold, spare: int | None,
+                     held: dict[int, int] | None = None) -> Provision | None:
+    """What a merchant selling `sold` sells of `role` for a character of `level` to buy (V550):
+    the best tier the level may use whose purchase `spare` pays (all of them for a purse not
+    known); of a tier, one the bags already hold first (it stacks), then the lowest item."""
+    held = held or {}
+    offers = [p for item, p in provisions().items()
+              if item in sold and p.role in (role, "both")
+              and (level is None or p.level <= level)
+              and (spare is None or p.price <= spare)]
+    if not offers:
+        return None
+    return min(offers, key=lambda p: (-p.level, not held.get(p.item_id), p.item_id))
+
+
 def merchants(map_id: int, *, items: frozenset[int] = frozenset()) -> tuple[Merchant, ...]:
     """All matching spawns on the current world map; caller ranks by world-yard distance.
 

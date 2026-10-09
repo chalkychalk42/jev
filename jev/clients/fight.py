@@ -182,6 +182,8 @@ GCD_GUARD_S = 1.9
 # Hamstrings at 10-14 rage, where Heroic Strike's 15 could not be paid, and Thunder Clap's 20
 # in 9% of their fights against two.
 RAGE_TYPE = 1
+# And mana (`UnitPowerType` 0): what a mana potion gives (V555).
+MANA_TYPE = 0
 
 # After a target vanishes, how long to watch for the experience that proves a kill.
 SETTLE_LOOKS = 3
@@ -674,6 +676,10 @@ class Fight:
     # refuses every shot "no ammo", and a dry hunter stood up to 14 s at range pressing Auto
     # Shot before it gave up and walked in: 24 of the hive's 42 hunters were dry on 7 Oct.
     dry: bool = field(default=False, init=False)
+    # The bar's potions, kind ("heal", "mana") to slot, as the body put them there (V555,
+    # `LiveBody._bar_profile`), and when the last was drunk (monotonic): they share a cooldown.
+    potions: dict[str, int] = field(default_factory=dict, init=False)
+    _potion_at: float | None = field(default=None, init=False)
     # Whether the weapon is the broken thing, as last read (`disarmed`, V393): `None` until a
     # reading could tell.
     disarmed_seen: bool | None = field(default=None, init=False)
@@ -2620,6 +2626,9 @@ class Fight:
             return
         if values.get("bars.casting") is True:
             return
+        # 0. A potion (V555): off the global cooldown, so ahead of its check.
+        if self._potion(values):
+            return
         gcd = values.get("bars.gcd")
         if gcd is not None and gcd > 0.0:
             return
@@ -3042,6 +3051,47 @@ class Fight:
     def pressed_keys(self) -> list[str]:
         """The slots pressed this fight, as the keys they were sent as."""
         return [SLOT_KEYS.get(slot, str(slot)) for slot in self.pressed]
+
+    def _potion(self, values: dict) -> bool:
+        """Drink a healing potion under `jev.world.potions.HEAL_BELOW` health in a fight, or, a
+        class whose power is mana, a mana potion under `MANA_BELOW` mana while its health needs
+        none (V555): the one on the bar (`potions`), usable - one in the bags - and ready, its
+        shared cooldown over by the bar's ready bit and the last drunk `COOLDOWN_S` ago; so at
+        most one a fight. Instant and off the global cooldown. Whether one was drunk."""
+        if values.get("vitals.combat") is not True or not self.potions:
+            return False
+        from jev.world import potions as potion
+
+        now = time.monotonic()
+        if self._potion_at is not None and now - self._potion_at < potion.COOLDOWN_S:
+            return False
+        hp, power = values.get("vitals.hp"), values.get("vitals.power")
+        want = None
+        if hp is not None and hp < potion.HEAL_BELOW and "heal" in self.potions:
+            want = "heal"
+        elif (power is not None and power < potion.MANA_BELOW and "mana" in self.potions
+              and values.get("vitals.power_type") == MANA_TYPE
+              and (hp is None or hp >= potion.HEAL_BELOW)):
+            want = "mana"
+        if want is None:
+            return False
+        slot = self.potions[want]
+        bit = 1 << (slot - 1)
+        usable, ready = values.get("bars.usable"), values.get("bars.ready")
+        if not (isinstance(usable, int) and usable & bit) or (isinstance(ready, int)
+                                                              and not ready & bit):
+            return False
+        key = SLOT_KEYS.get(slot)
+        if key is None:
+            return False
+        event("fight.potion", data={"kind": want, "slot": slot, "hp": hp, "power": power,
+                                    "attackers": values.get("combat.attackers")})
+        if not self.hid.tap(key):
+            self._input_refused = True
+            self.detail = f"potion slot {slot} input refused"
+            return False
+        self._potion_at = now
+        return True
 
     def _press(self, ability: Ability) -> bool:
         key = SLOT_KEYS.get(ability.slot)
