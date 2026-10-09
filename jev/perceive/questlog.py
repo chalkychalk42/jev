@@ -64,7 +64,7 @@ class QuestLog:
         if count is None:
             return self._complete
 
-        if log_hash != self.hash_seen:
+        if log_hash != self.hash_seen or count != self.count:
             # A different log, or the same log changed. Anything half-built describes
             # something that no longer exists; a whole log of as many entries is patched.
             self.hash_seen = log_hash
@@ -72,6 +72,7 @@ class QuestLog:
             self._patching = self._whole is not None and len(self._whole) == count > 0
             if not self._patching:
                 self._complete = None
+                self._whole = None
 
         self.count = count
         if count == 0:
@@ -79,11 +80,12 @@ class QuestLog:
             # for. This is what tells a fresh character it is on the entry step.
             self._complete = ()
             self._whole, self._patching = {}, False
+            self.slots.clear()
             return self._complete
 
         slot = values.get("quests.slot")
         quest_id = values.get("quests.slot_id")
-        if slot is None:
+        if slot is None or quest_id is None:
             return self._complete
 
         objectives = tuple(
@@ -108,6 +110,7 @@ class QuestLog:
                 # Another quest in this slot: another log, read whole before it is believed.
                 self._patching = False
                 self._complete = None
+                self._whole = None
             else:
                 self._whole[slot] = quest
                 self.patched += 1

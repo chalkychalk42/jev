@@ -283,6 +283,60 @@ def test_the_hunter_93_yards_from_auberdines_fishmonger_with_no_food_has_one_nea
     assert "food" not in b.larder(state).near, "twelve of the tier sold here: not low"
 
 
+def test_bloodmyst_food_selected_by_policy_is_available_to_the_azurmyst_guide_executor():
+    """hive-889 made 1,747 no-supplier attempts in this run. The nearby Bloodmyst vendor's
+    bananas were excluded by the executor's Azuremyst-only item list."""
+    from jev.guide.coords import bounds_by_radio_id
+    from jev.guide.graph import Graph, Node
+    from jev.world.vendor import merchants
+
+    case = json.loads((Path(__file__).parent / "fixtures/provisions-cross-zone.json").read_text())
+    state = State.model_validate(case["state"])
+    b = body()
+    zones = bounds_by_radio_id("data/zones-tbc-243.json")
+    b.client.bounds = next(v for v in zones.values() if v.area_id == 3524)
+    b.client.coordinate_zones = zones
+    node = Node.model_validate(case["node"])
+    b.graph = Graph(graph_id="cross-zone", faction="alliance", entry=node.id, nodes=(node,))
+    b._side, b._larder_rows = "alliance", {}
+    # Earlier attempts had already ruled out the distant Azuremyst merchants.
+    b._provisions_far = {m.entry for m in merchants(530) if m.entry != 21145}
+    values = {"char.class_id": WARRIOR, "char.race_id": DRAENEI, "char.level": 11,
+              "pos.zone_id": state.pos.zone_id, "vitals.hp": 1.0}
+    b.client.read = lambda: values
+    b.client.position = lambda: (state.pos.mx, state.pos.my)
+    b._take_larder = lambda values: None
+    b._leftovers = lambda *args: {}
+    b.arm = Armed(Decision(goal="supplies", intent=Intent.SERVICE, skill="BUY_AMMO_REAGENT_FOOD",
+                           abort_if=["dead"], why="food", confidence=1),
+                  ArmedBy.POLICY, 0, "service.provisions", "d", node.id)
+    assert b.larder(state).near == ("food",)
+    # Stop before physical execution: selection itself previously returned no_supplier.
+    class SelectedShop(Exception):
+        pass
+    candidates = []
+    def ranked(shops, world):
+        candidates.extend(shops)
+        raise SelectedShop
+    b._ranked = ranked
+    with pytest.raises(SelectedShop):
+        b._vendor(state)
+    assert [m.entry for m in candidates] == [21145]
+    assert 4537 in b._sold_in_box(state.pos.zone_id)
+    assert 4537 not in b._sold_in_box(), "the current zone leaked into another frame's cache"
+
+
+def test_a_food_catalog_never_includes_an_observed_zone_on_another_continent():
+    from jev.guide.coords import bounds_by_radio_id
+
+    b = body()
+    zones = bounds_by_radio_id("data/zones-tbc-243.json")
+    b.client.bounds = next(v for v in zones.values() if v.area_id == 3524)
+    b.client.coordinate_zones = zones
+    foreign = next(k for k, v in zones.items() if v.map_id != b.client.bounds.map_id)
+    assert b._sold_in_box(foreign) == b._sold_in_box()
+
+
 # -- a give-up before any walk is no failure (V550) ------------------------------------------
 
 def test_too_far_is_held_by_the_session_not_by_a_half_hour_backoff(tmp_path):

@@ -66,7 +66,39 @@ def test_accept_and_turnin_keep_the_confirmed_interact_choose_advance_compositio
     result = b.execute(b.arm, seen(), lambda: None)
     assert result.outcome.value == "succeeded"
     assert events == ["interact", ("choose", "A quest"), ("advance", 1, goal)]
-    b.client.log.reset.assert_called_once()
+    b.client.log.reset.assert_not_called()
+
+
+def test_repeated_accepts_allow_a_slow_rolling_log_to_finish():
+    """Reproduce the parity failure using the real body and assembler: the server has
+    accepted, but each interaction/tick sees only two of ten slots. Resetting at every
+    interaction leaves it unread forever; keeping the slots confirms within one cycle."""
+    from jev.perceive.questlog import QuestLog
+    from test_questlog import frame
+
+    b = body()
+    b.client.log = log = QuestLog()
+    ticks = iter(range(100))
+
+    def paint(**kw):
+        slot = next(ticks) % 10
+        log.observe(frame(10, slot=slot, quest_id=slot + 1))
+        return None if log.complete is None else tuple(q.quest_id for q in log.complete)
+
+    b.client.quest_ids = paint
+    b._open_on = Mock(return_value=Interacted.QUEST)
+    # Make the fake actuator's contract explicit: it answers success, as ServerAdvance
+    # does, while a separate paint supplies what the tracker can actually observe.
+    def accepted(*args):
+        paint()
+        return Advanced.DONE
+    b.advance = SimpleNamespace(run=accepted, detail="accepted")
+    for _ in range(5):
+        assert b._quest(seen()).outcome is SkillOutcome.SUCCEEDED
+    assert log.complete is not None and len(log.complete) == 10
+    before = b._open_on.call_count
+    assert b._quest(seen()).outcome is SkillOutcome.SUCCEEDED
+    assert b._open_on.call_count == before, "a confirmed accept reopened its giver"
 
 
 def test_nearest_repairer_compares_world_yards_and_filters_maps():

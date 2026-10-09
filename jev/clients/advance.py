@@ -120,7 +120,9 @@ class AdvanceQuestFrame:
             self.hid.click(*point)
             time.sleep(settle_s)
 
-            if quest_id is not None and self._reached(quest_id, goal, confirm_tries):
+            # Continue/reward-choice pages need another observed click, not a whole log
+            # cycle's wait between each button. After the frame closes we wait below.
+            if quest_id is not None and self._reached(quest_id, goal, 1):
                 return Advanced.DONE
 
         if quest_id is None:
@@ -135,7 +137,10 @@ class AdvanceQuestFrame:
         """Has the log reached the goal — measured on a **whole** cycle, or not at all."""
         for _ in range(tries):
             ids = self.quest_ids()
-            if ids is not None:
-                return (quest_id in ids) if goal is Goal.HELD else (quest_id not in ids)
-            time.sleep(0.1)
+            if ids is not None and ((quest_id in ids) == (goal is Goal.HELD)):
+                return True
+            # A complete *old* log can still precede the post-click paint. Give that
+            # paint the same bounded wait as a partial assembly, without clicking again.
+            if tries > 1:
+                time.sleep(0.1)
         return False

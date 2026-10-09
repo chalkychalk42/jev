@@ -4,6 +4,14 @@ Every architectural decision, with what triggered it and when to revisit. **Supe
 rows are kept deliberately so we do not re-litigate them.** Read this before proposing an
 alternative — it may already have been rejected, with a reason.
 
+## Speed and transfer candidates, 9 October 2026
+
+| # | Date | Decision | Why | Status / revisit when |
+|---|---|---|---|---|
+| **V610** | 9 Oct 2026 | **Quest retries retain the rolling log; a confirmed accept never reopens the giver.** `LiveBody._quest` no longer resets the assembler. The painted count/hash invalidate it; changed membership cannot revive an old whole log, a count change invalidates even under a hash collision, and an unidentified slot cannot complete it. `AdvanceQuestFrame` checks once between observed reward buttons, then waits for a delayed post-click log without clicking again. | The parity shard repeatedly accepted while its own reset prevented a whole cycle; regression tests exercise the actual body plus a ten-slot reader and stale post-click frames. | **Candidate** — rolling-log parity must remain enabled during validation. No success is inferred from a partial log. |
+| **V611** | 9 Oct 2026 | **Long trips compare planned walking distances with both ground legs of a known flight, ride estimate and overhead; flying must save 25% when walking is possible.** At most three origins and three landings each; every eligible landing is compared. All failed flights get the retry cooldown. The hive adapter recognizes `PLANNED_FLIGHTS` and uses the same memory and planner for every race. | Straight-line costs missed portal shortcuts and bad landing detours, stopped after the first reachable landing, and ordinary failed flights were immediately retried. Tests cover these cases, unknown nodes, unreachable ground legs, cooldown expiry and the planner-call bound. | **Candidate** — estimated airborne time, actual taxi map/landing required; no boats, zeppelins or new lift timing assumptions. |
+| **V612** | 9 Oct 2026 | **Food selection uses the guide coordinate frame and observed current zone consistently in policy and execution.** The observed zone id is passed into the cached item catalog, with both full map boxes in its key; another continent is excluded. Pet-food selection shares this rule. | Recorded hive-889 run `20261009T201539-96481b`: 1,747 failed purchases. The policy selected Little Azimi in Bloodmyst but execution used Azuremyst food IDs; previously rejected distant merchants left no candidate. A recorded-state test now reaches Little Azimi without a physical action. | **Candidate** — shared by hive and live; no purchase-failure backoff is removed. |
+
 ---
 
 | # | Date | Decision | Why | Status / revisit when |

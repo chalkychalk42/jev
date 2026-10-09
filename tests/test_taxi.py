@@ -1,5 +1,7 @@
 """Flights: which node is which, when a flight beats the walk, and taking one."""
 
+import math
+
 from jev.clients.taxi import Flew, TaxiDesk
 from jev.world.taxi import Node, flight, load_nodes, save_node, visited
 from jev.world.vendor import FlightMaster
@@ -160,8 +162,11 @@ def test_an_unvisited_flight_master_near_is_visited_and_its_node_remembered(monk
 
 
 def test_a_long_walk_flies_its_long_part_then_walks_on(monkeypatch, tmp_path):
-    b = _taxi_body(monkeypatch, tmp_path)
-    save_node(b.taxi_memory, Node(4242, "Ariena Stormfeather", (5000.0, 5000.0, 0.0)))
+    landing = FlightMaster(931, "Ariena Stormfeather", 0, (5000.0, 5000.0, 0.0), "")
+    b = _taxi_body(monkeypatch, tmp_path, masters=(NEAR_MASTER, landing))
+    b._side = "alliance"
+    b._planned_walk = lambda start, end: math.dist((50, 50, 0) if start is None else start, end)
+    save_node(b.taxi_memory, Node(4242, landing.name, landing.world))
     walked = []
     b.client.approach = lambda world, **kw: walked.append(tuple(world)) or True
     b.client.read = lambda: {"vitals.hp": 1.0, "vitals.combat": False, "vitals.dead": False,

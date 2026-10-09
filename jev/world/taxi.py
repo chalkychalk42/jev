@@ -188,7 +188,8 @@ def starting_nodes(race_id: int | None, map_id: int | None, side: str | None, *,
 
 def beyond(at: tuple[float, float], destination, masters, nodes: dict[int, Node],
            walk: Callable[[object, object], float | None], *,
-           skip: Callable[[object, Node], bool] | None = None) -> tuple[object, Node, float] | None:
+           skip: Callable[[object, Node], bool] | None = None,
+           max_seconds: float | None = None) -> tuple[object, Node, float] | None:
     """A flight for a walk the planner finds no way for (V408, the hive's `hive.taxi.beyond`):
     from the flight master it walks to, to the known node it walks on from to the end, the
     soonest there of the `BEYOND_MASTERS` nearest flight masters within `BEYOND_REACH_YARDS`
@@ -196,7 +197,10 @@ def beyond(at: tuple[float, float], destination, masters, nodes: dict[int, Node]
     end)`: the planner's walk in yards, `None` where it has no way; a start of `None` is from
     where the character stands. `masters`: the flight masters of the character's side on its
     map; a node is a landing on this map when one of them stands at it. `skip(master, node)`:
-    a flight not to try (one that failed lately)."""
+    a flight not to try (one that failed lately). `max_seconds` also lets a reachable walk
+    compete: the estimate must beat that budget, including both ground legs and overhead.
+    At most three origins and three landings per origin are planned."""
+    masters = tuple(masters)
     on_map = [n for n in nodes.values()
               if any(math.dist(m.world[:2], n.world[:2]) <= SAME_PLACE_YARDS for m in masters)]
     near = sorted((m for m in masters if math.dist(at[:2], m.world[:2]) <= BEYOND_REACH_YARDS),
@@ -224,7 +228,28 @@ def beyond(at: tuple[float, float], destination, masters, nodes: dict[int, Node]
             seconds = (to_master / RUN_YARDS_PER_S + FLIGHT_OVERHEAD_S
                        + math.dist(master.world[:2], node.world[:2]) / FLIGHT_YARDS_PER_S
                        + walk_on / RUN_YARDS_PER_S)
-            if best is None or seconds < best[0]:
+            if ((max_seconds is None or seconds <= max_seconds)
+                    and (best is None or seconds < best[0])):
                 best = (seconds, master, node, to_master)
-            break
     return best[1:] if best else None
+
+
+def planned_flight(at, destination, masters, nodes: dict[int, Node], walk: Callable, *,
+                   skip: Callable[[object, Node], bool] | None = None):
+    """A flight worth taking against a complete *planned* walk, or one bridging no walk.
+
+    Known landings and reachable ground legs are required. Flight duration is still a
+    conservative distance estimate; the observed taxi map and landing decide execution.
+    Short local approaches make no planner calls. The 25% saving margin pays for uncertainty.
+    """
+    if (len(destination) < 3 or not nodes
+            or math.dist(at[:2], destination[:2]) < FLY_MIN_YARDS):
+        return None
+    masters = tuple(masters)
+    if not any(math.dist(n.world[:2], destination[:2]) < math.dist(at[:2], destination[:2])
+               and any(math.dist(m.world[:2], n.world[:2]) <= SAME_PLACE_YARDS for m in masters)
+               for n in nodes.values()):
+        return None
+    direct = walk(None, destination)
+    budget = None if direct is None else direct / RUN_YARDS_PER_S * WORTH
+    return beyond(at, destination, masters, nodes, walk, skip=skip, max_seconds=budget)

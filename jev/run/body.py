@@ -85,10 +85,8 @@ from jev.world.home import load_home, save_home
 from jev.world.quarry import NEAR_YARDS, Held
 from jev.world.quarry import held as quarry_held
 from jev.world.state_v1 import PowerType, State, StepKind
-from jev.world.taxi import FLY_MIN_YARDS, SAME_PLACE_YARDS
 from jev.world.taxi import Node as TaxiNode
-from jev.world.taxi import beyond as flight_beyond
-from jev.world.taxi import flight as flight_plan
+from jev.world.taxi import planned_flight
 from jev.world.taxi import load_nodes, save_node, starting_nodes, visited
 from jev.world.training import placements as spell_placements
 from jev.world.training import spell as spell_facts
@@ -448,6 +446,12 @@ def walk_cost(planned, world) -> float | bool:
 
 
 class LiveBody:
+    # The hive adapter uses this capability to select this same planner and remembered
+    # nodes for every race, instead of its older server-only flight policy.
+    PLANNED_FLIGHTS: ClassVar[bool] = True
+    # Required observation contracts when this body is exercised by a server adapter.
+    # Optional parity switches may add more; these two cannot be silently disabled.
+    REQUIRED_PARITY: ClassVar[tuple[str, ...]] = ("quests", "flights")
     # Purse saves, one at a time (V328); a body made without `__init__` shares this one.
     _purse_lock = threading.Lock()
     # Every entry has an executor. The verifier receives exactly this capability set.
@@ -845,29 +849,20 @@ class LiveBody:
         return {**seeded, **load_nodes(self.taxi_memory)}
 
     def _fly_toward(self, world) -> bool:
-        """Fly the long part of a walk, when a remembered node lands near its end and a
-        flight master stands near its start (`jev.world.taxi.flight`); and a walk of
-        `FLY_MIN_YARDS` or more no route on foot finishes, from the flight master the planner
-        walks to soonest to the node it walks on from (`jev.world.taxi.beyond`, V408): from
-        Teldrassil every walk to Darkshore ends in the sea. Anything short of landing leaves
-        the character to walk from wherever it is."""
+        """Use a known flight when its planned ground legs and estimated ride beat walking,
+        or bridge an unreachable walk. The taxi map and actual landing confirm execution."""
         here = self._position()
         if here is None:
             return False
         at = map_to_world(*here, self.client.bounds)
         nodes = self._taxi_nodes()
         masters = flightmasters(self.client.bounds.map_id, self._side)
-        plan = flight_plan(at, world[:2], nodes, masters)
-        walk = None
+        plan = self._flight_plan(at, world, nodes, masters)
         if plan is None:
-            found = self._flight_beyond(at, world, nodes, masters)
-            if found is None:
-                return False
-            master, node, walk = found
-            self.say(f"  no walk finishes at ({world[0]:.0f}, {world[1]:.0f}): flying from "
-                     f"{master.name} to {node.flightmaster} on the way")
-        else:
-            master, node = plan
+            return False
+        master, node, walk = plan
+        self.say(f"  planned flight from {master.name} to {node.flightmaster} "
+                 f"on the way ({walk:.0f} yards to the flight master)")
         self._flying = True
         kept = self.travel_timeout
         if walk is not None:
@@ -893,20 +888,9 @@ class LiveBody:
             self._flying = False
             self.travel_timeout = kept
 
-    def _flight_beyond(self, at, world, nodes, masters):
-        """`jev.world.taxi.beyond` for a walk to `world` of `FLY_MIN_YARDS` or more that the
-        planner finds no way for (V408): its flight master, its node and the walk there in
-        yards, or `None`. A flight that came to nothing lately is not tried again."""
-        if (len(world) < 3 or math.dist(at[:2], world[:2]) < FLY_MIN_YARDS or not nodes
-                or self._side is None):
-            return None                          # nor before the side is read: its masters
-        # A landing on this map nearer the end than the character, before any plan is asked.
-        ahead = math.dist(at[:2], world[:2])
-        if not any(math.dist(n.world[:2], world[:2]) < ahead
-                   and any(math.dist(m.world[:2], n.world[:2]) <= SAME_PLACE_YARDS for m in masters)
-                   for n in nodes.values()):
-            return None
-        if self._planned_walk(None, world) is not None:
+    def _flight_plan(self, at, world, nodes, masters):
+        """The shared planner, with a cooldown for every failed origin/destination pair."""
+        if self._side is None:
             return None
         failed = getattr(self, "_flights_failed", None) or {}
         now = time.monotonic()
@@ -915,12 +899,10 @@ class LiveBody:
             when = failed.get((master.name, node.name_id))
             return when is not None and now - when < FLIGHT_FAILED_S
 
-        return flight_beyond(at, world, masters, nodes, self._planned_walk, skip=skip)
+        return planned_flight(at, world, masters, nodes, self._planned_walk, skip=skip)
 
     def _flight_failed(self, master, node, walk) -> None:
-        """A flight where no walk finishes that came to nothing (V408), kept `FLIGHT_FAILED_S`."""
-        if walk is None:
-            return
+        """Any flight that came to nothing, kept `FLIGHT_FAILED_S`."""
         failed = getattr(self, "_flights_failed", None)
         if failed is None:
             failed = self._flights_failed = {}
@@ -1056,6 +1038,15 @@ class LiveBody:
             return Result(SkillOutcome.ABORTED, "quest has no placed NPC", "unsupported")
         if node.target_kind not in ("creature", "gameobject") or not node.target_name:
             return Result(SkillOutcome.ABORTED, "quest target needs a supported identity", "unsupported")
+        # An accept can be armed again while the rolling log catches up. Keep observing
+        # that same assembly: reopening the giver must not throw its collected slots away.
+        # Once the log confirms the accept, no second interaction is needed.
+        if node.kind is StepKind.QUEST_ACCEPT:
+            self._quest_ids()
+            with self.client._capturing:
+                log = self.client.log.complete
+            if log is not None and any(q.quest_id == node.quest_id for q in log):
+                return Result(SkillOutcome.SUCCEEDED, "quest already in the assembled log", "done")
         if node.target_kind == "gameobject":
             # A wanted poster or a body: stood at, found by the name its tooltip gives.
             self._approach(node.world)
@@ -1076,8 +1067,8 @@ class LiveBody:
             chose = self.chooser.run(node.title)
             if not chose.ok:
                 return self._result(chose, self.chooser.detail)
-        with self.client._capturing:
-            self.client.log.reset()
+        # QuestLog invalidates itself when the painted count/hash changes. Resetting it
+        # here starves a slow reader on every retry (the hive's rolling-log accept loop).
         goal = Goal.HELD if node.kind is StepKind.QUEST_ACCEPT else Goal.CLEARED
         outcome = self.advance.run(node.quest_id, goal)
         return self._result(outcome, self.advance.detail)
@@ -1711,7 +1702,7 @@ class LiveBody:
                       "char.race_id": RACE_IDS.get(state.char.race)}
             level = state.char.level
             roles = self._provision_roles(values)
-            sold = self._sold_in_box()
+            sold = self._sold_in_box(state.pos.zone_id)
             empty = tuple(role for role in roles if stock(rows, role, level) == 0)
             prices = [p.price for item, p in provisions().items()
                       if item in sold and (level is None or p.level <= level)
@@ -2786,22 +2777,32 @@ class LiveBody:
             known = census.known
         if not known or pets.FEED_PET not in known:
             return None
-        food = pets.to_buy(pets.family_of(pet.entry), pet.level, self._sold_in_box())
+        food = pets.to_buy(pets.family_of(pet.entry), pet.level,
+                          self._sold_in_box(state.pos.zone_id))
         return food.entry if food is not None else None
 
-    def _sold_in_box(self) -> frozenset[int]:
-        """Every item a merchant standing in the measured zone's map box sells, once a box: read
-        from the policy's thread, so nothing of the body's own readers (`_in_zone`)."""
+    def _sold_in_box(self, zone_id: int | None = None) -> frozenset[int]:
+        """Items sold in the guide frame or the observed current zone, as `_in_zone` shops.
+
+        The observer supplies the zone id: no capture from the policy thread. A guide can
+        keep Azuremyst coordinates while the character shops in Bloodmyst; using only the
+        guide's food IDs excluded Little Azimi after the policy selected her nearby shop.
+        """
         bounds = self.client.bounds
         if bounds is None:
             return frozenset()
+        boxes = [bounds]
+        actual = (getattr(self.client, "coordinate_zones", None) or {}).get(zone_id)
+        if actual is not None and actual != bounds and actual.map_id == bounds.map_id:
+            boxes.append(actual)
         kept = self.__dict__.setdefault("_sold", {})
-        key = (bounds.map_id, bounds.area_id, bounds.left, bounds.top)
+        key = tuple((b.map_id, b.area_id, b.left, b.right, b.top, b.bottom) for b in boxes)
         if key not in kept:
             kept[key] = frozenset(
                 item for m in merchants(bounds.map_id)
-                if (point := world_to_map(*m.world[:2], bounds)) is not None
-                and all(0 <= value <= 1 for value in point) for item in m.items)
+                if any((point := world_to_map(*m.world[:2], box)) is not None
+                       and all(0 <= value <= 1 for value in point) for box in boxes)
+                for item in m.items)
         return kept[key]
 
     def _with_pet_food(self, supplies: tuple, state: State) -> tuple:
@@ -3437,7 +3438,8 @@ class LiveBody:
         food = set()
         if buying and not ammo:
             for role in (self._low_roles(values) if near else empty):
-                food |= self._provision_items(role, level, best=role not in empty)
+                food |= self._provision_items(role, level, best=role not in empty,
+                                             zone_id=values.get("pos.zone_id"))
         if buying and not (ammo or pet or food):
             if empty and not near:
                 # None in the zone sells what the empty roles eat (V292, V302).
@@ -3668,7 +3670,7 @@ class LiveBody:
         rows = self._larder_rows or {}
         level = values.get("char.level")
         level = level if isinstance(level, int) else None
-        sold = self._sold_in_box()
+        sold = self._sold_in_box(values.get("pos.zone_id"))
         out = []
         for role in self._provision_roles(values):
             tier = best_tier(role, level, sold)
@@ -3677,13 +3679,13 @@ class LiveBody:
         return out
 
     def _provision_items(self, role: str, level: int | None, *, best: bool,
-                         anywhere: bool = False) -> set[int]:
+                         anywhere: bool = False, zone_id: int | None = None) -> set[int]:
         """The food or drink of `role` a character of `level` may use that a merchant in the
         measured zone's box sells (`anywhere`: in the catalog at all); `best`, of the best tier
         sold there alone (V550)."""
         from jev.world.vendor import best_tier
 
-        sold = set(provisions()) if anywhere else self._sold_in_box()
+        sold = set(provisions()) if anywhere else self._sold_in_box(zone_id)
         level = level if isinstance(level, int) else 1
         items = {item for item, p in provisions().items()
                  if item in sold and p.role in (role, "both")

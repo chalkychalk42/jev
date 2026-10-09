@@ -137,6 +137,23 @@ def test_the_frame_closing_after_a_press_is_how_these_flows_end():
     assert len(hid.clicks) == 1
 
 
+def test_a_closed_frame_waits_for_the_old_complete_log_to_change(monkeypatch):
+    monkeypatch.setattr("jev.clients.advance.time.sleep", lambda _: None)
+    skill, hid = _stepping(OPEN, SHUT, ids_at=lambda n: ())
+    ids = iter([(), (), None, None, (783,)])
+    skill.quest_ids = lambda: next(ids)
+    assert skill.run(783, settle_s=0, confirm_tries=5) is Advanced.DONE
+    assert len(hid.clicks) == 1
+
+
+def test_reward_pages_do_not_wait_out_a_log_cycle_between_buttons(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr("jev.clients.advance.time.sleep", sleeps.append)
+    skill, hid = _stepping(OPEN, OPEN, SHUT, ids_at=lambda n: None if n < 2 else ())
+    assert skill.run(783, Goal.CLEARED, settle_s=0) is Advanced.DONE
+    assert len(hid.clicks) == 2 and sum(sleeps) == 0
+
+
 def test_the_goal_is_a_state_of_the_log_not_a_direction():
     """`HELD` and `CLEARED` are the only difference between accepting and turning in, and
     each is wrong for the other — otherwise a turn-in would confirm on the frame it was

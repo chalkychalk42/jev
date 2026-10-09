@@ -187,6 +187,29 @@ def test_another_number_of_entries_is_another_log():
         "a reset log patches nothing"
 
 
+def test_count_change_invalidates_even_when_the_short_hash_collides():
+    log = _whole(QuestLog(), (783, 7))
+    assert log.observe(frame(3, slot=0, quest_id=783)) is None
+    assert log.progress == (1, 3)
+
+
+def test_a_changed_membership_cannot_revive_the_disproved_whole_log():
+    log = _whole(QuestLog(), (783, 7, 5261))
+    assert log.observe(frame(3, slot=1, quest_id=33, log_hash=4444)) is None
+    # A counter changes before the new membership has assembled. The old quest 7 must
+    # not reappear just because this paint describes an unchanged slot.
+    assert log.observe(frame(3, slot=2, quest_id=5261, log_hash=5555)) is None
+    assert log.observe(frame(3, slot=0, quest_id=783, log_hash=5555)) is None
+    result = log.observe(frame(3, slot=1, quest_id=33, log_hash=5555))
+    assert [q.quest_id for q in result] == [783, 33, 5261]
+
+
+def test_an_unknown_slot_identity_cannot_complete_a_log():
+    log = QuestLog()
+    assert log.observe(frame(1, slot=1)) is None
+    assert log.progress == (0, 1)
+
+
 def _golden_slot(tick: int, count: int) -> int:
     """The slot the addon paints at its `tick`th paint (`advanceQuestSlot`)."""
     return min(count - 1, int(((tick * GOLDEN) % 1) * count))

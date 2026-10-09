@@ -236,7 +236,7 @@ def test_taming_waits_for_feed_pet_and_nothing_is_tended_before_tame_beast():
 
 def test_the_pets_food_is_named_while_none_it_eats_in_full_is_in_the_bags():
     b = _body()
-    b._sold_in_box = lambda: frozenset(GRIMTAK)
+    b._sold_in_box = lambda zone_id=None: frozenset(GRIMTAK)
     pet = Pet(has=True, dead=False, entry=SCORPID, level=11, happiness=2, food_count=0)
     assert b.pet_food(_state(pet=pet)) == HAUNCH
     assert b.pet_food(_state(pet=pet.model_copy(update={"food_count": 3}))) is None
