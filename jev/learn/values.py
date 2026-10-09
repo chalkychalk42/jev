@@ -89,6 +89,34 @@ def _in_band(key: str, level: int) -> bool:
         return False
 
 
+def _band(bands, level: int) -> dict | None:
+    if not isinstance(bands, dict):
+        return None
+    entry = next((e for k, e in bands.items() if _in_band(k, level)), None)
+    return entry if isinstance(entry, dict) else None
+
+
+def _played(bands, level: int | None, cls: str | None,
+            min_hours: float) -> tuple[float, float] | None:
+    """A band's experience an hour as played and its hours (`Values.played`), crowded or not."""
+    if level is None:
+        return None
+    entry = _band(bands, level)
+    if entry is None:
+        return None
+    own = entry.get("classes") if isinstance(entry.get("classes"), dict) else {}
+    mine = next((e for k, e in own.items()
+                 if cls is not None and str(k).lower() == cls.lower() and isinstance(e, dict)),
+                None)
+    for found, least in ((mine, max(CLASS_HOURS, min_hours)), (entry, min_hours)):
+        if found is None:
+            continue
+        xp_h, hours = _number(found, "xp_h"), _number(found, "hours")
+        if xp_h is not None and hours is not None and hours >= least:
+            return xp_h, hours
+    return None
+
+
 def rib_name(step_id: str) -> str:
     """A grind as the values name it, whichever guide its step is in: `grind_<zone>_<lo>_<hi>`
     or `gate_<level>_<zone>`."""
@@ -146,6 +174,38 @@ class Values:
 
     def grind(self, step_id: str, level: int | None, cls: str | None = None) -> Value | None:
         return self._at(self.grinds_by.get(rib_name(step_id)), level, cls)
+
+    def played(self, step_id: str, level: int | None, cls: str | None = None,
+               min_hours: float = 0.0, toward: float | None = None,
+               prior_hours: float = 0.0) -> float | None:
+        """What a grind paid an hour, as played, at `level` (V560): its band's experience an hour
+        over at least `min_hours`, the class's own where it has `CLASS_HOURS`; a band the hive
+        marked crowded counts, as a choice of grind is made where the others play too. With
+        `toward`, drawn to it as if `prior_hours` more had paid that: a grind of few hours is
+        not taken at its luck. `None` where it was not measured so long."""
+        found = _played(self.grinds_by.get(rib_name(step_id)), level, cls, min_hours)
+        if found is None:
+            return None
+        xp_h, hours = found
+        if toward is None or prior_hours <= 0.0:
+            return xp_h
+        return (xp_h * hours + toward * prior_hours) / (hours + prior_hours)
+
+    def played_mean(self, level: int | None, cls: str | None = None,
+                    min_hours: float = 0.0) -> float | None:
+        """What grinding paid an hour at `level` over every grind measured `min_hours` there, by
+        its hours (V560): a grind not measured is taken at it."""
+        if level is None:
+            return None
+        total = weight = 0.0
+        for bands in self.grinds_by.values():
+            entry = _band(bands, level)
+            hours = _number(entry, "hours") if entry is not None else None
+            found = _played(bands, level, cls, min_hours)
+            if found is not None and hours:
+                total += found[0] * hours
+                weight += hours
+        return total / weight if weight else None
 
     def grinds(self, level: int | None, cls: str | None = None) -> Value | None:
         """What grinding pays at `level`, over every rib measured there, by their hours: the

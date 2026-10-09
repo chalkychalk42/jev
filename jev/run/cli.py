@@ -226,6 +226,14 @@ OUTGROWN_AT: dict[str, int] = {
 }
 
 
+def _rib_values():
+    """The hive's measured quests and grinds lent beside the other priors (`var/prior/
+    values.json`, V312), for the runtime's rib choice (V560); `None` without the file."""
+    from jev.learn.values import Values
+
+    return Values.load(PRIOR / "values.json")
+
+
 def outgrown_at(graph_id: str) -> int | None:
     """The level a guide with a next is outgrown at: its own (V162), and never before the next
     guide takes over (V280, amended): at 13 the 1-12 guide was outgrown while the 12-20 guide
@@ -666,6 +674,8 @@ def _live(args, graph) -> int:
             available_skills=body.available,
             validate_action=body.validate,
             judge=judge,
+            # The hive's measured grinds value the ribs (V560), with or without the coach.
+            values=_rib_values(),
         )
         if runtime.outgrown_at is not None:
             print(f"guide {route.source_graph_id}: outgrown at level {runtime.outgrown_at}, "

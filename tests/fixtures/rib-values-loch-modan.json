@@ -1,0 +1,239 @@
+{
+ "about": "The hive's measured grinds of 9 Oct 01:14 (var/values.json) for the ribs of tests/test_rib_bars.py's priest graph, named as its steps are; bands 11-12 to 15-16, xp_h, hours, crowded and the priests' own numbers.",
+ "format": 1,
+ "grinds": {
+  "dun_morogh_11_13_stonesplinter_tr": {
+   "11-12": {
+    "classes": {
+     "priest": {
+      "hours": 3.67,
+      "xp_h": 1089
+     }
+    },
+    "crowded": true,
+    "hours": 23.56,
+    "xp_h": 944
+   },
+   "13-14": {
+    "crowded": true,
+    "hours": 5.28,
+    "xp_h": 1470
+   },
+   "15-16": {
+    "crowded": true,
+    "hours": 3.71,
+    "xp_h": 2113
+   }
+  },
+  "dun_morogh_13_15": {
+   "13-14": {
+    "classes": {
+     "priest": {
+      "hours": 17.63,
+      "xp_h": 145
+     }
+    },
+    "crowded": true,
+    "hours": 42.1,
+    "xp_h": 204
+   },
+   "15-16": {
+    "crowded": true,
+    "hours": 9.48,
+    "xp_h": 626
+   }
+  },
+  "dun_morogh_13_15_stonesplinter_se": {
+   "13-14": {
+    "classes": {
+     "priest": {
+      "hours": 10.86,
+      "xp_h": 94
+     }
+    },
+    "crowded": true,
+    "hours": 45.69,
+    "xp_h": 141
+   },
+   "15-16": {
+    "crowded": true,
+    "hours": 6.88,
+    "xp_h": 563
+   }
+  },
+  "dun_morogh_9_11": {
+   "11-12": {
+    "classes": {
+     "priest": {
+      "hours": 10.84,
+      "xp_h": 2879
+     }
+    },
+    "crowded": true,
+    "hours": 43.19,
+    "xp_h": 2089
+   },
+   "13-14": {
+    "classes": {
+     "priest": {
+      "hours": 9.07,
+      "xp_h": 2227
+     }
+    },
+    "crowded": true,
+    "hours": 29.54,
+    "xp_h": 2415
+   },
+   "15-16": {
+    "classes": {
+     "priest": {
+      "hours": 10.68,
+      "xp_h": 2076
+     }
+    },
+    "crowded": true,
+    "hours": 20.37,
+    "xp_h": 1855
+   }
+  },
+  "loch_modan_11_13": {
+   "11-12": {
+    "classes": {
+     "priest": {
+      "hours": 3.09,
+      "xp_h": 798
+     }
+    },
+    "crowded": true,
+    "hours": 70.06,
+    "xp_h": 541
+   },
+   "13-14": {
+    "classes": {
+     "priest": {
+      "hours": 4.88,
+      "xp_h": 1089
+     }
+    },
+    "crowded": true,
+    "hours": 45.82,
+    "xp_h": 1364
+   },
+   "15-16": {
+    "classes": {
+     "priest": {
+      "hours": 5.5,
+      "xp_h": 1054
+     }
+    },
+    "crowded": true,
+    "hours": 20.94,
+    "xp_h": 1535
+   }
+  },
+  "loch_modan_11_13_loch_frenzy": {
+   "11-12": {
+    "crowded": true,
+    "hours": 34.83,
+    "xp_h": 356
+   },
+   "13-14": {
+    "classes": {
+     "priest": {
+      "hours": 3.44,
+      "xp_h": 847
+     }
+    },
+    "crowded": true,
+    "hours": 26.8,
+    "xp_h": 610
+   },
+   "15-16": {
+    "crowded": true,
+    "hours": 6.5,
+    "xp_h": 566
+   }
+  },
+  "loch_modan_13_15": {
+   "13-14": {
+    "classes": {
+     "priest": {
+      "hours": 5.14,
+      "xp_h": 1028
+     }
+    },
+    "crowded": true,
+    "hours": 48.17,
+    "xp_h": 1578
+   },
+   "15-16": {
+    "classes": {
+     "priest": {
+      "hours": 6.08,
+      "xp_h": 1750
+     }
+    },
+    "crowded": true,
+    "hours": 26.49,
+    "xp_h": 2516
+   }
+  },
+  "loch_modan_13_15_loch_crocolisk": {
+   "13-14": {
+    "crowded": true,
+    "hours": 10.16,
+    "xp_h": 1516
+   },
+   "15-16": {
+    "classes": {
+     "priest": {
+      "hours": 2.69,
+      "xp_h": 844
+     }
+    },
+    "crowded": true,
+    "hours": 13.71,
+    "xp_h": 1313
+   }
+  },
+  "loch_modan_13_15_mangy_mountain_b": {
+   "13-14": {
+    "classes": {
+     "priest": {
+      "hours": 5.1,
+      "xp_h": 2035
+     }
+    },
+    "crowded": true,
+    "hours": 28.08,
+    "xp_h": 3010
+   },
+   "15-16": {
+    "classes": {
+     "priest": {
+      "hours": 11.87,
+      "xp_h": 2396
+     }
+    },
+    "crowded": true,
+    "hours": 44.33,
+    "xp_h": 3252
+   }
+  },
+  "loch_modan_15_17": {
+   "15-16": {
+    "classes": {
+     "priest": {
+      "hours": 9.58,
+      "xp_h": 1653
+     }
+    },
+    "crowded": true,
+    "hours": 43.93,
+    "xp_h": 1688
+   }
+  }
+ },
+ "quests": {},
+ "written": "2026-10-08T18:28"
+}
