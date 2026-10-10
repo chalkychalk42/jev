@@ -1,0 +1,108 @@
+{
+  "source": {
+    "run": "20261010T094926-64493c",
+    "client": "hive-879",
+    "gather_preemptions": 1462
+  },
+  "state": {
+    "t": 1791622166.8760157,
+    "client_id": "hive-879",
+    "char": {
+      "name": null,
+      "key": 2091167353,
+      "cls": "warlock",
+      "race": "orc",
+      "faction": "horde",
+      "level": 17,
+      "xp_pct": 0.2096341463414634
+    },
+    "pos": {
+      "zone_id": 842,
+      "coord_zone_id": 14,
+      "zone": "Durotar",
+      "sub": null,
+      "mx": 0.6512114157070554,
+      "my": 0.8772860593031797,
+      "raw_mx": 0.6512114157070554,
+      "raw_my": 0.8772860593031797,
+      "facing": null,
+      "indoors": false,
+      "corpse_mx": null,
+      "corpse_my": null,
+      "raw_corpse_mx": null,
+      "raw_corpse_my": null,
+      "world": null
+    },
+    "vitals": {
+      "hp": 1.0,
+      "hp_max": 313,
+      "power": 1.0,
+      "power_max": 613,
+      "power_type": "mana",
+      "combat": false,
+      "dead": false,
+      "ghost": false
+    },
+    "bags": {
+      "free": 0,
+      "durability_min": 0.8666666666666667,
+      "money_copper": 525,
+      "food_id": 117,
+      "food_count": 0,
+      "drink_id": 159,
+      "drink_count": 0,
+      "inventory_revision": 23088,
+      "inventory_total": 38,
+      "slot": {
+        "bag": 0,
+        "slot": 16,
+        "item_id": 769,
+        "count": 10,
+        "quality": 1,
+        "locked": false
+      }
+    },
+    "guide": {
+      "graph_id": "hive_orc_warlock_1_20.supported",
+      "step_id": "hive_orc_warlock_1_20_808_minshina_s_skull_do",
+      "kind": "quest_objective",
+      "age_s": 0.5005471706390381,
+      "on_route": true,
+      "progress": 0.0,
+      "deaths_on_step": 0,
+      "attempts": 0
+    },
+    "quests": [
+      {
+        "quest_id": 808,
+        "title": null,
+        "objectives": [
+          {
+            "text": "",
+            "have": 0,
+            "need": 1,
+            "counter_index": 0
+          }
+        ],
+        "complete": false
+      }
+    ],
+    "sense": {
+      "addon_ok": true,
+      "fault": "none",
+      "seq": 4,
+      "vision_conf": null,
+      "source": "radio"
+    },
+    "ui": {
+      "loot": false,
+      "gossip": false,
+      "vendor": false,
+      "quest_frame": false,
+      "trainer": false,
+      "mail": false,
+      "modal": false,
+      "error": null
+    }
+  }
+}

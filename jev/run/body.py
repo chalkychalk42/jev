@@ -1431,6 +1431,15 @@ class LiveBody:
         for point in (p for lap in laps for p in lap):
             if complete() is True:
                 return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
+            values = self._read()
+            if values is None:
+                return self._result(Gathered.BLIND, "unread before gathering")
+            if values.get("vitals.dead") is True or values.get("vitals.ghost") is True:
+                return Result(SkillOutcome.PREEMPTED, "dead before gathering", "died")
+            if values.get("vitals.combat") is True or values.get("ui.modal") is True:
+                return self._result(Gathered.INTERRUPTED, "combat or a dialog before gathering")
+            if values.get("bags.free") == 0:
+                return self._gather_full(node)
             if time.monotonic() > deadline:
                 return Result(SkillOutcome.TIMED_OUT,
                               f"{self.hunt_timeout:.0f}s and the objective is not done", "timeout")
@@ -1444,12 +1453,27 @@ class LiveBody:
             if chooser is not None:
                 chooser.leave(got is Gathered.TOOK)
             self.say(f"    gather: {got.value} - {self.gather.detail}")
+            if got is Gathered.BAGS_FULL:
+                return self._gather_full(node)
             if not got.ok:
                 return self._result(got, self.gather.detail)
         if complete() is True:
             return Result(SkillOutcome.SUCCEEDED, "quest completion confirmed", "done")
         return Result(SkillOutcome.ABORTED, "every spawn point walked and the objective is short",
                       "nothing")
+
+    def _gather_full(self, node) -> Result:
+        """A full bag yields to an available service; otherwise this objective cannot run.
+
+        Unlike a kill, gathering cannot progress with no room. An unavailable bag service
+        must spend an attempt, or a preempted gather is armed again without a retry limit.
+        Hive-879 repeated Minshina's Skull 1,462 times in one recorded session that way.
+        """
+        context = self.policy_context
+        available = context is None or context.can_make_space(0, node.id, time.time())
+        return Result(SkillOutcome.PREEMPTED if available else SkillOutcome.ABORTED,
+                      "bags are full; the object would give nothing"
+                      + ("" if available else "; bag service unavailable"), "bags_full")
 
     def learn(self, memory, log=None) -> None:
         """Choices learned from their outcomes (`jev.learn.choices`, DECISIONS V158): where

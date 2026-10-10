@@ -1,5 +1,7 @@
 # Decision log
 
+Latest candidate: [V613 — bounded quest gathering with full bags](docs/reviews/2026-10-10-gather-capacity.md).
+
 Every architectural decision, with what triggered it and when to revisit. **Superseded
 rows are kept deliberately so we do not re-litigate them.** Read this before proposing an
 alternative — it may already have been rejected, with a reason.
